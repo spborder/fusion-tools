@@ -1,0 +1,18 @@
+[project]
+name = "fusion-tools"
+version = "0.0.1"
+authors = [
+  { name="Sam Border", email="sam.border2256@gmail.com" },
+]
+description = "Tools for accession, visualization and other utilities for data derived from FUSION."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache 2.0 License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/spborder/fusion-tools"
+Issues = "https://github.com/spborder/fusion-tools/issues"
