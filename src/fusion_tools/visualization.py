@@ -7,6 +7,7 @@ Functions related to visualization for data derived from FUSION.
 
 """
 
+import large_image.exceptions
 from fastapi import FastAPI, APIRouter, Response
 
 import large_image
@@ -19,12 +20,14 @@ from dash_extensions.enrich import DashProxy, html, Input, Output, State
 import plotly.express as px
 import plotly.graph_objects as go
 
+import numpy as np
+
 from typing_extensions import Union
 from PIL import Image
 from io import BytesIO
 import json
 import uvicorn
-
+import requests
 
 class TileServer:
     def __init__(self,
@@ -38,44 +41,54 @@ class TileServer:
 
         self.router = APIRouter()
         self.router.add_api_route('/',self.root,methods=["GET"])
-        self.router.add_api_route('/tiles/{z}/{y}/{x}',self.get_tile,methods=["GET"])
+        self.router.add_api_route('/tiles/{z}/{x}/{y}',self.get_tile,methods=["GET"])
+        self.router.add_api_route('/metadata',self.get_metadata,methods=["GET"])
 
     def root(self):
         return {'message': "Oh yeah, now we're cooking"}
 
-    def get_tile(self,z:int, y:int, x:int):
-        raw_tile = self.tile_source.getTile(
-                    x = x,
-                    y = y,
-                    z = z
-                )
+    def get_tile(self,z:int, x:int, y:int):
+        try:
+            raw_tile = self.tile_source.getTile(
+                        x = x,
+                        y = y,
+                        z = z
+                    )
+            
+        except large_image.exceptions.TileSourceXYZRangeError:
+            # This error appears for any negative tile coordinates
+            raw_tile = np.zeros((self.tile_metadata['tileHeight'],self.tile_metadata['tileWidth']),dtype=np.uint8).tobytes()
 
         return Response(content = raw_tile, media_type='image/png')
     
     def get_metadata(self):
         large_image_metadata = self.tile_source.getMetadata()
-
         return Response(content = json.dumps(large_image_metadata),media_type = 'application/json')
     
-    def start(self):
+    def start(self, port = 8050):
         app = FastAPI()
         app.include_router(self.router)
 
-        uvicorn.run(app,host='0.0.0.0',port=8050)
+        uvicorn.run(app,host='0.0.0.0',port=port)
 
 
 class LocalSlideViewer:
     def __init__(self,
-                 local_image_path: str,
-                 port: list):
+                 tile_server_port: str,
+                 app_port: str):
         
-        self.local_image_path = local_image_path
-        self.port = port
+        self.app_port = app_port
+        self.tile_server_port = tile_server_port
+
+        image_metadata = requests.get(
+            f'http://localhost:{self.tile_server_port}/metadata'
+        ).json()
         
         self.viewer_app = DashProxy(__name__)
         self.viewer_app.layout = self.gen_layout(
-            tile_size = 240,
-            zoom_levels = 7
+            tile_size = image_metadata['tileWidth'],
+            zoom_levels = image_metadata['levels'],
+            tile_server_port = self.tile_server_port
         )
 
         # Add callback functions here
@@ -83,11 +96,11 @@ class LocalSlideViewer:
 
         self.viewer_app.run(
             host = '0.0.0.0',
-            port = self.port,
+            port = self.app_port,
             debug = False
         )
 
-    def gen_layout(self, tile_size:int, zoom_levels: int):
+    def gen_layout(self, tile_size:int, zoom_levels: int, tile_server_port:str):
         """
         Generate simple slide viewer layout
         """
@@ -101,14 +114,17 @@ class LocalSlideViewer:
                             dl.Map(
                                 id = 'slide-map',
                                 crs = 'Simple',
-                                style = {'height': '100%','width': '100%'},
+                                center = [120,-120],
+                                zoom = 0,
+                                style = {'height': '100vh','width': '100vw','margin': 'auto','display': 'inline-block'},
                                 children = [
                                     dl.TileLayer(
                                         id = 'slide-tile-layer',
-                                        url = 'http://localhost:8050/tiles/{z}/{x}/{y}',
+                                        url = f'http://localhost:{tile_server_port}/tiles'+'/{z}/{x}/{y}',
                                         tileSize=tile_size,
                                         maxNativeZoom=zoom_levels-1,
-                                        minZoom = 0
+                                        minZoom = 0,
+                                        #bounds = [[0,0],[tile_size,-tile_size]]
                                     ),
                                     dl.FullScreenControl(
                                         position = 'upper-left'

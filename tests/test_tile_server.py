@@ -8,6 +8,7 @@ import os
 import sys
 sys.path.append('./src/')
 from fusion_tools.visualization import TileServer, LocalSlideViewer
+import threading
 
 
 def main():
@@ -17,11 +18,14 @@ def main():
     tile_server = TileServer(
         local_image_path = path_to_slide
     )
-    tile_server.start()
+
+    new_thread = threading.Thread(target = tile_server.start, name = 'local_tile_server', args = ['8050'])
+    new_thread.daemon = True
+    new_thread.start()
 
     slide_viewer = LocalSlideViewer(
-        local_image_path = path_to_slide,
-        port = '8080'
+        tile_server_port='8050',
+        app_port = '8080'
     )
 
 
