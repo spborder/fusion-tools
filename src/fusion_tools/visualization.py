@@ -90,10 +90,12 @@ class LocalSlideViewer:
             zoom_levels = image_metadata['levels'],
             tile_server_port = self.tile_server_port
         )
+        self.viewer_app.title = 'FUSION'
 
         # Add callback functions here
+        self.get_callbacks()
 
-
+        # Running using default Flask server
         self.viewer_app.run(
             host = '0.0.0.0',
             port = self.app_port,
@@ -143,6 +145,13 @@ class LocalSlideViewer:
 
         return layout
 
+    def get_callbacks(self):
+        # Add callbacks to self.viewer_app
+        # Maybe add something so users can point the app to some zarr storage or add polygons either through uploads or on initialization
+
+
+        pass
+
 
 class FeatureViewer:
     def __init__(self,
@@ -170,7 +179,6 @@ class FeatureViewer:
         elif not self.mode=='bbox' and type(self.mode_col)==list:
             print('Provide a single column name (type: str) to identify samples in the target slide.')
             raise TypeError
-
 
         self.fusion_handler = fusion_handler
 
@@ -210,7 +218,6 @@ class FeatureViewer:
             ],
             prevent_initial_call = True
         )(self.graph_image)
-
 
     def get_layout(self):
         """
@@ -304,9 +311,6 @@ class FeatureViewer:
 
 
 
-
-
-
         return return_plot
 
     def grab_image(self, selected_points):
@@ -318,87 +322,6 @@ class FeatureViewer:
 
 
 
-
-
-
-
-
         return return_image
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 

@@ -19,7 +19,10 @@ setuptools.setup(
         "tqdm",
         "numpy>=1.20.0",
         "uuid",
-        "scikit-image"
+        "scikit-image",
+        "fastapi",
+        "uvicorn",
+        "threading"
     ],
     packages=setuptools.find_packages(),
     classifiers=[

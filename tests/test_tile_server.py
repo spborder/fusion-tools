@@ -19,6 +19,7 @@ def main():
         local_image_path = path_to_slide
     )
 
+    #TODO: Should this be included in the tile_server.start method?
     new_thread = threading.Thread(target = tile_server.start, name = 'local_tile_server', args = ['8050'])
     new_thread.daemon = True
     new_thread.start()
