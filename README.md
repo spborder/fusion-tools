@@ -12,6 +12,9 @@ $ pip install fusion-tools
 `fusion-tools` is intended to bring some of the functionality found in FUSION to developers working with whole slide images (WSIs) stored locally. 
 
 One such example would be the TileServer and LocalSlideViewer class:
+<div align="center">
+    <img src="docs/images/local-slide-viewer.PNG">
+</div>
 
 ```python
 from fusion_tools.visualization import TileServer, LocalSlideViewer
