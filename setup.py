@@ -18,6 +18,8 @@ setuptools.setup(
         "shapely>=2.0.1",
         "tqdm",
         "numpy>=1.20.0",
+        "large-image[common]",
+        "wsi-annotations-kit",
         "uuid",
         "scikit-image",
         "fastapi",
@@ -26,6 +28,7 @@ setuptools.setup(
     ],
     packages=setuptools.find_packages(),
     classifiers=[
+        "Development Status :: 4 - Beta",
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: Apache 2.0 License",
         "Operating System :: OS Independent",
