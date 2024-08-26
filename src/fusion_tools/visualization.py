@@ -13,7 +13,7 @@ from fastapi import FastAPI, APIRouter, Response
 import large_image
 import pandas as pd
 import dash_leaflet as dl
-from dash import dcc, callback, ctx, ALL, exceptions
+from dash import dcc, callback, ctx, ALL, MATCH, exceptions, dash_table
 import dash_bootstrap_components as dbc
 from dash_extensions.enrich import DashProxy, DashBlueprint, html, Input, Output, State
 from dash_extensions.javascript import assign, arrow_function, Namespace
@@ -86,8 +86,13 @@ class Visualization:
             )
 
 
+class TileServer:
+    """
+    Components which pull information from a slide(s)
+    """
+    pass
 
-class LocalTileServer:
+class LocalTileServer(TileServer):
     """
     Tile server from image saved locally. Uses large-image to read and parse image formats (default: [common])
     """
@@ -99,13 +104,17 @@ class LocalTileServer:
 
         self.tile_server_port = '8050'
 
+        self.tiles_url = f'http://localhost:{self.tile_server_port}/tiles/'+'{z}/{x}/{y}'
+        self.regions_url = f'http://locahost:{self.tile_server_port}/tiles/region'
+
         self.tile_source = large_image.open(self.local_image_path,encoding='PNG')
-        self.tile_metadata = self.tile_source.getMetadata()
+        self.tiles_metadata = self.tile_source.getMetadata()
 
         self.router = APIRouter()
         self.router.add_api_route('/',self.root,methods=["GET"])
         self.router.add_api_route('/tiles/{z}/{x}/{y}',self.get_tile,methods=["GET"])
         self.router.add_api_route('/metadata',self.get_metadata,methods=["GET"])
+        self.router.add_api_route('/tiles/region',self.get_region,methods=["GET"])
     
     def __str__(self):
         return f'TileServer class for {self.local_image_path} to http://localhost:{self.tile_server_port}'
@@ -128,9 +137,23 @@ class LocalTileServer:
         return Response(content = raw_tile, media_type='image/png')
     
     def get_metadata(self):
-        large_image_metadata = self.tile_source.getMetadata()
-        return Response(content = json.dumps(large_image_metadata),media_type = 'application/json')
+        return Response(content = json.dumps(self.tiles_metadata),media_type = 'application/json')
     
+    def get_region(self, top: int, left: int, bottom:int,right:int):
+        """
+        Grabbing a specific region in the image based on bounding box coordinates
+        """
+        image, mime_type = self.tile_source.getRegion(
+            region = {
+                'left': left,
+                'top': top,
+                'right': right,
+                'bottom': bottom
+            }
+        )
+
+        return Response(content = image, media_type = 'image/png')
+
     def start(self, port = 8050):
         app = FastAPI()
         app.include_router(self.router)
@@ -138,40 +161,104 @@ class LocalTileServer:
         uvicorn.run(app,host='0.0.0.0',port=port)
 
 
-class RemoteTileServer:
+class RemoteTileServer(TileServer):
     """
     Use for linking visualization with remote tiles API (DSA server)
     """
     def __init__(self,
-                 tiles_url: str):
+                 base_url: str):
 
-        pass
+        self.base_url = base_url
+        self.tiles_url = f'{base_url}/tiles/'+'{z}/{x}/{y}'
+        self.regions_url = f'{base_url}/tiles/region'
+
+        self.tiles_metadata = requests.get(
+            f'{base_url}/tiles'
+        ).json()
+
+    def __str__(self):
+        return f'RemoteTileServer for {self.base_url}'
 
 
-class SlideMap:
+class MapComponent:
+    """
+    Components which are rendered with dash-leaflet components
+    """
+    pass
+
+class SlideMap(MapComponent):
     def __init__(self,
-                 tile_server_port: str
+                 tile_server,
+                 annotations: Union[dict,list,None]
                 ):
         
-        self.tile_server_port = tile_server_port
-
-        image_metadata = requests.get(
-            f'http://localhost:{self.tile_server_port}/metadata'
-        ).json()
+        self.tiles_url = tile_server.tiles_url
+        image_metadata = tile_server.tiles_metadata
+        self.annotations = annotations
         
         self.assets_folder = os.getcwd()+'/.fusion_assets/'
+        # Add Namespace functions here:
+        self.get_namespace()
 
-        self.layout = self.gen_layout(
+        self.annotation_components = self.process_annotations()
+
+        self.blueprint = DashBlueprint()        
+        self.blueprint.layout = self.gen_layout(
             tile_size = image_metadata['tileWidth'],
             zoom_levels = image_metadata['levels'],
             tile_server_port = self.tile_server_port
         )
 
-        # Add Namespace functions here:
-        self.get_namespace()
-
         # Add callback functions here
         self.get_callbacks()
+
+    def process_annotations(self):
+        """
+        Convert geojson or list of geojsons into dash-leaflet components
+        """
+
+        annotation_components = []
+        if not self.annotations is None:
+            if type(self.annotations)==dict:
+                self.annotations = [self.annotations]
+            
+            for st_idx,st in enumerate(self.annotations):
+                dl.Overlay(
+                    dl.LayerGroup(
+                        dl.GeoJSON(
+                            data = st,
+                            id = {'type': 'feature-bounds','index': st_idx},
+                            options = {
+                                'style': self.js_namespace("featureStyle")
+                            },
+                            filter = self.js_namespace("featureFilter"),
+                            hideout = {
+                                'colorKey': {},
+                                'overlayProp': {},
+                                'fillOpacity': 0.5,
+                                'lineColor': {},
+                                'filterVals': []
+                            },
+                            hoverStyle = arrow_function(
+                                {
+                                    'weight': 5,
+                                    'color': '#9caf00',
+                                    'dashArray':''
+                                }
+                            ),
+                            zoomToBounds = False,
+                            children = [
+                                dl.Popup(
+                                    id = {'type': 'feature-popup','index': st_idx},
+                                    autoPan = False,
+                                )
+                            ]
+                        )
+                    ),
+                    name = st['properties']['name'], checked = True, id = {'type':'feature-overlay','index':st_idx}
+                )
+
+        return annotation_components
 
     def gen_layout(self, tile_size:int, zoom_levels: int, tile_server_port:str):
         """
@@ -187,7 +274,7 @@ class SlideMap:
                 children = [
                     dl.TileLayer(
                         id = 'slide-tile-layer',
-                        url = f'http://localhost:{tile_server_port}/tiles'+'/{z}/{x}/{y}',
+                        url = self.tiles_url,
                         tileSize=tile_size,
                         maxNativeZoom=zoom_levels-1,
                         minZoom = 0
@@ -207,7 +294,9 @@ class SlideMap:
                     ),
                     dl.LayersControl(
                         id = 'slid-layers-control',
-                        children = []
+                        children = [
+                            self.annotation_components
+                        ]
                     ),
                     dl.EasyButton(
                         icon = 'fa-solid fa-arrows-to-dot',
@@ -240,7 +329,7 @@ class SlideMap:
         self.js_namespace.add(
             src = """
                 function(feature,context){
-                const {colorKey, overlayProp, fillOpacity, lineColor, featureFilter} = context.hideout;
+                const {colorKey, overlayProp, fillOpacity, lineColor, filterVals} = context.hideout;
                 var style = {};
 
 
@@ -254,7 +343,7 @@ class SlideMap:
         self.js_namespace.add(
             src = """
                 function(feature,context){
-                const {colorKey, overlayProp, fillOpacity, lineColor, featureFilter} = context.hideout;
+                const {colorKey, overlayProp, fillOpacity, lineColor, filterVals} = context.hideout;
                 
                 var returnFeature = true;
 
@@ -271,11 +360,69 @@ class SlideMap:
         )
 
     def get_callbacks(self):
-        # Add callbacks to self.viewer_app
-        # Maybe add something so users can point the app to some zarr storage or add polygons either through uploads or on initialization
+        """
+        Adding callbacks to this DashBlueprint object
+        """
+        
+        # Getting popup info for clicked feature
+        self.blueprint.callback(
+            [
+                Input({'type':'feature-bounds','index': MATCH},'clickData')
+            ],
+            [
+                Output({'type': 'ftu-popup','index': MATCH},'children')
+            ]
+        )(self.get_click_popup)
 
+        # 
 
-        pass
+    def get_click_popup(self, clicked):
+        """
+        Popuplate popup for clicked feature
+        """
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        def make_dash_table(df:pd.DataFrame):
+            """
+            Populate dash_table.DataTable
+            """
+            return_table = dash_table.DataTable(
+                columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in df],
+                data = df.to_dict('records'),
+                editable=False,                                        
+                sort_mode='multi',
+                page_current=0,
+                page_size=5,
+                style_cell = {
+                    'overflow':'hidden',
+                    'textOverflow':'ellipsis',
+                    'maxWidth':0
+                },
+                tooltip_data = [
+                    {
+                        column: {'value':str(value),'type':'markdown'}
+                        for column, value in row.items()
+                    } for row in df.to_dict('records')
+                ],
+                tooltip_duration = None
+            )
+
+            return return_table
+
+        popup_div = html.Div(
+            dbc.Accordion(
+                dbc.AccordionItem(
+                    title = 'Properties',
+                    children = [
+                        make_dash_table(pd.DataFrame.from_records([i['properties'] for i in clicked]))
+                    ]
+                )
+            )
+        )
+
+        return popup_div
 
 
 class MultiFrameSlideMap(SlideMap):
@@ -283,21 +430,19 @@ class MultiFrameSlideMap(SlideMap):
     Used for viewing slides with multiple "frames" (e.g. CODEX images)
     """
     def __init__(self,
-                 tile_server_port: str
+                 tile_server,
+                 annotations: Union[dict,list,None]
                  ):
-        self.tile_server_port = tile_server_port
-
-        pass
+        super().__init__(tile_server,annotations)
+        
     
-
-
-
-class Annotations:
+class ToolTab:
     """
-    Components associated with annotations added to the slide map
+    Components which can be added to tabs
     """
-    def __init__(self):
-        pass
+    pass
+
+
 
 
 

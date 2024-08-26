@@ -19,7 +19,7 @@ import pandas as pd
 from typing_extensions import Union
 
 
-def load_geojson(geojson_path: str) -> dict:
+def load_geojson(geojson_path: str, name = None) -> dict:
     """
     Load geojson annotations from filepath
     """
@@ -30,9 +30,12 @@ def load_geojson(geojson_path: str) -> dict:
 
         f.close()
 
+    if not name is None:
+        geojson_anns['properties'] = geojson_anns['properties'] | {'name': name}
+
     return geojson_anns
 
-def load_histomics(json_path: str) -> dict:
+def load_histomics(json_path: str) -> list:
     """
     Load histomics annotations from filepath
     """
@@ -45,49 +48,35 @@ def load_histomics(json_path: str) -> dict:
     
     #TODO: update for non-polyline annotations
 
-    if isinstance(json_anns,dict):
+    if type(json_anns)==dict:
+        json_anns = [json_anns]
+
+    geojson_list = []
+    for ann in json_anns:
+
         geojson_anns = {
             'type': 'FeatureCollection',
+            'properties': ann['annotation']['name'],
             'features': [
                 {
-                    'type': 'Feature',
+                    'type':'Feature',
                     'geometry': {
                         'type': 'Polygon',
                         'coordinates': [
                             el['points']
                         ]
                     },
-                    'properties': {
-                        'user': el['user'] if 'user' in el else {}
-                    }
+                    'properties': el['user'] if 'user' in el else {} | {'name': f'{ann["annotation"]["name"]}_{el_idx}'}
                 }
-                for el in json_anns['annotation']['elements']
+                for el_idx,el in enumerate(ann['annotation']['elements'])
             ]
         }
-    elif isinstance(json_anns,list):
 
-        geojson_anns = {
-            'type': 'FeatureCollection',
-            'features': []
-        }
-        for ann in json_anns:
-            geojson_anns['features'].extend(
-                {
-                    'type': 'Feature',
-                    'geometry': {
-                        'type': 'Polygon',
-                        'coordinates': [
-                            el['points']
-                        ]
-                    },
-                    'properties': el['user'] if 'user' in el else {}
-                }
-                for el in ann['annotation']['elements']
-            )
+        geojson_list.append(geojson_anns)
 
-    return geojson_anns
+    return geojson_list
 
-def load_aperio(xml_path: str) -> dict:
+def load_aperio(xml_path: str) -> list:
     """
     Load Aperio annotations from filepath
     """
@@ -96,12 +85,13 @@ def load_aperio(xml_path: str) -> dict:
     tree = ET.parse(xml_path)
     structures_in_xml = tree.getroot().findall('Annotation')
     
-    geojson_anns = {
-        'type': 'FeatureCollection',
-        'features': []
-    }
-
+    geojson_list = []
     for ann_idx in range(0,len(structures_in_xml)):
+
+        geojson_anns = {
+            'type': "FeatureCollection",
+            "features": []
+        }
         this_structure = tree.getroot().findall(f'Annotation[@Id="{str(ann_idx+1)}]/Regions/Region')
 
         for obj in this_structure:
@@ -122,7 +112,9 @@ def load_aperio(xml_path: str) -> dict:
                 'properties': {}
             })
 
-    return geojson_anns
+        geojson_list.append(geojson_anns)
+
+    return geojson_list
 
 def load_polygon_csv(
         csv_path: str, 
