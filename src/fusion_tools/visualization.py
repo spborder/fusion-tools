@@ -34,6 +34,36 @@ import requests
 class Visualization:
     """
     General holder class used for initialization. Components added after initialization.
+    
+    Parameters
+    --------
+    components: list
+        list of components to add to the visualization session (one of Tool or Map)
+
+    layout: list 
+        Hierarchy goes from Row-->Column-->Tab for elements in lists. 
+        (e.g. [0] would be one row with one component, 
+        [0,1] would be one row with two columns, 
+        [[0],[[1,2]]] would be two rows, first row with one column, second row with one column with two tabs)
+    
+
+    Examples
+    --------
+    >>> layout = [
+        [0,[1,2]]
+    ]
+    >>> components = [
+        SlideMap(
+            tile_server = LocalTileServer('/path/to/slide.svs'),
+            annotations = geojson_list
+        ),
+        AnnotationOptions(geojson_list),
+        PropertyViewer()
+    ]
+
+    >>> vis_session = Visualization(components,layout)
+    >>> vis_session.start()
+        
     """
     def __init__(self,
                  components: list,
@@ -159,7 +189,6 @@ class LocalTileServer(TileServer):
         app.include_router(self.router)
 
         uvicorn.run(app,host='0.0.0.0',port=port)
-
 
 class RemoteTileServer(TileServer):
     """
@@ -436,12 +465,11 @@ class MultiFrameSlideMap(SlideMap):
         super().__init__(tile_server,annotations)
         
     
-class ToolTab:
+class Tool:
     """
     Components which can be added to tabs
     """
     pass
-
 
 
 
