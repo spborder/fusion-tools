@@ -87,7 +87,10 @@ class Visualization:
 
 
 
-class TileServer:
+class LocalTileServer:
+    """
+    Tile server from image saved locally. Uses large-image to read and parse image formats (default: [common])
+    """
     def __init__(self,
                  local_image_path: str
                  ):
@@ -135,7 +138,17 @@ class TileServer:
         uvicorn.run(app,host='0.0.0.0',port=port)
 
 
-class LocalSlideViewer:
+class RemoteTileServer:
+    """
+    Use for linking visualization with remote tiles API (DSA server)
+    """
+    def __init__(self,
+                 tiles_url: str):
+
+        pass
+
+
+class SlideMap:
     def __init__(self,
                  tile_server_port: str
                 ):
@@ -263,6 +276,29 @@ class LocalSlideViewer:
 
 
         pass
+
+
+class MultiFrameSlideMap(SlideMap):
+    """
+    Used for viewing slides with multiple "frames" (e.g. CODEX images)
+    """
+    def __init__(self,
+                 tile_server_port: str
+                 ):
+        self.tile_server_port = tile_server_port
+
+        pass
+    
+
+
+
+class Annotations:
+    """
+    Components associated with annotations added to the slide map
+    """
+    def __init__(self):
+        pass
+
 
 
 class FeatureViewer:
@@ -435,18 +471,6 @@ class FeatureViewer:
 
         return return_image
 
-
-class MultiFrameSlideViewer(LocalSlideViewer):
-    """
-    Used for viewing slides with multiple "frames" (e.g. CODEX images)
-    """
-    def __init__(self,
-                 tile_server_port: str
-                 ):
-        self.tile_server_port = tile_server_port
-
-        pass
-    
 
 
 
