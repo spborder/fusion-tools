@@ -6,7 +6,7 @@ Functions related to visualization for data derived from FUSION.
 - Local slide viewers
 
 """
-
+import os
 import large_image.exceptions
 from fastapi import FastAPI, APIRouter, Response
 
@@ -15,7 +15,8 @@ import pandas as pd
 import dash_leaflet as dl
 from dash import dcc, callback, ctx, ALL, exceptions
 import dash_bootstrap_components as dbc
-from dash_extensions.enrich import DashProxy, html, Input, Output, State
+from dash_extensions.enrich import DashProxy, DashBlueprint, html, Input, Output, State
+from dash_extensions.javascript import assign, arrow_function, Namespace
 
 import plotly.express as px
 import plotly.graph_objects as go
@@ -29,12 +30,71 @@ import json
 import uvicorn
 import requests
 
+
+class Visualization:
+    """
+    General holder class used for initialization. Components added after initialization.
+    """
+    def __init__(self,
+                 components: list,
+                 layout: list,
+                 app_options: dict = {}):
+        
+
+        self.components = components
+        self.layout = layout
+        self.app_options = app_options
+
+        self.default_options = {
+            'title': 'FUSION',
+            'server': 'default',
+            'server_options': {},
+            'port': '8080'
+        }
+
+        self.viewer_app = DashProxy(
+            __name__,
+            external_stylesheets = [
+                dbc.themes.LUX,
+                dbc.themes.BOOTSTRAP,
+                dbc.icons.BOOTSTRAP,
+                dbc.icons.FONT_AWESOME
+            ],
+            assets_folder = self.assets_folder,
+            prevent_initial_callbacks=True
+        )
+        self.viewer_app.title = self.app_options['title'] if 'title' in self.app_options else self.default_options['title']
+        self.viewer_app.layout = []
+    
+    def start(self):
+        """
+        Starting the visualization app based on app_options        
+        """
+        
+        if 'server' in self.app_options:
+            if self.app_options['server']=='default':
+                self.viewer_app.run_server(
+                    host = '0.0.0.0',
+                    port = self.app_options['port'] if 'port' in self.app_options else self.default_options['port'],
+                    debug = False
+                )
+        else:
+            self.viewer_app.run_server(
+                host = '0.0.0.0',
+                port = self.app_options['port'] if 'port' in self.app_options else self.default_options['port'],
+                debug = False
+            )
+
+
+
 class TileServer:
     def __init__(self,
                  local_image_path: str
                  ):
 
         self.local_image_path = local_image_path
+
+        self.tile_server_port = '8050'
 
         self.tile_source = large_image.open(self.local_image_path,encoding='PNG')
         self.tile_metadata = self.tile_source.getMetadata()
@@ -43,11 +103,14 @@ class TileServer:
         self.router.add_api_route('/',self.root,methods=["GET"])
         self.router.add_api_route('/tiles/{z}/{x}/{y}',self.get_tile,methods=["GET"])
         self.router.add_api_route('/metadata',self.get_metadata,methods=["GET"])
+    
+    def __str__(self):
+        return f'TileServer class for {self.local_image_path} to http://localhost:{self.tile_server_port}'
 
     def root(self):
         return {'message': "Oh yeah, now we're cooking"}
 
-    def get_tile(self,z:int, x:int, y:int):
+    def get_tile(self,z:int, x:int, y:int, style = {}):
         try:
             raw_tile = self.tile_source.getTile(
                         x = x,
@@ -74,76 +137,125 @@ class TileServer:
 
 class LocalSlideViewer:
     def __init__(self,
-                 tile_server_port: str,
-                 app_port: str):
+                 tile_server_port: str
+                ):
         
-        self.app_port = app_port
         self.tile_server_port = tile_server_port
 
         image_metadata = requests.get(
             f'http://localhost:{self.tile_server_port}/metadata'
         ).json()
         
-        self.viewer_app = DashProxy(__name__)
-        self.viewer_app.layout = self.gen_layout(
+        self.assets_folder = os.getcwd()+'/.fusion_assets/'
+
+        self.layout = self.gen_layout(
             tile_size = image_metadata['tileWidth'],
             zoom_levels = image_metadata['levels'],
             tile_server_port = self.tile_server_port
         )
-        self.viewer_app.title = 'FUSION'
+
+        # Add Namespace functions here:
+        self.get_namespace()
 
         # Add callback functions here
         self.get_callbacks()
-
-        # Running using default Flask server
-        self.viewer_app.run(
-            host = '0.0.0.0',
-            port = self.app_port,
-            debug = False
-        )
 
     def gen_layout(self, tile_size:int, zoom_levels: int, tile_server_port:str):
         """
         Generate simple slide viewer layout
         """
         layout = html.Div(
-            dbc.Container(
-                id = 'container',
-                fluid = True,
+            dl.Map(
+                id = 'slide-map',
+                crs = 'Simple',
+                center = [-tile_size,tile_size],
+                zoom = 1,
+                style = {'height': '90vh','width': '95vw','margin': 'auto','display': 'inline-block'},
                 children = [
-                    dbc.Row(
-                        html.Div(
-                            dl.Map(
-                                id = 'slide-map',
-                                crs = 'Simple',
-                                center = [120,-120],
-                                zoom = 0,
-                                style = {'height': '100vh','width': '100vw','margin': 'auto','display': 'inline-block'},
-                                children = [
-                                    dl.TileLayer(
-                                        id = 'slide-tile-layer',
-                                        url = f'http://localhost:{tile_server_port}/tiles'+'/{z}/{x}/{y}',
-                                        tileSize=tile_size,
-                                        maxNativeZoom=zoom_levels-1,
-                                        minZoom = 0,
-                                        #bounds = [[0,0],[tile_size,-tile_size]]
-                                    ),
-                                    dl.FullScreenControl(
-                                        position = 'upper-left'
-                                    ),
-                                    dl.LayersControl(
-                                        id = 'slid-layers-control',
-                                        children = []
-                                    )
-                                ]
+                    dl.TileLayer(
+                        id = 'slide-tile-layer',
+                        url = f'http://localhost:{tile_server_port}/tiles'+'/{z}/{x}/{y}',
+                        tileSize=tile_size,
+                        maxNativeZoom=zoom_levels-1,
+                        minZoom = 0
+                    ),
+                    dl.FullScreenControl(
+                        position = 'upper-left'
+                    ),
+                    dl.FeatureGroup(
+                        id='edit-feature-group',
+                        children = [
+                            dl.EditControl(
+                                id = 'edit-control',
+                                draw = dict(polyline=False, line=False, circle = False, circlemarker=False),
+                                position='topleft'
                             )
-                        )
-                    )
+                        ]
+                    ),
+                    dl.LayersControl(
+                        id = 'slid-layers-control',
+                        children = []
+                    ),
+                    dl.EasyButton(
+                        icon = 'fa-solid fa-arrows-to-dot',
+                        title = 'Re-Center Map',
+                        id = 'center-map',
+                        position = 'top-left',
+                        eventHandlers = {
+                            'click': self.js_namespace('centerMap')
+                        }
+                    ),
                 ]
             )
         )
 
         return layout
+
+    def get_namespace(self):
+        """
+        Adding javascript functions to layout
+        """
+        self.js_namespace = Namespace(
+            "fusionTools","default"
+        )
+
+        self.js_namespace.add(
+            src = 'function(e,ctx){ctx.map.flyTo([-120,120],1);}',
+            name = "centerMap"
+        )
+
+        self.js_namespace.add(
+            src = """
+                function(feature,context){
+                const {colorKey, overlayProp, fillOpacity, lineColor, featureFilter} = context.hideout;
+                var style = {};
+
+
+                return style;
+                }
+
+                """,
+            name = 'featureStyle'
+        )
+
+        self.js_namespace.add(
+            src = """
+                function(feature,context){
+                const {colorKey, overlayProp, fillOpacity, lineColor, featureFilter} = context.hideout;
+                
+                var returnFeature = true;
+
+
+                return returnFeature;
+                }
+                """,
+            name = 'featureFilter'
+        )
+
+
+        self.js_namespace.dump(
+            assets_folder = self.assets_folder
+        )
 
     def get_callbacks(self):
         # Add callbacks to self.viewer_app
@@ -190,7 +302,6 @@ class FeatureViewer:
         self.feature_viewer.layout = self.get_layout()
         self.get_callbacks()
 
-    
     def get_callbacks(self):
         """
         Put all callbacks in here
@@ -323,5 +434,30 @@ class FeatureViewer:
 
 
         return return_image
+
+
+class MultiFrameSlideViewer(LocalSlideViewer):
+    """
+    Used for viewing slides with multiple "frames" (e.g. CODEX images)
+    """
+    def __init__(self,
+                 tile_server_port: str
+                 ):
+        self.tile_server_port = tile_server_port
+
+        pass
+    
+
+
+
+
+
+
+
+
+
+
+
+
 
 
