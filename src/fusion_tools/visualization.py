@@ -94,8 +94,18 @@ class Visualization:
             prevent_initial_callbacks=True
         )
         self.viewer_app.title = self.app_options['title'] if 'title' in self.app_options else self.default_options['title']
-        self.viewer_app.layout = []
+        self.viewer_app.layout = self.gen_layout()
     
+    def gen_layout(self):
+
+        layout = html.Div(
+            dbc.Container(
+                id = 'vis-container',
+                fluid = True,
+                children = []
+            )
+        )
+
     def start(self):
         """
         Starting the visualization app based on app_options        
@@ -127,12 +137,13 @@ class LocalTileServer(TileServer):
     Tile server from image saved locally. Uses large-image to read and parse image formats (default: [common])
     """
     def __init__(self,
-                 local_image_path: str
+                 local_image_path: str,
+                 tile_server_port = '8050'
                  ):
 
         self.local_image_path = local_image_path
 
-        self.tile_server_port = '8050'
+        self.tile_server_port = tile_server_port
 
         self.tiles_url = f'http://localhost:{self.tile_server_port}/tiles/'+'{z}/{x}/{y}'
         self.regions_url = f'http://locahost:{self.tile_server_port}/tiles/region'
@@ -195,7 +206,8 @@ class RemoteTileServer(TileServer):
     Use for linking visualization with remote tiles API (DSA server)
     """
     def __init__(self,
-                 base_url: str):
+                 base_url: str
+                 ):
 
         self.base_url = base_url
         self.tiles_url = f'{base_url}/tiles/'+'{z}/{x}/{y}'
@@ -207,6 +219,22 @@ class RemoteTileServer(TileServer):
 
     def __str__(self):
         return f'RemoteTileServer for {self.base_url}'
+
+class CustomTileServer(TileServer):
+    """
+    If using some other tiles endpoint (must pass tileSize and levels in dictionary)
+    """
+    def __init__(self,
+                 tiles_url:str,
+                 regions_url:str,
+                 image_metadata: dict
+                 ):
+        
+        self.tiles_url = tiles_url
+        self.regions_url = regions_url
+
+        assert 'tileSize' in image_metadata and 'levels' in image_metadata
+        self.tiles_metadata = image_metadata
 
 
 class MapComponent:
@@ -231,6 +259,7 @@ class SlideMap(MapComponent):
 
         self.annotation_components = self.process_annotations()
 
+        self.title = 'Slide Map'
         self.blueprint = DashBlueprint()        
         self.blueprint.layout = self.gen_layout(
             tile_size = image_metadata['tileWidth'],
@@ -295,14 +324,14 @@ class SlideMap(MapComponent):
         """
         layout = html.Div(
             dl.Map(
-                id = 'slide-map',
+                id = {'type': 'slide-map','index': 0},
                 crs = 'Simple',
                 center = [-tile_size,tile_size],
                 zoom = 1,
                 style = {'height': '90vh','width': '95vw','margin': 'auto','display': 'inline-block'},
                 children = [
                     dl.TileLayer(
-                        id = 'slide-tile-layer',
+                        id = {'type': 'map-tile-layer','index': 0},
                         url = self.tiles_url,
                         tileSize=tile_size,
                         maxNativeZoom=zoom_levels-1,
@@ -312,17 +341,21 @@ class SlideMap(MapComponent):
                         position = 'upper-left'
                     ),
                     dl.FeatureGroup(
-                        id='edit-feature-group',
+                        id = {'type': 'edit-feature-group','index': 0},
                         children = [
                             dl.EditControl(
-                                id = 'edit-control',
+                                id = {'type': 'edit-control','index': 0},
                                 draw = dict(polyline=False, line=False, circle = False, circlemarker=False),
                                 position='topleft'
                             )
                         ]
                     ),
+                    html.Div(
+                        id = {'type': 'map-colorbar-div','index': 0},
+                        children = []
+                    ),
                     dl.LayersControl(
-                        id = 'slid-layers-control',
+                        id = {'type': 'map-layers-control'},
                         children = [
                             self.annotation_components
                         ]
@@ -330,7 +363,7 @@ class SlideMap(MapComponent):
                     dl.EasyButton(
                         icon = 'fa-solid fa-arrows-to-dot',
                         title = 'Re-Center Map',
-                        id = 'center-map',
+                        id = {'type': 'center-map','index': 0},
                         position = 'top-left',
                         eventHandlers = {
                             'click': self.js_namespace('centerMap')
@@ -464,12 +497,166 @@ class MultiFrameSlideMap(SlideMap):
                  ):
         super().__init__(tile_server,annotations)
         
+        self.title = 'Multi-Frame Slide Map'
     
 class Tool:
     """
     Components which can be added to tabs
     """
     pass
+
+
+class OverlayOptions(Tool):
+    """
+    Creates dropdown menu for changing overlay colors based on structure properties
+
+    Parameters
+    --------
+    geojson_anns: Union[list,dict]
+        List or single GeoJSON object containing "property" key 
+
+    reference_object: Union[str,None]
+        File path to data file with properties not added to geojson objects but with some reference field which links the two
+    
+    ignore_list: list = []
+        List of properties to ignore and not make usable for generating overlaid heatmaps
+
+
+    """
+    def __init__(self,
+                 geojson_anns: Union[list,dict],
+                 reference_object: Union[str,None],
+                 ignore_list: list = []
+                 ):
+
+        self.reference_object = reference_object
+        self.overlay_options = self.extract_overlay_options(geojson_anns, ignore_list)
+        
+        self.title = 'Overlay Options'
+        self.blueprint = DashBlueprint()
+        self.blueprint.layout = self.gen_layout()
+
+        # Add callbacks here
+        self.get_callbacks()
+
+    
+    def extract_overlay_options(self,geojson_anns,reference_object,ignore_list):
+        """
+        Extract all properties which can be used for overlays
+        """
+
+        geojson_properties = []
+        for ann in geojson_anns:
+            for f in ann['features']:
+                f_props = list(f['properties'].keys())
+                for p in f_props:
+                    # Checking for sub-properties: (only going 1 level)
+                    if type(f['properties'][p])==dict:
+                        sub_props = [f'{p} --> {sp}' for sp in list(f['properties'][p].keys())]
+                    else:
+                        sub_props = [p]
+                    
+                    geojson_properties.extend([i for i in sub_props if not i in geojson_properties and not i in ignore_list])
+
+        #TODO: After loading an experiment, reference the file here for additional properties
+        
+
+        return geojson_properties
+
+    def gen_layout(self):
+        
+        layout = html.Div([
+            dbc.Card(
+                dbc.CardBody(
+                    dbc.Row(
+                        html.H3('Overlay Options')
+                    ),
+                    html.Hr(),
+                    dbc.Row(
+                        'Select options below to adjust overlay color, transparency, and line color for structures on your slide.'
+                    ),
+                    html.Hr(),
+                    dbc.Row([
+                        dbc.Col(
+                            dbc.Label(
+                                'Select Overlay Property: ',
+                                html_for = {'type': 'overlay-drop','index': 0}
+                            ),
+                            md = 3
+                        ),
+                        dbc.Col(
+                            dcc.Dropdown(
+                                options = [
+                                    {'label': i, 'value': i}
+                                    for i in self.overlay_options
+                                ],
+                                value = [],
+                                mutli = False,
+                                id = {'type': 'overlay-drop','index': 0}
+                            ),
+                            md = 9
+                        )
+                    ]),
+                    html.Hr(),
+                    dbc.Row([
+                        dbc.Col(
+                            dbc.Label(
+                                'Adjust Overlay Transparency: ',
+                                html_for = {'type': 'overlay-trans-slider','index': 0}
+                            ),
+                            md = 3
+                        ),
+                        dbc.Col(
+                            dcc.Slider(
+                                min = 0,
+                                max = 100,
+                                step = 10,
+                                value = 50,
+                                id = {'type': 'overlay-trans-slider','index': 0}
+                            )
+                        )
+                    ]),
+                    dbc.Row([
+                        
+                    ])
+                )
+            )
+        ])
+
+    
+        return layout
+
+    def get_callbacks(self):
+
+        self.blueprint.callback(
+            [
+                Input({'type': 'overlay-drop','index': ALL},'value'),
+                Input({'type':'overlay-trans-slider','index': ALL},'value')
+            ],
+            [
+                Output({'type': 'feature-bounds','index': ALL},'hideout'),
+                Output({'type': 'map-colorbar-div','index': ALL},'children')
+            ],
+            [
+                State({'type': 'overlay-drop','index': ALL},'value'),
+                State({'type': 'overlay-trans-slider','index': ALL},'value')
+            ]
+        )(self.update_overlays)
+
+    def update_overlays(self, overlay_value, transp_value, overlay_state, transp_state):
+        """
+        Update overlay transparency and color based on property selection
+        """
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+    
+
+
+
+
+
+
 
 
 
