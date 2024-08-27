@@ -13,7 +13,8 @@ from fastapi import FastAPI, APIRouter, Response
 import large_image
 import pandas as pd
 import dash_leaflet as dl
-from dash import dcc, callback, ctx, ALL, MATCH, exceptions, dash_table
+import dash_leaflet.express as dlx
+from dash import dcc, callback, ctx, ALL, MATCH, exceptions, dash_table, Patch
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_extensions.enrich import DashProxy, DashBlueprint, html, Input, Output, State
@@ -78,6 +79,8 @@ class Visualization:
         self.layout = layout
         self.app_options = app_options
 
+        self.asset_folder = os.getcwd()+'/.fusion_assets/'
+
         self.default_options = {
             'title': 'FUSION',
             'server': 'default',
@@ -101,13 +104,33 @@ class Visualization:
     
     def gen_layout(self):
 
+        layout_children = self.get_layout_children()
+
         layout = html.Div(
             dbc.Container(
                 id = 'vis-container',
                 fluid = True,
-                children = []
-            )
+                children = [
+                    layout_children
+                ]
+            ),
+            style = self.app_options['app_style'] if 'app_style' in self.app_options else {}
         )
+
+        return layout
+
+    def get_layout_children(self):
+        """
+        Generate children of layout container from input list of components and layout options
+        """
+
+        layout_children = []
+
+
+
+
+
+        return layout_children
 
     def start(self):
         """
@@ -253,7 +276,9 @@ class SlideMap(MapComponent):
                 ):
         
         self.tiles_url = tile_server.tiles_url
-        image_metadata = tile_server.tiles_metadata
+        self.image_metadata = tile_server.tiles_metadata
+        
+        self.x_scale, self.y_scale = self.get_scale_factors()
         self.annotations = annotations
         
         self.assets_folder = os.getcwd()+'/.fusion_assets/'
@@ -263,15 +288,33 @@ class SlideMap(MapComponent):
         self.annotation_components = self.process_annotations()
 
         self.title = 'Slide Map'
-        self.blueprint = DashBlueprint()        
+        self.blueprint = DashBlueprint(
+            external_scripts = ['https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.1.0/chroma.min.js']
+        )        
         self.blueprint.layout = self.gen_layout(
-            tile_size = image_metadata['tileWidth'],
-            zoom_levels = image_metadata['levels'],
+            tile_size = self.image_metadata['tileWidth'],
+            zoom_levels = self.image_metadata['levels'],
             tile_server_port = self.tile_server_port
         )
 
         # Add callback functions here
         self.get_callbacks()
+
+    def get_scale_factors(self):
+        """
+        Used to adjust overlaid annotations and coordinates so that they fit on the "base" tile (tileWidth x tileHeight)
+        
+        """
+
+        base_dims = [
+            self.image_metadata['sizeX']/(2**(self.image_metadata['levels']-1)),
+            self.image_metadata['sizeY']/(2**(self.image_metadata['levels']-1))
+        ]
+
+        x_scale = base_dims[0] / self.image_metadata['sizeX']
+        y_scale = -(base_dims[1] / self.image_metadata['sizeY'])
+
+        return x_scale, y_scale
 
     def process_annotations(self):
         """
@@ -284,6 +327,14 @@ class SlideMap(MapComponent):
                 self.annotations = [self.annotations]
             
             for st_idx,st in enumerate(self.annotations):
+
+                # Scale annotations to fit within base tile dimensions
+                for f in st['features']:
+                    f['geometry']['coordinates'] = [
+                        [i[0]*self.x_scale,i[1]*self.y_scale]
+                        for i in f['geometry']['coordinates']
+                    ]
+
                 dl.Overlay(
                     dl.LayerGroup(
                         dl.GeoJSON(
@@ -294,7 +345,7 @@ class SlideMap(MapComponent):
                             },
                             filter = self.js_namespace("featureFilter"),
                             hideout = {
-                                'colorKey': {},
+                                'overlayBounds': {},
                                 'overlayProp': {},
                                 'fillOpacity': 0.5,
                                 'lineColor': '#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255)),
@@ -394,8 +445,10 @@ class SlideMap(MapComponent):
         self.js_namespace.add(
             src = """
                 function(feature,context){
-                const {colorKey, overlayProp, fillOpacity, lineColor, filterVals} = context.hideout;
+                const {overlayBounds, overlayProp, fillOpacity, lineColor, filterVals} = context.hideout;
                 var style = {};
+                const csc = chroma.scale(["blue","red"]).domain([overlayMin,overlayMax]);
+
 
 
                 return style;
@@ -408,7 +461,7 @@ class SlideMap(MapComponent):
         self.js_namespace.add(
             src = """
                 function(feature,context){
-                const {colorKey, overlayProp, fillOpacity, lineColor, filterVals} = context.hideout;
+                const {overlayBounds, overlayProp, fillOpacity, lineColor, filterVals} = context.hideout;
                 
                 var returnFeature = true;
 
@@ -489,7 +542,6 @@ class SlideMap(MapComponent):
 
         return popup_div
 
-
 class MultiFrameSlideMap(SlideMap):
     """
     Used for viewing slides with multiple "frames" (e.g. CODEX images)
@@ -508,7 +560,40 @@ class MultiFrameSlideMap(SlideMap):
         """
         
         """
+
+        layout = html.Div([
+
+        ])
+
+
+
+        return layout
+    
+    def get_callbacks(self):
         pass
+
+
+class SlideImageOverlay(MapComponent):
+    def __init__(self,
+                 image_path: str
+                ):
+        
+        self.image_path = image_path
+
+        self.title = 'Slide Image Overlay'
+
+        self.blueprint = DashBlueprint()
+        self.blueprint.layout = self.gen_layout()
+
+        self.get_callbacks()
+
+    def gen_layout(self):
+        pass
+
+    def get_callbacks(self):
+        pass
+
+
 
 
     
@@ -542,7 +627,7 @@ class OverlayOptions(Tool):
                  ):
 
         self.reference_object = reference_object
-        self.overlay_options, self.feature_names = self.extract_overlay_options(geojson_anns, ignore_list)
+        self.overlay_options, self.feature_names, self.overlay_info = self.extract_overlay_options(geojson_anns, ignore_list)
         
         self.title = 'Overlay Options'
         self.blueprint = DashBlueprint()
@@ -559,6 +644,7 @@ class OverlayOptions(Tool):
 
         geojson_properties = []
         feature_names = []
+        property_info = {}
         for ann in geojson_anns:
             feature_names.append(ann['properties']['name'])
             for f in ann['features']:
@@ -566,16 +652,82 @@ class OverlayOptions(Tool):
                 for p in f_props:
                     # Checking for sub-properties: (only going 1 level)
                     if type(f['properties'][p])==dict:
+                        sub_props = []
+                        for sup in list(f['properties'][p].keys()):
+                            sub_prop_name = f'{p} --> {sup}'
+                            sub_props.append(sub_prop_name)
+                            
+                            f_sup_val = f['properties'][p][sup]
+
+                            if not sub_prop_name in property_info:
+                                if type(f_sup_val) in [int,float]:
+                                    property_info[sub_prop_name] = {
+                                        'min': f_sup_val,
+                                        'max': f_sup_val,
+                                        'distinct': 1
+                                    }
+                                elif type(f_sup_val) in [str]:
+                                    property_info[sub_prop_name] = {
+                                        'unique': [f_sup_val],
+                                        'distinct': 1
+                                    }
+
+
+                            else:
+                                if type(f_sup_val) in [int,float]:
+                                    if f_sup_val < property_info[sub_prop_name]['min']:
+                                        property_info[sub_prop_name]['min'] = f_sup_val
+                                        property_info[sub_prop_name]['distinct']+=1
+
+                                    if f_sup_val > property_info[sub_prop_name]['max']:
+                                        property_info[sub_prop_name]['max'] = f_sup_val
+                                        property_info[sub_prop_name]['distinct'] += 1
+
+                                elif type(f_sup_val) in [str]:
+                                    if not f_sup_val in property_info[sub_prop_name]['unique']:
+                                        property_info[sub_prop_name]['unique'].append(f_sup_val)
+                                        property_info[sub_prop_name]['distinct']+=1
+
                         sub_props = [f'{p} --> {sp}' for sp in list(f['properties'][p].keys())]
                     else:
                         sub_props = [p]
-                    
-                    geojson_properties.extend([i for i in sub_props if not i in geojson_properties and not i in ignore_list])
+
+                        f_sup_val = f['properties'][p]
+
+                        if not p in property_info:
+                            if type(f_sup_val) in [int,float]:
+                                property_info[p] = {
+                                    'min': f_sup_val,
+                                    'max': f_sup_val,
+                                    'distinct': 1
+                                }
+                            else:
+                                property_info[p] = {
+                                    'unique': [f_sup_val],
+                                    'distinct': 1
+                                }
+                        else:
+                            if type(f_sup_val) in [int,float]:
+                                if f_sup_val < property_info[p]['min']:
+                                    property_info[p]['min'] = f_sup_val
+                                    property_info[p]['distinct'] += 1
+                                
+                                elif f_sup_val > property_info[p]['max']:
+                                    property_info[p]['max'] = f_sup_val
+                                    property_info[p]['distinct']+=1
+
+                            elif type(f_sup_val) in [str]:
+                                if not f_sup_val in property_info[p]['unique']:
+                                    property_info[p]['unique'].append(f_sup_val)
+                                    property_info[p]['distinct']+=1
+
+                    new_props = [i for i in sub_props if not i in geojson_properties and not i in ignore_list]
+                    geojson_properties.extend(new_props)
 
         #TODO: After loading an experiment, reference the file here for additional properties
         
 
-        return geojson_properties, feature_names
+        return geojson_properties, feature_names, property_info
 
     def gen_layout(self):
         
@@ -611,6 +763,13 @@ class OverlayOptions(Tool):
                             md = 9
                         )
                     ]),
+                    html.Div(
+                        dcc.Store(
+                            id = {'type': 'overlay-property-info','index':0},
+                            data = json.dumps(self.overlay_info),
+                            storage_type='memory'
+                        )
+                    ),
                     html.Hr(),
                     dbc.Row([
                         dbc.Col(
@@ -630,6 +789,24 @@ class OverlayOptions(Tool):
                             )
                         )
                     ]),
+                    html.Hr(),
+                    dbc.Row(
+                        dbc.Label('Filter Structures: ',html_for = {'type': 'add-filter-parent','index': 0})
+                    ),
+                    dbc.Row([
+                        html.Div(
+                            id = {'type': 'add-filter-parent','index': 0},
+                            children = []
+                        ),
+                        html.Div(
+                            html.A(html.I(
+                                className = 'bi bi-filter-circle fa-2x',
+                                n_clicks = 0,
+                                id = {'type': 'add-filter-butt','index': 0},
+                                style = {'display': 'inline-block','position': 'relative','left': '45%','right':'50%'}
+                            ))
+                        )
+                    ],align='center'),
                     html.Hr(),
                     dbc.Row(
                         dbc.Label('Update Structure Boundary Color',html_for = {'type': 'feature-lineColor-opts','index': 0})
@@ -668,11 +845,13 @@ class OverlayOptions(Tool):
 
     def get_callbacks(self):
 
+        # Updating overlay color, transparency, line color, and filter
         self.blueprint.callback(
             [
                 Input({'type': 'overlay-drop','index': ALL},'value'),
                 Input({'type':'overlay-trans-slider','index': ALL},'value'),
-                Input({'type':'feature-lineColor-butt','index': ALL},'n_clicks')
+                Input({'type':'feature-lineColor-butt','index': ALL},'n_clicks'),
+                Input({'type': 'add-filter-selector','index': ALL},'value')
             ],
             [
                 Output({'type': 'feature-bounds','index': ALL},'hideout'),
@@ -681,11 +860,112 @@ class OverlayOptions(Tool):
             [
                 State({'type': 'overlay-drop','index': ALL},'value'),
                 State({'type': 'overlay-trans-slider','index': ALL},'value'),
-                State({'type': 'feature-lineColor','index': ALL},'value')
+                State({'type': 'overlay-property-info','index': ALL},'data'),
+                State({'type': 'feature-lineColor','index': ALL},'value'),
+                State({'type': 'add-filter-selector','index': ALL},'value'),
+                State({'type':'add-filter-drop','index': ALL},'value')
             ]
         )(self.update_overlays)
 
-    def update_overlays(self, overlay_value, transp_value, overlay_state, transp_state, lineColor_state):
+        # Adding filters
+        self.blueprint.callback(
+            [
+                Output({'type': 'add-filter-parent','index': ALL},'children',allow_duplicate=True)
+            ],
+            [
+                Input({'type': 'add-filter-butt','index': ALL},'n_clicks'),
+                Input({'type': 'add-filter-drop','index': ALL},'value'),
+                Input({'type': 'delete-filter','index': ALL},'n_clicks')
+            ],
+            [
+                State({'type': 'overlay-property-info','index': ALL},'data')
+            ]
+        )(self.add_filter)
+
+    def add_filter(self, add_filter_click, add_filter_value, delete_filter_click,overlay_info_state):
+        """
+        Add new filter based on selected overlay value
+        """
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        add_filter_value = get_pattern_matching_value(add_filter_value)
+        delete_filter_click = get_pattern_matching_value(delete_filter_click)
+        overlay_info_state = json.loads(get_pattern_matching_value(overlay_info_state))
+
+        patched_list = Patch()
+        if ctx.triggered_id['type']=='delete-filter':
+
+            values_to_remove = []
+            for i,val in enumerate(delete_filter_click):
+                if val:
+                    values_to_remove.insert(0,i)
+            
+            for v in values_to_remove:
+                del patched_list[v]
+
+        elif ctx.triggered_id['type'] in ['add-filter-drop','add-filter-butt']:
+            
+            #TODO: Get min and max values for selected property
+            overlayBounds = overlay_info_state[add_filter_value]
+            if 'min' in overlayBounds:
+
+                values_selector = html.Div(
+                    dcc.RangeSlider(
+                        id = {'type': 'add-filter-selector','index': add_filter_click},
+                        min = overlayBounds['min'],
+                        max = overlayBounds['max'],
+                        step = 0.01,
+                        marks = None,
+                        tooltip = {'placement':'bottom','always_visible': True},
+                        allowCross = False,
+                        disabled = False
+                    ),
+                    style = {'display': 'inline-block','margin': 'auto','width': '100%'},
+                    id = {'type': 'add-filter-selector-div','index': add_filter_click}
+                )
+            elif 'unique' in overlayBounds:
+                values_selector = html.Div(
+                    dcc.Dropdown(
+                        id = {'type':'add-filter-selector','index': add_filter_click},
+                        options = overlayBounds['unique'],
+                        value = overlayBounds['unique'],
+                        multi = True
+                    )
+                )
+
+            
+            def new_filter_item():
+                return html.Div([
+                    dbc.Row([
+                        dbc.Col(
+                            dcc.Dropdown(
+                                options = self.overlay_options,
+                                value = [],
+                                placeholder = 'Select property to filter structures',
+                                id = {'type': 'add-filter-drop','index': add_filter_click}
+                            ),
+                            md = 10
+                        ),
+                        dbc.Col(
+                            html.I(
+                                id = {'type': 'delete-filter','index': add_filter_click},
+                                n_clicks = 0,
+                                className = 'bi bi-x-circle-fill fa-2x',
+                                style = {'color': 'rgb(255,0,0)'}
+                            ),
+                            md = 2
+                        )
+                    ],align='center'),
+                    values_selector
+                ])
+            
+            patched_list.append(new_filter_item())
+
+        return patched_list
+
+    def update_overlays(self, overlay_value, transp_value, filter_value, overlay_state, transp_state, overlay_info_state, lineColor_state, filter_state, filter_drop_state):
         """
         Update overlay transparency and color based on property selection
 
@@ -700,37 +980,44 @@ class OverlayOptions(Tool):
         overlay_state = get_pattern_matching_value(overlay_state)
         transp_state = get_pattern_matching_value(overlay_state)
         lineColor_state = get_pattern_matching_value(lineColor_state)
+        overlay_info_state = json.loads(get_pattern_matching_value(overlay_info_state))
 
-        if ctx.triggered_id['type']=='overlay-drop': 
-            if '-->' in overlay_value:
-                split_overlay_value = overlay_value.split(' --> ')
+        if ctx.triggered_id['type']=='overlay-drop':
+            use_overlay_value = overlay_value
+            use_filter_value = filter_state
+            use_filter_name = filter_drop_state
+        else:
+            use_overlay_value = overlay_state
 
-                overlay_prop = {
-                    'name': split_overlay_value[0],
-                    'value': split_overlay_value[1]
-                }
-            else:
-                overlay_prop = {
-                    'name': overlay_value,
-                    'value': None
-                }
+        if ctx.triggered_id['type']=='overlay-trans-slider':
+            use_transp_value = transp_value
+            use_filter_value = filter_state
+            use_filter_name = filter_drop_state
+        else:
+            use_transp_value = transp_state
 
-            fillOpacity = transp_state/100
-        elif ctx.triggered_id['type']=='overlay-trans-slider':
-            if '-->' in overlay_state:
-                split_overlay_value = overlay_value.split(' --> ')
+        if ctx.triggered_id['type']=='add-filter-selector':
+            use_overlay_value = overlay_state
+            use_transp_value = transp_state
+            use_filter_value = filter_value
+            use_filter_name = filter_drop_state
 
-                overlay_prop = {
-                    'name': split_overlay_value[0],
-                    'value': split_overlay_value[1]
-                }
-            else:
-                overlay_prop = {
-                    'name': overlay_state,
-                    'value': None
-                }
-            
-            fillOpacity = transp_value/100
+        if '-->' in use_overlay_value:
+            split_overlay_value = use_overlay_value.split(' --> ')
+
+            overlay_prop = {
+                'name': split_overlay_value[0],
+                'value': split_overlay_value[1]
+            }
+        else:
+            overlay_prop = {
+                'name': overlay_value,
+                'value': None
+            }
+
+        fillOpacity = use_transp_value/100
+
+        overlay_bounds = overlay_info_state[use_overlay_value]
 
         lineColor = {
             i: j
@@ -748,24 +1035,40 @@ class OverlayOptions(Tool):
             'padding':'0px 0px 0px 25px'
         }
 
-        #TODO: Define colorkey based on selected values
-        colorKey = {}
-        default_colorbar = dl.Colorbar(
-            colorscale = list(colorKey.values()),
-            width = 200,
-            height = 15,
-            position = 'bottomleft',
-            id = f'colorbar{np.random.randint(0,100)}',
-            style = color_bar_style,
-            tooltip=True
-        )
+        if 'min' in overlay_bounds:
+            colorbar = dl.Colorbar(
+                colorscale = ['blue','red'],
+                width = 200,
+                height = 15,
+                position = 'bottomleft',
+                id = f'colorbar{np.random.randint(0,100)}',
+                style = color_bar_style,
+                tooltip=True
+            )
+        elif 'unique' in overlay_bounds:
+            colorbar = dlx.categorical_colorbar(
+                categories = overlay_bounds['unique'],
+                colorscale = ['blue','red'],
+                style = color_bar_style,
+                position = 'bottomleft',
+                id = f'colorbar{np.random.randint(0,100)}',
+                width = 200,
+                height = 15
+            )
 
         #TODO: Get all current filters values here
-        filterVals = []
+        filterVals = [
+            {
+                'name': f.split(' --> ')[0] if '-->' in f else f,
+                'value': f.split(' --> ')[1] if '-->' in f else None,
+                'range': f_range
+            }
+            for f,f_range in zip(use_filter_name,use_filter_value)
+        ]
 
         geojson_hideout = [
             {
-                'colorKey': colorKey,
+                'overlayBounds': overlay_bounds,
                 'overlayProp': overlay_prop,
                 'fillOpacity': fillOpacity,
                 'lineColor': lineColor,
@@ -774,190 +1077,186 @@ class OverlayOptions(Tool):
             for i in range(len(ctx.outputs_list[0]))
         ]
 
-        return geojson_hideout, default_colorbar
+        return geojson_hideout, colorbar
 
 
-
-
-
-class FeatureViewer:
+class ChannelMixer(Tool):
     def __init__(self,
-                 feature_df: pd.DataFrame,
-                 item_id: str,
-                 ann_name: str,
-                 mode: str,
-                 mode_col: Union[str,list],
-                 fusion_handler,
-                 viewer_title = 'Feature Viewer'
+                 image_metadata: dict,
+                 tiles_url: str
                  ):
         
-        self.feature_df = feature_df
-        self.viewer_title = viewer_title
-        self.item_id = item_id
-        self.mode = mode
-        self.mode_col = mode_col
-        self.ann_name = ann_name
-        
-        assert mode in ['bbox','index','column_index','element_id']
+        self.image_metadata = image_metadata
 
-        if self.mode=='bbox' and not type(self.mode_col)==list:
-            print('If using "bbox" mode, provide a list of column names containing bounding box coordinates in minx, miny, maxx, maxy format.')
-            raise TypeError
-        elif not self.mode=='bbox' and type(self.mode_col)==list:
-            print('Provide a single column name (type: str) to identify samples in the target slide.')
-            raise TypeError
+        self.title = 'Channel Mixer'
+        self.blueprint = DashBlueprint()
+        self.blueprint.layout = self.gen_layout()
 
-        self.fusion_handler = fusion_handler
-
-        self.feature_viewer = DashProxy(
-            __name__
-        )
-
-        self.feature_viewer.title = self.viewer_title
-        self.feature_viewer.layout = self.get_layout()
         self.get_callbacks()
 
-    def get_callbacks(self):
-        """
-        Put all callbacks in here
-        """
-        # First callback is selecting features to view and plotting them when "Plot" button is pressed
-        self.feature_viewer.callback(
-            [
-                Output('feature-graph','figure'),
-                Output('image-graph','figure')
-            ],
-            [
-                Input('feature-drop','value'),
-                Input('label-drop','value')
-            ],
-            prevent_initial_call = True
-        )(self.update_plot)
+    def gen_layout(self):
 
-        # Second callback is grabbing images associated with selected points
-        self.feature_viewer.callback(
-            [
-                Output('image-graph','figure')
-            ],
-            [
-                Input('feature-graph','selectedData')
-            ],
-            prevent_initial_call = True
-        )(self.graph_image)
+        layout = html.Div([
 
-    def get_layout(self):
-        """
-        Assembling a layout based on the provided feature dataframe
-        """
-
-        main_layout = html.Div([
-            dbc.Container(
-                id = 'feature-viewer-container',
-                fluid = True,
-                children = [
-                    html.H1(self.viewer_title),
-                    dbc.Row([
-                        dbc.Col([
-                            dbc.Row([
-                                dbc.Col(
-                                    dbc.Label('Select feature(s) for plotting:',html_for='feature-drop'),
-                                    md = 3
-                                ),
-                                dbc.Col(
-                                    dcc.Dropdown(
-                                        options = [
-                                            {'label': i, 'value': i, 'disabled': False}
-                                            if not i in self.mode_col else
-                                            {'label': i, 'value': i, 'disabled': True}
-                                            for i in self.feature_df.columns.tolist() 
-                                        ],
-                                        value = [],
-                                        multi = True,
-                                        id = 'feature-drop'
-                                    ),
-                                    md = 9
-                                )
-                            ]),
-                            dbc.Row([
-                                dbc.Col(
-                                    dbc.Label('(Optional) Select a label for the plot:',html_for='label-drop'),
-                                    md = 3
-                                ),
-                                dbc.Col(
-                                    dcc.Dropdown(
-                                        options = [
-                                            {'label': i,'value': i,'disabled': False}
-                                            if not i in self.mode_col else
-                                            {'label': i, 'value': i, 'disabled': True}
-                                            for i in self.feature_df.columns.tolist()
-                                        ],
-                                        value = [],
-                                        multi = False,
-                                        id = 'label-drop'
-                                    )
-                                )
-                            ]),
-                            dbc.Row([
-                                dcc.Graph(
-                                    id = 'feature-graph',
-                                    figure = go.Figure()
-                                )
-                            ])
-                        ], md = 6),
-                        dbc.Col([
-                            dbc.Row(
-                                html.H3('Select points to see the image at that point')
-                            ),
-                            dbc.Row(
-                                dcc.Graph(
-                                    id = 'image-graph',
-                                    figure = go.Figure()
-                                )
-                            )
-                        ])
-                    ])
-                ]
-            )
         ])
 
 
-        return main_layout
+        return layout
 
-    def update_plot(self, features_selected, labels_selected, plot_button):
+    def get_callbacks(self):
+        pass
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+class PropertyViewer(Tool):
+    def __init__(self,
+                 geojson_list: Union[dict,list],
+                 reference_object: Union[str,None],
+                 ignore_list: list = []
+                 ):
+        
+        self.ignore_list = []
+        self.reference_object = reference_object
+        self.available_properties = self.extract_overlay_options(geojson_list,reference_object,ignore_list)
+    
+
+        self.title = 'Property Viewer'
+        self.blueprint = DashBlueprint()
+        self.blueprint.layout = self.gen_layout()
+
+        self.get_callbacks()   
+        
+    
+    def extract_overlay_options(self,geojson_anns,reference_object,ignore_list):
         """
-        Plotting selected data with label
+        Extract all properties which can be used for overlays
         """
 
-        print(ctx.triggered)
+        geojson_properties = []
+        feature_names = []
+        for ann in geojson_anns:
+            feature_names.append(ann['properties']['name'])
+            for f in ann['features']:
+                f_props = list(f['properties'].keys())
+                for p in f_props:
+                    # Checking for sub-properties: (only going 1 level)
+                    if type(f['properties'][p])==dict:
+                        sub_props = [f'{p} --> {sp}' for sp in list(f['properties'][p].keys())]
+                    else:
+                        sub_props = [p]
+                    
+                    geojson_properties.extend([i for i in sub_props if not i in geojson_properties and not i in ignore_list])
 
-        if not ctx.triggered:
-            raise exceptions.PreventUpdate
+        #TODO: After loading an experiment, reference the file here for additional properties
+        
 
-        return_plot = go.Figure()
+        return geojson_properties, feature_names
+
+    def gen_layout(self):
+        pass
 
 
 
-        return return_plot
+    def get_callbacks(self):
+        pass
 
-    def grab_image(self, selected_points):
+
+
+class PropertyPlotter(Tool):
+    def __init__(self,
+                 geojson_list: Union[dict,list],
+                 reference_object: Union[str,None],
+                 ignore_list: list = []
+                 ):
+
+        self.reference_object = reference_object
+        self.ignore_list = ignore_list
+        self.available_properties = self.extract_overlay_options(geojson_list,reference_object,ignore_list)
+
+        self.title = 'Prperty Plotter'
+        self.blueprint = DashBlueprint()
+        self.blueprint.layout = self.gen_layout()
+
+        self.get_callbacks()
+
+
+
+    def extract_overlay_options(self,geojson_anns,reference_object,ignore_list):
         """
-        Grabbing image region based on selected points
+        Extract all properties which can be used for overlays
         """
 
-        return_image = go.Figure()
+        geojson_properties = []
+        feature_names = []
+        for ann in geojson_anns:
+            feature_names.append(ann['properties']['name'])
+            for f in ann['features']:
+                f_props = list(f['properties'].keys())
+                for p in f_props:
+                    # Checking for sub-properties: (only going 1 level)
+                    if type(f['properties'][p])==dict:
+                        sub_props = [f'{p} --> {sp}' for sp in list(f['properties'][p].keys())]
+                    else:
+                        sub_props = [p]
+                    
+                    geojson_properties.extend([i for i in sub_props if not i in geojson_properties and not i in ignore_list])
+
+        #TODO: After loading an experiment, reference the file here for additional properties
+        
+
+        return geojson_properties, feature_names
+
+    def get_callbacks(self):
+        pass
+
+    def gen_layout(self):
+        pass
 
 
+class FeatureAnnotator(Tool):
+    def __init__(self):
 
-        return return_image
+        self.title = 'Feature Annotator'
+        self.blueprint = DashBlueprint()
+        self.blueprint.layout = self.gen_layout()
+
+        self.get_callbacks()
+
+    def gen_layout(self):
+        pass
+
+    def get_callbacks(self):
+        pass
 
 
+class HRAViewer(Tool):
+    def __init__(self):
+
+        self.title = 'HRA Viewer'
+        self.blueprint = DashBlueprint()
+        self.blueprint.layout = self.gen_layout()
+
+        self.get_callbacks()
+
+    def gen_layout(self):
+        pass
 
 
-
-
-
-
-
+    def get_callbacks(self):
+        pass
 
 
 
