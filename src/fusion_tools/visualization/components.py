@@ -15,8 +15,11 @@ import pandas as pd
 import dash_leaflet as dl
 from dash import dcc, callback, ctx, ALL, MATCH, exceptions, dash_table
 import dash_bootstrap_components as dbc
+import dash_mantine_components as dmc
 from dash_extensions.enrich import DashProxy, DashBlueprint, html, Input, Output, State
 from dash_extensions.javascript import assign, arrow_function, Namespace
+
+from vis_utils import get_pattern_matching_value
 
 import plotly.express as px
 import plotly.graph_objects as go
@@ -294,7 +297,7 @@ class SlideMap(MapComponent):
                                 'colorKey': {},
                                 'overlayProp': {},
                                 'fillOpacity': 0.5,
-                                'lineColor': {},
+                                'lineColor': '#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255)),
                                 'filterVals': []
                             },
                             hoverStyle = arrow_function(
@@ -498,13 +501,22 @@ class MultiFrameSlideMap(SlideMap):
         super().__init__(tile_server,annotations)
         
         self.title = 'Multi-Frame Slide Map'
+
+        # Changing up the layout so that it generates different tile layers for each frame
+    
+    def gen_layout(self):
+        """
+        
+        """
+        pass
+
+
     
 class Tool:
     """
     Components which can be added to tabs
     """
     pass
-
 
 class OverlayOptions(Tool):
     """
@@ -530,7 +542,7 @@ class OverlayOptions(Tool):
                  ):
 
         self.reference_object = reference_object
-        self.overlay_options = self.extract_overlay_options(geojson_anns, ignore_list)
+        self.overlay_options, self.feature_names = self.extract_overlay_options(geojson_anns, ignore_list)
         
         self.title = 'Overlay Options'
         self.blueprint = DashBlueprint()
@@ -546,7 +558,9 @@ class OverlayOptions(Tool):
         """
 
         geojson_properties = []
+        feature_names = []
         for ann in geojson_anns:
+            feature_names.append(ann['properties']['name'])
             for f in ann['features']:
                 f_props = list(f['properties'].keys())
                 for p in f_props:
@@ -561,7 +575,7 @@ class OverlayOptions(Tool):
         #TODO: After loading an experiment, reference the file here for additional properties
         
 
-        return geojson_properties
+        return geojson_properties, feature_names
 
     def gen_layout(self):
         
@@ -616,8 +630,34 @@ class OverlayOptions(Tool):
                             )
                         )
                     ]),
+                    html.Hr(),
+                    dbc.Row(
+                        dbc.Label('Update Structure Boundary Color',html_for = {'type': 'feature-lineColor-opts','index': 0})
+                    ),
                     dbc.Row([
-                        
+                        dbc.Tabs(
+                            id = {'type': 'feature-lineColor-opts','index': 0},
+                            children = [
+                                dbc.Tab(
+                                    children = [
+                                        dmc.ColorPicker(
+                                            id = {'type': 'feature-lineColor','index': f_idx},
+                                            format = 'hex',
+                                            value = '#FFFFFF',
+                                            fullWidth=True
+                                        ),
+                                        dbc.Button(
+                                            id = {'type': 'feature-lineColor-butt','index': f_idx},
+                                            children = ['Update Boundary Color'],
+                                            className = 'd-grid col-12 mx-auto',
+                                            n_clicks = 0
+                                        )
+                                    ],
+                                    label = f
+                                )
+                                for f_idx, f in enumerate(self.feature_names)
+                            ]
+                        )
                     ])
                 )
             )
@@ -631,7 +671,8 @@ class OverlayOptions(Tool):
         self.blueprint.callback(
             [
                 Input({'type': 'overlay-drop','index': ALL},'value'),
-                Input({'type':'overlay-trans-slider','index': ALL},'value')
+                Input({'type':'overlay-trans-slider','index': ALL},'value'),
+                Input({'type':'feature-lineColor-butt','index': ALL},'n_clicks')
             ],
             [
                 Output({'type': 'feature-bounds','index': ALL},'hideout'),
@@ -639,23 +680,101 @@ class OverlayOptions(Tool):
             ],
             [
                 State({'type': 'overlay-drop','index': ALL},'value'),
-                State({'type': 'overlay-trans-slider','index': ALL},'value')
+                State({'type': 'overlay-trans-slider','index': ALL},'value'),
+                State({'type': 'feature-lineColor','index': ALL},'value')
             ]
         )(self.update_overlays)
 
-    def update_overlays(self, overlay_value, transp_value, overlay_state, transp_state):
+    def update_overlays(self, overlay_value, transp_value, overlay_state, transp_state, lineColor_state):
         """
         Update overlay transparency and color based on property selection
+
+        Adding new values to the "hideout" property of the GeoJSON layers triggers the featureStyle Namespace function
         """
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
-    
+        
+        overlay_value = get_pattern_matching_value(overlay_value)
+        transp_value = get_pattern_matching_value(overlay_value)
+        overlay_state = get_pattern_matching_value(overlay_state)
+        transp_state = get_pattern_matching_value(overlay_state)
+        lineColor_state = get_pattern_matching_value(lineColor_state)
 
+        if ctx.triggered_id['type']=='overlay-drop': 
+            if '-->' in overlay_value:
+                split_overlay_value = overlay_value.split(' --> ')
 
+                overlay_prop = {
+                    'name': split_overlay_value[0],
+                    'value': split_overlay_value[1]
+                }
+            else:
+                overlay_prop = {
+                    'name': overlay_value,
+                    'value': None
+                }
 
+            fillOpacity = transp_state/100
+        elif ctx.triggered_id['type']=='overlay-trans-slider':
+            if '-->' in overlay_state:
+                split_overlay_value = overlay_value.split(' --> ')
 
+                overlay_prop = {
+                    'name': split_overlay_value[0],
+                    'value': split_overlay_value[1]
+                }
+            else:
+                overlay_prop = {
+                    'name': overlay_state,
+                    'value': None
+                }
+            
+            fillOpacity = transp_value/100
 
+        lineColor = {
+            i: j
+            for i,j in zip(self.feature_names, lineColor_state)
+        }
+        
+        color_bar_style = {
+            'visibility':'visible',
+            'background':'white',
+            'background':'rgba(255,255,255,0.8)',
+            'box-shadow':'0 0 15px rgba(0,0,0,0.2)',
+            'border-radius':'10px',
+            #'width': f'{round(0.3*window_width)}px',
+            'width': '200px',
+            'padding':'0px 0px 0px 25px'
+        }
+
+        #TODO: Define colorkey based on selected values
+        colorKey = {}
+        default_colorbar = dl.Colorbar(
+            colorscale = list(colorKey.values()),
+            width = 200,
+            height = 15,
+            position = 'bottomleft',
+            id = f'colorbar{np.random.randint(0,100)}',
+            style = color_bar_style,
+            tooltip=True
+        )
+
+        #TODO: Get all current filters values here
+        filterVals = []
+
+        geojson_hideout = [
+            {
+                'colorKey': colorKey,
+                'overlayProp': overlay_prop,
+                'fillOpacity': fillOpacity,
+                'lineColor': lineColor,
+                'filerVals': filterVals 
+            }
+            for i in range(len(ctx.outputs_list[0]))
+        ]
+
+        return geojson_hideout, default_colorbar
 
 
 
