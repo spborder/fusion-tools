@@ -12,15 +12,17 @@ from fastapi import FastAPI, APIRouter, Response
 
 import large_image
 import pandas as pd
+import dash
+dash._dash_renderer._set_react_version('18.2.0')
 import dash_leaflet as dl
 import dash_leaflet.express as dlx
-from dash import dcc, callback, ctx, ALL, MATCH, exceptions, dash_table, Patch
+from dash import dcc, callback, ctx, ALL, MATCH, exceptions, dash_table, Patch, no_update
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_extensions.enrich import DashProxy, DashBlueprint, html, Input, Output, State
 from dash_extensions.javascript import assign, arrow_function, Namespace
 
-from vis_utils import get_pattern_matching_value
+from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 
 import plotly.express as px
 import plotly.graph_objects as go
@@ -43,8 +45,6 @@ class Visualization:
     --------
     components: list
         list of components to add to the visualization session (one of Tool or Map)
-
-    layout: list 
         Hierarchy goes from Row-->Column-->Tab for elements in lists. 
         (e.g. [0] would be one row with one component, 
         [0,1] would be one row with two columns, 
@@ -53,33 +53,35 @@ class Visualization:
 
     Examples
     --------
-    >>> layout = [
-        [0,[1,2]]
-    ]
     >>> components = [
-        SlideMap(
-            tile_server = LocalTileServer('/path/to/slide.svs'),
-            annotations = geojson_list
-        ),
-        AnnotationOptions(geojson_list),
-        PropertyViewer()
+        [
+            SlideMap(
+                tile_server = LocalTileServer('/path/to/slide.svs'),
+                annotations = geojson_list
+            )
+        ],
+        [
+            [
+                OverlayOptions(geojson_list),
+                PropertyViewer()
+            ]
+        ]
     ]
 
-    >>> vis_session = Visualization(components,layout)
+    >>> vis_session = Visualization(components)
     >>> vis_session.start()
         
     """
     def __init__(self,
                  components: list,
-                 layout: list,
                  app_options: dict = {}):
         
 
         self.components = components
-        self.layout = layout
+        #self.layout = layout
         self.app_options = app_options
 
-        self.asset_folder = os.getcwd()+'/.fusion_assets/'
+        self.assets_folder = os.getcwd()+'/.fusion_assets/'
 
         self.default_options = {
             'title': 'FUSION',
@@ -96,6 +98,7 @@ class Visualization:
                 dbc.icons.BOOTSTRAP,
                 dbc.icons.FONT_AWESOME
             ],
+            external_scripts = ['https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.1.0/chroma.min.js'],
             assets_folder = self.assets_folder,
             prevent_initial_callbacks=True
         )
@@ -106,15 +109,17 @@ class Visualization:
 
         layout_children = self.get_layout_children()
 
-        layout = html.Div(
-            dbc.Container(
-                id = 'vis-container',
-                fluid = True,
+        layout = dmc.MantineProvider(
                 children = [
-                    layout_children
+                    html.Div(
+                        dbc.Container(
+                            id = 'vis-container',
+                            fluid = True,
+                            children = layout_children
+                        ),
+                        style = self.app_options['app_style'] if 'app_style' in self.app_options else {}
+                    )
                 ]
-            ),
-            style = self.app_options['app_style'] if 'app_style' in self.app_options else {}
         )
 
         return layout
@@ -125,10 +130,55 @@ class Visualization:
         """
 
         layout_children = []
+        for row in self.components:
+            row_children = []
+            for col in row:
+                if not type(col)==list:
+                    if isinstance(col,SlideMap):
+                        col.blueprint.layout = col.gen_layout(width=f'{int(100/len(row))}vw')
 
+                    row_children.append(
+                        dbc.Col(
+                            dbc.Card([
+                                dbc.CardHeader(
+                                    col.title
+                                ),
+                                dbc.CardBody(
+                                    col.blueprint.embed(self.viewer_app)
+                                )
+                            ])
+                        )
+                    )
+                else:
+                    tabs_children = []
+                    for tab in col:
+                        if isinstance(tab,SlideMap):
+                            tab.blueprint.layout = tab.gen_layout(width=f'{int(100/len(row))}vw')
+                        tabs_children.append(
+                            dbc.Tab(
+                                dbc.Card(
+                                    dbc.CardBody(
+                                        tab.blueprint.embed(self.viewer_app)
+                                    )
+                                ),
+                                label = tab.title,
+                                tab_id = tab.title.lower().replace(' ','-')
+                            )
+                        )
 
+                    row_children.append(
+                        dbc.Col(
+                            dbc.Tabs(
+                                tabs_children
+                            )
+                        )
+                    )
 
-
+            layout_children.append(
+                dbc.Row(
+                    row_children
+                )
+            )
 
         return layout_children
 
@@ -199,7 +249,7 @@ class LocalTileServer(TileServer):
             
         except large_image.exceptions.TileSourceXYZRangeError:
             # This error appears for any negative tile coordinates
-            raw_tile = np.zeros((self.tile_metadata['tileHeight'],self.tile_metadata['tileWidth']),dtype=np.uint8).tobytes()
+            raw_tile = np.zeros((self.tiles_metadata['tileHeight'],self.tiles_metadata['tileWidth']),dtype=np.uint8).tobytes()
 
         return Response(content = raw_tile, media_type='image/png')
     
@@ -259,7 +309,7 @@ class CustomTileServer(TileServer):
         self.tiles_url = tiles_url
         self.regions_url = regions_url
 
-        assert 'tileSize' in image_metadata and 'levels' in image_metadata
+        assert all([i in image_metadata for i in ['tileWidth','tileHeight','sizeX','sizeY','levels']])
         self.tiles_metadata = image_metadata
 
 
@@ -271,7 +321,7 @@ class MapComponent:
 
 class SlideMap(MapComponent):
     def __init__(self,
-                 tile_server,
+                 tile_server: TileServer,
                  annotations: Union[dict,list,None]
                 ):
         
@@ -288,14 +338,8 @@ class SlideMap(MapComponent):
         self.annotation_components = self.process_annotations()
 
         self.title = 'Slide Map'
-        self.blueprint = DashBlueprint(
-            external_scripts = ['https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.1.0/chroma.min.js']
-        )        
-        self.blueprint.layout = self.gen_layout(
-            tile_size = self.image_metadata['tileWidth'],
-            zoom_levels = self.image_metadata['levels'],
-            tile_server_port = self.tile_server_port
-        )
+        self.blueprint = DashBlueprint()        
+        #self.blueprint.layout = self.gen_layout()
 
         # Add callback functions here
         self.get_callbacks()
@@ -330,49 +374,51 @@ class SlideMap(MapComponent):
 
                 # Scale annotations to fit within base tile dimensions
                 for f in st['features']:
-                    f['geometry']['coordinates'] = [
+                    f['geometry']['coordinates'] = [[
                         [i[0]*self.x_scale,i[1]*self.y_scale]
                         for i in f['geometry']['coordinates']
-                    ]
-
-                dl.Overlay(
-                    dl.LayerGroup(
-                        dl.GeoJSON(
-                            data = st,
-                            id = {'type': 'feature-bounds','index': st_idx},
-                            options = {
-                                'style': self.js_namespace("featureStyle")
-                            },
-                            filter = self.js_namespace("featureFilter"),
-                            hideout = {
-                                'overlayBounds': {},
-                                'overlayProp': {},
-                                'fillOpacity': 0.5,
-                                'lineColor': '#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255)),
-                                'filterVals': []
-                            },
-                            hoverStyle = arrow_function(
-                                {
-                                    'weight': 5,
-                                    'color': '#9caf00',
-                                    'dashArray':''
-                                }
-                            ),
-                            zoomToBounds = False,
-                            children = [
-                                dl.Popup(
-                                    id = {'type': 'feature-popup','index': st_idx},
-                                    autoPan = False,
-                                )
-                            ]
-                        )
-                    ),
-                    name = st['properties']['name'], checked = True, id = {'type':'feature-overlay','index':st_idx}
+                    ]]
+                
+                annotation_components.append(
+                    dl.Overlay(
+                        dl.LayerGroup(
+                            dl.GeoJSON(
+                                data = st,
+                                id = {'type': 'feature-bounds','index': st_idx},
+                                options = {
+                                    'style': self.js_namespace("featureStyle")
+                                },
+                                filter = self.js_namespace("featureFilter"),
+                                hideout = {
+                                    'overlayBounds': {},
+                                    'overlayProp': {},
+                                    'fillOpacity': 0.5,
+                                    'lineColor': {st['properties']['name']: '#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255))},
+                                    'filterVals': []
+                                },
+                                hoverStyle = arrow_function(
+                                    {
+                                        'weight': 5,
+                                        'color': '#9caf00',
+                                        'dashArray':''
+                                    }
+                                ),
+                                zoomToBounds = False,
+                                children = [
+                                    dl.Popup(
+                                        id = {'type': 'feature-popup','index': st_idx},
+                                        autoPan = False,
+                                    )
+                                ]
+                            )
+                        ),
+                        name = st['properties']['name'], checked = True, id = {'type':'feature-overlay','index':st_idx}
+                    )
                 )
 
         return annotation_components
 
-    def gen_layout(self, tile_size:int, zoom_levels: int, tile_server_port:str):
+    def gen_layout(self, width: str):
         """
         Generate simple slide viewer layout
         """
@@ -380,15 +426,15 @@ class SlideMap(MapComponent):
             dl.Map(
                 id = {'type': 'slide-map','index': 0},
                 crs = 'Simple',
-                center = [-tile_size,tile_size],
+                center = [-self.image_metadata['tileWidth']/2,self.image_metadata['tileWidth']/2],
                 zoom = 1,
-                style = {'height': '90vh','width': '95vw','margin': 'auto','display': 'inline-block'},
+                style = {'height': '90vh','width': width,'margin': 'auto','display': 'inline-block'},
                 children = [
                     dl.TileLayer(
                         id = {'type': 'map-tile-layer','index': 0},
                         url = self.tiles_url,
-                        tileSize=tile_size,
-                        maxNativeZoom=zoom_levels-1,
+                        tileSize=self.image_metadata['tileWidth'],
+                        maxNativeZoom=self.image_metadata['levels']-1,
                         minZoom = 0
                     ),
                     dl.FullScreenControl(
@@ -410,9 +456,7 @@ class SlideMap(MapComponent):
                     ),
                     dl.LayersControl(
                         id = {'type': 'map-layers-control'},
-                        children = [
-                            self.annotation_components
-                        ]
+                        children = self.annotation_components
                     ),
                     dl.EasyButton(
                         icon = 'fa-solid fa-arrows-to-dot',
@@ -447,9 +491,64 @@ class SlideMap(MapComponent):
                 function(feature,context){
                 const {overlayBounds, overlayProp, fillOpacity, lineColor, filterVals} = context.hideout;
                 var style = {};
-                const csc = chroma.scale(["blue","red"]).domain([overlayMin,overlayMax]);
+                
+                if ("min" in overlayBounds) {
+                    var csc = chroma.scale(["blue","red"]).domain([overlayBounds.min,overlayBounds.max]);
+                } else if ("unique" in overlayBounds) {
+                    const class_indices = overlayBounds.unique.map(str => overlayBounds.unique.indexOf(str));
+                    var csc = chroma.scale(["blue","red"]).classes(class_indices);
+                } else {
+                    style.fillColor = 'white';
+                    style.fillOpacity = fillOpacity;
+                    if ('name' in feature.properties) {
+                        style.color = lineColor[feature.properties.name];
+                    } else {
+                        style.color = 'white';
+                    }
 
+                    return style;
+                }
 
+                var overlayVal = Number.Nan;
+                if (overlayProp) {
+                    if (overlayProp.name) {
+                        if (overlayProp.name in feature.properties) {
+                            if (overlayProp.value) {
+                                if (overlayProp.value in feature.properties[overlayProp.name]) {
+                                    var overlayVal = feature.properties[overlayProp.name][overlayProp.value];
+                                } else {
+                                    var overlayVal = Number.Nan;
+                                }
+                            } else {
+                                var overlayVal = feature.properties[overlayProp.name];
+                            }
+                        } else {
+                            var overlayVal = Number.Nan;
+                        }
+                    } else {
+                        var overlayVal = Number.Nan;
+                    }
+                } else {
+                    var overlayVal = Number.Nan;
+                }
+
+                if (overlayVal == overlayVal) {
+                    if (typeof overlayVal==='number') {
+                        style.fillColor = csc(overlayVal);
+                    } else {
+                        overlayVal = overlayBounds.unique.indexOf(overlayVal);
+                        style.fillColor = csc(overlayVal);
+                    }
+                } else {
+                    style.fillColor = "f00";
+                }
+
+                style.fillOpacity = fillOpacity;
+                if (feature.properties.name in lineColor) {
+                    style.color = lineColor[feature.properties.name];
+                } else {
+                    style.color = 'white';
+                }
 
                 return style;
                 }
@@ -464,9 +563,50 @@ class SlideMap(MapComponent):
                 const {overlayBounds, overlayProp, fillOpacity, lineColor, filterVals} = context.hideout;
                 
                 var returnFeature = true;
+                if (filterVals) {
+                    for (let i = 0; i < filterVals.length; i++) {
+                        // Iterating through filterVals list
+                        var filter = filterVals[i];
 
+                        if (filter.name) {
+                            if (filter.name in feature.properties) {
+                                if (filter.value) {
+                                    if (filter.value in feature.properties[filter.name]) {
+                                        var testVal = feature.properties[filter.name][filter.value];
+                                    } else {
+                                        returnFeature = returnFeature & false;
+                                    }
+                                } else {
+                                    var testVal = feature.properties[filter.name];
+                                }
+                            } else {
+                                returnFeature = returnFeature & false;
+                            }
+                        }
 
+                        if (filter.range) {
+                            if (typeof filter.range[0]==='number') {
+                                if (test_val < filter.range[0]) {
+                                    returnFeature = returnFeature & false;
+                                }
+                                if (test_val > filter.range[1]) {
+                                    returnFeature = returnFeature & false;
+                                }
+                            } else {
+                                if (filter.range.includes(testVal)) {
+                                    returnFeature = returnFeature & true;
+                                } else {
+                                    returnFeature = returnFeature & false;
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    return returnFeature;
+                }
+                
                 return returnFeature;
+                
                 }
                 """,
             name = 'featureFilter'
@@ -547,7 +687,7 @@ class MultiFrameSlideMap(SlideMap):
     Used for viewing slides with multiple "frames" (e.g. CODEX images)
     """
     def __init__(self,
-                 tile_server,
+                 tile_server: TileServer,
                  annotations: Union[dict,list,None]
                  ):
         super().__init__(tile_server,annotations)
@@ -572,10 +712,10 @@ class MultiFrameSlideMap(SlideMap):
     def get_callbacks(self):
         pass
 
-
 class SlideImageOverlay(MapComponent):
     def __init__(self,
-                 image_path: str
+                 image_path: str,
+                 image_crs: list = [0,0]
                 ):
         
         self.image_path = image_path
@@ -622,12 +762,12 @@ class OverlayOptions(Tool):
     """
     def __init__(self,
                  geojson_anns: Union[list,dict],
-                 reference_object: Union[str,None],
+                 reference_object: Union[str,None] = None,
                  ignore_list: list = []
                  ):
 
         self.reference_object = reference_object
-        self.overlay_options, self.feature_names, self.overlay_info = self.extract_overlay_options(geojson_anns, ignore_list)
+        self.overlay_options, self.feature_names, self.overlay_info = self.extract_overlay_options(geojson_anns, reference_object,ignore_list)
         
         self.title = 'Overlay Options'
         self.blueprint = DashBlueprint()
@@ -733,7 +873,7 @@ class OverlayOptions(Tool):
         
         layout = html.Div([
             dbc.Card(
-                dbc.CardBody(
+                dbc.CardBody([
                     dbc.Row(
                         html.H3('Overlay Options')
                     ),
@@ -757,7 +897,7 @@ class OverlayOptions(Tool):
                                     for i in self.overlay_options
                                 ],
                                 value = [],
-                                mutli = False,
+                                multi = False,
                                 id = {'type': 'overlay-drop','index': 0}
                             ),
                             md = 9
@@ -836,7 +976,7 @@ class OverlayOptions(Tool):
                             ]
                         )
                     ])
-                )
+                ])
             )
         ])
 
@@ -965,7 +1105,7 @@ class OverlayOptions(Tool):
 
         return patched_list
 
-    def update_overlays(self, overlay_value, transp_value, filter_value, overlay_state, transp_state, overlay_info_state, lineColor_state, filter_state, filter_drop_state):
+    def update_overlays(self, overlay_value, transp_value, lineColor_butt, filter_value, overlay_state, transp_state, overlay_info_state, lineColor_state, filter_state, filter_drop_state):
         """
         Update overlay transparency and color based on property selection
 
@@ -976,18 +1116,25 @@ class OverlayOptions(Tool):
             raise exceptions.PreventUpdate
         
         overlay_value = get_pattern_matching_value(overlay_value)
-        transp_value = get_pattern_matching_value(overlay_value)
+        transp_value = get_pattern_matching_value(transp_value)
         overlay_state = get_pattern_matching_value(overlay_state)
-        transp_state = get_pattern_matching_value(overlay_state)
-        lineColor_state = get_pattern_matching_value(lineColor_state)
+        transp_state = get_pattern_matching_value(transp_state)
         overlay_info_state = json.loads(get_pattern_matching_value(overlay_info_state))
+        print(overlay_info_state)
 
         if ctx.triggered_id['type']=='overlay-drop':
             use_overlay_value = overlay_value
             use_filter_value = filter_state
             use_filter_name = filter_drop_state
+            use_transp_value = transp_state
         else:
-            use_overlay_value = overlay_state
+            if type(overlay_state)==list:
+                if len(overlay_state)==0:
+                    use_overlay_value = None
+                else:
+                    use_overlay_value = overlay_state[0]
+            else:
+                use_overlay_value = overlay_state
 
         if ctx.triggered_id['type']=='overlay-trans-slider':
             use_transp_value = transp_value
@@ -1002,22 +1149,40 @@ class OverlayOptions(Tool):
             use_filter_value = filter_value
             use_filter_name = filter_drop_state
 
-        if '-->' in use_overlay_value:
-            split_overlay_value = use_overlay_value.split(' --> ')
+        if ctx.triggered_id['type']=='feature-lineColor-butt':
+            use_filter_value = filter_state
+            use_filter_name = filter_drop_state
+            use_overlay_value = overlay_state
+            use_transp_value = transp_state
 
-            overlay_prop = {
-                'name': split_overlay_value[0],
-                'value': split_overlay_value[1]
-            }
+        if not use_overlay_value is None:
+            if '-->' in use_overlay_value:
+                split_overlay_value = use_overlay_value.split(' --> ')
+
+                overlay_prop = {
+                    'name': split_overlay_value[0],
+                    'value': split_overlay_value[1]
+                }
+            else:
+                overlay_prop = {
+                    'name': use_overlay_value,
+                    'value': None
+                }
         else:
             overlay_prop = {
-                'name': overlay_value,
+                'name': None,
                 'value': None
             }
 
-        fillOpacity = use_transp_value/100
+        if not use_transp_value is None:
+            fillOpacity = use_transp_value/100
+        else:
+            fillOpacity = 0.5
 
-        overlay_bounds = overlay_info_state[use_overlay_value]
+        if not use_overlay_value is None:
+            overlay_bounds = overlay_info_state[use_overlay_value]
+        else:
+            overlay_bounds = {}
 
         lineColor = {
             i: j
@@ -1030,31 +1195,33 @@ class OverlayOptions(Tool):
             'background':'rgba(255,255,255,0.8)',
             'box-shadow':'0 0 15px rgba(0,0,0,0.2)',
             'border-radius':'10px',
-            #'width': f'{round(0.3*window_width)}px',
-            'width': '200px',
+            'width': '400px',
             'padding':'0px 0px 0px 25px'
         }
 
         if 'min' in overlay_bounds:
-            colorbar = dl.Colorbar(
+            colorbar = [dl.Colorbar(
                 colorscale = ['blue','red'],
-                width = 200,
+                width = 300,
                 height = 15,
                 position = 'bottomleft',
                 id = f'colorbar{np.random.randint(0,100)}',
                 style = color_bar_style,
                 tooltip=True
-            )
+            )]
         elif 'unique' in overlay_bounds:
-            colorbar = dlx.categorical_colorbar(
+            colorbar = [dlx.categorical_colorbar(
                 categories = overlay_bounds['unique'],
                 colorscale = ['blue','red'],
                 style = color_bar_style,
                 position = 'bottomleft',
                 id = f'colorbar{np.random.randint(0,100)}',
-                width = 200,
+                width = 300,
                 height = 15
-            )
+            )]
+
+        else:
+            colorbar = [no_update]
 
         #TODO: Get all current filters values here
         filterVals = [
@@ -1080,7 +1247,7 @@ class OverlayOptions(Tool):
         return geojson_hideout, colorbar
 
 
-class ChannelMixer(Tool):
+class ChannelMixer(MapComponent):
     def __init__(self,
                  image_metadata: dict,
                  tiles_url: str

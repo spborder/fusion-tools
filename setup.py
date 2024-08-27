@@ -23,6 +23,7 @@ setuptools.setup(
         "dash-leaflet",
         "dash-extensions",
         "dash-bootstrap-components",
+        "dash-mantine-components",
         "requests",
         "uuid",
         "scikit-image",

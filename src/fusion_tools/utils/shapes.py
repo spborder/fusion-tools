@@ -90,9 +90,12 @@ def load_aperio(xml_path: str) -> list:
 
         geojson_anns = {
             'type': "FeatureCollection",
-            "features": []
+            "features": [],
+            'properties': {
+                'name': f'Layer{ann_idx+1}'
+            }
         }
-        this_structure = tree.getroot().findall(f'Annotation[@Id="{str(ann_idx+1)}]/Regions/Region')
+        this_structure = tree.getroot().findall(f'Annotation[@Id="{str(ann_idx+1)}"]/Regions/Region')
 
         for obj in this_structure:
             vertices = obj.findall('./Vertices/Vertex')
@@ -109,7 +112,9 @@ def load_aperio(xml_path: str) -> list:
                     'type': 'Polygon',
                     'coordinates': coords
                 },
-                'properties': {}
+                'properties': {
+                    'name': f'Layer{ann_idx+1}'
+                }
             })
 
         geojson_list.append(geojson_anns)
@@ -248,19 +253,59 @@ def align_object_props(
     return geo_ann
 
 def export_annotations(
-        ann_geojson: dict, 
+        ann_geojson: Union[dict,list], 
         format: str, 
         save_path: str,
         ann_options: dict = {}):
     """
     Exporting geojson annotations to desired format
     """
-    if format in ['json','geojson']:
-        with open(save_path,'w') as f:
-            json.dump(f,ann_geojson)
+    assert format in ['geojson','aperio','histomics']
 
-            f.close()
-    
+    if format in ['histomics','geojson']:
+        if format=='geojson':
+            if type(ann_geojson)==dict:
+                ann_geojson = [ann_geojson]
+            
+            for ann_idx,ann in enumerate(ann_geojson):
+                if 'name' in ann['properties']:
+                    ann_name = ann['properties']['name']
+                else:
+                    ann_name = f'Structure_{ann_idx}'
+                with open(save_path.replace('.geojson',f'{ann_name}.geojson'),'w') as f:
+                    json.dump(ann_geojson,f)
+
+                    f.close()
+
+        elif format=='histomics':
+            
+            if type(ann_geojson)==dict:
+                ann_geojson = [ann_geojson]
+
+            histomics_anns = []
+            for ann_idx,ann in enumerate(ann_geojson):
+                ann_dict = {
+                    'annotation': {
+                        'name': ann['properties']['name'] if 'name' in ann['properties'] else f'Structure_{ann_idx}',
+                        'elements': []
+                    }
+                }
+                for f_idx, f in enumerate(ann['features']):
+                    ann_dict['annotation']['elements'].append(
+                        {
+                            'type': 'polyline',
+                            'points': [i+[0] for i in f['geometry']['coordinates']],
+                            'user': f['properties']
+                        }
+                    )
+
+                histomics_anns.append(ann_dict)
+
+            with open(save_path,'w') as f:
+                json.dump(histomics_anns,f)
+
+                f.close()
+
     elif format=='aperio':
 
         if 'id' not in ann_options:
