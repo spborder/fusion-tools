@@ -417,7 +417,8 @@ def find_intersecting(geo_source:dict, geo_query:Polygon, return_props:bool = Tr
     elif return_shapes:
         return geo_intersect_geojson
 
-
+def spatially_aggregate(agg_geo:Polygon):
+    pass
 
 
 

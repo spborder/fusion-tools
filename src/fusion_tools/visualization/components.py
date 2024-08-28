@@ -497,8 +497,8 @@ class SlideMap(MapComponent):
                 if ("min" in overlayBounds) {
                     var csc = chroma.scale(["blue","red"]).domain([overlayBounds.min,overlayBounds.max]);
                 } else if ("unique" in overlayBounds) {
-                    const class_indices = overlayBounds.unique.map(str => overlayBounds.unique.indexOf(str));
-                    var csc = chroma.scale(["blue","red"]).classes(class_indices);
+                    var class_indices = overlayBounds.unique.map(str => overlayBounds.unique.indexOf(str));
+                    var csc = chroma.scale(["blue","red"]).colors(class_indices.length);
                 } else {
                     style.fillColor = 'white';
                     style.fillOpacity = fillOpacity;
@@ -539,7 +539,7 @@ class SlideMap(MapComponent):
                         style.fillColor = csc(overlayVal);
                     } else {
                         overlayVal = overlayBounds.unique.indexOf(overlayVal);
-                        style.fillColor = csc(overlayVal);
+                        style.fillColor = csc[overlayVal];
                     }
                 } else {
                     style.fillColor = "f00";
@@ -1299,7 +1299,6 @@ class PropertyViewer(Tool):
 
         self.get_callbacks()   
         
-    
     def extract_overlay_options(self,geojson_anns,reference_object,ignore_list):
         """
         Extract all properties which can be used for overlays
