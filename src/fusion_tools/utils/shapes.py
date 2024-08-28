@@ -15,6 +15,7 @@ import geopandas as gpd
 from shapely.geometry import Polygon, Point, shape
 import pandas as pd
 
+import uuid
 
 from typing_extensions import Union
 
@@ -31,7 +32,7 @@ def load_geojson(geojson_path: str, name = None) -> dict:
         f.close()
 
     if not name is None:
-        geojson_anns['properties'] = geojson_anns['properties'] | {'name': name}
+        geojson_anns['properties'] = geojson_anns['properties'] | {'name': name, '_id': uuid.uuid4().hex[:24]}
 
     return geojson_anns
 
@@ -66,7 +67,7 @@ def load_histomics(json_path: str) -> list:
                             el['points']
                         ]
                     },
-                    'properties': el['user'] if 'user' in el else {} | {'name': f'{ann["annotation"]["name"]}_{el_idx}'}
+                    'properties': el['user'] if 'user' in el else {} | {'name': f'{ann["annotation"]["name"]}_{el_idx}', '_id': ann['annotation']['_id']}
                 }
                 for el_idx,el in enumerate(ann['annotation']['elements'])
             ]
@@ -92,7 +93,8 @@ def load_aperio(xml_path: str) -> list:
             'type': "FeatureCollection",
             "features": [],
             'properties': {
-                'name': f'Layer{ann_idx+1}'
+                'name': f'Layer{ann_idx+1}',
+                '_id': uuid.uuid4().hex[:24]
             }
         }
         this_structure = tree.getroot().findall(f'Annotation[@Id="{str(ann_idx+1)}"]/Regions/Region')
@@ -123,6 +125,7 @@ def load_aperio(xml_path: str) -> list:
 
 def load_polygon_csv(
         csv_path: str, 
+        name: str,
         shape_cols: Union[list,str], 
         group_by_col: Union[str,None],
         property_cols: Union[str,list,None],
@@ -145,7 +148,11 @@ def load_polygon_csv(
 
     geojson_anns = {
         'type': 'FeatureCollection',
-        'features': []
+        'features': [],
+        'properties': {
+            'name': name,
+            '_id': uuid.uuid4().hex[:24]
+        }
     }
     csv_anns = pd.read_csv(csv_path)
 
@@ -371,6 +378,54 @@ def export_annotations(
             f.write(xml_string)
 
             f.close()
+
+def find_intersecting(geo_source:dict, geo_query:Polygon, return_props:bool = True, return_shapes:bool = True):
+    """
+    Return properties and/or shapes of features from geo_1 that intersect with geo_2
+    
+    Parameters
+    --------
+    geo_source: dict
+        GeoJSON dictionary containing "FeatureCollection" with "features" key
+
+    geo_query: dict
+        GeoJSON dictionary containing "FeatureCollection" with "features" key
+
+    return_props: bool = True
+        Whether to return properties of features from geo_source that intersect with geo_query
+
+    return_shapes: bool = True
+        Whether to return shape (geometries) of features from geo_source that intersect with geo_query
+    
+    """
+    assert return_props or return_shapes
+
+    # Automatically assigned properties by Leaflet (DO NOT ADD "cluster" AS A PROPERTY)
+    ignore_properties = ['geometry','cluster','id']
+    geo_source = gpd.GeoDataFrame.from_features(geo_source['features'])
+
+    geo_source_intersect = geo_source[geo_source.intersects(geo_query)]
+    geo_source_intersect_columns = geo_source_intersect.columns.tolist()
+    geo_source_intersect_props = geo_source_intersect.iloc[:,[i for i in range(len(geo_source_intersect_columns)) if not geo_source_intersect_columns[i] in ignore_properties]]
+    
+    geo_intersect_geojson = json.loads(geo_source_intersect['geometry'].to_json())
+
+    if return_props and return_shapes:
+        return geo_intersect_geojson, geo_source_intersect_props
+    elif return_props:
+        return geo_source_intersect_props
+    elif return_shapes:
+        return geo_intersect_geojson
+
+
+
+
+
+
+
+
+
+
 
 
 

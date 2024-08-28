@@ -9,7 +9,7 @@ import os
 import sys
 import threading
 sys.path.append('./src/')
-from fusion_tools.visualization.components import Visualization, SlideMap, LocalTileServer, OverlayOptions
+from fusion_tools.visualization.components import Visualization, SlideMap, LocalTileServer, OverlayOptions, PropertyViewer
 from fusion_tools.utils.shapes import load_aperio, load_geojson, export_annotations
 
 
@@ -51,6 +51,9 @@ def main():
                 [
                     OverlayOptions(
                         geojson_anns = annotations
+                    ),
+                    PropertyViewer(
+                        geojson_list = annotations
                     )
                 ]
             ]

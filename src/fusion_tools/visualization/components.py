@@ -23,12 +23,13 @@ from dash_extensions.enrich import DashProxy, DashBlueprint, html, Input, Output
 from dash_extensions.javascript import assign, arrow_function, Namespace
 
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
-
+from fusion_tools.utils.shapes import find_intersecting
+from shapely.geometry import box
 import plotly.express as px
 import plotly.graph_objects as go
 
 import numpy as np
-
+import uuid
 from typing_extensions import Union
 from PIL import Image
 from io import BytesIO
@@ -169,7 +170,8 @@ class Visualization:
                     row_children.append(
                         dbc.Col(
                             dbc.Tabs(
-                                tabs_children
+                                tabs_children,
+                                id = {'type': 'vis-layout-tabs','index': np.random.randint(0,1000)}
                             )
                         )
                     )
@@ -775,12 +777,10 @@ class OverlayOptions(Tool):
         # Add callbacks here
         self.get_callbacks()
 
-    
     def extract_overlay_options(self,geojson_anns,reference_object,ignore_list):
         """
         Extract all properties which can be used for overlays
         """
-
         geojson_properties = []
         feature_names = []
         property_info = {}
@@ -978,9 +978,8 @@ class OverlayOptions(Tool):
                     ])
                 ])
             )
-        ])
+        ],style = {'maxHeight': '100vh','overflow':'scroll'})
 
-    
         return layout
 
     def get_callbacks(self):
@@ -1283,32 +1282,17 @@ class ChannelMixer(MapComponent):
         pass
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 class PropertyViewer(Tool):
     def __init__(self,
                  geojson_list: Union[dict,list],
-                 reference_object: Union[str,None],
+                 reference_object: Union[str,None] = None,
                  ignore_list: list = []
                  ):
         
         self.ignore_list = []
         self.reference_object = reference_object
-        self.available_properties = self.extract_overlay_options(geojson_list,reference_object,ignore_list)
+        self.available_properties, self.feature_names = self.extract_overlay_options(geojson_list,reference_object,ignore_list)
     
-
         self.title = 'Property Viewer'
         self.blueprint = DashBlueprint()
         self.blueprint.layout = self.gen_layout()
@@ -1342,12 +1326,246 @@ class PropertyViewer(Tool):
         return geojson_properties, feature_names
 
     def gen_layout(self):
-        pass
+        
+        layout = html.Div([
+            dbc.Card([
+                dbc.CardBody([
+                    dbc.Row(
+                        html.H3('Property Viewer')
+                    ),
+                    html.Hr(),
+                    dbc.Row(
+                        'Pan around on the slide to view select properties across regions of interest'
+                    ),
+                    html.Hr(),
+                    html.Div(
+                        dmc.Switch(
+                            id = {'type':'property-viewer-update','index': 0},
+                            size = 'lg',
+                            onLabel = 'ON',
+                            offLabel = 'OFF',
+                            checked = True,
+                            label = 'Update Property Viewer',
+                            description = 'Select whether or not to update values when panning around in the image'
+                        )
+                    ),
+                    html.Hr(),
+                    html.Div(
+                        id = {'type': 'property-viewer-parent','index': 0},
+                        children = [
+                            'Move around to initialize property viewer.'
+                        ]
+                    ),
+                    html.Div(
+                        dcc.Store(
+                            id = {'type':'property-viewer-data','index':0},
+                            storage_type='memory',
+                            data = json.dumps({})
+                        )
+                    )
+                ])
+            ])
+        ],style = {'maxHeight': '100vh','overflow':'scroll'})
 
-
+        return layout
 
     def get_callbacks(self):
-        pass
+        
+        # Updating when panning in SlideMap-like object
+        self.blueprint.callback(
+            [
+                Input({'type': 'slide-map','index': ALL},'bounds'),
+                Input({'type': 'property-view-type','index': ALL},'value'),
+                Input({'type': 'property-view-subtype','index': ALL},'value'),
+                Input({'type': 'property-view-butt','index': ALL},'n_clicks')
+            ],
+            [
+                Output({'type': 'property-viewer-parent','index': ALL},'children'),
+                Output({'type': 'property-viewer-data','index': ALL},'data')
+            ],
+            [
+                State({'type': 'vis-layout-tabs','index': ALL},'active_tab'),
+                State({'type': 'property-viewer-data','index': ALL},'data'),
+                State({'type': 'property-viewer-update','index': ALL},'checked'),
+                State({'type': 'feature-bounds','index': ALL},'data')
+            ]
+        )(self.update_property_viewer)
+
+    def update_property_viewer(self,slide_map_bounds, view_type_value, view_subtype_value, view_butt_click, active_tab, current_property_data, update_viewer, current_geojson):
+        """
+        Updating visualization of properties within the current viewport
+
+        """
+
+        update_viewer = get_pattern_matching_value(update_viewer)
+        active_tab = get_pattern_matching_value(active_tab)
+
+        if not active_tab is None:
+            if not active_tab=='property-viewer':
+                raise exceptions.PreventUpdate
+        
+        slide_map_bounds = get_pattern_matching_value(slide_map_bounds)
+        view_type_value = get_pattern_matching_value(view_type_value)
+        current_property_data = json.loads(get_pattern_matching_value(current_property_data))
+
+        if ctx.triggered_id['type']=='slide-map':
+            # Only update the region info when this is checked
+            if update_viewer:
+                current_property_data['bounds'] = slide_map_bounds
+
+        current_property_data['update_view'] = update_viewer
+        current_property_data['property'] = view_type_value
+        current_property_data['sub_property'] = view_subtype_value
+        plot_components = self.generate_plot_tabs(current_property_data, current_geojson)
+
+        return_div = html.Div([
+            dbc.Row([
+                dbc.Col(
+                    dbc.Label('Select a Property: ',html_for = {'type': 'property-view-type','index': 0}),
+                    md = 3
+                ),
+                dbc.Col(
+                    dcc.Dropdown(
+                        options = self.available_properties,
+                        value = view_type_value if not view_type_value is None else [],
+                        placeholder = 'Property',
+                        multi = False,
+                        id = {'type': 'property-view-type','index': 0}
+                    )
+                )
+            ]),
+            html.Hr(),
+            dbc.Row([
+                plot_components
+            ],style = {'maxHeight': '100vh'})
+        ])
+
+        updated_view_data = json.dumps(current_property_data)
+
+        return [return_div], [updated_view_data]
+
+    def generate_plot_tabs(self, current_property_data, current_features):
+        """
+        Checking for intersecting features and extracting necessary data
+        """
+
+        current_bounds_bounds = current_property_data['bounds']
+        current_bounds_box = box(current_bounds_bounds[0][1],current_bounds_bounds[0][0],current_bounds_bounds[1][1],current_bounds_bounds[1][0])
+
+        plot_tabs_children = []
+        for g_idx, g in enumerate(current_features):
+            
+            if current_property_data['update_view']:
+                intersecting_shapes,intersecting_properties = find_intersecting(g,current_bounds_box)
+                current_property_data[g['properties']['_id']] = {
+                    "geometry": intersecting_shapes,
+                    "properties": intersecting_properties.to_dict('records')
+                }
+            else:
+                if g['properties']['_id'] in current_property_data:
+                    intersecting_properties = pd.DataFrame.from_records(current_property_data[g['properties']['_id']]['properties'])
+                    intersecting_shapes = current_property_data[g['properties']['_id']]['geometry']
+                else:
+                    intersecting_properties = pd.DataFrame()
+                    intersecting_shapes = {}
+            
+            g_count = len(intersecting_shapes['features'])
+            if not current_property_data['property'] is None:
+                
+                if current_property_data['property'] in intersecting_properties:
+                    if any([i in str(intersecting_properties[current_property_data['property']].dtype) for i in ["int","float"]]):
+                        # This generates a histogram (all quantitative feature)
+                        g_plot = dcc.Graph(
+                            figure = px.histogram(
+                                data_frame = intersecting_properties,
+                                x = current_property_data['property'],
+                                title = f'Histogram of {current_property_data["property"]} in {g["properties"]["name"]}'
+                            )
+                        )
+                    elif intersecting_properties[current_property_data['property']].dtype == 'object':
+                        column_type = list(set([type(i) for i in intersecting_properties[current_property_data['property']].tolist()]))
+
+                        if len(column_type)==1:
+                            if column_type[0]==str:
+                                g_plot = dcc.Graph(
+                                    figure = px.histogram(
+                                        data_frame = intersecting_properties,
+                                        x = current_property_data['property'],
+                                        title = f'Histogram of {current_property_data["property"]} in {g["properties"]["name"]}'
+                                    )
+                                )
+                            elif column_type[0]==dict:
+                                sub_property_df = pd.DataFrame.from_records(intersecting_properties[current_property_data['property']].tolist()) 
+                                sub_properties = sub_property_df.columns.tolist()
+                                if 'sub_property' in current_property_data:
+                                    if current_property_data['sub_property'] in sub_properties:
+                                        use_sub_prop_value = current_property_data['sub_property']
+                                    else:
+                                        use_sub_prop_value = sub_properties[0]
+                                else:
+                                    use_sub_prop_value = sub_properties[0]
+
+                                current_property_data['sub_property'] = use_sub_prop_value
+
+                                g_plot = html.Div(
+                                    dbc.Row([
+                                        dbc.Col(
+                                            dbc.Label('Select a Sub-Property: ',html_for={'type': 'property-viewer-subtype','index': g_idx}),
+                                            md = 3
+                                        ),
+                                        dbc.Col(
+                                            dcc.Dropdown(
+                                                options = sub_properties,
+                                                value = use_sub_prop_value,
+                                                id = {'type': 'property-viewer-subtype','index': g_idx}
+                                            ),
+                                            md = 9
+                                        )
+                                    ]),
+                                    html.Hr(),
+                                    dbc.Row([
+                                        dcc.Graph(
+                                            figure = go.Figure(
+                                                px.histogram(
+                                                    data_frame = sub_properties,
+                                                    x = use_sub_prop_value,
+                                                    title = f'Histogram of {use_sub_prop_value} in {g["properties"]["name"]}'
+                                                )
+                                            )
+                                        )
+                                    ])
+                                )
+
+                            else:
+                                g_plot = f'Not implemented for type: {column_type}'
+
+                        elif len(column_type)>1:
+                            g_plot = f'Uh oh! Mixed dtypes: {column_type}'
+                        else:
+                            g_plot = f'Uh oh! column type: {column_type}'
+                    else:
+                        g_plot = f'Uh oh! column dtype is: {intersecting_properties[current_property_data["property"]].dtype}'
+                else:
+                    g_plot = f'Uh oh! {current_property_data["property"]} is not in {g["properties"]["name"]} with id: {g["properties"]["_id"]}'
+            else:
+                g_plot = 'Select a property to view'
+
+            plot_tabs_children.append(
+                dbc.Tab(
+                    g_plot,
+                    tab_id = g['properties']['_id'],
+                    label = f"{g['properties']['name']} ({g_count})"
+                )
+            )
+
+        plot_tabs = dbc.Tabs(
+            plot_tabs_children,
+            active_tab = current_features[0]['properties']['_id'],
+            id = {'type': 'property-viewer-tabs','index': 0}
+        )
+
+        return plot_tabs
+
 
 
 
