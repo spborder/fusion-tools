@@ -561,13 +561,12 @@ class SlideMap(MapComponent):
             src = """
                 function(feature,context){
                 const {overlayBounds, overlayProp, fillOpacity, lineColor, filterVals} = context.hideout;
-                
+
                 var returnFeature = true;
                 if (filterVals) {
                     for (let i = 0; i < filterVals.length; i++) {
                         // Iterating through filterVals list
                         var filter = filterVals[i];
-
                         if (filter.name) {
                             if (filter.name in feature.properties) {
                                 if (filter.value) {
@@ -930,9 +929,10 @@ class OverlayOptions(Tool):
                         )
                     ]),
                     html.Hr(),
-                    dbc.Row(
-                        dbc.Label('Filter Structures: ',html_for = {'type': 'add-filter-parent','index': 0})
-                    ),
+                    dbc.Row([
+                        dbc.Label('Filter Structures: ',html_for = {'type': 'add-filter-parent','index': 0}),
+                        html.Div('Click the icon below to add a filter.')
+                    ]),
                     dbc.Row([
                         html.Div(
                             id = {'type': 'add-filter-parent','index': 0},
@@ -991,7 +991,9 @@ class OverlayOptions(Tool):
                 Input({'type': 'overlay-drop','index': ALL},'value'),
                 Input({'type':'overlay-trans-slider','index': ALL},'value'),
                 Input({'type':'feature-lineColor-butt','index': ALL},'n_clicks'),
-                Input({'type': 'add-filter-selector','index': ALL},'value')
+                Input({'type': 'add-filter-parent','index': ALL},'children'),
+                Input({'type':'add-filter-selector','index': ALL},'value'),
+                Input({'type':'delete-filter','index': ALL},'n_clicks')
             ],
             [
                 Output({'type': 'feature-bounds','index': ALL},'hideout'),
@@ -1002,8 +1004,6 @@ class OverlayOptions(Tool):
                 State({'type': 'overlay-trans-slider','index': ALL},'value'),
                 State({'type': 'overlay-property-info','index': ALL},'data'),
                 State({'type': 'feature-lineColor','index': ALL},'value'),
-                State({'type': 'add-filter-selector','index': ALL},'value'),
-                State({'type':'add-filter-drop','index': ALL},'value')
             ]
         )(self.update_overlays)
 
@@ -1026,15 +1026,17 @@ class OverlayOptions(Tool):
         """
         Add new filter based on selected overlay value
         """
-
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
+        add_filter_click = get_pattern_matching_value(add_filter_click)
         add_filter_value = get_pattern_matching_value(add_filter_value)
-        delete_filter_click = get_pattern_matching_value(delete_filter_click)
         overlay_info_state = json.loads(get_pattern_matching_value(overlay_info_state))
 
-        patched_list = Patch()
+        if len(list(overlay_info_state.keys()))==0:
+            raise exceptions.PreventUpdate
+
+        active_filters = Patch()
         if ctx.triggered_id['type']=='delete-filter':
 
             values_to_remove = []
@@ -1043,14 +1045,17 @@ class OverlayOptions(Tool):
                     values_to_remove.insert(0,i)
             
             for v in values_to_remove:
-                del patched_list[v]
+                del active_filters[v]
 
         elif ctx.triggered_id['type'] in ['add-filter-drop','add-filter-butt']:
             
-            #TODO: Get min and max values for selected property
+            # Initializing dropdown value 
+            if add_filter_value is None:
+                add_filter_value = list(overlay_info_state.keys())[0]
+
             overlayBounds = overlay_info_state[add_filter_value]
             if 'min' in overlayBounds:
-
+                # Used for numeric filtering
                 values_selector = html.Div(
                     dcc.RangeSlider(
                         id = {'type': 'add-filter-selector','index': add_filter_click},
@@ -1062,10 +1067,10 @@ class OverlayOptions(Tool):
                         allowCross = False,
                         disabled = False
                     ),
-                    style = {'display': 'inline-block','margin': 'auto','width': '100%'},
-                    id = {'type': 'add-filter-selector-div','index': add_filter_click}
+                    style = {'display': 'inline-block','margin': 'auto','width': '100%'}
                 )
             elif 'unique' in overlayBounds:
+                # Used for categorical filtering
                 values_selector = html.Div(
                     dcc.Dropdown(
                         id = {'type':'add-filter-selector','index': add_filter_click},
@@ -1074,7 +1079,6 @@ class OverlayOptions(Tool):
                         multi = True
                     )
                 )
-
             
             def new_filter_item():
                 return html.Div([
@@ -1082,7 +1086,7 @@ class OverlayOptions(Tool):
                         dbc.Col(
                             dcc.Dropdown(
                                 options = self.overlay_options,
-                                value = [],
+                                value = self.overlay_options[0],
                                 placeholder = 'Select property to filter structures',
                                 id = {'type': 'add-filter-drop','index': add_filter_click}
                             ),
@@ -1101,31 +1105,48 @@ class OverlayOptions(Tool):
                     values_selector
                 ])
             
-            patched_list.append(new_filter_item())
+            active_filters.append(new_filter_item())
 
-        return patched_list
+        return [active_filters]
 
-    def update_overlays(self, overlay_value, transp_value, lineColor_butt, filter_value, overlay_state, transp_state, overlay_info_state, lineColor_state, filter_state, filter_drop_state):
+    def parse_added_filters(self, add_filter_parent):
+        """
+        Getting all filter values from parent div
+
+        add_filter_parent is a list of divs, each one containing two children (Row, Div).
+        """
+        processed_filters = []
+
+        if not add_filter_parent is None:
+            for div in add_filter_parent:
+                div_children = div['props']['children']
+
+                filter_name = div_children[0]['props']['children'][0]['props']['children']['props']['value']
+                filter_value = div_children[1]['props']['children']['props']['value']
+
+                processed_filters.append({
+                    'name': filter_name.split(' --> ')[0] if '-->' in filter_name else filter_name,
+                    'value': filter_name.split(' --> ')[1] if '-->' in filter_name else None,
+                    'range': filter_value
+                })
+
+        return processed_filters
+
+    def update_overlays(self, overlay_value, transp_value, lineColor_butt, filter_parent, filter_value, delete_filter, overlay_state, transp_state, overlay_info_state, lineColor_state):
         """
         Update overlay transparency and color based on property selection
 
         Adding new values to the "hideout" property of the GeoJSON layers triggers the featureStyle Namespace function
         """
 
-        if not any([i['value'] for i in ctx.triggered]):
-            raise exceptions.PreventUpdate
-        
         overlay_value = get_pattern_matching_value(overlay_value)
         transp_value = get_pattern_matching_value(transp_value)
         overlay_state = get_pattern_matching_value(overlay_state)
         transp_state = get_pattern_matching_value(transp_state)
         overlay_info_state = json.loads(get_pattern_matching_value(overlay_info_state))
-        print(overlay_info_state)
 
         if ctx.triggered_id['type']=='overlay-drop':
             use_overlay_value = overlay_value
-            use_filter_value = filter_state
-            use_filter_name = filter_drop_state
             use_transp_value = transp_state
         else:
             if type(overlay_state)==list:
@@ -1138,22 +1159,17 @@ class OverlayOptions(Tool):
 
         if ctx.triggered_id['type']=='overlay-trans-slider':
             use_transp_value = transp_value
-            use_filter_value = filter_state
-            use_filter_name = filter_drop_state
         else:
             use_transp_value = transp_state
 
-        if ctx.triggered_id['type']=='add-filter-selector':
+        if ctx.triggered_id['type'] in ['add-filter-parent', 'add-filter-selector','delete-filter']:
             use_overlay_value = overlay_state
             use_transp_value = transp_state
-            use_filter_value = filter_value
-            use_filter_name = filter_drop_state
 
         if ctx.triggered_id['type']=='feature-lineColor-butt':
-            use_filter_value = filter_state
-            use_filter_name = filter_drop_state
             use_overlay_value = overlay_state
             use_transp_value = transp_state
+
 
         if not use_overlay_value is None:
             if '-->' in use_overlay_value:
@@ -1223,15 +1239,8 @@ class OverlayOptions(Tool):
         else:
             colorbar = [no_update]
 
-        #TODO: Get all current filters values here
-        filterVals = [
-            {
-                'name': f.split(' --> ')[0] if '-->' in f else f,
-                'value': f.split(' --> ')[1] if '-->' in f else None,
-                'range': f_range
-            }
-            for f,f_range in zip(use_filter_name,use_filter_value)
-        ]
+        # Grabbing all filter values from the parent div
+        filterVals = self.parse_added_filters(get_pattern_matching_value(filter_parent))
 
         geojson_hideout = [
             {
@@ -1239,7 +1248,7 @@ class OverlayOptions(Tool):
                 'overlayProp': overlay_prop,
                 'fillOpacity': fillOpacity,
                 'lineColor': lineColor,
-                'filerVals': filterVals 
+                'filterVals': filterVals 
             }
             for i in range(len(ctx.outputs_list[0]))
         ]
