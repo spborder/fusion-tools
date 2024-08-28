@@ -136,7 +136,7 @@ class Visualization:
             for col in row:
                 if not type(col)==list:
                     if isinstance(col,SlideMap):
-                        col.blueprint.layout = col.gen_layout(width=f'{int(100/len(row))}vw')
+                        col.blueprint.layout = col.gen_layout()
 
                     row_children.append(
                         dbc.Col(
@@ -154,7 +154,7 @@ class Visualization:
                     tabs_children = []
                     for tab in col:
                         if isinstance(tab,SlideMap):
-                            tab.blueprint.layout = tab.gen_layout(width=f'{int(100/len(row))}vw')
+                            tab.blueprint.layout = tab.gen_layout()
                         tabs_children.append(
                             dbc.Tab(
                                 dbc.Card(
@@ -420,7 +420,7 @@ class SlideMap(MapComponent):
 
         return annotation_components
 
-    def gen_layout(self, width: str):
+    def gen_layout(self):
         """
         Generate simple slide viewer layout
         """
@@ -430,7 +430,7 @@ class SlideMap(MapComponent):
                 crs = 'Simple',
                 center = [-self.image_metadata['tileWidth']/2,self.image_metadata['tileWidth']/2],
                 zoom = 1,
-                style = {'height': '90vh','width': width,'margin': 'auto','display': 'inline-block'},
+                style = {'height': '90vh','width': '100%','margin': 'auto','display': 'inline-block'},
                 children = [
                     dl.TileLayer(
                         id = {'type': 'map-tile-layer','index': 0},
@@ -1475,24 +1475,30 @@ class PropertyViewer(Tool):
                 if current_property_data['property'] in intersecting_properties:
                     if any([i in str(intersecting_properties[current_property_data['property']].dtype) for i in ["int","float"]]):
                         # This generates a histogram (all quantitative feature)
-                        g_plot = dcc.Graph(
-                            figure = px.histogram(
-                                data_frame = intersecting_properties,
-                                x = current_property_data['property'],
-                                title = f'Histogram of {current_property_data["property"]} in {g["properties"]["name"]}'
-                            )
+                        g_plot = html.Div(
+                            dcc.Graph(
+                                figure = px.histogram(
+                                    data_frame = intersecting_properties,
+                                    x = current_property_data['property'],
+                                    title = f'Histogram of {current_property_data["property"]} in {g["properties"]["name"]}'
+                                )
+                            ),
+                            style = {'width': '100%'}
                         )
                     elif intersecting_properties[current_property_data['property']].dtype == 'object':
                         column_type = list(set([type(i) for i in intersecting_properties[current_property_data['property']].tolist()]))
 
                         if len(column_type)==1:
                             if column_type[0]==str:
-                                g_plot = dcc.Graph(
-                                    figure = px.histogram(
-                                        data_frame = intersecting_properties,
-                                        x = current_property_data['property'],
-                                        title = f'Histogram of {current_property_data["property"]} in {g["properties"]["name"]}'
-                                    )
+                                g_plot = html.Div(
+                                    dcc.Graph(
+                                        figure = px.histogram(
+                                            data_frame = intersecting_properties,
+                                            x = current_property_data['property'],
+                                            title = f'Histogram of {current_property_data["property"]} in {g["properties"]["name"]}'
+                                        )
+                                    ),
+                                    style = {'width': '100%'}
                                 )
                             elif column_type[0]==dict:
                                 sub_property_df = pd.DataFrame.from_records(intersecting_properties[current_property_data['property']].tolist()) 
@@ -1533,7 +1539,8 @@ class PropertyViewer(Tool):
                                                 )
                                             )
                                         )
-                                    ])
+                                    ]),
+                                    style = {'width': '100%'}
                                 )
 
                             else:
