@@ -23,7 +23,7 @@ from dash_extensions.enrich import DashProxy, DashBlueprint, html, Input, Output
 from dash_extensions.javascript import assign, arrow_function, Namespace
 
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
-from fusion_tools.utils.shapes import find_intersecting
+from fusion_tools.utils.shapes import find_intersecting, spatially_aggregate
 from shapely.geometry import box
 import plotly.express as px
 import plotly.graph_objects as go
@@ -457,7 +457,7 @@ class SlideMap(MapComponent):
                         children = []
                     ),
                     dl.LayersControl(
-                        id = {'type': 'map-layers-control'},
+                        id = {'type': 'map-layers-control','index': 0},
                         children = self.annotation_components
                     ),
                     dl.EasyButton(
@@ -629,11 +629,19 @@ class SlideMap(MapComponent):
                 Input({'type':'feature-bounds','index': MATCH},'clickData')
             ],
             [
-                Output({'type': 'ftu-popup','index': MATCH},'children')
+                Output({'type': 'feature-popup','index': MATCH},'children')
             ]
         )(self.get_click_popup)
 
-        # 
+        # Drawing manual ROIs and spatially aggregating underlying info
+        self.blueprint.callback(
+            [
+                Input({'type':'edit-control','index': ALL},'geojson')
+            ],
+            [
+                Output({'type': 'map-layers-control','index': ALL},'children')
+            ]
+        )(self.add_manual_roi)
 
     def get_click_popup(self, clicked):
         """
@@ -642,7 +650,7 @@ class SlideMap(MapComponent):
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
-
+        
         def make_dash_table(df:pd.DataFrame):
             """
             Populate dash_table.DataTable
@@ -670,18 +678,96 @@ class SlideMap(MapComponent):
 
             return return_table
 
+        print(clicked['properties'])
+
+        property_dict = [
+            {'Property': i, 'Value': j}
+            for i,j in clicked['properties'].items()
+        ]
+        print(property_dict)
+        print(pd.DataFrame.from_records(property_dict))
+
+        property_df = pd.DataFrame.from_records(property_dict)
         popup_div = html.Div(
             dbc.Accordion(
                 dbc.AccordionItem(
                     title = 'Properties',
                     children = [
-                        make_dash_table(pd.DataFrame.from_records([i['properties'] for i in clicked]))
+                        make_dash_table(property_df)
                     ]
                 )
             )
         )
 
         return popup_div
+    
+    def make_geojson_layers(self, geojson_list:list):
+        """
+        Creating geojson layers (without scaling) to add to map-layers-control
+        """
+        annotation_components = []
+        for st_idx,st in enumerate(geojson_list):
+            annotation_components.append(
+                dl.Overlay(
+                    dl.LayerGroup(
+                        dl.GeoJSON(
+                            data = st,
+                            id = {'type': 'feature-bounds','index': st_idx},
+                            options = {
+                                'style': self.js_namespace("featureStyle")
+                            },
+                            filter = self.js_namespace("featureFilter"),
+                            hideout = {
+                                'overlayBounds': {},
+                                'overlayProp': {},
+                                'fillOpacity': 0.5,
+                                'lineColor': {st['properties']['name']: '#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255))},
+                                'filterVals': []
+                            },
+                            hoverStyle = arrow_function(
+                                {
+                                    'weight': 5,
+                                    'color': '#9caf00',
+                                    'dashArray':''
+                                }
+                            ),
+                            zoomToBounds = False,
+                            children = [
+                                dl.Popup(
+                                    id = {'type': 'feature-popup','index': st_idx},
+                                    autoPan = False,
+                                )
+                            ]
+                        )
+                    ),
+                    name = st['properties']['name'], checked = True, id = {'type':'feature-overlay','index':st_idx}
+                )
+            )
+
+        return annotation_components
+
+    def add_manual_roi(self,new_geojson):
+        """
+        Adding a new manual ROI and spatially aggregating underlying structure properties
+        """
+        new_geojson = get_pattern_matching_value(new_geojson)
+        if not new_geojson is None:
+            new_geojson['properties'] = {
+                'name': 'Manual ROI',
+                '_id': uuid.uuid4().hex[:24]
+            }
+
+            new_geojson = spatially_aggregate(new_geojson, self.annotations)
+
+            if len(new_geojson['features'])>0:
+                new_children = self.make_geojson_layers(self.annotations+[new_geojson])
+            else:
+                new_children = self.make_geojson_layers(self.annotations)
+
+            return [new_children]
+        else:
+            raise exceptions.PreventUpdate
+
 
 class MultiFrameSlideMap(SlideMap):
     """

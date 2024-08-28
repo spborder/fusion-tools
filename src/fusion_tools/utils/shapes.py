@@ -417,9 +417,56 @@ def find_intersecting(geo_source:dict, geo_query:Polygon, return_props:bool = Tr
     elif return_shapes:
         return geo_intersect_geojson
 
-def spatially_aggregate(agg_geo:Polygon):
-    pass
+def spatially_aggregate(agg_geo:dict, base_geos: list):
+    """
+    Aggregate properties of intersecting features with agg_geo (geojson FeatureCollection)
+    """
 
+    for b in base_geos:
+        b_name = b['properties']['name']
+        for f in agg_geo['features']:
+            f_shape = shape(f['geometry'])
+            intersecting_shapes, intersecting_props = find_intersecting(b,f_shape)
+
+            if len(intersecting_shapes['features'])>0:
+                intersecting_areas = [
+                    shape(i['geometry']).intersection(f_shape).area
+                    for i in intersecting_shapes['features']
+                ]
+
+                f['properties'][f'{b_name} count'] = len(intersecting_shapes['features'])
+                f['properties'][f'{b_name} area'] = sum(intersecting_areas)
+
+                intersecting_props_cols = intersecting_props.columns.tolist()
+                numeric_props = intersecting_props.select_dtypes(exclude='object')
+                if not numeric_props.empty:
+                    for c in numeric_props.columns.tolist():
+                        c_max = numeric_props[c].max()
+                        c_min = numeric_props[c].min()
+                        c_mean = numeric_props[c].mean()
+                        c_sum = numeric_props[c].sum()
+
+                        f['properties'][f'{b_name} {c} Max'] = c_max
+                        f['properties'][f'{b_name} {c} Min'] = c_min
+                        f['properties'][f'{b_name} {c} Mean'] = c_mean
+                        f['properties'][f'{b_name} {c} Sum'] = c_sum
+                
+                object_props = intersecting_props.iloc[:,[i for i in range(len(intersecting_props_cols)) if not intersecting_props_cols[i] in numeric_props]]
+                if not object_props.empty:
+                    for c in object_props.columns.tolist():
+                        col_type = list(set([type(i) for i in object_props[c].tolist()]))
+
+                        if len(col_type)==1:
+                            if col_type[0]==str:
+                                c_counts = object_props[c].value_counts().to_dict()
+                                for i,j in c_counts.items():
+                                    f['properties'][f'{b_name} {i}'] = j
+                            elif col_type[0]==dict:
+                                c_df = pd.DataFrame.from_records(object_props[c].tolist())
+                                print(c_df)
+
+
+    return agg_geo
 
 
 
