@@ -6,7 +6,6 @@ import os
 import sys
 
 
-
 def get_pattern_matching_value(input_val):
     """
     Used to extract usable values from components generated using pattern-matching syntax.
@@ -26,37 +25,6 @@ def get_pattern_matching_value(input_val):
         return_val = input_val
 
     return return_val
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

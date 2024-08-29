@@ -21,15 +21,14 @@ import dash
 dash._dash_renderer._set_react_version('18.2.0')
 import dash_leaflet as dl
 import dash_leaflet.express as dlx
-from dash import dcc, callback, ctx, ALL, MATCH, exceptions, dash_table, Patch, no_update
+from dash import dcc, callback, ctx, ALL, MATCH, exceptions, Patch, no_update
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash_extensions.enrich import DashProxy, DashBlueprint, html, Input, Output, State
-from dash_extensions.javascript import assign, arrow_function, Namespace
+from dash_extensions.enrich import DashBlueprint, html, Input, Output, State
 
 # fusion-tools imports
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
-from fusion_tools.utils.shapes import find_intersecting, spatially_aggregate
+from fusion_tools.utils.shapes import find_intersecting
 
 
 
@@ -915,37 +914,8 @@ class HRAViewer(Tool):
     def gen_layout(self):
         pass
 
-
     def get_callbacks(self):
         pass
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
