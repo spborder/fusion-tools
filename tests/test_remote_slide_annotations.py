@@ -17,8 +17,8 @@ from fusion_tools.components import SlideMap
 def main():
 
     # Grabbing first item from demo DSA instance
-    base_url = 'http://ec2-3-230-122-132.compute-1.amazonaws.com:8080/api/v1'
-    item_id = '6495a4e03e6ae3107da10dc5'
+    base_url = 'https://demo.kitware.com/histomicstk/api/v1'
+    item_id = '5bbdeed1e629140048d01bcb'
 
     # Starting visualization session
     tile_server = DSATileServer(
