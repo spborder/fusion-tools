@@ -9,7 +9,9 @@ import os
 import sys
 import threading
 sys.path.append('./src/')
-from fusion_tools.visualization.components import Visualization, SlideMap, LocalTileServer, OverlayOptions, PropertyViewer
+from fusion_tools import Visualization
+from fusion_tools.tileserver import LocalTileServer
+from fusion_tools.components import SlideMap, OverlayOptions, PropertyViewer
 from fusion_tools.utils.shapes import load_aperio, load_geojson, export_annotations
 
 
