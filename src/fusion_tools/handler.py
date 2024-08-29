@@ -216,6 +216,15 @@ class DSAHandler:
                             f'/annotation/{a["_id"]}/geojson'
                         )
 
+                    for f in ann_geojson['features']:
+                        if 'properties' in f:
+                            if 'user' in f['properties']:
+                                f['properties'] = f['properties']['user']
+
+                            f['properties']['name'] = a['annotation']['name']
+                        else:
+                            f['properties'] = {'name': a['annotation']['name']}
+
                     if 'properties' not in ann_geojson:
                         ann_geojson['properties'] = {
                             'name': a['annotation']['name']
@@ -246,6 +255,15 @@ class DSAHandler:
                         ann_geojson = self.gc.get(
                             f'/annotation/{a["_id"]}/geojson'
                         )
+
+                    for f in ann_geojson['features']:
+                        if 'properties' in f:
+                            if 'user' in f['properties']:
+                                f['properties'] = f['properties']['user']
+                                del f['properties']['user']
+                            f['properties']['name'] = a['annotation']['name']
+                        else:
+                            f['properties'] = {'name': a['annotation']['name']}
 
                     if 'properties' not in ann_geojson:
                         ann_geojson['properties'] = {

@@ -96,8 +96,8 @@ class SlideMap(MapComponent):
 
                 if 'properties' not in st:
                     st['properties'] = {}
-                    if 'annotation' in st['features'][0]['properties']:
-                        st['properties']['name'] = st['features'][0]['properties']['annotation']['name']
+                    if 'name' in st['features'][0]['properties']:
+                        st['properties']['name'] = st['features'][0]['properties']['name']
                     else:
                         st['properties']['name'] = f'Structure {st_idx}'
                 
@@ -380,6 +380,7 @@ class SlideMap(MapComponent):
                 data = df.to_dict('records'),
                 editable=False,                                        
                 sort_mode='multi',
+                sort_action = 'native',
                 page_current=0,
                 page_size=5,
                 style_cell = {
@@ -410,20 +411,27 @@ class SlideMap(MapComponent):
                 html.Div([
                     make_dash_table(pd.DataFrame(non_dict_prop_list))
                 ])
-            ])
+            ], title = 'Properties')
         )
 
-        
+        # Now loading the dict properties as sub-accordions
+        dict_properties = [i for i in all_properties if type(clicked['properties'][i])==dict]
+        for d in dict_properties:
+            sub_properties = clicked['properties'][d]
+            sub_prop_record = [{'SubProperty': i, 'Value': j} for i,j in sub_properties.items() if not type(j) in [list,dict]]
 
+            if len(sub_prop_record)>0:
+                accordion_children.append(
+                    dbc.AccordionItem([
+                        html.Div([
+                            make_dash_table(pd.DataFrame.from_records(sub_prop_record))
+                        ])
+                    ],title = d)
+                )
 
         popup_div = html.Div(
             dbc.Accordion(
-                dbc.AccordionItem(
-                    title = 'Properties',
-                    children = [
-                        make_dash_table(property_df)
-                    ]
-                )
+                children = accordion_children
             )
         )
 

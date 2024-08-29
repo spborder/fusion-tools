@@ -430,27 +430,30 @@ def spatially_aggregate(agg_geo:dict, base_geos: list):
             intersecting_shapes, intersecting_props = find_intersecting(b,f_shape)
 
             if len(intersecting_shapes['features'])>0:
+                
+                f['properties'][b_name] = {}
+
                 intersecting_areas = [
                     shape(i['geometry']).intersection(f_shape).area
                     for i in intersecting_shapes['features']
                 ]
 
-                f['properties'][f'{b_name} count'] = len(intersecting_shapes['features'])
-                f['properties'][f'{b_name} area'] = sum(intersecting_areas)
+                f['properties'][b_name]['count'] = len(intersecting_shapes['features'])
+                f['properties'][b_name]['area'] = sum(intersecting_areas)
 
                 intersecting_props_cols = intersecting_props.columns.tolist()
                 numeric_props = intersecting_props.select_dtypes(exclude='object')
                 if not numeric_props.empty:
                     for c in numeric_props.columns.tolist():
-                        c_max = numeric_props[c].max()
-                        c_min = numeric_props[c].min()
-                        c_mean = numeric_props[c].mean()
-                        c_sum = numeric_props[c].sum()
+                        c_max = numeric_props[c].nanmax()
+                        c_min = numeric_props[c].nanmin()
+                        c_mean = numeric_props[c].nanmean()
+                        c_sum = numeric_props[c].nansum()
 
-                        f['properties'][f'{b_name} {c} Max'] = c_max
-                        f['properties'][f'{b_name} {c} Min'] = c_min
-                        f['properties'][f'{b_name} {c} Mean'] = c_mean
-                        f['properties'][f'{b_name} {c} Sum'] = c_sum
+                        f['properties'][b_name][f'{c} Max'] = c_max
+                        f['properties'][b_name][f'{c} Min'] = c_min
+                        f['properties'][b_name][f'{c} Mean'] = c_mean
+                        f['properties'][b_name][f'{c} Sum'] = c_sum
                 
                 object_props = intersecting_props.iloc[:,[i for i in range(len(intersecting_props_cols)) if not intersecting_props_cols[i] in numeric_props]]
                 if not object_props.empty:
@@ -461,10 +464,15 @@ def spatially_aggregate(agg_geo:dict, base_geos: list):
                             if col_type[0]==str:
                                 c_counts = object_props[c].value_counts().to_dict()
                                 for i,j in c_counts.items():
-                                    f['properties'][f'{b_name} {i}'] = j
+                                    f['properties'][b_name][i] = j
                             elif col_type[0]==dict:
                                 c_df = pd.DataFrame.from_records(object_props[c].tolist())
-                                print(c_df)
+                                f['properties'][b_name][c] = {
+                                    'mean': c_df.nanmean(axis=0).to_dict(),
+                                    'max': c_df.nanmax(axis=0).to_dict(),
+                                    'min': c_df.nanmin(axis=0).to_dict(),
+                                    'sum': c_df.nansum(axis=0).to_dict()
+                                }
 
 
     return agg_geo

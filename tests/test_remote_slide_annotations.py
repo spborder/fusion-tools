@@ -32,7 +32,7 @@ def main():
     )
 
     # Checking how many annotations this item has:
-    print('This item has the following annotations: ')
+    #print('This item has the following annotations: ')
     #print(dsa_handler.query_annotation_count(item=item_id).to_dict('records'))
 
     annotations = dsa_handler.get_annotations(
