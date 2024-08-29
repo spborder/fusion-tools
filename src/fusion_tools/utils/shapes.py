@@ -105,14 +105,15 @@ def load_aperio(xml_path: str) -> list:
             for vert in vertices:
                 coords.append([
                     int(float(vert.attrib['X'])),
-                    int(float(vert.attrib['Y']))
+                    int(float(vert.attrib['Y'])),
+                    int(1.0)
                 ])
             
             geojson_anns['features'].append({
                 'type': 'Feature',
                 'geometry': {
                     'type': 'Polygon',
-                    'coordinates': coords
+                    'coordinates': [coords]
                 },
                 'properties': {
                     'name': f'Layer{ann_idx+1}'

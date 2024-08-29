@@ -842,7 +842,7 @@ class PropertyViewer(Tool):
 class PropertyPlotter(Tool):
     def __init__(self,
                  geojson_list: Union[dict,list],
-                 reference_object: Union[str,None],
+                 reference_object: Union[str,None] = None,
                  ignore_list: list = []
                  ):
 

@@ -11,6 +11,7 @@ import pandas as pd
 import numpy as np
 import uuid
 from typing_extensions import Union
+import geojson
 
 
 # Dash imports
@@ -91,11 +92,14 @@ class SlideMap(MapComponent):
             for st_idx,st in enumerate(self.annotations):
 
                 # Scale annotations to fit within base tile dimensions
-                for f in st['features']:
-                    f['geometry']['coordinates'] = [[
-                        [i[0]*self.x_scale,i[1]*self.y_scale]
-                        for i in f['geometry']['coordinates']
-                    ]]
+                st = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*self.x_scale,c[1]*self.y_scale, c[2]), g), st)
+
+                if 'properties' not in st:
+                    st['properties'] = {}
+                    if 'annotation' in st['features'][0]['properties']:
+                        st['properties']['name'] = st['features'][0]['properties']['annotation']['name']
+                    else:
+                        st['properties']['name'] = f'Structure {st_idx}'
                 
                 annotation_components.append(
                     dl.Overlay(
@@ -394,14 +398,24 @@ class SlideMap(MapComponent):
 
             return return_table
 
-        # Table won't render with dict type elements
-        property_dict = [
-            {'Property': i, 'Value': j}
-            for i,j in clicked['properties'].items()
-            if type(j) in [int,float,str]
-        ]
 
-        property_df = pd.DataFrame.from_records(property_dict)
+        accordion_children = []
+        all_properties = list(clicked['properties'].keys())
+
+        non_dict_properties = [i for i in all_properties if not type(clicked['properties'][i]) in [list,dict]]
+        non_dict_prop_list = {'Property': non_dict_properties, 'Value': [clicked['properties'][i] for i in non_dict_properties]}
+
+        accordion_children.append(
+            dbc.AccordionItem([
+                html.Div([
+                    make_dash_table(pd.DataFrame(non_dict_prop_list))
+                ])
+            ])
+        )
+
+        
+
+
         popup_div = html.Div(
             dbc.Accordion(
                 dbc.AccordionItem(
@@ -472,17 +486,17 @@ class SlideMap(MapComponent):
             }
 
             if not self.annotations is None:
-                new_geojson = spatially_aggregate(new_geojson, self.annotations)
 
                 if len(new_geojson['features'])>0:
+                    new_geojson = spatially_aggregate(new_geojson, self.annotations)
                     new_children = self.make_geojson_layers(self.annotations+[new_geojson])
                 else:
                     new_children = self.make_geojson_layers(self.annotations)
-            
+
+                return [new_children]
             else:
                 if len(new_geojson['features'])>0:
                     new_children = self.make_geojson_layers([new_geojson])
-
                     return [new_children]
                 
                 else:
