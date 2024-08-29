@@ -56,7 +56,7 @@ The `Visualization` class lets users construct custom layouts of different tools
 </div>
 
 
-```
+```python
 
 import threading
 from fusion_tools import Visualization
