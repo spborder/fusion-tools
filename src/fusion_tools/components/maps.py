@@ -471,16 +471,25 @@ class SlideMap(MapComponent):
                 '_id': uuid.uuid4().hex[:24]
             }
 
-            new_geojson = spatially_aggregate(new_geojson, self.annotations)
+            if not self.annotations is None:
+                new_geojson = spatially_aggregate(new_geojson, self.annotations)
 
-            if len(new_geojson['features'])>0:
-                new_children = self.make_geojson_layers(self.annotations+[new_geojson])
+                if len(new_geojson['features'])>0:
+                    new_children = self.make_geojson_layers(self.annotations+[new_geojson])
+                else:
+                    new_children = self.make_geojson_layers(self.annotations)
+            
             else:
-                new_children = self.make_geojson_layers(self.annotations)
+                if len(new_geojson['features'])>0:
+                    new_children = self.make_geojson_layers([new_geojson])
 
-            return [new_children]
+                    return [new_children]
+                
+                else:
+                    raise exceptions.PreventUpdate
         else:
             raise exceptions.PreventUpdate
+
 
 class MultiFrameSlideMap(SlideMap):
     """

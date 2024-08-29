@@ -88,24 +88,25 @@ class LocalTileServer(TileServer):
 
         uvicorn.run(app,host='0.0.0.0',port=port)
 
-class RemoteTileServer(TileServer):
+class DSATileServer(TileServer):
     """
     Use for linking visualization with remote tiles API (DSA server)
     """
     def __init__(self,
-                 base_url: str
+                 api_url: str,
+                 item_id: str
                  ):
 
-        self.base_url = base_url
-        self.tiles_url = f'{base_url}/tiles/'+'{z}/{x}/{y}'
-        self.regions_url = f'{base_url}/tiles/region'
+        self.base_url = api_url
+        self.tiles_url = f'{api_url}/item/{item_id}/tiles/zxy/'+'{z}/{x}/{y}'
+        self.regions_url = f'{api_url}/item/{item_id}/tiles/region'
 
         self.tiles_metadata = requests.get(
-            f'{base_url}/tiles'
+            f'{api_url}/item/{item_id}/tiles'
         ).json()
 
     def __str__(self):
-        return f'RemoteTileServer for {self.base_url}'
+        return f'DSATileServer for {self.base_url}'
 
 class CustomTileServer(TileServer):
     """
@@ -123,5 +124,7 @@ class CustomTileServer(TileServer):
         assert all([i in image_metadata for i in ['tileWidth','tileHeight','sizeX','sizeY','levels']])
         self.tiles_metadata = image_metadata
 
+    def __str__(self):
+        return f'CustomTileServer for {self.tiles_url}'
 
 
