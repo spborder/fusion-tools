@@ -1,5 +1,5 @@
 """
-Utility functions for data derived from FUSION
+Utility functions for --omics data in fusion-tools
 
 """
 
@@ -7,40 +7,10 @@ import os
 import sys
 
 import numpy as np
-
-import geopandas as gpd
 import pandas as pd
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+import anndata as ad
+import spatialdata as sd
 
 
 
