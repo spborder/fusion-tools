@@ -1,6 +1,15 @@
 # Changelog
 
 <!--next-version-placeholder-->
+## v0.0.5 (08/29/2024)
+
+### Fix
+- Fixing GeoJSON coordinates shape from load_aperio
+
+### Features
+- Adding more information to feature popups with sub-items for dictionary-type feature data
+- Tested DSATileServer 
+
 ## v0.0.4 (08/29/2024)
 
 ### Features
