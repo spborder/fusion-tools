@@ -24,9 +24,11 @@ setuptools.setup(
         "dash-extensions",
         "dash-bootstrap-components",
         "dash-mantine-components",
+        "dash-treeview-antd",
         "requests",
         "uuid",
         "scikit-image",
+        "umap-learn",
         "fastapi",
         "uvicorn",
         "threading"

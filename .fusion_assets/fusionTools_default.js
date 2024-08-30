@@ -12,7 +12,6 @@ window.fusionTools = Object.assign({}, window.fusionTools, {
                     filterVals
                 } = context.hideout;
                 var style = {};
-
                 if ("min" in overlayBounds) {
                     var csc = chroma.scale(["blue", "red"]).domain([overlayBounds.min, overlayBounds.max]);
                 } else if ("unique" in overlayBounds) {
@@ -53,12 +52,14 @@ window.fusionTools = Object.assign({}, window.fusionTools, {
                     var overlayVal = Number.Nan;
                 }
 
-                if (overlayVal == overlayVal) {
+                if (overlayVal == overlayVal && overlayVal != null) {
                     if (typeof overlayVal === 'number') {
                         style.fillColor = csc(overlayVal);
-                    } else {
+                    } else if ('unique' in overlayBounds) {
                         overlayVal = overlayBounds.unique.indexOf(overlayVal);
                         style.fillColor = csc[overlayVal];
+                    } else {
+                        style.fillColor = "f00";
                     }
                 } else {
                     style.fillColor = "f00";
@@ -108,10 +109,10 @@ window.fusionTools = Object.assign({}, window.fusionTools, {
 
                     if (filter.range) {
                         if (typeof filter.range[0] === 'number') {
-                            if (test_val < filter.range[0]) {
+                            if (testVal < filter.range[0]) {
                                 returnFeature = returnFeature & false;
                             }
-                            if (test_val > filter.range[1]) {
+                            if (testVal > filter.range[1]) {
                                 returnFeature = returnFeature & false;
                             }
                         } else {

@@ -15,7 +15,8 @@ import dash
 dash._dash_renderer._set_react_version('18.2.0')
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash_extensions.enrich import DashProxy, html
+from dash_extensions.enrich import DashProxy, html, MultiplexerTransform
+
 
 # fusion-tools imports
 from fusion_tools.components import SlideMap
@@ -85,7 +86,10 @@ class Visualization:
             ],
             external_scripts = ['https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.1.0/chroma.min.js'],
             assets_folder = self.assets_folder,
-            prevent_initial_callbacks=True
+            prevent_initial_callbacks=True,
+            transforms = [
+                MultiplexerTransform()
+            ]
         )
         self.viewer_app.title = self.app_options['title'] if 'title' in self.app_options else self.default_options['title']
         self.viewer_app.layout = self.gen_layout()
@@ -114,53 +118,66 @@ class Visualization:
     def get_layout_children(self):
         """
         Generate children of layout container from input list of components and layout options
+        
         """
 
         layout_children = []
         for row in self.components:
             row_children = []
-            for col in row:
-                if not type(col)==list:
-                    if isinstance(col,SlideMap):
-                        col.blueprint.layout = col.gen_layout()
-
-                    row_children.append(
-                        dbc.Col(
-                            dbc.Card([
-                                dbc.CardHeader(
-                                    col.title
-                                ),
-                                dbc.CardBody(
-                                    col.blueprint.embed(self.viewer_app)
-                                )
-                            ])
-                        )
-                    )
-                else:
-                    tabs_children = []
-                    for tab in col:
-                        if isinstance(tab,SlideMap):
-                            tab.blueprint.layout = tab.gen_layout()
-                        tabs_children.append(
-                            dbc.Tab(
-                                dbc.Card(
+            if type(row)==list:
+                for col in row:
+                    if not type(col)==list:
+                        row_children.append(
+                            dbc.Col(
+                                dbc.Card([
+                                    dbc.CardHeader(
+                                        col.title
+                                    ),
                                     dbc.CardBody(
-                                        tab.blueprint.embed(self.viewer_app)
+                                        col.blueprint.embed(self.viewer_app)
                                     )
-                                ),
-                                label = tab.title,
-                                tab_id = tab.title.lower().replace(' ','-')
+                                ])
                             )
                         )
+                    else:
+                        tabs_children = []
+                        for tab in col:
+                            tabs_children.append(
+                                dbc.Tab(
+                                    dbc.Card(
+                                        dbc.CardBody(
+                                            tab.blueprint.embed(self.viewer_app)
+                                        )
+                                    ),
+                                    label = tab.title,
+                                    tab_id = tab.title.lower().replace(' ','-')
+                                )
+                            )
 
-                    row_children.append(
-                        dbc.Col(
-                            dbc.Tabs(
-                                tabs_children,
-                                id = {'type': 'vis-layout-tabs','index': np.random.randint(0,1000)}
+                        row_children.append(
+                            dbc.Col(
+                                dbc.Card([
+                                    dbc.CardHeader('Tools'),
+                                    dbc.CardBody(
+                                        dbc.Tabs(
+                                            tabs_children,
+                                            id = {'type': 'vis-layout-tabs','index': np.random.randint(0,1000)}
+                                        )
+                                    )
+                                ])
                             )
                         )
+            else:
+                row_children.append(
+                    dbc.Col(
+                        dbc.Card([
+                            dbc.CardHeader(row.title),
+                            dbc.CardBody(
+                                row.blueprint.embed(self.viewer_app)
+                            )
+                        ])
                     )
+                )
 
             layout_children.append(
                 dbc.Row(

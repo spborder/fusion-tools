@@ -208,10 +208,12 @@ class DSAHandler:
                 annotations = []
                 for a in annotation_ids:
                     if '_id' in a['annotation']:
+                        a_id = a['annotation']['_id']
                         ann_geojson = self.gc.get(
                             f'/annotation/{a["annotation"]["_id"]}/geojson'
                         )
                     elif '_id' in a:
+                        a_id = a['_id']
                         ann_geojson = self.gc.get(
                             f'/annotation/{a["_id"]}/geojson'
                         )
@@ -225,10 +227,14 @@ class DSAHandler:
                         else:
                             f['properties'] = {'name': a['annotation']['name']}
 
+
                     if 'properties' not in ann_geojson:
                         ann_geojson['properties'] = {
                             'name': a['annotation']['name']
                         }
+
+                    ann_geojson['properties']['_id'] = a_id
+
                     annotations.append(ann_geojson)
             elif format=='histomics':
 
@@ -248,10 +254,12 @@ class DSAHandler:
             for a in annotation_id:
                 if format in [None,'geojson']:
                     if '_id' in a['annotation']:
+                        a_id = a['annotation']['_id']
                         ann_geojson = self.gc.get(
                             f'/annotation/{a["annotation"]["_id"]}/geojson'
                         )
                     elif '_id' in a:
+                        a_id = a['_id']
                         ann_geojson = self.gc.get(
                             f'/annotation/{a["_id"]}/geojson'
                         )
@@ -269,6 +277,8 @@ class DSAHandler:
                         ann_geojson['properties'] = {
                             'name': a['annotation']['name']
                         }
+                        
+                    ann_geojson['properties']['_id'] = a_id
 
                     annotations.append(ann_geojson)
                 elif format=='histomics':
