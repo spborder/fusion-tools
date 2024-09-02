@@ -1,11 +1,4 @@
 version: 1
-
-build:
-  tools:
-    python:
-      install:
-        - method: pip
-        path: .
         
 
 sphinx:
