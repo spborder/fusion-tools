@@ -14,19 +14,24 @@ import uvicorn
 
 
 class TileServer:
-    """
-    Components which pull information from a slide(s)
+    """Components which pull information from a slide(s)
     """
     pass
 
 class LocalTileServer(TileServer):
-    """
-    Tile server from image saved locally. Uses large-image to read and parse image formats (default: [common])
+    """Tile server from image saved locally. Uses large-image to read and parse image formats (default: [common])
     """
     def __init__(self,
                  local_image_path: str,
                  tile_server_port = '8050'
                  ):
+        """Constructor method
+
+        :param local_image_path: File path for image saved locally
+        :type local_image_path: str
+        :param tile_server_port: Tile server path where tiles are accessible from, defaults to '8050'
+        :type tile_server_port: str, optional
+        """
 
         self.local_image_path = local_image_path
 
@@ -51,6 +56,19 @@ class LocalTileServer(TileServer):
         return {'message': "Oh yeah, now we're cooking"}
 
     def get_tile(self,z:int, x:int, y:int, style = {}):
+        """Tiles endpoint, returns an image tyle based on provided coordinates
+
+        :param z: Zoom level for tile
+        :type z: int
+        :param x: X tile coordinate
+        :type x: int
+        :param y: Y tile coordinate
+        :type y: int
+        :param style: Additional style arguments to pass to large-image, defaults to {}
+        :type style: dict, optional
+        :return: Image tile containing bytes encoded pixel information
+        :rtype: Response
+        """
         try:
             raw_tile = self.tile_source.getTile(
                         x = x,
@@ -65,11 +83,21 @@ class LocalTileServer(TileServer):
         return Response(content = raw_tile, media_type='image/png')
     
     def get_metadata(self):
+        """Getting large-image metadata for image
+
+        :return: Dictionary containing metadata for local image
+        :rtype: Response
+        """
         return Response(content = json.dumps(self.tiles_metadata),media_type = 'application/json')
     
     def get_region(self, top: int, left: int, bottom:int,right:int):
         """
         Grabbing a specific region in the image based on bounding box coordinates
+        """
+        """Grabbing a specific region of the image based on bounding box coordinates
+
+        :return: Image region (bytes encoded)
+        :rtype: Response
         """
         image, mime_type = self.tile_source.getRegion(
             region = {
@@ -82,20 +110,32 @@ class LocalTileServer(TileServer):
 
         return Response(content = image, media_type = 'image/png')
 
-    def start(self, port = 8050):
+    def start(self, port:str = '8050'):
+        """Starting tile server instance on a provided port
+
+        :param port: Tile server port from which tiles are accessed, defaults to '8050'
+        :type port: str, optional
+        """
         app = FastAPI()
         app.include_router(self.router)
 
         uvicorn.run(app,host='0.0.0.0',port=port)
 
 class DSATileServer(TileServer):
-    """
-    Use for linking visualization with remote tiles API (DSA server)
+    """Use for linking visualization with remote tiles API (DSA server)
+
     """
     def __init__(self,
                  api_url: str,
                  item_id: str
                  ):
+        """Constructor method
+
+        :param api_url: URL for DSA API (ends in /api/v1)
+        :type api_url: str
+        :param item_id: Girder item Id to get tiles from
+        :type item_id: str
+        """
 
         self.base_url = api_url
         self.tiles_url = f'{api_url}/item/{item_id}/tiles/zxy/'+'{z}/{x}/{y}'
@@ -109,14 +149,22 @@ class DSATileServer(TileServer):
         return f'DSATileServer for {self.base_url}'
 
 class CustomTileServer(TileServer):
-    """
-    If using some other tiles endpoint (must pass tileSize and levels in dictionary)
+    """CustomTileServer component if using some other tiles endpoint (must pass tileSize and levels in dictionary)
     """
     def __init__(self,
                  tiles_url:str,
                  regions_url:str,
                  image_metadata: dict
                  ):
+        """Constructor method
+
+        :param tiles_url: URL to grab tiles from (ends in "/{z}/{x}/{y}")
+        :type tiles_url: str
+        :param regions_url: URL to grab image regions from
+        :type regions_url: str
+        :param image_metadata: Dictionary containing at least ['tileWidth','tileHeight','sizeX','sizeY','levels']
+        :type image_metadata: dict
+        """
         
         self.tiles_url = tiles_url
         self.regions_url = regions_url
