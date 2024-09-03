@@ -26,23 +26,23 @@ class Visualization:
 
     Example Usage: 
     .. code-block:: python
-        components = [
+    components = [
+        [
+            SlideMap(
+                tile_server = LocalTileServer("/path/to/slide.svs"),
+                annotations = geojson_list
+            )
+        ],
+        [
             [
-                SlideMap(
-                    tile_server = LocalTileServer("/path/to/slide.svs"),
-                    annotations = geojson_list
-                )
-            ],
-            [
-                [
-                    OverlayOptions(geojson_list),
-                    PropertyViewer(geojson_list)
-                ]
+                OverlayOptions(geojson_list),
+                PropertyViewer(geojson_list)
             ]
         ]
+    ]
 
-        vis_session = Visualization(components)
-        vis_session.start()
+    vis_session = Visualization(components)
+    vis_session.start()
 
     """
     

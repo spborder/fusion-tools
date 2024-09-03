@@ -4,4 +4,4 @@ src
 .. toctree::
    :maxdepth: 4
 
-   stack
+   fusion_tools

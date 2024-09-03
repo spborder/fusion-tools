@@ -255,13 +255,6 @@ def align_object_props(
         prop_df: Union[pd.DataFrame, list],
         prop_cols: Union[list,str],
         alignment_type: str) -> dict:
-    """
-    Align object annotations with those in another file
-    alignment_type options: 
-        - "index" = row index--> feature index
-        - "{property}" = prop_df[{property}] --> feature['properties'][{property}] matching
-        - "bbox" = prop_df["bbox"] --> shape(feature['geometry']).bounds matching
-    """
     """Aligning GeoJSON formatted annotations with an external file containing properties for each feature
 
     :param geo_ann: GeoJSON formatted annotations to align with external file
