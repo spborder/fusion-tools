@@ -33,7 +33,7 @@ setuptools.setup(
         "uvicorn",
         "threading",
         "sphinx",
-        "sphinx_rtd_theme"
+        "sphinx-rtd-theme"
     ],
     packages=setuptools.find_packages(),
     classifiers=[
