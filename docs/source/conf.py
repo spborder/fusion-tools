@@ -21,7 +21,8 @@ release = '0.0.5'
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.napoleon',
-    'sphinx.ext.coverage'
+    'sphinx.ext.coverage',
+    'sphinx_rtd_theme'
 ]
 
 templates_path = ['_templates']
@@ -32,4 +33,4 @@ exclude_patterns = []
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_theme = 'classic'
+html_theme = 'sphinx_rtd_theme'
