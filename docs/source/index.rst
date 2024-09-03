@@ -6,10 +6,7 @@
 fusion-tools documentation
 ==========================
 
-Add your content using ``reStructuredText`` syntax. See the
-`reStructuredText <https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html>`_
-documentation for details.
-
+Documentation for `fusion-tools` package for generating modular dashboard visualizations for high-resolution microscopy images.
 
 .. toctree::
    :maxdepth: 2
