@@ -20,48 +20,42 @@ from dash_extensions.enrich import DashProxy, html, MultiplexerTransform
 
 # fusion-tools imports
 from fusion_tools.components import SlideMap
- 
-
 
 class Visualization:
-    """
-    General holder class used for initialization. Components added after initialization.
-    
-    Parameters
-    --------
-    components: list
-        list of components to add to the visualization session (one of Tool or Map)
-        Hierarchy goes from Row-->Column-->Tab for elements in lists. 
-        (e.g. [0] would be one row with one component, 
-        [0,1] would be one row with two columns, 
-        [[0],[[1,2]]] would be two rows, first row with one column, second row with one column with two tabs)
-    
+    """General holder class used for initialization. Components added after initialization.
 
-    Examples
-    --------
-    >>> components = [
-        [
-            SlideMap(
-                tile_server = LocalTileServer('/path/to/slide.svs'),
-                annotations = geojson_list
-            )
-        ],
-        [
+    Example Usage: 
+    .. code-block:: python
+        components = [
             [
-                OverlayOptions(geojson_list),
-                PropertyViewer()
+                SlideMap(
+                    tile_server = LocalTileServer("/path/to/slide.svs"),
+                    annotations = geojson_list
+                )
+            ],
+            [
+                [
+                    OverlayOptions(geojson_list),
+                    PropertyViewer(geojson_list)
+                ]
             ]
         ]
-    ]
 
-    >>> vis_session = Visualization(components)
-    >>> vis_session.start()
-        
+        vis_session = Visualization(components)
+        vis_session.start()
+
     """
+    
     def __init__(self,
                  components: list,
                  app_options: dict = {}):
-        
+        """Constructor method
+
+        :param components: List of rows, columns, and tabs to include current visualization session
+        :type components: list
+        :param app_options: Additional application options, defaults to {}
+        :type app_options: dict, optional
+        """
 
         self.components = components
         #self.layout = layout
@@ -95,7 +89,11 @@ class Visualization:
         self.viewer_app.layout = self.gen_layout()
     
     def gen_layout(self):
+        """Generating Visualization layout
 
+        :return: Total layout containing embedded components
+        :rtype: dmc.MantineProvider
+        """
         layout_children = self.get_layout_children()
 
         layout = dmc.MantineProvider(
@@ -119,6 +117,11 @@ class Visualization:
         """
         Generate children of layout container from input list of components and layout options
         
+        """
+        """Generating layout of embedded components from structure of components list
+
+        :return: List of dbc.Row(dbc.Col(dbc.Tabs())) components
+        :rtype: list
         """
 
         layout_children = []
@@ -188,8 +191,7 @@ class Visualization:
         return layout_children
 
     def start(self):
-        """
-        Starting the visualization app based on app_options        
+        """Starting visualization session based on provided app_options
         """
         
         if 'server' in self.app_options:

@@ -7,8 +7,13 @@ import sys
 
 
 def get_pattern_matching_value(input_val):
-    """
-    Used to extract usable values from components generated using pattern-matching syntax.
+    """Used to extract usable values from components generated using pattern-matching syntax
+
+    :param input_val: Value emitted by component generated with pattern-matching syntax
+    :type input_val: None
+
+    :return: Value used in callbacks
+    :rtype: None
     """
     if type(input_val)==list:
         if len(input_val)>0:

@@ -33,16 +33,30 @@ from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 
 
 class MapComponent:
-    """
-    Components which are rendered with dash-leaflet components
+    """General class for components added to SlideMap
+        For more information see dash-leaflet: https://www.dash-leaflet.com/
+
     """
     pass
 
 class SlideMap(MapComponent):
+    """This is a general high-resolution tiled image component. 
+    
+
+    :param MapComponent: General class for components added to SlideMap
+    :type MapComponent: None
+    """
     def __init__(self,
                  tile_server: TileServer,
                  annotations: Union[dict,list,None]
                 ):
+        """Constructor method
+
+        :param tile_server: Whichever TileServer is currently being hosted. For remote DSA sources, this is a DSATileServer while for local images this would be LocalTileServer
+        :type tile_server: TileServer
+        :param annotations: Initial GeoJSON formatted annotations added to the map
+        :type annotations: Union[dict,list,None]
+        """
         
         self.tiles_url = tile_server.tiles_url
         self.image_metadata = tile_server.tiles_metadata
@@ -64,9 +78,10 @@ class SlideMap(MapComponent):
         self.get_callbacks()
 
     def get_scale_factors(self):
-        """
-        Used to adjust overlaid annotations and coordinates so that they fit on the "base" tile (tileWidth x tileHeight)
-        
+        """Function used to initialize scaling factors applied to GeoJSON annotations to project annotations into the SlideMap CRS (coordinate reference system)
+
+        :return: x and y (horizontal and vertical) scale factors applied to each coordinate in incoming annotations
+        :rtype: float
         """
 
         base_dims = [
@@ -80,8 +95,10 @@ class SlideMap(MapComponent):
         return x_scale, y_scale
 
     def process_annotations(self):
-        """
-        Convert geojson or list of geojsons into dash-leaflet components
+        """Process incoming annotations and generate dl.Overlay components applied to the SlideMap
+
+        :return: List of dl.Overlay components containing dl.GeoJSON objects where "data" contains the corresponding scaled GeoJSON information 
+        :rtype: list
         """
 
         annotation_components = []
@@ -141,9 +158,12 @@ class SlideMap(MapComponent):
         return annotation_components
 
     def gen_layout(self):
+        """Generating SlideMap layout
+
+        :return: Div object containing interactive components for the SlideMap object.
+        :rtype: dash.html.Div.Div
         """
-        Generate simple slide viewer layout
-        """
+
         layout = html.Div(
             dl.Map(
                 id = {'type': 'slide-map','index': 0},
@@ -200,8 +220,17 @@ class SlideMap(MapComponent):
         return layout
 
     def get_namespace(self):
-        """
-        Adding javascript functions to layout
+        """Adding JavaScript functions to the SlideMap Namespace
+
+        These functions are automatically written to .fusion_assets/fusionTools_default.js where they are accessible
+        to select interactive components in SlideMap.
+
+        For more information on adding JS functions to a Dash application, see:
+
+        https://www.dash-extensions.com/sections/javascript
+        and 
+        https://www.dash-leaflet.com/docs/geojson_tutorial
+        
         """
         self.js_namespace = Namespace(
             "fusionTools","default"
@@ -344,8 +373,8 @@ class SlideMap(MapComponent):
         )
 
     def get_callbacks(self):
-        """
-        Adding callbacks to this DashBlueprint object
+        """Initializing callback functions for interactive components in SlideMap. 
+        Adding these callbacks to the DashBlueprint() object enable embedding into other layouts.
         """
         
         # Getting popup info for clicked feature
@@ -369,8 +398,13 @@ class SlideMap(MapComponent):
         )(self.add_manual_roi)
 
     def get_click_popup(self, clicked):
-        """
-        Popuplate popup for clicked feature
+        """Populating popup Div with summary information on the clicked GeoJSON feature
+
+        :param clicked: GeoJSON feature on SlideMap that was selected
+        :type clicked: dl.GeoJSON.GeoJSON
+        :raises exceptions.PreventUpdate: Stops callback execution
+        :return: Popup with summary information on clicked GeoJSON. Nested properties (in dictionaries) appear as collapsible dbc.AccordionItem() with their own dash_table.DataTable
+        :rtype: dash.html.Div.Div
         """
 
         if not any([i['value'] for i in ctx.triggered]):
@@ -442,10 +476,15 @@ class SlideMap(MapComponent):
 
         return popup_div
     
-    def make_geojson_layers(self, geojson_list:list):
+    def make_geojson_layers(self, geojson_list:list) -> list:
+        """Creates new dl.Overlay() dl.GeoJSON components from list of GeoJSON FeatureCollection objects
+
+        :param geojson_list: List of GeoJSON FeatureCollection objects
+        :type geojson_list: list
+        :return: Overlay components on SlideMap.
+        :rtype: list
         """
-        Creating geojson layers (without scaling) to add to map-layers-control
-        """
+
         annotation_components = []
         for st_idx,st in enumerate(geojson_list):
             annotation_components.append(
@@ -487,9 +526,15 @@ class SlideMap(MapComponent):
 
         return annotation_components
 
-    def add_manual_roi(self,new_geojson):
-        """
-        Adding a new manual ROI and spatially aggregating underlying structure properties
+    def add_manual_roi(self,new_geojson:list) -> list:
+        """Adding a manual region of interest (ROI) to the SlideMap using dl.EditControl() tools including polygon, rectangle, and markers.
+
+        :param new_geojson: Incoming GeoJSON object that is emitted by dl.EditControl() following annotation on SlideMap
+        :type new_geojson: list
+        :raises exceptions.PreventUpdate: new_geojson input is None
+        :raises exceptions.PreventUpdate: No new features are added, this can occur after deletion of previous manual ROIs.
+        :return: List of new children to dl.LayerControl() consisting of overlaid GeoJSON components.
+        :rtype: list
         """
         new_geojson = get_pattern_matching_value(new_geojson)
         if not new_geojson is None:
@@ -519,24 +564,35 @@ class SlideMap(MapComponent):
 
 
 class MultiFrameSlideMap(SlideMap):
-    """
-    Used for viewing slides with multiple "frames" (e.g. CODEX images)
+    """MultiFrameSlideMap component, containing an image with multiple frames which are added as additional, selectable dl.TileLayer() components
+
+    :param SlideMap: dl.Map() container where image tiles are displayed.
+    :type SlideMap: None
     """
     def __init__(self,
                  tile_server: TileServer,
                  annotations: Union[dict,list,None]
                  ):
+        """Constructor method
+
+        :param tile_server: TileServer object in use. For remote DSA tile sources this would be DSATileServer while for local images this would be LocalTileServer
+        :type tile_server: TileServer
+        :param annotations: Individual or list of GeoJSON formatted annotations to add on top of the MultiFrameSlideMap
+        :type annotations: Union[dict,list,None]
+        """
         super().__init__(tile_server,annotations)
+
         
         self.title = 'Multi-Frame Slide Map'
 
         # Changing up the layout so that it generates different tile layers for each frame
     
     def gen_layout(self):
-        """
-        
-        """
+        """Generating layout for MultiFrameSlideMap
 
+        :return: Layout added to DashBlueprint object to be embedded in larger layout.
+        :rtype: dash.html.Div.Div
+        """
         layout = html.Div([
 
         ])
@@ -549,11 +605,22 @@ class MultiFrameSlideMap(SlideMap):
         pass
 
 class SlideImageOverlay(MapComponent):
+    """Image overlay on specific coordinates within a SlideMap
+
+    :param MapComponent: General component class for children of SlideMap
+    :type MapComponent: None
+    """
     def __init__(self,
                  image_path: str,
                  image_crs: list = [0,0]
                 ):
-        
+        """Constructor method
+
+        :param image_path: Filepath for image to be overlaid on top of SlideMap
+        :type image_path: str
+        :param image_crs: Top-left coordinates (x,y) for the image, defaults to [0,0]
+        :type image_crs: list, optional
+        """
         self.image_path = image_path
 
         self.title = 'Slide Image Overlay'
@@ -570,11 +637,22 @@ class SlideImageOverlay(MapComponent):
         pass
 
 class ChannelMixer(MapComponent):
+    """ChannelMixer component that allows users to select various frames from their image to overlay at the same time with different color (styles) applied.
+
+    :param MapComponent: General component class for children of SlideMap
+    :type MapComponent: None
+    """
     def __init__(self,
                  image_metadata: dict,
                  tiles_url: str
                  ):
-        
+        """Constructor method
+
+        :param image_metadata: Dictionary containing "frames" data for a given image. "frames" here is a list containing channel names and indices.
+        :type image_metadata: dict
+        :param tiles_url: URL to refer to for accessing tiles (contains /{z}/{x}/{y}). Allows for "style" parameter to be passed. See large-image documentation: https://girder.github.io/large_image/getting_started.html#styles-changing-colors-scales-and-other-properties
+        :type tiles_url: str
+        """
         self.image_metadata = image_metadata
 
         self.title = 'Channel Mixer'
@@ -584,7 +662,11 @@ class ChannelMixer(MapComponent):
         self.get_callbacks()
 
     def gen_layout(self):
+        """Generating layout for ChannelMixer component
 
+        :return: Interactive components for ChannelMixer component
+        :rtype: dash.html.Div.Div
+        """
         layout = html.Div([
 
         ])

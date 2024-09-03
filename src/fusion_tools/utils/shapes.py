@@ -20,9 +20,15 @@ import uuid
 from typing_extensions import Union
 
 
-def load_geojson(geojson_path: str, name = None) -> dict:
-    """
-    Load geojson annotations from filepath
+def load_geojson(geojson_path: str, name:Union[str,None]=None) -> dict:
+    """Load GeoJSON annotations from file path. Optionally add names for GeoJSON FeatureCollections
+
+    :param geojson_path: Path to GeoJSON file
+    :type geojson_path: str
+    :param name: Name for structure present in FeatureCollection, defaults to None
+    :type name: Union[str,None], optional
+    :return: GeoJSON FeatureCollection dictionary
+    :rtype: dict
     """
     assert os.path.exists(geojson_path)
 
@@ -37,8 +43,12 @@ def load_geojson(geojson_path: str, name = None) -> dict:
     return geojson_anns
 
 def load_histomics(json_path: str) -> list:
-    """
-    Load histomics annotations from filepath
+    """Load large-image annotation from filepath
+
+    :param json_path: Path to large-image formatted annotations
+    :type json_path: str
+    :return: GeoJSON FeatureCollection formatted annotation
+    :rtype: list
     """
     assert os.path.exists(json_path)
 
@@ -78,8 +88,12 @@ def load_histomics(json_path: str) -> list:
     return geojson_list
 
 def load_aperio(xml_path: str) -> list:
-    """
-    Load Aperio annotations from filepath
+    """Loading Aperio formatted annotations
+
+    :param xml_path: Path to Aperio formatted annotations (XML)
+    :type xml_path: str
+    :return: GeoJSON FeatureCollection formatted annotations for each layer in XML
+    :rtype: list
     """
     assert os.path.exists(xml_path)
 
@@ -137,6 +151,23 @@ def load_polygon_csv(
     group_by_col: name of column to group features by (used to determine which coordinates belong to the same structure for non-point annotations)
     property_cols: list of columns containing properties
     shape_options: dict with "radius" for point annotations (can be number or column that has number)
+    """
+    """Load csv formatted annotations from filepath
+
+    :param csv_path: Path to CSV file containing annotations
+    :type csv_path: str
+    :param name: Name for structure contained in CSV file
+    :type name: str
+    :param shape_cols: Column(s) containing shape information
+    :type shape_cols: Union[list,str],
+    :param group_by_col: Column to use to group rows together (same value = same feature in resulting GeoJSON)
+    :type group_by_col: Union[str,None]
+    :param property_cols: Column(s) containing property information for each feature
+    :type property_cols: Union[str,list,None]
+    :param shape_options: Dictionary containing additional options to construct feature shape
+    :type shape_options: dict
+    :return: GeoJSON formatted FeatureCollection containing structure shape and properties
+    :rtype: dict
     """
     assert os.path.exists(csv_path)
 
@@ -231,6 +262,19 @@ def align_object_props(
         - "{property}" = prop_df[{property}] --> feature['properties'][{property}] matching
         - "bbox" = prop_df["bbox"] --> shape(feature['geometry']).bounds matching
     """
+    """Aligning GeoJSON formatted annotations with an external file containing properties for each feature
+
+    :param geo_ann: GeoJSON formatted annotations to align with external file
+    :type geo_ann: dict
+    :param prop_df: Property DataFrame or list containing DataFrames to align with GeoJSON
+    :type prop_df: Union[pd.DataFrame,list]
+    :param prop_cols: Column(s) containing property information in each DataFrame
+    :type prop_cols: Union[list,str]
+    :param alignment_type: Process to use for aligning rows of property DataFrame to GeoJSON
+    :type alignment_type: str
+    :return: GeoJSON annotations with aligned properties applied
+    :rtype: dict
+    """
 
     if type(prop_df)==pd.DataFrame:
         prop_df = [prop_df]
@@ -265,8 +309,16 @@ def export_annotations(
         format: str, 
         save_path: str,
         ann_options: dict = {}):
-    """
-    Exporting geojson annotations to desired format
+    """Exporting GeoJSON annotations to a desired format
+
+    :param ann_geojson: Individual or list of GeoJSON formatted annotations
+    :type ann_geojson: Union[dict,list]
+    :param format: What format to export these annotations to
+    :type format: str
+    :param save_path: Where to save the exported annotations
+    :type save_path: str
+    :param ann_options: Additional options to pass to export (used to add an id or layer name for Aperio formatted annotations)
+    :type ann_options: dict, optional
     """
     assert format in ['geojson','aperio','histomics']
 
@@ -399,6 +451,20 @@ def find_intersecting(geo_source:dict, geo_query:Polygon, return_props:bool = Tr
         Whether to return shape (geometries) of features from geo_source that intersect with geo_query
     
     """
+    """Return properties and/or shapes of features from geo_source that intersect with geo_query
+
+    :param geo_source: Source GeoJSON where you are searching for intersecting features
+    :type geo_source: dict
+    :param geo_query: Query polygon used to filter source GeoJSON features
+    :type geo_query: shapely.geometry.Polygon
+    :param return_props: Whether or not to return properties of intersecting features
+    :type return_props: bool, optional
+    :param return_shapes: Whether or not to return shape information of intersecting features
+    :type return_shapes: bool, optional
+
+    :return: Intersecting properties and/or shapes from geo_source
+    :rtype: tuple
+    """
     assert return_props or return_shapes
 
     # Automatically assigned properties by Leaflet (DO NOT ADD "cluster" AS A PROPERTY)
@@ -419,8 +485,14 @@ def find_intersecting(geo_source:dict, geo_query:Polygon, return_props:bool = Tr
         return geo_intersect_geojson
 
 def spatially_aggregate(agg_geo:dict, base_geos: list):
-    """
-    Aggregate properties of intersecting features with agg_geo (geojson FeatureCollection)
+    """Aggregate intersecting feature properties to a provided GeoJSON 
+
+    :param agg_geo: GeoJSON object that is receiving aggregated properties
+    :type agg_geo: dict
+    :param base_geos: List of GeoJSON objects which are intersecting with agg_geo
+    :type base_geos: list
+    :return: Updated agg_geo object with new properties from intersecting base_geos
+    :rtype: dict
     """
 
     for b in base_geos:

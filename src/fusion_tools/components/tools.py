@@ -37,33 +37,30 @@ from fusion_tools.utils.shapes import find_intersecting
 
 
 class Tool:
-    """
-    Components which can be added to tabs
+    """General class for interactive components that visualize, edit, or perform analyses on data.
     """
     pass
 
 class OverlayOptions(Tool):
-    """
-    Creates dropdown menu for changing overlay colors based on structure properties
+    """OverlayOptions Tool which enables editing overlay visualization properties including line color, fill color, and filters.
 
-    Parameters
-    --------
-    geojson_anns: Union[list,dict]
-        List or single GeoJSON object containing "property" key 
-
-    reference_object: Union[str,None]
-        File path to data file with properties not added to geojson objects but with some reference field which links the two
-    
-    ignore_list: list = []
-        List of properties to ignore and not make usable for generating overlaid heatmaps
-
-
+    :param Tool: General class for interactive components that visualize, edit, or perform analyses on data.
+    :type Tool: None
     """
     def __init__(self,
                  geojson_anns: Union[list,dict],
                  reference_object: Union[str,None] = None,
                  ignore_list: list = []
                  ):
+        """Constructor method
+
+        :param geojson_anns: Individual or list of GeoJSON formatted annotations.
+        :type geojson_anns: Union[list,dict]
+        :param reference_object: Path to larger object containing information on GeoJSON features, defaults to None
+        :type reference_object: Union[str,None], optional
+        :param ignore_list: List of properties to exclude from visualization. These can include any internal or private properties that are not desired to be viewed by the user or used for filtering/overlay colors., defaults to []
+        :type ignore_list: list, optional
+        """
 
         self.reference_object = reference_object
         self.overlay_options, self.feature_names, self.overlay_info = self.extract_overlay_options(geojson_anns, reference_object,ignore_list)
@@ -75,9 +72,17 @@ class OverlayOptions(Tool):
         # Add callbacks here
         self.get_callbacks()
 
-    def extract_overlay_options(self,geojson_anns,reference_object,ignore_list):
-        """
-        Extract all properties which can be used for overlays
+    def extract_overlay_options(self,geojson_anns: Union[list,dict],reference_object:Union[str,None],ignore_list:list):
+        """Function to extract properties which are accessible for overlay and filters.
+
+        :param geojson_anns: Individual or list of multiple GeoJSON formatted annotations applied to the current image.
+        :type geojson_anns: Union[list,dict]
+        :param reference_object: Path to external data container.
+        :type reference_object: Union[str,None]
+        :param ignore_list: List of properties to exclude from overlay generation and filtering.
+        :type ignore_list: list
+        :return: Properties extracted from GeoJSON objects, names for each structure, and summary information for each property
+        :rtype: tuple
         """
         geojson_properties = []
         feature_names = []
@@ -167,7 +172,11 @@ class OverlayOptions(Tool):
         return geojson_properties, feature_names, property_info
 
     def gen_layout(self):
-        
+        """Generating OverlayOptions layout, added to DashBlueprint() object to be embedded in larger layout.
+
+        :return: OverlayOptions layout
+        :rtype: dash.html.Div.Div
+        """
         layout = html.Div([
             dbc.Card(
                 dbc.CardBody([
@@ -281,7 +290,8 @@ class OverlayOptions(Tool):
         return layout
 
     def get_callbacks(self):
-
+        """Initializing callbacks for OverlayOptions Tool
+        """
         # Updating overlay color, transparency, line color, and filter
         self.blueprint.callback(
             [
@@ -332,8 +342,18 @@ class OverlayOptions(Tool):
         )(self.update_filter_selector)
 
     def add_filter(self, add_filter_click, delete_filter_click,overlay_info_state):
-        """
-        Add new filter based on selected overlay value
+        """Adding a new filter to apply to GeoJSON features
+
+        :param add_filter_click: Add filter icon clicked
+        :type add_filter_click: _type_
+        :param delete_filter_click: Delete filter icon (x) clicked
+        :type delete_filter_click: _type_
+        :param overlay_info_state: Summary information on properties for GeoJSON features
+        :type overlay_info_state: _type_
+        :raises exceptions.PreventUpdate: Stop callback execution
+        :raises exceptions.PreventUpdate: No information provided for GeoJSON properties, cancels adding new filter.
+        :return: List of current filters applied to GeoJSON features
+        :rtype: list
         """
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
@@ -418,8 +438,16 @@ class OverlayOptions(Tool):
         return [active_filters]
     
     def update_filter_selector(self, add_filter_value, overlay_info_state):
-        """
-        Updating the filter selector (either a RangeSlider or Dropdown component depending on property type)
+        """Updating the filter selector (either a RangeSlider or Dropdown component depending on property type)
+
+
+        :param add_filter_value: Selected property to be used for filters.
+        :type add_filter_value: str
+        :param overlay_info_state: Current information on GeoJSON feature properties (contains "min" and "max" for numeric properties and "unique" for categorical properties)
+        :type overlay_info_state: list
+        :raises exceptions.PreventUpdate: Stop callback execution
+        :return: Filter selector. Either a dropdown menu for categorical properties or a dcc.RangeSlider for selecting a range of values between the minimum and maximum for that property
+        :rtype: _type_
         """
 
         if not any([i['value'] for i in ctx.triggered]):
@@ -452,11 +480,14 @@ class OverlayOptions(Tool):
 
         return values_selector
 
-    def parse_added_filters(self, add_filter_parent):
-        """
-        Getting all filter values from parent div
+    def parse_added_filters(self, add_filter_parent:list)->list:
+        """Getting all filter values from parent div
 
-        add_filter_parent is a list of divs, each one containing two children (Row, Div).
+
+        :param add_filter_parent: List of dictionaries containing component information from dynamically added filters.
+        :type add_filter_parent: list
+        :return: List of filter values to apply to current GeoJSON features.
+        :rtype: list
         """
         processed_filters = []
 
@@ -479,10 +510,32 @@ class OverlayOptions(Tool):
         return processed_filters
 
     def update_overlays(self, overlay_value, transp_value, lineColor_butt, filter_parent, filter_value, delete_filter, overlay_state, transp_state, overlay_info_state, lineColor_state):
-        """
-        Update overlay transparency and color based on property selection
+        """Update overlay transparency and color based on property selection
 
         Adding new values to the "hideout" property of the GeoJSON layers triggers the featureStyle Namespace function
+
+        :param overlay_value: Value to use as a basis for generating colors (range of colors for numeric properties and list of colors for categorical properties)
+        :type overlay_value: list
+        :param transp_value: Transparency value for each feature.
+        :type transp_value: list
+        :param lineColor_butt: Whether the button to update the lineColor property was clicked.
+        :type lineColor_butt: list
+        :param filter_parent: Parent Div containing filter information
+        :type filter_parent: list
+        :param filter_value: Whether the callback is triggered by a new filter value being selected
+        :type filter_value: list
+        :param delete_filter: Whether the callback is triggered by a filter being deleted
+        :type delete_filter: list
+        :param overlay_state: State of overlay dropdown if not triggered by new overlay value selection
+        :type overlay_state: list
+        :param transp_state: State of transparency slider if not triggered by transparency slider adjustment
+        :type transp_state: list
+        :param overlay_info_state: Information on overlay properties for current GeoJSON features
+        :type overlay_info_state: list
+        :param lineColor_state: Current selected lineColors to apply to current GeoJSON features
+        :type lineColor_state: list
+        :return: List of dictionaries added to the GeoJSONs' "hideout" property (used by Namespace functions) and a colorbar based on overlay value.
+        :rtype: tuple
         """
 
         overlay_value = get_pattern_matching_value(overlay_value)
@@ -602,12 +655,25 @@ class OverlayOptions(Tool):
         return geojson_hideout, colorbar
 
 class PropertyViewer(Tool):
+    """PropertyViewer Tool which allows users to view distribution of properties across the current viewport of the SlideMap
+
+    :param Tool: General class for interactive components that visualize, edit, or perform analyses on data
+    :type Tool: None
+    """
     def __init__(self,
                  geojson_list: Union[dict,list],
                  reference_object: Union[str,None] = None,
                  ignore_list: list = []
                  ):
-        
+        """Constructor method
+
+        :param geojson_list: Individual or list of GeoJSON formatted annotations.
+        :type geojson_list: Union[dict,list]
+        :param reference_object: Path to larger reference object containing information on GeoJSON features, defaults to None
+        :type reference_object: Union[str,None], optional
+        :param ignore_list: List of properties not to make available to this component., defaults to []
+        :type ignore_list: list, optional
+        """
         self.ignore_list = []
         self.reference_object = reference_object
         self.available_properties, self.feature_names = self.extract_overlay_options(geojson_list,reference_object,ignore_list)
@@ -618,11 +684,18 @@ class PropertyViewer(Tool):
 
         self.get_callbacks()   
         
-    def extract_overlay_options(self,geojson_anns,reference_object,ignore_list):
-        """
-        Extract all properties which can be used for overlays
-        """
+    def extract_overlay_options(self,geojson_anns:Union[list,dict],reference_object:Union[str,None],ignore_list:list)->tuple:
+        """Extract all properties which can be used for overlays
 
+        :param geojson_anns: Inividual or list of GeoJSON formatted annotations
+        :type geojson_anns: Union[list,dict]
+        :param reference_object: Path to external reference object containing information on GeoJSON features
+        :type reference_object: Union[str,None]
+        :param ignore_list: List of properties to not make available to this component.
+        :type ignore_list: list
+        :return: List of properties and names of structures
+        :rtype: tuple
+        """
         geojson_properties = []
         feature_names = []
         for ann in geojson_anns:
@@ -644,7 +717,11 @@ class PropertyViewer(Tool):
         return geojson_properties, feature_names
 
     def gen_layout(self):
-        
+        """Generating layout for PropertyViewer Tool
+
+        :return: Layout added to DashBlueprint() object to be embedded in larger layout
+        :rtype: dash.html.Div.Div
+        """
         layout = html.Div([
             dbc.Card([
                 dbc.CardBody([
@@ -688,7 +765,8 @@ class PropertyViewer(Tool):
         return layout
 
     def get_callbacks(self):
-        
+        """Initializing callbacks for PropertyViewer Tool
+        """
         # Updating when panning in SlideMap-like object
         self.blueprint.callback(
             [
@@ -710,9 +788,28 @@ class PropertyViewer(Tool):
         )(self.update_property_viewer)
 
     def update_property_viewer(self,slide_map_bounds, view_type_value, view_subtype_value, view_butt_click, active_tab, current_property_data, update_viewer, current_geojson):
-        """
-        Updating visualization of properties within the current viewport
+        """Updating visualization of properties within the current viewport
 
+
+        :param slide_map_bounds: Current viewport boundaries
+        :type slide_map_bounds: list
+        :param view_type_value: Property to view across each GeoJSON object
+        :type view_type_value: list
+        :param view_subtype_value: If a subtype is available for the view type, what it's value is. This is present for nested (dictionary) properties.
+        :type view_subtype_value: list
+        :param view_butt_click: Whether the callback is triggered by update plot button
+        :type view_butt_click: list
+        :param active_tab: Which tool tab is currently in view. Prevents update if the current tab isn't "property-viewer"
+        :type active_tab: list
+        :param current_property_data: Data used in current set of plots
+        :type current_property_data: list
+        :param update_viewer: Switch value for whether or not to update the plots based on panning around in the SlideMap
+        :type update_viewer: list
+        :param current_geojson: Current set of GeoJSON features and their properties
+        :type current_geojson: list
+        :raises exceptions.PreventUpdate: Stop callback execution
+        :return: List of PropertyViewer tabs (separated by structure) and data used in plots
+        :rtype: tuple
         """
 
         update_viewer = get_pattern_matching_value(update_viewer)
@@ -790,8 +887,14 @@ class PropertyViewer(Tool):
         return [return_div], [updated_view_data]
 
     def generate_plot_tabs(self, current_property_data, current_features):
-        """
-        Checking for intersecting features and extracting necessary data
+        """Generating tabs for each structure containing plot of selected value.
+
+        :param current_property_data: Data stored for current viewport and property value selection
+        :type current_property_data: dict
+        :param current_features: Current GeoJSON features
+        :type current_features: list
+        :return: Tabs object containing a tab for each structure with a plot of the selected property value
+        :rtype: dbc.Tabs
         """
 
         current_bounds_bounds = current_property_data['bounds']
@@ -898,12 +1001,26 @@ class PropertyViewer(Tool):
 
 
 class PropertyPlotter(Tool):
+    """PropertyPlotter Tool which enables more detailed selection of properties across the entire tissue. 
+    Allows for generation of violin plots, scatter plots, and UMAP plots.
+
+    :param Tool: General class for interactive components that visualize, edit, or perform analyses on data.
+    :type Tool: None
+    """
     def __init__(self,
                  geojson_list: Union[dict,list],
                  reference_object: Union[str,None] = None,
                  ignore_list: list = []
                  ):
+        """Constructor method
 
+        :param geojson_list: Individual or list of GeoJSON formatted annotations
+        :type geojson_list: Union[dict,list]
+        :param reference_object: Path to external reference object containing information on each GeoJSON feature, defaults to None
+        :type reference_object: Union[str,None], optional
+        :param ignore_list: List of properties to not include in this component, defaults to []
+        :type ignore_list: list, optional
+        """
         self.reference_object = reference_object
         self.ignore_list = ignore_list
         self.available_properties, self.feature_names = self.extract_overlay_options(geojson_list,reference_object,ignore_list)
@@ -916,11 +1033,18 @@ class PropertyPlotter(Tool):
 
         self.get_callbacks()
 
-    def extract_overlay_options(self,geojson_anns,reference_object,ignore_list):
-        """
-        Extract all properties which can be used for overlays
-        """
+    def extract_overlay_options(self,geojson_anns:Union[list,dict],reference_object:Union[str,None],ignore_list:list):
+        """Extract all properties which can be used for overlays
 
+        :param geojson_anns: Individual or list of GeoJSON formatted annotations
+        :type geojson_anns: Union[list,dict]
+        :param reference_object: Path to external object containing information on each GeoJSON feature
+        :type reference_object: Union[str,None]
+        :param ignore_list: List of properties to not include in this component
+        :type ignore_list: list
+        :return: List of GeoJSON properties, List of feature names
+        :rtype: tuple
+        """
         geojson_properties = []
         feature_names = []
         for ann in geojson_anns:
@@ -942,10 +1066,11 @@ class PropertyPlotter(Tool):
         return geojson_properties, feature_names
 
     def generate_property_dict(self):
+        """Generate nested dictionary used for populating the property dropdown menus
+        
+        For more information, see: https://github.com/kapot65/dash-treeview-antd
+        
         """
-        Generate nested dictionary used for populating the property dropdown menus
-        """
-
         self.label_dict = {}
         self.property_dict = {}
         self.label_keys = {}
@@ -1040,7 +1165,8 @@ class PropertyPlotter(Tool):
         self.label_dict['children'][1]['children'].extend(label_property_dict_children)
 
     def get_callbacks(self):
-        
+        """Initializing callbacks for PropertyPlotter Tool
+        """
         # Updating plot based on selected properties and labels
         self.blueprint.callback(
             [
@@ -1083,7 +1209,11 @@ class PropertyPlotter(Tool):
         # Exporting plotter data
 
     def gen_layout(self):
-        
+        """Generating layout for PropertyPlotter Tool
+
+        :return: Layout for PropertyPlotter DashBlueprint object to be embedded in larger layouts
+        :rtype: dash.html.Div.Div
+        """
         layout = html.Div([
             dbc.Card([
                 dbc.CardBody([
@@ -1182,14 +1312,22 @@ class PropertyPlotter(Tool):
         return layout
 
     def update_property_graph(self, plot_butt_click, property_list, label_list, current_features, current_plot_data):
-        """
-        Updating plot based on selected properties, label(s)
+        """Updating plot based on selected properties, label(s)
 
-        Returns
-        --------
-        {'type': 'property-graph', 'index': ALL}, figure -> go.Figure()
-        {'type': 'property-graph-tabs-div','index': ALL}, children -> list
-        {'type': 'property-plotter-store','index': ALL}, data -> str
+        :param plot_butt_click: Whether this callback is triggered by the plot button being clicked
+        :type plot_butt_click: list
+        :param property_list: List of properties to incorporate in the generated plot
+        :type property_list: list
+        :param label_list: List of properties to use as labels in the generated plot
+        :type label_list: list
+        :param current_features: Current set of GeoJSON features 
+        :type current_features: list
+        :param current_plot_data: Data present in the current plot.
+        :type current_plot_data: list
+        :raises exceptions.PreventUpdate: Stop callback execution because no properties are selected
+        :raises exceptions.PreventUpdate: Stop callback execution because no properties are selected
+        :return: Generated plot figure and new plot data
+        :rtype: tuple
         """
         property_graph_tabs_div = [no_update]
 
@@ -1252,16 +1390,23 @@ class PropertyPlotter(Tool):
             )
 
 
-
         current_plot_data = json.dumps(current_plot_data)
 
         return [plot_figure], property_graph_tabs_div, [current_plot_data]
 
-    def extract_data_from_features(self, geo_list, properties, labels):
-        """
-        Iterate through properties and extract data based on selection
-        """
+    def extract_data_from_features(self, geo_list:list, properties:list, labels:list)->list:
+        """Iterate through properties and extract data based on selection
 
+
+        :param geo_list: List of current GeoJSON features 
+        :type geo_list: list
+        :param properties: List of properties to use in the current plot
+        :type properties: list
+        :param labels: List of labels to use in the current plot (should just be one element)
+        :type labels: list
+        :return: Extracted data to use for the plot
+        :rtype: list
+        """
         extract_data = []
         for g_idx, g in enumerate(geo_list):
             for f_idx, f in enumerate(g['features']):
@@ -1294,8 +1439,19 @@ class PropertyPlotter(Tool):
         return extract_data
 
     def gen_violin_plot(self, data_df:pd.DataFrame, label_col: Union[str,None], property_column: str, customdata_columns:list):
-        """
-        Generating a violin plot using provided data, property columns, and customdata
+        """Generating a violin plot using provided data, property columns, and customdata
+
+
+        :param data_df: Extracted data from current GeoJSON features
+        :type data_df: pd.DataFrame
+        :param label_col: Name of column to use for label
+        :type label_col: Union[str,None]
+        :param property_column: Name of column to use for property (y-axis) value
+        :type property_column: str
+        :param customdata_columns: Names of columns to use for customdata (accessible from clickData and selectedData)
+        :type customdata_columns: list
+        :return: Figure containing violin plot data
+        :rtype: go.Figure
         """
         figure = go.Figure(
             data = go.Violin(
@@ -1344,10 +1500,20 @@ class PropertyPlotter(Tool):
         return figure
 
     def gen_scatter_plot(self, data_df:pd.DataFrame, plot_cols:list, label_cols:Union[str,None], customdata_cols:list):
-        """
-        Generating a 2D scatter plot using provided data
-        """
+        """Generating a 2D scatter plot using provided data
 
+
+        :param data_df: Extracted data from current GeoJSON features
+        :type data_df: pd.DataFrame
+        :param plot_cols: Names of columns containing properties for the scatter plot
+        :type plot_cols: list
+        :param label_cols: Name of column to use to label markers.
+        :type label_cols: Union[str,None]
+        :param customdata_cols: Names of columns to use for customdata on plot
+        :type customdata_cols: list
+        :return: Scatter plot figure
+        :rtype: go.Figure
+        """
         if not label_cols is None:
             figure = go.Figure(
                 data = px.scatter(
@@ -1417,9 +1583,16 @@ class PropertyPlotter(Tool):
 
         return figure
 
-    def gen_umap_cols(self, data_df:pd.DataFrame, property_columns: list):
-        """
-        Scale and run UMAP for dimensionality reduction
+    def gen_umap_cols(self, data_df:pd.DataFrame, property_columns: list)->pd.DataFrame:
+        """Scale and run UMAP for dimensionality reduction
+
+
+        :param data_df: Extracted data from current GeoJSON features
+        :type data_df: pd.DataFrame
+        :param property_columns: Names of columns containing properties for UMAP plot
+        :type property_columns: list
+        :return: Dataframe containing colunns named UMAP1 and UMAP2
+        :rtype: pd.DataFrame
         """
         quant_data = data_df.loc[:,[i for i in property_columns if i in data_df.columns]].values
         print(quant_data)
@@ -1439,13 +1612,17 @@ class PropertyPlotter(Tool):
         return umap_df
 
     def select_data_from_plot(self, selected_data, current_plot_data):
-        """
-        Updating selected data tab based on selection in primary graph
-        Returns
-        --------
-        {'type': 'property-graph-selected-div','index': ALL}, children -> list
-        {'type': 'map-marker-div','index': ALL}, children -> list
-        {'type': 'property-plotter-store','index':ALL}, data -> str 
+        """Updating selected data tab based on selection in primary graph
+
+
+        :param selected_data: Selected data points in the current plot
+        :type selected_data: list
+        :param current_plot_data: Data used to generate the current plot
+        :type current_plot_data: list
+        :raises exceptions.PreventUpdate: Stop callback execution because there is no selected data
+        :raises exceptions.PreventUpdate: Stop callback execution because there is no selected data
+        :return: Selected data description div, markers to add to the map, updated current plot data
+        :rtype: tuple
         """
 
         property_graph_selected_div = [no_update]
@@ -1469,7 +1646,15 @@ class PropertyPlotter(Tool):
 
 
 class FeatureAnnotator(Tool):
+    """FeatureAnnotator Tool used to annotate individual GeoJSON features.
+    These annotations can include either drawings highlighting regions within a feature or labels for a feature.
+
+    :param Tool: General class for interactive components that visualize, edit, or perform analyses on data.
+    :type Tool: None
+    """
     def __init__(self):
+        """Constructor method
+        """
 
         self.title = 'Feature Annotator'
         self.blueprint = DashBlueprint()
@@ -1484,7 +1669,16 @@ class FeatureAnnotator(Tool):
         pass
 
 class HRAViewer(Tool):
+    """HRAViewer Tool which enables hierarchy visualization for organs, cell types, biomarkers, and proteins in the Human Reference Atlas
+
+    For more information on the Human Reference Atlas (HRA), see: https://humanatlas.io/
+
+    :param Tool: General class for interactive components that visualize, edit, or perform analyses on data.
+    :type Tool: None
+    """
     def __init__(self):
+        """Constructor method
+        """
 
         self.title = 'HRA Viewer'
         self.blueprint = DashBlueprint()
