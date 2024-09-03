@@ -1,107 +1,53 @@
 <!DOCTYPE html>
-<html class="writer-html5" lang="en" data-content_root="./">
-<head>
-  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>fusion_tools package &mdash; fusion-tools 0.0.5 documentation</title>
-      <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
-      <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=19f00094" />
+<html lang="en" data-content_root="./">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
-  
-  <!--[if lt IE 9]>
-    <script src="_static/js/html5shiv.min.js"></script>
-  <![endif]-->
-  
-        <script src="_static/jquery.js?v=5d32c60e"></script>
-        <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-        <script src="_static/documentation_options.js?v=282f96c0"></script>
-        <script src="_static/doctools.js?v=9a2dae69"></script>
-        <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
-    <script src="_static/js/theme.js"></script>
+    <title>fusion_tools package &#8212; fusion-tools 0.0.5 documentation</title>
+    <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=fa44fd50" />
+    <link rel="stylesheet" type="text/css" href="_static/classic.css?v=def86cc0" />
+    
+    <script src="_static/documentation_options.js?v=282f96c0"></script>
+    <script src="_static/doctools.js?v=9a2dae69"></script>
+    <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
+    
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
     <link rel="next" title="fusion_tools.components package" href="fusion_tools.components.html" />
     <link rel="prev" title="src" href="modules.html" /> 
-</head>
+  </head><body>
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="fusion_tools.components.html" title="fusion_tools.components package"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="modules.html" title="src"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">fusion-tools 0.0.5 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="modules.html" accesskey="U">src</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">fusion_tools package</a></li> 
+      </ul>
+    </div>  
 
-<body class="wy-body-for-nav"> 
-  <div class="wy-grid-for-nav">
-    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
-      <div class="wy-side-scroll">
-        <div class="wy-side-nav-search" >
-
-          
-          
-          <a href="index.html" class="icon icon-home">
-            fusion-tools
-          </a>
-<div role="search">
-  <form id="rtd-search-form" class="wy-form" action="search.html" method="get">
-    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
-    <input type="hidden" name="check_keywords" value="yes" />
-    <input type="hidden" name="area" value="default" />
-  </form>
-</div>
-        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
-<ul class="current">
-<li class="toctree-l1 current"><a class="reference internal" href="modules.html">src</a><ul class="current">
-<li class="toctree-l2 current"><a class="current reference internal" href="#">fusion_tools package</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="#subpackages">Subpackages</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="fusion_tools.components.html">fusion_tools.components package</a></li>
-<li class="toctree-l4"><a class="reference internal" href="fusion_tools.utils.html">fusion_tools.utils package</a></li>
-<li class="toctree-l4"><a class="reference internal" href="fusion_tools.visualization.html">fusion_tools.visualization package</a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#submodules">Submodules</a></li>
-<li class="toctree-l3"><a class="reference internal" href="#module-fusion_tools.handler">fusion_tools.handler module</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#fusion_tools.handler.DSAHandler"><code class="docutils literal notranslate"><span class="pre">DSAHandler</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#module-fusion_tools.tileserver">fusion_tools.tileserver module</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="#fusion_tools.tileserver.CustomTileServer"><code class="docutils literal notranslate"><span class="pre">CustomTileServer</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#fusion_tools.tileserver.DSATileServer"><code class="docutils literal notranslate"><span class="pre">DSATileServer</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#fusion_tools.tileserver.LocalTileServer"><code class="docutils literal notranslate"><span class="pre">LocalTileServer</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="#fusion_tools.tileserver.TileServer"><code class="docutils literal notranslate"><span class="pre">TileServer</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="#module-fusion_tools">Module contents</a></li>
-</ul>
-</li>
-</ul>
-</li>
-</ul>
-
-        </div>
-      </div>
-    </nav>
-
-    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
-          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-          <a href="index.html">fusion-tools</a>
-      </nav>
-
-      <div class="wy-nav-content">
-        <div class="rst-content">
-          <div role="navigation" aria-label="Page navigation">
-  <ul class="wy-breadcrumbs">
-      <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
-          <li class="breadcrumb-item"><a href="modules.html">src</a></li>
-      <li class="breadcrumb-item active">fusion_tools package</li>
-      <li class="wy-breadcrumbs-aside">
-            <a href="_sources/fusion_tools.rst.txt" rel="nofollow"> View page source</a>
-      </li>
-  </ul>
-  <hr/>
-</div>
-          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
-           <div itemprop="articleBody">
-             
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
   <section id="fusion-tools-package">
-<h1>fusion_tools package<a class="headerlink" href="#fusion-tools-package" title="Link to this heading"></a></h1>
+<h1>fusion_tools package<a class="headerlink" href="#fusion-tools-package" title="Link to this heading">¶</a></h1>
 <section id="subpackages">
-<h2>Subpackages<a class="headerlink" href="#subpackages" title="Link to this heading"></a></h2>
+<h2>Subpackages<a class="headerlink" href="#subpackages" title="Link to this heading">¶</a></h2>
 <div class="toctree-wrapper compound">
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="fusion_tools.components.html">fusion_tools.components package</a><ul>
@@ -223,19 +169,19 @@
 </div>
 </section>
 <section id="submodules">
-<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading">¶</a></h2>
 </section>
 <section id="module-fusion_tools.handler">
-<span id="fusion-tools-handler-module"></span><h2>fusion_tools.handler module<a class="headerlink" href="#module-fusion_tools.handler" title="Link to this heading"></a></h2>
+<span id="fusion-tools-handler-module"></span><h2>fusion_tools.handler module<a class="headerlink" href="#module-fusion_tools.handler" title="Link to this heading">¶</a></h2>
 <p>Handler for requests made to a running FUSION instance.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="fusion_tools.handler.DSAHandler">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.handler.</span></span><span class="sig-name descname"><span class="pre">DSAHandler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">girderApiUrl</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">username</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">password</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.handler.DSAHandler" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.handler.</span></span><span class="sig-name descname"><span class="pre">DSAHandler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">girderApiUrl</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">username</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">password</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.handler.DSAHandler" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>Handler for DSA (digital slide archive) instance</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.handler.DSAHandler.get_annotations">
-<span class="sig-name descname"><span class="pre">get_annotations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotation_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">format</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'geojson'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.handler.DSAHandler.get_annotations" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">get_annotations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotation_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">format</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'geojson'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.handler.DSAHandler.get_annotations" title="Link to this definition">¶</a></dt>
 <dd><p>Get annotations for an item in DSA</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -262,7 +208,7 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.handler.DSAHandler.get_folder_slide_count">
-<span class="sig-name descname"><span class="pre">get_folder_slide_count</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">folder_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ignore_histoqc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#fusion_tools.handler.DSAHandler.get_folder_slide_count" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">get_folder_slide_count</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">folder_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ignore_histoqc</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#fusion_tools.handler.DSAHandler.get_folder_slide_count" title="Link to this definition">¶</a></dt>
 <dd><p>Get number of slides contained in a folder</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -282,13 +228,13 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.handler.DSAHandler.get_image_region">
-<span class="sig-name descname"><span class="pre">get_image_region</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coords_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">style</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#fusion_tools.handler.DSAHandler.get_image_region" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">get_image_region</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">coords_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">style</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#fusion_tools.handler.DSAHandler.get_image_region" title="Link to this definition">¶</a></dt>
 <dd><p>Grabbing image region from list of bounding box coordinates</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.handler.DSAHandler.get_path_info">
-<span class="sig-name descname"><span class="pre">get_path_info</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#fusion_tools.handler.DSAHandler.get_path_info" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">get_path_info</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#fusion_tools.handler.DSAHandler.get_path_info" title="Link to this definition">¶</a></dt>
 <dd><p>Get information for a given resource path</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -305,7 +251,7 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.handler.DSAHandler.make_boundary_mask">
-<span class="sig-name descname"><span class="pre">make_boundary_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exterior_coords</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#fusion_tools.handler.DSAHandler.make_boundary_mask" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">make_boundary_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exterior_coords</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#fusion_tools.handler.DSAHandler.make_boundary_mask" title="Link to this definition">¶</a></dt>
 <dd><p>Making boundary mask for a set of exterior coordinates</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -322,7 +268,7 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.handler.DSAHandler.query_annotation_count">
-<span class="sig-name descname"><span class="pre">query_annotation_count</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#fusion_tools.handler.DSAHandler.query_annotation_count" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">query_annotation_count</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#fusion_tools.handler.DSAHandler.query_annotation_count" title="Link to this definition">¶</a></dt>
 <dd><p>Get count of structures in an item</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -341,30 +287,30 @@
 
 </section>
 <section id="module-fusion_tools.tileserver">
-<span id="fusion-tools-tileserver-module"></span><h2>fusion_tools.tileserver module<a class="headerlink" href="#module-fusion_tools.tileserver" title="Link to this heading"></a></h2>
+<span id="fusion-tools-tileserver-module"></span><h2>fusion_tools.tileserver module<a class="headerlink" href="#module-fusion_tools.tileserver" title="Link to this heading">¶</a></h2>
 <p>Tile server components</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="fusion_tools.tileserver.CustomTileServer">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.tileserver.</span></span><span class="sig-name descname"><span class="pre">CustomTileServer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiles_url</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">regions_url</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.tileserver.CustomTileServer" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.tileserver.</span></span><span class="sig-name descname"><span class="pre">CustomTileServer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiles_url</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">regions_url</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.tileserver.CustomTileServer" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#fusion_tools.tileserver.TileServer" title="fusion_tools.tileserver.TileServer"><code class="xref py py-class docutils literal notranslate"><span class="pre">TileServer</span></code></a></p>
 <p>CustomTileServer component if using some other tiles endpoint (must pass tileSize and levels in dictionary)</p>
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="fusion_tools.tileserver.DSATileServer">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.tileserver.</span></span><span class="sig-name descname"><span class="pre">DSATileServer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">api_url</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">item_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.tileserver.DSATileServer" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.tileserver.</span></span><span class="sig-name descname"><span class="pre">DSATileServer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">api_url</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">item_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.tileserver.DSATileServer" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#fusion_tools.tileserver.TileServer" title="fusion_tools.tileserver.TileServer"><code class="xref py py-class docutils literal notranslate"><span class="pre">TileServer</span></code></a></p>
 <p>Use for linking visualization with remote tiles API (DSA server)</p>
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="fusion_tools.tileserver.LocalTileServer">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.tileserver.</span></span><span class="sig-name descname"><span class="pre">LocalTileServer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">local_image_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tile_server_port</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'8050'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.tileserver.LocalTileServer" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.tileserver.</span></span><span class="sig-name descname"><span class="pre">LocalTileServer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">local_image_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tile_server_port</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'8050'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.tileserver.LocalTileServer" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference internal" href="#fusion_tools.tileserver.TileServer" title="fusion_tools.tileserver.TileServer"><code class="xref py py-class docutils literal notranslate"><span class="pre">TileServer</span></code></a></p>
 <p>Tile server from image saved locally. Uses large-image to read and parse image formats (default: [common])</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.tileserver.LocalTileServer.get_metadata">
-<span class="sig-name descname"><span class="pre">get_metadata</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.tileserver.LocalTileServer.get_metadata" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">get_metadata</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.tileserver.LocalTileServer.get_metadata" title="Link to this definition">¶</a></dt>
 <dd><p>Getting large-image metadata for image</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -378,13 +324,13 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.tileserver.LocalTileServer.get_region">
-<span class="sig-name descname"><span class="pre">get_region</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">top</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">left</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bottom</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">right</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.tileserver.LocalTileServer.get_region" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">get_region</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">top</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">left</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bottom</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">right</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.tileserver.LocalTileServer.get_region" title="Link to this definition">¶</a></dt>
 <dd><p>Grabbing a specific region in the image based on bounding box coordinates</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.tileserver.LocalTileServer.get_tile">
-<span class="sig-name descname"><span class="pre">get_tile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">z</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">style</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">{}</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.tileserver.LocalTileServer.get_tile" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">get_tile</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">z</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">x</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">y</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">style</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">{}</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.tileserver.LocalTileServer.get_tile" title="Link to this definition">¶</a></dt>
 <dd><p>Tiles endpoint, returns an image tyle based on provided coordinates</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -406,12 +352,12 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.tileserver.LocalTileServer.root">
-<span class="sig-name descname"><span class="pre">root</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.tileserver.LocalTileServer.root" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">root</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.tileserver.LocalTileServer.root" title="Link to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.tileserver.LocalTileServer.start">
-<span class="sig-name descname"><span class="pre">start</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'8050'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.tileserver.LocalTileServer.start" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">start</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'8050'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.tileserver.LocalTileServer.start" title="Link to this definition">¶</a></dt>
 <dd><p>Starting tile server instance on a provided port</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -424,46 +370,116 @@
 
 <dl class="py class">
 <dt class="sig sig-object py" id="fusion_tools.tileserver.TileServer">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.tileserver.</span></span><span class="sig-name descname"><span class="pre">TileServer</span></span><a class="headerlink" href="#fusion_tools.tileserver.TileServer" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.tileserver.</span></span><span class="sig-name descname"><span class="pre">TileServer</span></span><a class="headerlink" href="#fusion_tools.tileserver.TileServer" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
 <p>Components which pull information from a slide(s)</p>
 </dd></dl>
 
 </section>
 <section id="module-fusion_tools">
-<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-fusion_tools" title="Link to this heading"></a></h2>
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-fusion_tools" title="Link to this heading">¶</a></h2>
 </section>
 </section>
 
 
-           </div>
+            <div class="clearer"></div>
           </div>
-          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="modules.html" class="btn btn-neutral float-left" title="src" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="fusion_tools.components.html" class="btn btn-neutral float-right" title="fusion_tools.components package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
-    </div>
-
-  <hr/>
-
-  <div role="contentinfo">
-    <p>&#169; Copyright 2024, Sam Border.</p>
-  </div>
-
-  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
-    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
-    provided by <a href="https://readthedocs.org">Read the Docs</a>.
-   
-
-</footer>
         </div>
       </div>
-    </section>
-  </div>
-  <script>
-      jQuery(function () {
-          SphinxRtdTheme.Navigation.enable(true);
-      });
-  </script> 
+      <div class="sphinxsidebar" role="navigation" aria-label="Main">
+        <div class="sphinxsidebarwrapper">
+  <div>
+    <h3><a href="index.html">Table of Contents</a></h3>
+    <ul>
+<li><a class="reference internal" href="#">fusion_tools package</a><ul>
+<li><a class="reference internal" href="#subpackages">Subpackages</a></li>
+<li><a class="reference internal" href="#submodules">Submodules</a></li>
+<li><a class="reference internal" href="#module-fusion_tools.handler">fusion_tools.handler module</a><ul>
+<li><a class="reference internal" href="#fusion_tools.handler.DSAHandler"><code class="docutils literal notranslate"><span class="pre">DSAHandler</span></code></a><ul>
+<li><a class="reference internal" href="#fusion_tools.handler.DSAHandler.get_annotations"><code class="docutils literal notranslate"><span class="pre">DSAHandler.get_annotations()</span></code></a></li>
+<li><a class="reference internal" href="#fusion_tools.handler.DSAHandler.get_folder_slide_count"><code class="docutils literal notranslate"><span class="pre">DSAHandler.get_folder_slide_count()</span></code></a></li>
+<li><a class="reference internal" href="#fusion_tools.handler.DSAHandler.get_image_region"><code class="docutils literal notranslate"><span class="pre">DSAHandler.get_image_region()</span></code></a></li>
+<li><a class="reference internal" href="#fusion_tools.handler.DSAHandler.get_path_info"><code class="docutils literal notranslate"><span class="pre">DSAHandler.get_path_info()</span></code></a></li>
+<li><a class="reference internal" href="#fusion_tools.handler.DSAHandler.make_boundary_mask"><code class="docutils literal notranslate"><span class="pre">DSAHandler.make_boundary_mask()</span></code></a></li>
+<li><a class="reference internal" href="#fusion_tools.handler.DSAHandler.query_annotation_count"><code class="docutils literal notranslate"><span class="pre">DSAHandler.query_annotation_count()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-fusion_tools.tileserver">fusion_tools.tileserver module</a><ul>
+<li><a class="reference internal" href="#fusion_tools.tileserver.CustomTileServer"><code class="docutils literal notranslate"><span class="pre">CustomTileServer</span></code></a></li>
+<li><a class="reference internal" href="#fusion_tools.tileserver.DSATileServer"><code class="docutils literal notranslate"><span class="pre">DSATileServer</span></code></a></li>
+<li><a class="reference internal" href="#fusion_tools.tileserver.LocalTileServer"><code class="docutils literal notranslate"><span class="pre">LocalTileServer</span></code></a><ul>
+<li><a class="reference internal" href="#fusion_tools.tileserver.LocalTileServer.get_metadata"><code class="docutils literal notranslate"><span class="pre">LocalTileServer.get_metadata()</span></code></a></li>
+<li><a class="reference internal" href="#fusion_tools.tileserver.LocalTileServer.get_region"><code class="docutils literal notranslate"><span class="pre">LocalTileServer.get_region()</span></code></a></li>
+<li><a class="reference internal" href="#fusion_tools.tileserver.LocalTileServer.get_tile"><code class="docutils literal notranslate"><span class="pre">LocalTileServer.get_tile()</span></code></a></li>
+<li><a class="reference internal" href="#fusion_tools.tileserver.LocalTileServer.root"><code class="docutils literal notranslate"><span class="pre">LocalTileServer.root()</span></code></a></li>
+<li><a class="reference internal" href="#fusion_tools.tileserver.LocalTileServer.start"><code class="docutils literal notranslate"><span class="pre">LocalTileServer.start()</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#fusion_tools.tileserver.TileServer"><code class="docutils literal notranslate"><span class="pre">TileServer</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#module-fusion_tools">Module contents</a></li>
+</ul>
+</li>
+</ul>
 
-</body>
+  </div>
+  <div>
+    <h4>Previous topic</h4>
+    <p class="topless"><a href="modules.html"
+                          title="previous chapter">src</a></p>
+  </div>
+  <div>
+    <h4>Next topic</h4>
+    <p class="topless"><a href="fusion_tools.components.html"
+                          title="next chapter">fusion_tools.components package</a></p>
+  </div>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/fusion_tools.rst.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<search id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</search>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="Related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="fusion_tools.components.html" title="fusion_tools.components package"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="modules.html" title="src"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">fusion-tools 0.0.5 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="modules.html" >src</a> &#187;</li>
+        <li class="nav-item nav-item-this"><a href="">fusion_tools package</a></li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+    &#169; Copyright 2024, Sam Border.
+      Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.0.2.
+    </div>
+  </body>
 </html>

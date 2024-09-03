@@ -1,11 +1,3 @@
-"""
-Functions related to visualization for data derived from FUSION.
-
-- Interactive feature charts
-    - View images at points
-- Local slide viewers
-
-"""
 import os
 import pandas as pd
 import numpy as np
@@ -24,25 +16,24 @@ from fusion_tools.components import SlideMap
 class Visualization:
     """General holder class used for initialization. Components added after initialization.
 
-    Example Usage: 
     .. code-block:: python
-    components = [
-        [
-            SlideMap(
-                tile_server = LocalTileServer("/path/to/slide.svs"),
-                annotations = geojson_list
-            )
-        ],
-        [
+
+        components = [
             [
-                OverlayOptions(geojson_list),
-                PropertyViewer(geojson_list)
+                SlideMap(
+                    tile_server = LocalTileServer("/path/to/slide.svs"),
+                    annotations = geojson_list
+                )
+            ],
+            [
+                [
+                    OverlayOptions(geojson_list),
+                    PropertyViewer(geojson_list)
+                ]
             ]
         ]
-    ]
-
-    vis_session = Visualization(components)
-    vis_session.start()
+        vis_session = Visualization(components)
+        vis_session.start()
 
     """
     
