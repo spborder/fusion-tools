@@ -1356,7 +1356,7 @@ class PropertyPlotter(Tool):
         extracted_data = self.extract_data_from_features(current_features, property_names, label_names)
         current_plot_data['data'] = extracted_data
 
-        data_df = pd.DataFrame.from_records(extracted_data).dropna(subset=property_names)
+        data_df = pd.DataFrame.from_records(extracted_data).dropna(subset=property_names,how = 'all')
         if len(property_names)==1:
             # Single feature visualization
             plot_figure = self.gen_violin_plot(
@@ -1375,9 +1375,12 @@ class PropertyPlotter(Tool):
                     property_columns = property_names
                 )
 
-                data_df = pd.concat([data_df,umap_cols],axis=1,ignore_index=True)
-
+                before_cols = data_df.columns.tolist()
                 plot_cols = umap_cols.columns.tolist()
+
+                data_df = pd.concat([data_df,umap_cols],axis=1,ignore_index=True)
+                data_df.columns = before_cols + plot_cols
+
 
             elif len(property_names)==2:
                 plot_cols = property_names
@@ -1388,7 +1391,6 @@ class PropertyPlotter(Tool):
                 label_cols = label_names,
                 customdata_cols = ['bbox']
             )
-
 
         current_plot_data = json.dumps(current_plot_data)
 
@@ -1530,7 +1532,6 @@ class PropertyPlotter(Tool):
                         )
                 )
             )
-
             if not data_df[label_cols].dtype == np.number:
                 figure.update_layout(
                     legend = dict(
@@ -1594,15 +1595,16 @@ class PropertyPlotter(Tool):
         :return: Dataframe containing colunns named UMAP1 and UMAP2
         :rtype: pd.DataFrame
         """
-        quant_data = data_df.loc[:,[i for i in property_columns if i in data_df.columns]].values
-        print(quant_data)
+        quant_data = data_df.loc[:,[i for i in property_columns if i in data_df.columns]].fillna(0)
+        for p in property_columns:
+            quant_data[p] = pd.to_numeric(quant_data[p],errors='coerce')
+        quant_data = quant_data.values
         feature_data_means = np.nanmean(quant_data,axis=0)
         feature_data_stds = np.nanstd(quant_data,axis=0)
 
         scaled_data = (quant_data-feature_data_means)/feature_data_stds
         scaled_data[np.isnan(scaled_data)] = 0.0
         scaled_data[~np.isfinite(scaled_data)] = 0.0
-
         umap_reducer = UMAP()
         embeddings = umap_reducer.fit_transform(scaled_data)
         umap_df = pd.DataFrame(data = embeddings, columns = ['UMAP1','UMAP2'])
@@ -1625,24 +1627,46 @@ class PropertyPlotter(Tool):
         :rtype: tuple
         """
 
-        property_graph_selected_div = [no_update]
-        map_marker_div = [no_update]
+        property_graph_selected_div = [no_update]*len(ctx.outputs_list[0])
         
         current_plot_data = json.loads(get_pattern_matching_value(current_plot_data))
         selected_data = get_pattern_matching_value(selected_data)
 
-        print(selected_data)
         if selected_data is None:
             raise exceptions.PreventUpdate
         if type(selected_data)==list:
             if len(selected_data)==0:
                 raise exceptions.PreventUpdate
 
+        map_marker = []
+        for p_idx,p in enumerate(selected_data['points']):
+            map_marker.append(
+                dl.Marker(
+                    position = [
+                        (p['customdata'][0][0]+p['customdata'][0][2])/2,
+                        (p['customdata'][0][1]+p['customdata'][0][3])/2
+                    ][::-1],
+                    children = [
+                        dl.Popup(
+                            dbc.Button(
+                                'Clear Marker',
+                                color = 'danger',
+                                n_clicks = 0,
+                                id = {'type': 'selected-marker-delete','index': p_idx}
+                            ),
+                            id = {'type': 'selected-marker-popup','index': p_idx}
+                        )
+                    ]
+                )
+            )
+        
+        map_marker_div = html.Div(
+            map_marker
+        )
+        current_plot_data['selected'] = selected_data
+        current_plot_data = [json.dumps(current_plot_data)]
 
-
-
-
-        return property_graph_selected_div, map_marker_div, current_plot_data
+        return property_graph_selected_div, [map_marker_div], current_plot_data
 
 
 class FeatureAnnotator(Tool):
