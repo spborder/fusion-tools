@@ -31,7 +31,9 @@ setuptools.setup(
         "umap-learn",
         "fastapi",
         "uvicorn",
-        "threading"
+        "threading",
+        "sphinx",
+        "sphinx_rtd_theme"
     ],
     packages=setuptools.find_packages(),
     classifiers=[
