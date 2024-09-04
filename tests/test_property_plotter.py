@@ -11,7 +11,7 @@ import threading
 sys.path.append('./src/')
 from fusion_tools import Visualization, DSAHandler
 from fusion_tools.tileserver import DSATileServer
-from fusion_tools.components import SlideMap, OverlayOptions, PropertyViewer, PropertyPlotter
+from fusion_tools.components import SlideMap, OverlayOptions, PropertyViewer, PropertyPlotter, HRAViewer
 
 
 def main():
