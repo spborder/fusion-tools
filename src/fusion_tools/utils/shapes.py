@@ -278,9 +278,10 @@ def align_object_props(
         if alignment_type=='index':
             # Lining up horizontally
             for r in prop_cols:
-                prop_dict = p[r].to_dict()
-                for i in range(len(geo_ann['features'])):
-                    geo_ann['features'][i]['properties'] = geo_ann['features'][i]['properties'] | prop_dict
+                if r in p:
+                    prop_list = p[r].tolist()
+                    for i in range(len(geo_ann['features'])):
+                        geo_ann['features'][i]['properties'] = geo_ann['features'][i]['properties'] | {r: prop_list[i]}
 
         elif alignment_type in p:
             # Lining up by column/property name

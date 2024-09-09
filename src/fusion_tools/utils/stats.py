@@ -81,14 +81,14 @@ def get_label_statistics(data_df:pd.DataFrame, label_col:str):
             }
 
     elif data_df.shape[1]>2:
-        if data_df.shape[1]==2:
+        if data_df.shape[1]==3:
             # Calculating Pearson's correlation for each group separately
             pearson_r_list = []
             p_value = []
             for u_l in unique_labels:
                 # For each label, generate a new table with r
                 group_data = data_df[data_df[label_col].str.match(u_l)].values
-                group_r,group_p = stats.mstats.pearsonr(group_data[:,0],group_data[:,1])
+                group_r,group_p = stats.mstats.pearsonr(group_data[:,0].astype(float),group_data[:,1].astype(float))
                 
                 pearson_r_list.append(group_r)
                 p_value.append(group_p)
@@ -101,7 +101,7 @@ def get_label_statistics(data_df:pd.DataFrame, label_col:str):
                 }
             ).round(decimals=4)
 
-        elif data_df.shape[1]>2:
+        elif data_df.shape[1]>3:
             # This calculates silhouette score for each group
             overall_silhouette = round(
                 silhouette_score(
@@ -125,7 +125,6 @@ def get_label_statistics(data_df:pd.DataFrame, label_col:str):
                 'overall_silhouette': overall_silhouette,
                 'samples_silhouette': pd.DataFrame(sil_dict)
             }
-
 
     return p_value, results
 

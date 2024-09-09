@@ -12,6 +12,7 @@ import numpy as np
 import uuid
 from typing_extensions import Union
 import geojson
+import json
 
 
 # Dash imports
@@ -580,11 +581,15 @@ class MultiFrameSlideMap(SlideMap):
         :param annotations: Individual or list of GeoJSON formatted annotations to add on top of the MultiFrameSlideMap
         :type annotations: Union[dict,list,None]
         """
+        self.frame_layers = []
+
         super().__init__(tile_server,annotations)
 
-        
         self.title = 'Multi-Frame Slide Map'
+        self.process_frames()
 
+        self.blueprint = DashBlueprint()
+        self.blueprint.layout = self.gen_layout()
         # Changing up the layout so that it generates different tile layers for each frame
     
     def gen_layout(self):
@@ -593,16 +598,137 @@ class MultiFrameSlideMap(SlideMap):
         :return: Layout added to DashBlueprint object to be embedded in larger layout.
         :rtype: dash.html.Div.Div
         """
-        layout = html.Div([
-
-        ])
-
-
+        layout = html.Div(
+            dl.Map(
+                id = {'type': 'slide-map','index': 0},
+                crs = 'Simple',
+                center = [-self.image_metadata['tileWidth']/2,self.image_metadata['tileWidth']/2],
+                zoom = 1,
+                style = {'height': '90vh','width': '100%','margin': 'auto','display': 'inline-block'},
+                children = [
+                    dl.FullScreenControl(
+                        position = 'upper-left'
+                    ),
+                    dl.FeatureGroup(
+                        id = {'type': 'edit-feature-group','index': 0},
+                        children = [
+                            dl.EditControl(
+                                id = {'type': 'edit-control','index': 0},
+                                draw = dict(polyline=False, line=False, circle = False, circlemarker=False),
+                                position='topleft'
+                            )
+                        ]
+                    ),
+                    html.Div(
+                        id = {'type': 'map-colorbar-div','index': 0},
+                        children = []
+                    ),
+                    dl.LayersControl(
+                        id = {'type': 'map-layers-control','index': 0},
+                        children = self.frame_layers + self.annotation_components
+                    ),
+                    dl.EasyButton(
+                        icon = 'fa-solid fa-arrows-to-dot',
+                        title = 'Re-Center Map',
+                        id = {'type': 'center-map','index': 0},
+                        position = 'top-left',
+                        eventHandlers = {
+                            'click': self.js_namespace('centerMap')
+                        }
+                    ),
+                    html.Div(
+                        id = {'type': 'map-marker-div','index': 0},
+                        children = []
+                    )
+                ]
+            )
+        )
 
         return layout
-    
-    def get_callbacks(self):
-        pass
+
+    def process_frames(self):
+        """Create BaseLayer and TileLayer components for each of the different frames present in a multi-frame image
+        Also initializes base tile url and styled tile url
+        """
+
+        self.frame_layers = []
+
+        if 'frames' in self.image_metadata:
+            if len(self.image_metadata['frames'])>0:
+                
+                if any(['Channel' in i for i in self.image_metadata['frames']]):
+                    frame_names = [i['Channel'] for i in self.image_metadata['frames']]
+                else:
+                    frame_names = [f'Frame {i}' for i in range(len(self.image_metadata['frames']))]
+                # This is a multi-frame image
+                if len(self.image_metadata['frames'])==3:
+                    # Treat this as an RGB image by default
+                    rgb_url = self.tiles_url+'/?style={"bands": [{"framedelta":0,"palette":"rgba(255,0,0,255)"},{"framedelta":1,"palette":"rgba(0,255,0,255)"},{"framedelta":2,"palette":"rgba(0,0,255,255)"}]}'
+                else:
+
+                    # Checking for "red", "green" and "blue" frame names
+                    if all([i in frame_names for i in ['red','green','blue']]):
+                        rgb_style_dict = {
+                            "bands": [
+                                {
+                                    "palette": ["rgba(0,0,0,0)",'rgba('+','.join(['255' if i==c_idx else '0' for i in range(3)]+['0'])+')'],
+                                    "framedelta": frame_names.index(c)
+                                }
+                                for c_idx,c in enumerate(['red','green','blue'])
+                            ]
+                        }
+
+                        rgb_url = self.tiles_url+'/?style='+json.dumps(rgb_style_dict)
+                    else:
+                        rgb_url = None
+                    
+                    for f_idx,f in enumerate(frame_names):
+                        self.frame_layers.append(
+                            dl.BaseLayer(
+                                dl.TileLayer(
+                                    url = self.tiles_url+'/?style={"bands": [{"palette":["rgba(0,0,0,0)","rgba(255,255,255,255)"],"framedelta":'+str(f_idx)+'}]}',
+                                    tileSize = self.image_metadata['tileWidth'],
+                                    maxNativeZoom=self.image_metadata['levels']-1,
+                                    id = {'type': 'tile-layer','index': np.random.randint(0,1000)},
+                                    bounds = [[0,0],[-self.image_metadata['tileWidth'],self.image_metadata['tileWidth']]]
+                                ),
+                                name = f,
+                                checked = f==frame_names[0],
+                                id = {'type': 'base-layer','index': np.random.randint(0,1000)}
+                            )
+                        )
+                    if rgb_url:
+                        self.frame_layers.append(
+                            dl.BaseLayer(
+                                dl.TileLayer(
+                                    url = rgb_url,
+                                    tileSize = self.image_metadata['tileWidth'],
+                                    maxNativeZoom=self.image_metadata['levels']-1,
+                                    id = {'type': 'tile-layer','index': np.random.randint(0,1000)},
+                                    bounds = [[0,0],[-self.image_metadata['tileWidth'], self.image_metadata['tileWidth']]]
+                                ),
+                                name = 'RGB Image',
+                                checked = False,
+                                id = {'type': 'base-layer','index': np.random.randint(0,1000)}
+                            )
+                        )
+            else:
+                self.frame_layers.append(
+                    dl.BaseLayer(
+                        dl.TileLayer(
+                            url = self.tiles_url,
+                            tileSize = self.image_metadata['tileWidth'],
+                            maxNativeZoom=self.image_metadata['levels']-1,
+                            id = {'type': 'tile-layer','index': np.random.randint(0,1000)},
+                            bounds = [[0,0],[-self.image_metadata['tileWidth'],self.image_metadata['tileWidth']]]
+                        ),
+                        name = 'RGB Image',
+                        id = {'type': 'base-layer','index': np.random.randint(0,1000)}
+                    )
+                )
+        else:
+            raise TypeError("Missing 'frames' key in image metadata")
+
 
 class SlideImageOverlay(MapComponent):
     """Image overlay on specific coordinates within a SlideMap

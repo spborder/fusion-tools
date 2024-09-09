@@ -168,6 +168,7 @@ class OverlayOptions(Tool):
 
         #TODO: After loading an experiment, reference the file here for additional properties
         
+        geojson_properties = sorted(geojson_properties)
 
         return geojson_properties, feature_names, property_info
 
@@ -282,6 +283,77 @@ class OverlayOptions(Tool):
                                 for f_idx, f in enumerate(self.feature_names)
                             ]
                         )
+                    ]),
+                    dbc.Row([
+                        dbc.Accordion(
+                            id = {'type':'adv-overlay-accordion','index': 0},
+                            start_collapsed = True,
+                            children = [
+                                dbc.AccordionItem(
+                                    id = {'type':'adv-overlay-accordionitem','index':0},
+                                    title = html.P('Advanced Overlay Options',style={'font-style':'italic'}),
+                                    children = [
+                                        dbc.Card([
+                                            dbc.CardBody([
+                                                html.Div([
+                                                    dbc.InputGroup([
+                                                        dbc.Input(
+                                                            id = {'type': 'adv-overlay-colorbar-width','index': 0},
+                                                            placeholder = 'Colorbar Width',
+                                                            type = 'number',
+                                                            value = 300,
+                                                            min = 0,
+                                                            max = 1000,
+                                                            step = 50
+                                                        ),
+                                                        dbc.InputGroupText(
+                                                            'pixels'
+                                                        )
+                                                    ]),
+                                                    dbc.FormText(
+                                                        'Width of colorbar'
+                                                    ),
+                                                    html.Hr(),
+                                                    dbc.InputGroup([
+                                                        dbc.Input(
+                                                            id = {'type': 'adv-overlay-line-width','index': 0},
+                                                            placeholder = 'Line Width',
+                                                            type = 'number',
+                                                            value = 5,
+                                                            min = 0,
+                                                            max = 100,
+                                                            step = 1
+                                                        ),
+                                                        dbc.InputGroupText(
+                                                            'pixels'
+                                                        )
+                                                    ]),
+                                                    dbc.FormText(
+                                                        'Width of annotation boundary lines'
+                                                    ),
+                                                    html.Hr(),
+                                                    dbc.Select(
+                                                        id = {'type': 'adv-overlay-colormap','index': 0},
+                                                        placeholder = 'Select colormap options',
+                                                        options = [
+                                                            {'label': '','value': '', 'disabled': False}
+                                                        ]
+                                                    )
+                                                ]),
+                                                html.Div(
+                                                    dbc.Button(
+                                                        'Update Overlays!',
+                                                        className = 'd-grid col-12 mx-auto',
+                                                        id = {'type': 'adv-overlay-butt','index': 0},
+                                                        n_clicks = 0
+                                                    )
+                                                )
+                                            ])
+                                        ])
+                                    ]
+                                )
+                            ]
+                        )
                     ])
                 ])
             )
@@ -313,6 +385,22 @@ class OverlayOptions(Tool):
                 State({'type': 'feature-lineColor','index': ALL},'value'),
             ]
         )(self.update_overlays)
+
+        self.blueprint.callback(
+            [
+                Input({'type':'adv-overlay-butt','index': ALL},'n_clicks')
+            ],
+            [
+                Output({'type':'feature-bounds','index': ALL},'hideout'),
+                Output({'type': 'map-colorbar-div','index': ALL},'children')
+            ],
+            [
+                State({'type': 'adv-overlay-colorbar-width','index': ALL},'value'),
+                State({'type': 'adv-overlay-line-width','index': ALL},'value'),
+                State({'type': 'adv-overlay-colormap','index': ALL},'value'),
+                State({'type': 'feature-bounds','index': ALL},'hideout')
+            ]
+        )(self.adv_update_overlays)
 
         # Adding filters
         self.blueprint.callback(
@@ -654,6 +742,78 @@ class OverlayOptions(Tool):
 
         return geojson_hideout, colorbar
 
+    def adv_update_overlays(self, butt_click: list, colorbar_width:list, line_width:list, colormap_val:list, current_feature_hideout:list):
+        """Update some additional properties of the overlays and display.
+
+        :param butt_click: Button clicked to update overlay properties 
+        :type butt_click: list
+        :param colorbar_width: Width of colorbar in pixels
+        :type colorbar_width: list
+        :param line_width: Width of structure boundaries in pixels
+        :type line_width: list
+        :param colormap_val: Colormap option to pass to chroma
+        :type colormap_val: list
+        :param current_feature_hideout: Current hideout properties for all structures
+        :type current_feature_hideout: list
+        :return: Updated colorbar width, line width, and colormap
+        :rtype: tuple
+        """
+
+        if not any([i['value'] for i in ctx.triggered]) or len(current_feature_hideout)==0:
+            raise exceptions.PreventUpdate
+
+        new_hideout = [no_update]*len(ctx.outputs_list[1])
+
+        colorbar_width = get_pattern_matching_value(colorbar_width)
+        line_width = get_pattern_matching_value(line_width)
+        colormap_val = get_pattern_matching_value(colormap_val)
+
+        # Updating colorbar width and colormap:
+        overlay_bounds = current_feature_hideout[0]['overlayBounds']
+
+        if not colorbar_width==0:
+            color_bar_style = {
+                'visibility':'visible',
+                'background':'white',
+                'background':'rgba(255,255,255,0.8)',
+                'box-shadow':'0 0 15px rgba(0,0,0,0.2)',
+                'border-radius':'10px',
+                'width': f'{colorbar_width+100}px',
+                'padding':'0px 0px 0px 25px'
+            }
+
+            if 'min' in overlay_bounds:
+                colorbar_div_children = [dl.Colorbar(
+                    colorscale = ['blue','red'],
+                    width = colorbar_width,
+                    height = 15,
+                    position = 'bottomleft',
+                    id = f'colorbar{np.random.randint(0,100)}',
+                    style = color_bar_style,
+                    tooltip=True
+                )]
+            elif 'unique' in overlay_bounds:
+                colorbar_div_children = [dlx.categorical_colorbar(
+                    categories = overlay_bounds['unique'],
+                    colorscale = ['blue','red'],
+                    style = color_bar_style,
+                    position = 'bottomleft',
+                    id = f'colorbar{np.random.randint(0,100)}',
+                    width = colorbar_width,
+                    height = 15
+                )]
+
+            else:
+                colorbar_div_children = [no_update]
+        else:
+            colorbar_div_children = [html.Div()]
+
+        # Updating line width:
+        new_hideout = [i | {'lineWidth': line_width} for i in current_feature_hideout]
+
+
+        return new_hideout, colorbar_div_children
+
 class PropertyViewer(Tool):
     """PropertyViewer Tool which allows users to view distribution of properties across the current viewport of the SlideMap
 
@@ -713,6 +873,7 @@ class PropertyViewer(Tool):
 
         #TODO: After loading an experiment, reference the file here for additional properties
         
+        geojson_properties = sorted(geojson_properties)
 
         return geojson_properties, feature_names
 
@@ -1061,6 +1222,7 @@ class PropertyPlotter(Tool):
 
         #TODO: After loading an experiment, reference the file here for additional properties
         
+        geojson_properties = sorted(geojson_properties)
 
         return geojson_properties, feature_names
 
@@ -1070,30 +1232,8 @@ class PropertyPlotter(Tool):
         For more information, see: https://github.com/kapot65/dash-treeview-antd
         
         """
-        self.label_dict = {}
         self.property_dict = {}
-        self.label_keys = {}
         self.property_keys = {}
-
-        # Populating label dict with structure name and properties (which will be a copy of property_dict_children)
-        self.label_dict = {
-            'title': 'Labels',
-            'key': '0',
-            'children': [
-                {
-                    'title': 'Structure Name',
-                    'key': '0',
-                    'children': []
-                },
-                {
-                    'title': 'Property',
-                    'key': '1',
-                    'children': []
-                }
-            ]
-        }
-
-        self.label_keys['0'] = 'name'
 
         self.property_dict = {
             'title': 'Features',
@@ -1107,16 +1247,10 @@ class PropertyPlotter(Tool):
 
         # Adding branch properties first
         property_dict_children = []
-        label_property_dict_children = []
         for t_idx,t in enumerate(trunk_properties):
             trunk_dict = {
                 'title': t,
                 'key': f'0-{t_idx}',
-                'children': []
-            }
-            label_trunk_dict = {
-                'title': t,
-                'key': f'1-{t_idx}',
                 'children': []
             }
 
@@ -1128,20 +1262,14 @@ class PropertyPlotter(Tool):
                         'title': b.split(' --> ')[1],
                         'key': f'0-{t_idx}-{sub_count}'
                     }
-
-                    label_b_dict = b_dict.copy()
-                    label_b_dict['key'] = f'1-{t_idx}-{sub_count}'
                     
                     trunk_dict['children'].append(b_dict)
-                    label_trunk_dict['children'].append(label_b_dict)
 
                     self.property_keys[b_dict['key']] = b
-                    self.label_keys[label_b_dict['key']] = b
 
                     sub_count+=1
 
             property_dict_children.append(trunk_dict)
-            label_property_dict_children.append(label_trunk_dict)
 
         # Now adding leaf properties
         for l_idx, l in enumerate(leaf_properties):
@@ -1151,17 +1279,11 @@ class PropertyPlotter(Tool):
                 'children': []
             }
 
-            label_l_dict = l_dict.copy()
-            label_l_dict['key'] = f'1-{t_idx+l_idx}'
-
             property_dict_children.append(l_dict)
-            label_property_dict_children.append(l_dict)
 
             self.property_keys[l_dict['key']] = l
-            self.label_keys[label_l_dict['key']] = l
 
         self.property_dict['children'].extend(property_dict_children)
-        self.label_dict['children'][1]['children'].extend(label_property_dict_children)
 
     def get_callbacks(self):
         """Initializing callbacks for PropertyPlotter Tool
@@ -1178,7 +1300,7 @@ class PropertyPlotter(Tool):
             ],
             [
                 State({'type': 'property-list','index': ALL},'checked'),
-                State({'type': 'label-list','index': ALL},'checked'),
+                State({'type': 'label-list','index': ALL},'value'),
                 State({'type': 'feature-bounds','index':ALL},'data'),
                 State({'type': 'property-plotter-store','index': ALL},'data')
             ]
@@ -1199,13 +1321,35 @@ class PropertyPlotter(Tool):
             ]
         )(self.select_data_from_plot)
 
-        # Running clustering and finding cluster marker features
+        # Clearing markers
+        self.blueprint.callback(
+            [
+                Input({'type':'selected-marker-delete','index': ALL},'n_clicks')
+            ],
+            [
+                Output({'type': 'map-marker-div','index': ALL},'children'),
+                Output({'type': 'property-plotter-store','index': ALL},'data'),
+                Output({'type': 'property-graph-selected-div','index': ALL},'children')
+            ],
+            [
+                State({'type': 'property-plotter-store','index': ALL},'data')
+            ]
+        )(self.remove_marker_label)
 
-        # Applying label to points
-
-        # Training a model to predict graph labels
-
-        # Exporting plotter data
+        # Updating sub-plot
+        self.blueprint.callback(
+            [
+                Input({'type': 'selected-sub-butt','index': ALL},'n_clicks'),
+                Input({'type': 'selected-sub-markers','index': ALL},'n_clicks')
+            ],
+            [
+                Output({'type':'selected-sub-div','index': ALL},'children')
+            ],
+            [
+                State({'type': 'selected-sub-drop','index': ALL},'value'),
+                State({'type': 'property-plotter-store','index': ALL},'data')
+            ]
+        )(self.update_sub_div)
 
     def gen_layout(self):
         """Generating layout for PropertyPlotter Tool
@@ -1257,26 +1401,15 @@ class PropertyPlotter(Tool):
                         )
                     ),
                     dbc.Row(
-                        dbc.Card(
-                            id = {'type': 'label-list-card','index': 0},
-                            children = [
-                                html.Div(
-                                    id = {'type': 'label-list-div','index': 0},
-                                    children = [
-                                        dta.TreeView(
-                                            id = {'type': 'label-list','index': 0},
-                                            multiple = True,
-                                            checkable = True,
-                                            checked = [],
-                                            selected = [],
-                                            expanded = [],
-                                            data = self.label_dict
-                                        )
-                                    ],
-                                    style = {'maxHeight': '250px','overflow': 'scroll'}
-                                )
-                            ]
-                        )
+                        children = [
+                            dbc.Label('Label for points: ',html_for = {'type':'label-list','index': 0}),
+                            dcc.Dropdown(
+                                id = {'type': 'label-list','index': 0},
+                                placeholder = 'Select a label',
+                                multi = False,
+                                options = self.available_properties
+                            )
+                        ]
                     ),
                     html.Hr(),
                     dbc.Row(
@@ -1331,7 +1464,7 @@ class PropertyPlotter(Tool):
         current_plot_data = json.loads(get_pattern_matching_value(current_plot_data))
 
         property_list = get_pattern_matching_value(property_list)
-        label_list = get_pattern_matching_value(label_list)
+        label_names = get_pattern_matching_value(label_list)
 
         # Don't do anything if not given properties
         if property_list is None:
@@ -1341,19 +1474,12 @@ class PropertyPlotter(Tool):
                 raise exceptions.PreventUpdate
 
         property_names = [self.property_keys[i] for i in property_list if i in self.property_keys]
-        if not label_list is None:
-            if label_list[0] in self.label_keys:
-                label_names = self.label_keys[label_list[0]]
-            else:
-                label_names = None
-        else:
-            label_names = None
-        
-
+            
         extracted_data = self.extract_data_from_features(current_features, property_names, label_names)
         current_plot_data['data'] = extracted_data
 
         data_df = pd.DataFrame.from_records(extracted_data).dropna(subset=property_names,how = 'all')
+        data_df.reset_index(inplace=True,drop=True)
         if len(property_names)==1:
             # Single feature visualization
             plot_figure = self.gen_violin_plot(
@@ -1375,9 +1501,8 @@ class PropertyPlotter(Tool):
                 before_cols = data_df.columns.tolist()
                 plot_cols = umap_cols.columns.tolist()
 
-                data_df = pd.concat([data_df,umap_cols],axis=1,ignore_index=True)
+                data_df = pd.concat([data_df,umap_cols],axis=1,ignore_index=True).fillna(0)
                 data_df.columns = before_cols + plot_cols
-
 
             elif len(property_names)==2:
                 plot_cols = property_names
@@ -1608,11 +1733,68 @@ class PropertyPlotter(Tool):
         scaled_data[~np.isfinite(scaled_data)] = 0.0
         umap_reducer = UMAP()
         embeddings = umap_reducer.fit_transform(scaled_data)
-        umap_df = pd.DataFrame(data = embeddings, columns = ['UMAP1','UMAP2'])
+        umap_df = pd.DataFrame(data = embeddings, columns = ['UMAP1','UMAP2']).fillna(0)
 
         umap_df.columns = ['UMAP1','UMAP2']
+        umap_df.reset_index(drop=True, inplace=True)
 
         return umap_df
+
+    def gen_selected_div(self, n_markers: int):
+        """Generate a new property-graph-selected-div after changing the number of markers
+
+        :param n_markers: New number of markers
+        :type n_markers: int
+        """
+
+        new_selected_div = [
+            html.Div([
+                html.H3(f'Selected Samples: {n_markers}'),
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col(
+                        dbc.Label('Select property for sub-plot: ',html_for = {'type': 'selected-sub-drop','index':0}),
+                        md = 3
+                    ),
+                    dbc.Col(
+                        dcc.Dropdown(
+                            options = self.available_properties,
+                            value = [],
+                            id = {'type': 'selected-sub-drop','index': 0},
+                            multi = False
+                        ),
+                        md = 9
+                    )
+                ],align='center'),
+                dbc.Row(
+                    dbc.Button(
+                        'Update Sub-Plot',
+                        className = 'd-grid col-12 mx-auto',
+                        n_clicks = 0,
+                        id = {'type': 'selected-sub-butt','index': 0},
+                        color = 'primary'
+                    )
+                ),
+                html.B(),
+                dbc.Row(
+                    dbc.Button(
+                        'See Selected Marker Features',
+                        className = 'd-grid col-12 mx-auto',
+                        n_clicks=0,
+                        id = {'type': 'selected-sub-markers','index':0},
+                        color = 'secondary'
+                    )
+                ),
+                dbc.Row(
+                    html.Div(
+                        id = {'type': 'selected-sub-div','index': 0},
+                        children = 0
+                    )
+                )
+            ])
+        ]
+
+        return new_selected_div
 
     def select_data_from_plot(self, selected_data, current_plot_data):
         """Updating selected data tab based on selection in primary graph
@@ -1668,8 +1850,7 @@ class PropertyPlotter(Tool):
         current_plot_data = [json.dumps(current_plot_data)]
 
         # Update property_graph_selected_div
-        
-
+        property_graph_selected_div = self.gen_selected_div(len(map_marker))
 
 
         return property_graph_selected_div, [map_marker_div], current_plot_data
@@ -1691,10 +1872,9 @@ class PropertyPlotter(Tool):
         # Property summary tab
         property_summary_children = []
         if not label_col is None:
-            unique_labels = data_df[label_col].unique().tolist()
+            unique_labels = [i for i in data_df[label_col].unique().tolist() if type(i)==str]
             for u_idx, u in enumerate(unique_labels):
-
-                label_data = data_df[data_df[label_col].str.match(u)].loc[:,[i for i in property_cols if i in data_df]]
+                label_data = data_df[data_df[label_col].astype(str).str.match(u)].loc[:,[i for i in property_cols if i in data_df]]
                 summary = label_data.describe().round(decimals=4)
                 summary.reset_index(inplace=True,drop=False)
 
@@ -1737,7 +1917,7 @@ class PropertyPlotter(Tool):
                 html.H3('All Samples'),
                 html.Hr(),
                 dash_table.DataTable(
-                    id = {'type': 'property-summary-table','index': u_idx},
+                    id = {'type': 'property-summary-table','index': 0},
                     columns = [{'name': i, 'id': i, 'deletable': False, 'selectable': True} for i in summary.columns],
                     data = summary.to_dict('records'),
                     editable = False,
@@ -1980,8 +2160,8 @@ class PropertyPlotter(Tool):
                         html.Div(
                             dash_table.DataTable(
                                 id='silhouette-table',
-                                columns = [{'name':i,'id':i} for i in results['silhouette_samples'].columns],
-                                data = results['silhouette_samples'].to_dict('records'),
+                                columns = [{'name':i,'id':i} for i in results['samples_silhouette'].columns],
+                                data = results['samples_silhouette'].to_dict('records'),
                                 style_cell = {
                                     'overflow':'hidden',
                                     'textOverflow':'ellipsis',
@@ -1991,7 +2171,7 @@ class PropertyPlotter(Tool):
                                     {
                                         column: {'value':str(value),'type':'markdown'}
                                         for column,value in row.items()
-                                    } for row in results['silhouette_samples'].to_dict('records')
+                                    } for row in results['samples_silhouette'].to_dict('records')
                                 ],
                                 tooltip_duration = None,
                                 style_data_conditional = [
@@ -2053,6 +2233,69 @@ class PropertyPlotter(Tool):
         )
 
         return property_plot_tabs
+
+    def remove_marker_label(self, delete_click, current_plot_data):
+        """Remove marker from selected feature
+
+        :param delete_click: Clear marker button clicked
+        :type delete_click: list
+        :param current_plot_data: Current data for plot
+        :type current_plot_data: list
+        :return: Updating current markers on SlideMap, current plot data, and property-graph-selected-div
+        :rtype: tuple
+        """
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        current_plot_data = json.loads(get_pattern_matching_value(current_plot_data))
+        n_marked = len(current_plot_data['selected']['points'])
+
+        patched_list = Patch()
+        values_to_remove = []
+        for i, val in enumerate(delete_click):
+            if val:
+                values_to_remove.insert(0,i)
+
+        for v in values_to_remove:
+            del patched_list[v]
+            del current_plot_data['selected']['points'][v]
+        
+        
+        current_plot_data = [json.dumps(current_plot_data)]
+
+        new_selected_div = self.update_selected_div(n_marked-1)
+
+        return patched_list, current_plot_data, new_selected_div
+
+    def update_sub_div(self, plot_butt_clicked, marker_butt_clicked, sub_plot_value, current_plot_data):
+        """Updating the property-graph-selected-div based on selection of either a property to plot a sub-plot of or whether the marker properties button was clicked
+
+        :param plot_butt_clicked: Update sub-plot button was clicked
+        :type plot_butt_clicked: list
+        :param marker_butt_clicked: Get marker features for selected samples clicked
+        :type marker_butt_clicked: list
+        :param current_plot_data: Current data in the plot
+        :type current_plot_data: list
+        :return: Updated children of the selected-property-graph-div including either sub-plot or table of marker features
+        :rtype: tuple
+        """
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        current_plot_data = json.loads(get_pattern_matching_value(current_plot_data))
+        sub_plot_value = get_pattern_matching_value(sub_plot_value)
+        sub_div_content = []
+
+        if ctx.triggered_id['type']=='selected-sub-butt':
+            if not sub_plot_value is None:
+                # Pulling selected data points from current plot_data
+                current_selected = current_plot_data['selected']['points']
+                print(current_selected)
+
+        return [sub_div_content]
+
 
 class FeatureAnnotator(Tool):
     """FeatureAnnotator Tool used to annotate individual GeoJSON features.
