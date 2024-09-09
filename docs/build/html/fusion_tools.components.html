@@ -109,6 +109,21 @@
 </dd>
 </dl>
 <dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.maps.ChannelMixer.add_color_selector_tab">
+<span class="sig-name descname"><span class="pre">add_color_selector_tab</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">channel_mix_values</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_colors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.ChannelMixer.add_color_selector_tab" title="Link to this definition"></a></dt>
+<dd><p>Add a new color selector tab to channel-mixer-parent for selecting overlaid channel color</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>channel_mix_values</strong> (<em>list</em>) – Selected list of channels to overlay</p></li>
+<li><p><strong>current_channels</strong> (<em>list</em>) – Current set of overlaid channels (names)</p></li>
+<li><p><strong>current_colors</strong> (<em>list</em>) – Current set of overlaid channels (colors)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.ChannelMixer.gen_layout">
 <span class="sig-name descname"><span class="pre">gen_layout</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.ChannelMixer.gen_layout" title="Link to this definition"></a></dt>
 <dd><p>Generating layout for ChannelMixer component</p>
@@ -125,7 +140,40 @@
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.ChannelMixer.get_callbacks">
 <span class="sig-name descname"><span class="pre">get_callbacks</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.ChannelMixer.get_callbacks" title="Link to this definition"></a></dt>
-<dd></dd></dl>
+<dd><p>Initializing callbacks and adding to DashBlueprint</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.maps.ChannelMixer.process_frames">
+<span class="sig-name descname"><span class="pre">process_frames</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.ChannelMixer.process_frames" title="Link to this definition"></a></dt>
+<dd><p>Extracting names for each frame for easy reference</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.maps.ChannelMixer.update_channel_mix">
+<span class="sig-name descname"><span class="pre">update_channel_mix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">butt_click</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_colors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.ChannelMixer.update_channel_mix" title="Link to this definition"></a></dt>
+<dd><p>Updating urls of all tile layers to include selected overlay channels</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>butt_click</strong> (<em>list</em>) – Button clicked to update channel mix</p></li>
+<li><p><strong>current_channels</strong> (<em>list</em>) – Names of channels to overlay</p></li>
+<li><p><strong>current_colors</strong> (<em>list</em>) – Colors of channels to overlay</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.maps.ChannelMixer.update_tab_style">
+<span class="sig-name descname"><span class="pre">update_tab_style</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">color_select</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.ChannelMixer.update_tab_style" title="Link to this definition"></a></dt>
+<dd><p>Updating color of tab label based on selection</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>color_select</strong> (<em>str</em>) – “rgba” formatted color selection</p>
+</dd>
+</dl>
+</dd></dl>
 
 </dd></dl>
 
@@ -162,10 +210,10 @@ For more information see dash-leaflet: <a class="reference external" href="https
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="fusion_tools.components.maps.MultiFrameSlideMap.get_callbacks">
-<span class="sig-name descname"><span class="pre">get_callbacks</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.MultiFrameSlideMap.get_callbacks" title="Link to this definition"></a></dt>
-<dd><p>Initializing callback functions for interactive components in SlideMap.
-Adding these callbacks to the DashBlueprint() object enable embedding into other layouts.</p>
+<dt class="sig sig-object py" id="fusion_tools.components.maps.MultiFrameSlideMap.process_frames">
+<span class="sig-name descname"><span class="pre">process_frames</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.MultiFrameSlideMap.process_frames" title="Link to this definition"></a></dt>
+<dd><p>Create BaseLayer and TileLayer components for each of the different frames present in a multi-frame image
+Also initializes base tile url and styled tile url</p>
 </dd></dl>
 
 </dd></dl>
@@ -366,7 +414,8 @@ These annotations can include either drawings highlighting regions within a feat
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.HRAViewer.gen_layout">
 <span class="sig-name descname"><span class="pre">gen_layout</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.HRAViewer.gen_layout" title="Link to this definition"></a></dt>
-<dd></dd></dl>
+<dd><p>Generate layout for HRA Viewer component</p>
+</dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.HRAViewer.get_callbacks">
@@ -408,6 +457,29 @@ These annotations can include either drawings highlighting regions within a feat
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.tools.OverlayOptions.adv_update_overlays">
+<span class="sig-name descname"><span class="pre">adv_update_overlays</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">butt_click</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">colorbar_width</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">line_width</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">colormap_val</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_feature_hideout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.OverlayOptions.adv_update_overlays" title="Link to this definition"></a></dt>
+<dd><p>Update some additional properties of the overlays and display.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>butt_click</strong> (<em>list</em>) – Button clicked to update overlay properties</p></li>
+<li><p><strong>colorbar_width</strong> (<em>list</em>) – Width of colorbar in pixels</p></li>
+<li><p><strong>line_width</strong> (<em>list</em>) – Width of structure boundaries in pixels</p></li>
+<li><p><strong>colormap_val</strong> (<em>list</em>) – Colormap option to pass to chroma</p></li>
+<li><p><strong>current_feature_hideout</strong> (<em>list</em>) – Current hideout properties for all structures</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Updated colorbar width, line width, and colormap</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
 </dd>
 </dl>
 </dd></dl>
@@ -614,6 +686,17 @@ Allows for generation of violin plots, scatter plots, and UMAP plots.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyPlotter.gen_selected_div">
+<span class="sig-name descname"><span class="pre">gen_selected_div</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_markers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter.gen_selected_div" title="Link to this definition"></a></dt>
+<dd><p>Generate a new property-graph-selected-div after changing the number of markers</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>n_markers</strong> (<em>int</em>) – New number of markers</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyPlotter.gen_umap_cols">
 <span class="sig-name descname"><span class="pre">gen_umap_cols</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data_df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">property_columns</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">DataFrame</span></span></span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter.gen_umap_cols" title="Link to this definition"></a></dt>
 <dd><p>Scale and run UMAP for dimensionality reduction</p>
@@ -669,6 +752,48 @@ Allows for generation of violin plots, scatter plots, and UMAP plots.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyPlotter.make_property_plot_tabs">
+<span class="sig-name descname"><span class="pre">make_property_plot_tabs</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data_df</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">DataFrame</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label_col</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">property_cols</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">customdata_cols</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter.make_property_plot_tabs" title="Link to this definition"></a></dt>
+<dd><p>Generate property plot description tabs</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>data_df</strong> (<em>pd.DataFrame</em>) – Current data used to generate the plot</p></li>
+<li><p><strong>label_col</strong> (<em>Union</em><em>[</em><em>str</em><em>,</em><em>None</em><em>]</em>) – Column of data_df used to label points in the plot.</p></li>
+<li><p><strong>property_cols</strong> (<em>list</em>) – Column(s) of data_df plotted in the plot.</p></li>
+<li><p><strong>customdata_cols</strong> (<em>list</em>) – Column(s) used in the “customdata” field of points in the plot</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>List of tabs including summary statistics, clustering options, selected data options</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyPlotter.remove_marker_label">
+<span class="sig-name descname"><span class="pre">remove_marker_label</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">delete_click</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_plot_data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter.remove_marker_label" title="Link to this definition"></a></dt>
+<dd><p>Remove marker from selected feature</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>delete_click</strong> (<em>list</em>) – Clear marker button clicked</p></li>
+<li><p><strong>current_plot_data</strong> (<em>list</em>) – Current data for plot</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Updating current markers on SlideMap, current plot data, and property-graph-selected-div</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyPlotter.select_data_from_plot">
 <span class="sig-name descname"><span class="pre">select_data_from_plot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">selected_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_plot_data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter.select_data_from_plot" title="Link to this definition"></a></dt>
 <dd><p>Updating selected data tab based on selection in primary graph</p>
@@ -719,6 +844,27 @@ Allows for generation of violin plots, scatter plots, and UMAP plots.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
 <dd class="field-even"><p>tuple</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyPlotter.update_sub_div">
+<span class="sig-name descname"><span class="pre">update_sub_div</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">plot_butt_clicked</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">marker_butt_clicked</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">sub_plot_value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_plot_data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter.update_sub_div" title="Link to this definition"></a></dt>
+<dd><p>Updating the property-graph-selected-div based on selection of either a property to plot a sub-plot of or whether the marker properties button was clicked</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>plot_butt_clicked</strong> (<em>list</em>) – Update sub-plot button was clicked</p></li>
+<li><p><strong>marker_butt_clicked</strong> (<em>list</em>) – Get marker features for selected samples clicked</p></li>
+<li><p><strong>current_plot_data</strong> (<em>list</em>) – Current data in the plot</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Updated children of the selected-property-graph-div including either sub-plot or table of marker features</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
 </dd>
 </dl>
 </dd></dl>

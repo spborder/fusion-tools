@@ -1,6 +1,15 @@
 # Changelog
 
 <!--next-version-placeholder-->
+## v0.0.6 (09/09/2024)
+
+### Fix
+- Some fixes for PropertyPlotter
+
+### Features
+- Adding MultiFrameSlideMap and ChannelMixer components for visualization of multi-frame images
+- Added functionality in PropertyPlotter for selected data
+
 ## v0.0.5 (08/29/2024)
 
 ### Fix
