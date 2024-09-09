@@ -689,8 +689,7 @@ class MultiFrameSlideMap(SlideMap):
                                     url = self.tiles_url+'/?style={"bands": [{"palette":["rgba(0,0,0,0)","rgba(255,255,255,255)"],"framedelta":'+str(f_idx)+'}]}',
                                     tileSize = self.image_metadata['tileWidth'],
                                     maxNativeZoom=self.image_metadata['levels']-1,
-                                    id = {'type': 'tile-layer','index': np.random.randint(0,1000)},
-                                    bounds = [[0,0],[-self.image_metadata['tileWidth'],self.image_metadata['tileWidth']]]
+                                    id = {'type': 'tile-layer','index': np.random.randint(0,1000)}
                                 ),
                                 name = f,
                                 checked = f==frame_names[0],
@@ -728,7 +727,6 @@ class MultiFrameSlideMap(SlideMap):
                 )
         else:
             raise TypeError("Missing 'frames' key in image metadata")
-
 
 class SlideImageOverlay(MapComponent):
     """Image overlay on specific coordinates within a SlideMap
@@ -780,12 +778,26 @@ class ChannelMixer(MapComponent):
         :type tiles_url: str
         """
         self.image_metadata = image_metadata
+        self.tiles_url = tiles_url
+
+        self.process_frames()
 
         self.title = 'Channel Mixer'
         self.blueprint = DashBlueprint()
         self.blueprint.layout = self.gen_layout()
 
         self.get_callbacks()
+    
+    def process_frames(self):
+        """Extracting names for each frame for easy reference
+        """
+        if 'frames' in self.image_metadata:
+            if len(self.image_metadata['frames'])>0:
+                self.frame_names = [i['Channel'] if 'Channel' in i else f'Frame {idx}' for idx,i in enumerate(self.image_metadata['frames'])]
+            else:
+                raise IndexError("No frames found in this image!")
+        else:
+            raise TypeError("Image is not multi-frame")
 
     def gen_layout(self):
         """Generating layout for ChannelMixer component
@@ -794,16 +806,234 @@ class ChannelMixer(MapComponent):
         :rtype: dash.html.Div.Div
         """
         layout = html.Div([
-
+            dbc.Card([
+                dbc.CardBody([
+                    dbc.Row([
+                        html.H3('Channel Mixer')
+                    ]),
+                    html.Hr(),
+                    dbc.Row(
+                        'Select one or more channels and colors to view at the same time.'
+                    ),
+                    html.Hr(),
+                    dbc.Row(
+                        dbc.Label('Select Channels below: ',html_for = {'type':'channel-mixer-drop','index': 0}),
+                        style = {'marginBottom': '5px'}
+                    ),
+                    dbc.Row([
+                        dcc.Dropdown(
+                            id = {'type': 'channel-mixer-drop','index': 0},
+                            options = [
+                                {
+                                    'label': label, 'value': label
+                                }
+                                for idx,label in enumerate(self.frame_names)
+                            ],
+                            value = [],
+                            multi = True,
+                            disabled = False
+                        )
+                    ]),
+                    dbc.Row([
+                        html.Div(
+                            id = {'type': 'channel-mixer-color-parent','index': 0},
+                            children = [],
+                            style = {'marginTop': '5px','marginBottom': '5px'}
+                        )
+                    ]),
+                    dbc.Row([
+                        dbc.Button(
+                            'Overlay Channels!',
+                            id = {'type': 'channel-mixer-butt','index': 0},
+                            className = 'd-grid col-12 mx-auto',
+                            disabled = False,
+                            n_clicks = 0
+                        )
+                    ])
+                ])
+            ])
         ])
-
 
         return layout
 
     def get_callbacks(self):
-        pass
+        """Initializing callbacks and adding to DashBlueprint
+        """
 
+        self.blueprint.callback(
+            [
+                Input({'type': 'channel-mixer-drop','index':ALL},'value')
+            ],
+            [
+                State({'type': 'channel-mixer-tab','index': ALL},'label'),
+                State({'type': 'channel-mixer-tab','index': ALL},'label_style')
+            ],
+            [
+                Output({'type': 'channel-mixer-color-parent','index': ALL},'children')
+            ]
+        )(self.add_color_selector_tab)
+
+        self.blueprint.callback(
+            [
+                Input({'type': 'channel-mixer-color','index': MATCH},'value')
+            ],
+            [
+                Output({'type': 'channel-mixer-tab','index': MATCH},'label_style')
+            ]
+        )(self.update_tab_style)
+
+        self.blueprint.callback(
+            [
+                Input({'type': 'channel-mixer-butt','index':ALL},'n_clicks')
+            ],
+            [
+                State({'type': 'channel-mixer-tab','index': ALL},'label'),
+                State({'type': 'channel-mixer-tab','index': ALL},'label_style')
+            ],
+            [
+                Output({'type': 'tile-layer','index': ALL},'url')
+            ]
+        )(self.update_channel_mix)
+
+    def add_color_selector_tab(self, channel_mix_values: Union[list,None], current_channels:Union[list,None], current_colors: Union[list,None]):
+        """Add a new color selector tab to channel-mixer-parent for selecting overlaid channel color
+
+        :param channel_mix_values: Selected list of channels to overlay
+        :type channel_mix_values: list
+        :param current_channels: Current set of overlaid channels (names)
+        :type current_channels: list
+        :param current_colors: Current set of overlaid channels (colors)
+        :type current_colors: list
+        """
+
+        channel_mix_values = get_pattern_matching_value(channel_mix_values)
+        
+        if current_channels is None:
+            current_channels = []
+        
+        channel_mix_tabs = []
+        for c_idx, c in enumerate(channel_mix_values):
+            if not c in current_channels:
+                channel_tab = dbc.Tab(
+                    id = {'type': 'channel-mixer-tab','index': c_idx},
+                    tab_id = c.lower().replace(' ','-'),
+                    label = c,
+                    activeTabClassName='fw-bold fst-italic',
+                    label_style = {'color': 'rgb(0,0,0,255)'},
+                    children = [
+                        dmc.ColorPicker(
+                            id = {'type': 'channel-mixer-color','index': c_idx},
+                            format = 'rgba',
+                            value = 'rgba(255,255,255,255)',
+                            fullWidth=True
+                        )
+                    ]
+                )
+            else:
+                channel_tab = dbc.Tab(
+                    id = {'type': 'channel-mixer-tab','index': c_idx},
+                    tab_id = c.lower().replace(' ','-'),
+                    label = c,
+                    activeTabClassName='fw-bold fst-italic',
+                    label_style = current_colors[c_idx],
+                    children = [
+                        dmc.ColorPicker(
+                            id = {'type': 'channel-mixer-color','index': c_idx},
+                            format='rgba',
+                            value = current_colors[c_idx]['color'],
+                            fullWidth = True
+                        )
+                    ]
+                )
+
+            channel_mix_tabs.append(channel_tab)
+
+        channel_tabs = dbc.Tabs(
+            id = {'type': 'channel-mixer-tabs','index': 0},
+            children = channel_mix_tabs,
+            active_tab = c.lower().replace(' ','-')
+        )
+
+        return [channel_tabs]
+
+    def update_tab_style(self, color_select):
+        """Updating color of tab label based on selection
+
+        :param color_select: "rgba" formatted color selection
+        :type color_select: str
+        """
+        if not ctx.triggered:
+            raise exceptions.PreventUpdate
+        
+        return {'color': color_select}
     
+    def update_channel_mix(self, butt_click:list, current_channels:list,current_colors:list):
+        """Updating urls of all tile layers to include selected overlay channels
+
+        :param butt_click: Button clicked to update channel mix
+        :type butt_click: list
+        :param current_channels: Names of channels to overlay
+        :type current_channels: list
+        :param current_colors: Colors of channels to overlay
+        :type current_colors: list
+        """
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        style_dict = {"bands": []}
+        for c in range(len(current_channels)):
+            
+            # Checking that the alpha channel is uint8
+            rgba_val = current_colors[c]['color']
+            alpha_val = rgba_val.split(', ')[-1].replace(')','')
+
+            if not alpha_val=='255':
+                current_colors[c]['color'] = rgba_val.replace(alpha_val,str(int(255*float(alpha_val))))
+            
+            style_dict['bands'].append(
+                {
+                    "palette": ["rgba(0,0,0,0)",current_colors[c]["color"]],
+                    "framedelta": self.frame_names.index(current_channels[c])
+                }
+            )
+
+
+        styled_urls = []
+        if all([i in self.frame_names for i in ['red','green','blue']]):
+            # There can be an RGB image by default
+            rgb_style_dict = {
+                "bands": [
+                    {
+                        "palette": ["rgba(0,0,0,0)",'rgba('+','.join(['255' if i==c_idx else '0' for i in range(3)]+['0'])+')'],
+                        "framedelta": self.frame_names.index(c)
+                    }
+                    for c_idx,c in enumerate(['red','green','blue'])
+                ]
+            }
+
+        else:
+            rgb_style_dict = None
+
+        styled_urls = []
+        for f in self.frame_names:
+            f_dict = {
+                "bands": [
+                    {
+                        "palette": ["rgba(0,0,0,0)","rgba(255,255,255,255)"],
+                        "framedelta": self.frame_names.index(f)
+                    }
+                ]
+            }
+            styled_urls.append(
+                self.tiles_url+'/?style='+json.dumps({"bands":f_dict["bands"]+style_dict["bands"]})
+            )
+        if not rgb_style_dict is None:
+            styled_urls.append(
+                self.tiles_url+'/?style='+json.dumps({"bands":rgb_style_dict["bands"]+style_dict["bands"]})
+            )
+
+        return styled_urls
 
 
 

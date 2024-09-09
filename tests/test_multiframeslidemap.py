@@ -10,14 +10,14 @@ import threading
 sys.path.append('./src/')
 from fusion_tools import Visualization, DSAHandler
 from fusion_tools.tileserver import DSATileServer
-from fusion_tools.components import MultiFrameSlideMap
+from fusion_tools.components import MultiFrameSlideMap, ChannelMixer
 
 
 def main():
 
     # Grabbing first item from demo DSA instance
-    base_url = 'https://demo.kitware.com/histomicstk/api/v1'
-    item_id = '60e6135c25f89bfa9369f2c9'
+    base_url = 'http://ec2-3-230-122-132.compute-1.amazonaws.com:8080/api/v1'
+    item_id = '66b0d60452d091f0af6ef839'
 
     # Starting visualization session
     tile_server = DSATileServer(
@@ -45,6 +45,10 @@ def main():
                 MultiFrameSlideMap(
                     tile_server = tile_server,
                     annotations = annotations
+                ),
+                ChannelMixer(
+                    image_metadata = tile_server.tiles_metadata,
+                    tiles_url = tile_server.tiles_url
                 )
             ]
         ]
