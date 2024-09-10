@@ -563,7 +563,6 @@ class SlideMap(MapComponent):
         else:
             raise exceptions.PreventUpdate
 
-
 class MultiFrameSlideMap(SlideMap):
     """MultiFrameSlideMap component, containing an image with multiple frames which are added as additional, selectable dl.TileLayer() components
 
@@ -1034,12 +1033,6 @@ class ChannelMixer(MapComponent):
             )
 
         return styled_urls
-
-
-
-
-
-
 
 
 

@@ -163,7 +163,14 @@ vis_session.start()
 
 ## Contributing
 
-please
+Open to contributions. Feel free to submit a PR or post feature requests in [Issues](https://github.com/spborder/fusion-tools/issues)
+
+### Open Projects:
+- Automated segmentation workflow for locally stored images (active-learning, SAM, etc.)
+- Monitoring long-running model training/other external processes
+- Import anndata spatial --omics dataset
+
+
 
 ## License
 `fusion-tools` was created by Samuel Border. It is licensed under the terms of the Apache 2.0 License

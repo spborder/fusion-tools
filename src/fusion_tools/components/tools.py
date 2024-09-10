@@ -2288,11 +2288,15 @@ class PropertyPlotter(Tool):
         sub_plot_value = get_pattern_matching_value(sub_plot_value)
         sub_div_content = []
 
+        print(sub_plot_value)
+
         if ctx.triggered_id['type']=='selected-sub-butt':
             if not sub_plot_value is None:
                 # Pulling selected data points from current plot_data
                 current_selected = current_plot_data['selected']['points']
                 print(current_selected)
+
+
 
         return [sub_div_content]
 
