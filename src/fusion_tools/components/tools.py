@@ -28,6 +28,7 @@ dash._dash_renderer._set_react_version('18.2.0')
 import dash_leaflet as dl
 import dash_leaflet.express as dlx
 from dash import dcc, callback, ctx, ALL, MATCH, exceptions, Patch, no_update, dash_table
+from dash.dash_table.Format import Format, Scheme
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import dash_treeview_antd as dta
@@ -36,7 +37,7 @@ from dash_extensions.enrich import DashBlueprint, html, Input, Output, State
 # fusion-tools imports
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 from fusion_tools.utils.shapes import find_intersecting
-from fusion_tools.utils.stats import get_label_statistics
+from fusion_tools.utils.stats import get_label_statistics, run_wilcox_rank_sum
 
 
 
@@ -1351,7 +1352,9 @@ class PropertyPlotter(Tool):
             ],
             [
                 State({'type': 'selected-sub-drop','index': ALL},'value'),
-                State({'type': 'property-plotter-store','index': ALL},'data')
+                State({'type': 'property-plotter-store','index': ALL},'data'),
+                State({'type': 'feature-bounds','index': ALL},'data'),
+                State({'type': 'label-list','index': ALL},'value')
             ]
         )(self.update_sub_div)
 
@@ -1490,7 +1493,7 @@ class PropertyPlotter(Tool):
                 data_df = data_df,
                 label_col = label_names,
                 property_column = property_names[0],
-                customdata_columns=['bbox']
+                customdata_columns=['bbox','point_info']
             )
 
         elif len(property_names)>1:
@@ -1515,16 +1518,63 @@ class PropertyPlotter(Tool):
                 data_df = data_df,
                 plot_cols = plot_cols,
                 label_cols = label_names,
-                customdata_cols = ['bbox']
+                customdata_cols = ['bbox','point_info']
             )
 
         current_plot_data = json.dumps(current_plot_data)
 
-        property_graph_tabs_div = self.make_property_plot_tabs(data_df,label_names,property_names,['bbox'])
+        property_graph_tabs_div = self.make_property_plot_tabs(data_df,label_names,property_names,['bbox','point_info'])
 
         return [plot_figure], [property_graph_tabs_div], [current_plot_data]
 
-    def extract_data_from_features(self, geo_list:list, properties:list, labels:list)->list:
+    def extract_property(self, feature: dict, properties:list, labels:list)->dict:
+        """Extracting list of properties and labels from a single feature in a GeoJSON FeatureCollection
+
+        :param feature: One Feature in GeoJSON FeatureCollection
+        :type feature: dict
+        :param properties: List of property names to extract
+        :type properties: list
+        :param labels: List of properties used as labels to extract
+        :type labels: list
+        :return: Dictionary of properties and labels for a single Feature
+        :rtype: dict
+        """
+
+        f_dict = {}
+        for p in properties:
+            if '-->' not in p:
+                if p in feature['properties']:
+                    if not type(feature['properties'][p])==dict:
+                        try:
+                            f_dict[p] = float(feature['properties'][p])
+                        except ValueError:
+                            f_dict[p] = feature['properties'][p]
+            else:
+                split_p = p.split(' --> ')
+                if split_p[0] in feature['properties']:
+                    if split_p[1] in feature['properties'][split_p[0]]:
+                        if not type(feature['properties'][split_p[0]][split_p[1]])==dict:
+                            try:
+                                f_dict[p] = float(feature['properties'][split_p[0]][split_p[1]])
+                            except ValueError:
+                                f_dict[p] = feature['properties'][split_p[0]][split_p[1]]
+        
+        if not labels is None:
+            if type(labels)==list:
+                for l in labels:
+                    if l in feature['properties']:
+                        f_dict[l] = feature['properties'][l]
+            elif type(labels)==str:
+                if labels in feature['properties']:
+                    f_dict[labels] = feature['properties'][labels]
+
+        # Getting bounding box info
+        f_bbox = list(shape(feature['geometry']).bounds)
+        f_dict['bbox'] = f_bbox
+
+        return f_dict
+
+    def extract_data_from_features(self, geo_list:list, properties:list, labels:list, filter_list: Union[list,None] = None)->list:
         """Iterate through properties and extract data based on selection
 
 
@@ -1534,39 +1584,33 @@ class PropertyPlotter(Tool):
         :type properties: list
         :param labels: List of labels to use in the current plot (should just be one element)
         :type labels: list
+        :param filter_list: List of dictionaries containing g_idx and f_idx corresponding to the layers and features to extract data from
+        :param filter_list: Union[list,None], optional
         :return: Extracted data to use for the plot
         :rtype: list
         """
         extract_data = []
-        for g_idx, g in enumerate(geo_list):
-            for f_idx, f in enumerate(g['features']):
-                f_dict = {}
-                for p in properties:
-                    if '-->' not in p:
-                        if p in f['properties']:
-                            if not type(f['properties'][p])==dict:
-                                f_dict[p] = float(f['properties'][p])
-                    else:
-                        split_p = p.split(' --> ')
-                        if split_p[0] in f['properties']:
-                            if split_p[1] in f['properties'][split_p[0]]:
-                                if not type(f['properties'][split_p[0]][split_p[1]])==dict:
-                                    f_dict[p] = float(f['properties'][split_p[0]][split_p[1]])
-                
-                if not labels is None:
-                    if type(labels)==list:
-                        for l in labels:
-                            if l in f['properties']:
-                                f_dict[l] = f['properties'][l]
-                    elif type(labels)==str:
-                        if labels in f['properties']:
-                            f_dict[labels] = f['properties'][labels]
+        print(filter_list)
+        if filter_list is None:
+            for g_idx, g in enumerate(geo_list):
+                for f_idx, f in enumerate(g['features']):
+                    
+                    f_dict = self.extract_property(f, properties, labels)
+                    f_dict['point_info'] = {'g_idx': g_idx, 'f_idx': f_idx}
 
-                # Getting bounding box info
-                f_bbox = list(shape(f['geometry']).bounds)
-                f_dict['bbox'] = f_bbox
+                    extract_data.append(f_dict)
 
-                extract_data.append(f_dict)
+        else:
+            unique_gs = list(set([i['g_idx'] for i in filter_list]))
+            fs_for_gs = [[i['f_idx'] for i in filter_list if i['g_idx']==g] for g in unique_gs]
+
+            for f_list,g in zip(fs_for_gs,unique_gs):
+                for f in f_list:
+
+                    f_dict = self.extract_property(geo_list[g]['features'][f], properties, labels)
+                    f_dict['point_info'] = {'g_idx': g, 'f_idx': f}
+
+                    extract_data.append(f_dict)
 
         return extract_data
 
@@ -2272,7 +2316,7 @@ class PropertyPlotter(Tool):
 
         return patched_list, current_plot_data, new_selected_div
 
-    def update_sub_div(self, plot_butt_clicked, marker_butt_clicked, sub_plot_value, current_plot_data):
+    def update_sub_div(self, plot_butt_clicked, marker_butt_clicked, sub_plot_value, current_plot_data, current_features, current_labels):
         """Updating the property-graph-selected-div based on selection of either a property to plot a sub-plot of or whether the marker properties button was clicked
 
         :param plot_butt_clicked: Update sub-plot button was clicked
@@ -2281,6 +2325,10 @@ class PropertyPlotter(Tool):
         :type marker_butt_clicked: list
         :param current_plot_data: Current data in the plot
         :type current_plot_data: list
+        :param current_features: Current set of GeoJSON FeatureCollections on the SlideMap
+        :type current_features: list
+        :param current_labels: Current labels applied to the main plot
+        :type current_labels: list
         :return: Updated children of the selected-property-graph-div including either sub-plot or table of marker features
         :rtype: tuple
         """
@@ -2290,16 +2338,111 @@ class PropertyPlotter(Tool):
         
         current_plot_data = json.loads(get_pattern_matching_value(current_plot_data))
         sub_plot_value = get_pattern_matching_value(sub_plot_value)
+        current_labels = get_pattern_matching_value(current_labels)
         sub_div_content = []
-
-        print(sub_plot_value)
 
         if ctx.triggered_id['type']=='selected-sub-butt':
             if not sub_plot_value is None:
                 # Pulling selected data points from current plot_data
                 current_selected = current_plot_data['selected']['points']
-                print(current_selected)
+                
+                selected_data = self.extract_data_from_features(
+                    geo_list=current_features,
+                    properties=[sub_plot_value],
+                    labels = current_labels,
+                    filter_list = [i['customdata'][1] for i in current_selected]
+                )
 
+                if len(selected_data)>0:
+                    data_df = pd.DataFrame.from_records(selected_data).dropna(subset= [sub_plot_value],how='all')
+                    data_df.reset_index(inplace=True,drop=True)
+
+                    sub_plot_figure = self.gen_violin_plot(
+                        data_df = data_df,
+                        label_col = current_labels,
+                        property_column = sub_plot_value,
+                        customdata_columns = ['bbox','point_info']
+                    )
+
+                    sub_div_content = dcc.Graph(
+                        id = {'type': 'property-sub-graph','index': 0},
+                        figure = sub_plot_figure
+                    )
+                else:
+                    sub_div_content = dbc.Alert(
+                        f'Property: {sub_plot_value} not found in selected points!',
+                        color = 'warning'
+                    )
+
+        elif ctx.triggered_id['type'] == 'selected-sub-markers':
+            current_selected = current_plot_data['selected']['points']
+
+            selected_data = self.extract_data_from_features(
+                geo_list = current_features,
+                properties = self.available_properties,
+                labels = current_labels,
+                filter_list = [i['customdata'][1] for i in current_selected]
+            )
+
+            selected_data = pd.DataFrame.from_records(selected_data)
+            wilcox_results = run_wilcox_rank_sum(
+                data_df = selected_data,
+                label_col= current_labels
+            )
+
+            wilcox_df = pd.DataFrame.from_records(wilcox_results)
+
+            if not wilcox_df.empty:
+                
+                #TODO: Sorting columns using 'native' does not work for exponents. Ignores exponent part.
+                sub_div_content = dash_table.DataTable(
+                    id = {'type': 'property-sub-wilcox','index': 0},
+                    #sort_mode = 'multi',
+                    #sort_action = 'native',
+                    filter_action = 'native',
+                    columns = [
+                        {'name': i, 'id': i}
+                        if not 'p Value' in i or 'statistic' in i else
+                        {'name': i,'id': i, 'type': 'numeric', 'format': Format(precision=3,scheme=Scheme.decimal_or_exponent)}
+                        for i in wilcox_df.columns
+                    ],
+                    data = wilcox_df.to_dict('records'),
+                    style_cell = {
+                        'overflow': 'hidden',
+                        'textOverflow': 'ellipsis',
+                        'maxWidth': 0
+                    },
+                    tooltip_data = [
+                        {
+                            column: {'value': str(value), 'type': 'markdown'}
+                            for column, value in row.items()
+                        } for row in wilcox_df.to_dict('records')
+                    ],
+                    tooltip_duration = None,
+                    style_data_conditional=[
+                        {
+                            'if': {
+                                'filter_query': '{p Value Adjusted} <0.05',
+                                'column_id': 'p Value Adjusted'
+                            },
+                            'backgroundColor': 'tomato',
+                            'color': 'white'
+                        },
+                        {
+                            'if': {
+                                'filter_query': '{p Value Adjusted} >=0.05',
+                                'column_id': 'p Value Adjusted'
+                            },
+                            'backgroundColor': 'lightblue',
+                            'color': 'white'
+                        }
+                    ]
+                )
+            else:
+                sub_div_content = dbc.Alert(
+                    'No significant values found!',
+                    color = 'warning'
+                )
 
 
         return [sub_div_content]
@@ -2339,8 +2482,6 @@ class HRAViewer(Tool):
     def __init__(self):
         """Constructor method
         """
-
-
         self.asct_b_version = 7
 
         self.asct_b_release = pd.read_csv(

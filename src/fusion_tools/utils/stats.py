@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 
 from scipy import stats
+from statsmodels.stats.multitest import multipletests
 from sklearn.metrics import silhouette_score, silhouette_samples
 
 
@@ -85,10 +86,14 @@ def get_label_statistics(data_df:pd.DataFrame, label_col:str):
             # Calculating Pearson's correlation for each group separately
             pearson_r_list = []
             p_value = []
+            property_col_idxes = [i for i in range(data_df.shape[1]) if not data_df.columns.tolist()[i]==label_col]
             for u_l in unique_labels:
                 # For each label, generate a new table with r
                 group_data = data_df[data_df[label_col].str.match(u_l)].values
-                group_r,group_p = stats.mstats.pearsonr(group_data[:,0].astype(float),group_data[:,1].astype(float))
+                group_r,group_p = stats.mstats.pearsonr(
+                    group_data[:,property_col_idxes[0]].astype(float),
+                    group_data[:,property_col_idxes[1]].astype(float)
+                )
                 
                 pearson_r_list.append(group_r)
                 p_value.append(group_p)
@@ -127,6 +132,73 @@ def get_label_statistics(data_df:pd.DataFrame, label_col:str):
             }
 
     return p_value, results
+
+def run_wilcox_rank_sum(data_df: pd.DataFrame, label_col:str, p_val_thresh: float = 0.05):
+    """Run Wilcox Rank-Sum test to find significantly different features for each label
+
+    :param data_df: Dataframe containing property columns and label column
+    :type data_df: pd.DataFrame
+    :param label_col: Name of column to use for labels
+    :type label_col: str
+    :param p_val_thresh: Threshold value used to exclude non-significant properties
+    :type p_val_thresh: float, optional
+    """
+
+    unique_labels = data_df[label_col].unique().tolist()
+    results_list = []
+    raw_p_val_list = []
+    # Only running on numeric columns
+    label_vals = data_df[label_col].tolist()
+    data_df = data_df.select_dtypes(exclude='object')
+    data_df[label_col] = label_vals
+
+    column_names = [i for i in data_df.columns.tolist() if not i==label_col]
+    for u_idx, u in enumerate(unique_labels):
+        # Getting label and non-label data
+        u_data = data_df[data_df[label_col].str.match(u)]
+        non_u_data = data_df[~data_df[label_col].str.match(u)]
+
+        # Dropping label column
+        u_data = u_data.drop(columns=[label_col])
+        non_u_data = non_u_data.drop(columns=[label_col])
+
+        for c in column_names:
+            wilcox_result = stats.ranksums(
+                u_data[c].values,
+                non_u_data[c].values,
+                nan_policy='omit'
+            )
+
+            if wilcox_result.pvalue<=p_val_thresh:
+                results_list.append(
+                    {
+                        'Group': u,
+                        'Property': c,
+                        'p Value': '{:0.3e}'.format(wilcox_result.pvalue),
+                        'statistic': '{:0.3e}'.format(wilcox_result.statistic)
+                    }
+                )
+
+                raw_p_val_list.append(wilcox_result.pvalue)
+
+    if len(raw_p_val_list)>0:
+        # Running Bonferroni correction for multiple tests
+        reject, adjusted_p_vals, alpha_sidak, alpha_bonferroni = multipletests(
+            pvals = np.array(raw_p_val_list)
+        )
+
+        for result, adj in zip(results_list,adjusted_p_vals.tolist()):
+            result['p Value Adjusted'] = '{:0.3e}'.format(adj)
+
+    return results_list
+
+
+
+
+
+
+
+
 
 
 
