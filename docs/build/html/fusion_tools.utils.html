@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>fusion_tools.utils package &mdash; fusion-tools 0.0.5 documentation</title>
+  <title>fusion_tools.utils package &mdash; fusion-tools 0.0.7 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=19f00094" />
 
@@ -15,14 +15,12 @@
   
         <script src="_static/jquery.js?v=5d32c60e"></script>
         <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-        <script src="_static/documentation_options.js?v=282f96c0"></script>
+        <script src="_static/documentation_options.js?v=bbaf98b3"></script>
         <script src="_static/doctools.js?v=9a2dae69"></script>
         <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="fusion_tools.visualization package" href="fusion_tools.visualization.html" />
-    <link rel="prev" title="fusion_tools.components package" href="fusion_tools.components.html" /> 
+    <link rel="search" title="Search" href="search.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -44,26 +42,26 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
-<ul class="current">
-<li class="toctree-l1 current"><a class="reference internal" href="modules.html">src</a><ul class="current">
-<li class="toctree-l2 current"><a class="reference internal" href="fusion_tools.html">fusion_tools package</a><ul class="current">
-<li class="toctree-l3 current"><a class="reference internal" href="fusion_tools.html#subpackages">Subpackages</a><ul class="current">
-<li class="toctree-l4"><a class="reference internal" href="fusion_tools.components.html">fusion_tools.components package</a></li>
-<li class="toctree-l4 current"><a class="current reference internal" href="#">fusion_tools.utils package</a></li>
-<li class="toctree-l4"><a class="reference internal" href="fusion_tools.visualization.html">fusion_tools.visualization package</a></li>
+              <!-- Local TOC -->
+              <div class="local-toc"><ul>
+<li><a class="reference internal" href="#">fusion_tools.utils package</a><ul>
+<li><a class="reference internal" href="#submodules">Submodules</a></li>
+<li><a class="reference internal" href="#module-fusion_tools.utils.shapes">fusion_tools.utils.shapes module</a><ul>
+<li><a class="reference internal" href="#fusion_tools.utils.shapes.align_object_props"><code class="docutils literal notranslate"><span class="pre">align_object_props()</span></code></a></li>
+<li><a class="reference internal" href="#fusion_tools.utils.shapes.export_annotations"><code class="docutils literal notranslate"><span class="pre">export_annotations()</span></code></a></li>
+<li><a class="reference internal" href="#fusion_tools.utils.shapes.find_intersecting"><code class="docutils literal notranslate"><span class="pre">find_intersecting()</span></code></a></li>
+<li><a class="reference internal" href="#fusion_tools.utils.shapes.load_aperio"><code class="docutils literal notranslate"><span class="pre">load_aperio()</span></code></a></li>
+<li><a class="reference internal" href="#fusion_tools.utils.shapes.load_geojson"><code class="docutils literal notranslate"><span class="pre">load_geojson()</span></code></a></li>
+<li><a class="reference internal" href="#fusion_tools.utils.shapes.load_histomics"><code class="docutils literal notranslate"><span class="pre">load_histomics()</span></code></a></li>
+<li><a class="reference internal" href="#fusion_tools.utils.shapes.load_polygon_csv"><code class="docutils literal notranslate"><span class="pre">load_polygon_csv()</span></code></a></li>
+<li><a class="reference internal" href="#fusion_tools.utils.shapes.spatially_aggregate"><code class="docutils literal notranslate"><span class="pre">spatially_aggregate()</span></code></a></li>
 </ul>
 </li>
-<li class="toctree-l3"><a class="reference internal" href="fusion_tools.html#submodules">Submodules</a></li>
-<li class="toctree-l3"><a class="reference internal" href="fusion_tools.html#module-fusion_tools.handler">fusion_tools.handler module</a></li>
-<li class="toctree-l3"><a class="reference internal" href="fusion_tools.html#module-fusion_tools.tileserver">fusion_tools.tileserver module</a></li>
-<li class="toctree-l3"><a class="reference internal" href="fusion_tools.html#module-fusion_tools">Module contents</a></li>
+<li><a class="reference internal" href="#module-fusion_tools.utils">Module contents</a></li>
 </ul>
 </li>
 </ul>
-</li>
-</ul>
-
+</div>
         </div>
       </div>
     </nav>
@@ -78,8 +76,6 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
-          <li class="breadcrumb-item"><a href="modules.html">src</a></li>
-          <li class="breadcrumb-item"><a href="fusion_tools.html">fusion_tools package</a></li>
       <li class="breadcrumb-item active">fusion_tools.utils package</li>
       <li class="wy-breadcrumbs-aside">
             <a href="_sources/fusion_tools.utils.rst.txt" rel="nofollow"> View page source</a>
@@ -94,9 +90,6 @@
 <h1>fusion_tools.utils package<a class="headerlink" href="#fusion-tools-utils-package" title="Link to this heading"></a></h1>
 <section id="submodules">
 <h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
-</section>
-<section id="fusion-tools-utils-omics-module">
-<h2>fusion_tools.utils.omics module<a class="headerlink" href="#fusion-tools-utils-omics-module" title="Link to this heading"></a></h2>
 </section>
 <section id="module-fusion_tools.utils.shapes">
 <span id="fusion-tools-utils-shapes-module"></span><h2>fusion_tools.utils.shapes module<a class="headerlink" href="#module-fusion_tools.utils.shapes" title="Link to this heading"></a></h2>
@@ -248,10 +241,7 @@ shape_options: dict with “radius” for point annotations (can be number or co
 
            </div>
           </div>
-          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="fusion_tools.components.html" class="btn btn-neutral float-left" title="fusion_tools.components package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
-        <a href="fusion_tools.visualization.html" class="btn btn-neutral float-right" title="fusion_tools.visualization package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
-    </div>
+          <footer>
 
   <hr/>
 

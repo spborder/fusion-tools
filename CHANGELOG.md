@@ -1,6 +1,12 @@
 # Changelog
 
 <!--next-version-placeholder-->
+## v0.0.7 (09/11/2024)
+
+### Features
+- Added functionality for selected points in PropertyPlotter
+- Added HRAViewer ASCT+B table views for all organs in 7th release
+
 ## v0.0.6 (09/09/2024)
 
 ### Fix

@@ -4,14 +4,6 @@ fusion\_tools.utils package
 Submodules
 ----------
 
-fusion\_tools.utils.omics module
---------------------------------
-
-.. automodule:: fusion_tools.utils.omics
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 fusion\_tools.utils.shapes module
 ---------------------------------
 
