@@ -14,6 +14,7 @@ from typing_extensions import Union
 import geojson
 import json
 
+from PIL import Image
 
 # Dash imports
 import dash
@@ -69,7 +70,7 @@ class SlideMap(MapComponent):
         # Add Namespace functions here:
         self.get_namespace()
 
-        self.annotation_components = self.process_annotations()
+        self.annotation_components, self.image_overlays = self.process_annotations()
 
         self.title = 'Slide Map'
         self.blueprint = DashBlueprint()        
@@ -103,60 +104,85 @@ class SlideMap(MapComponent):
         """
 
         annotation_components = []
+        image_overlays = []
         if not self.annotations is None:
             if type(self.annotations)==dict:
                 self.annotations = [self.annotations]
             
             for st_idx,st in enumerate(self.annotations):
+                if type(st)==dict:
+                    # Scale annotations to fit within base tile dimensions
+                    st = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*self.x_scale,c[1]*self.y_scale, c[2]), g), st)
 
-                # Scale annotations to fit within base tile dimensions
-                st = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*self.x_scale,c[1]*self.y_scale, c[2]), g), st)
-
-                if 'properties' not in st:
-                    st['properties'] = {}
-                    if 'name' in st['features'][0]['properties']:
-                        st['properties']['name'] = st['features'][0]['properties']['name']
-                    else:
-                        st['properties']['name'] = f'Structure {st_idx}'
-                
-                annotation_components.append(
-                    dl.Overlay(
-                        dl.LayerGroup(
-                            dl.GeoJSON(
-                                data = st,
-                                id = {'type': 'feature-bounds','index': st_idx},
-                                options = {
-                                    'style': self.js_namespace("featureStyle")
-                                },
-                                filter = self.js_namespace("featureFilter"),
-                                hideout = {
-                                    'overlayBounds': {},
-                                    'overlayProp': {},
-                                    'fillOpacity': 0.5,
-                                    'lineColor': {st['properties']['name']: '#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255))},
-                                    'filterVals': []
-                                },
-                                hoverStyle = arrow_function(
-                                    {
-                                        'weight': 5,
-                                        'color': '#9caf00',
-                                        'dashArray':''
-                                    }
-                                ),
-                                zoomToBounds = False,
-                                children = [
-                                    dl.Popup(
-                                        id = {'type': 'feature-popup','index': st_idx},
-                                        autoPan = False,
-                                    )
-                                ]
-                            )
-                        ),
-                        name = st['properties']['name'], checked = True, id = {'type':'feature-overlay','index':st_idx}
+                    if 'properties' not in st:
+                        st['properties'] = {}
+                        if 'name' in st['features'][0]['properties']:
+                            st['properties']['name'] = st['features'][0]['properties']['name']
+                        else:
+                            st['properties']['name'] = f'Structure {st_idx}'
+                    
+                    annotation_components.append(
+                        dl.Overlay(
+                            dl.LayerGroup(
+                                dl.GeoJSON(
+                                    data = st,
+                                    id = {'type': 'feature-bounds','index': st_idx},
+                                    options = {
+                                        'style': self.js_namespace("featureStyle")
+                                    },
+                                    filter = self.js_namespace("featureFilter"),
+                                    hideout = {
+                                        'overlayBounds': {},
+                                        'overlayProp': {},
+                                        'fillOpacity': 0.5,
+                                        'lineColor': {st['properties']['name']: '#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255))},
+                                        'filterVals': []
+                                    },
+                                    hoverStyle = arrow_function(
+                                        {
+                                            'weight': 5,
+                                            'color': '#9caf00',
+                                            'dashArray':''
+                                        }
+                                    ),
+                                    zoomToBounds = False,
+                                    children = [
+                                        dl.Popup(
+                                            id = {'type': 'feature-popup','index': st_idx},
+                                            autoPan = False,
+                                        )
+                                    ]
+                                )
+                            ),
+                            name = st['properties']['name'], checked = True, id = {'type':'feature-overlay','index':st_idx}
+                        )
                     )
-                )
 
-        return annotation_components
+                elif type(st)==SlideImageOverlay:
+
+                    adjusted_image_crs = [
+                        [0,0],
+                        [-120,120]
+                    ]
+
+                    # Copying image over to assets folder
+                    read_image = Image.open(st.image_path)
+                    new_image_path = self.assets_folder+f'image_{st_idx}.png'
+                    print(new_image_path)
+                    read_image.save(new_image_path)
+
+                    print(adjusted_image_crs)
+
+                    image_overlays.append(
+                        dl.ImageOverlay(
+                            url = new_image_path,
+                            opacity = 0.5,
+                            bounds = adjusted_image_crs,
+                            id = {'type': 'image-overlay','index': st_idx}
+                        )
+                    )
+
+        return annotation_components, image_overlays
 
     def gen_layout(self):
         """Generating SlideMap layout
@@ -213,7 +239,8 @@ class SlideMap(MapComponent):
                     html.Div(
                         id = {'type': 'map-marker-div','index': 0},
                         children = []
-                    )
+                    ),
+                    *self.image_overlays
                 ]
             )
         )
@@ -488,42 +515,43 @@ class SlideMap(MapComponent):
 
         annotation_components = []
         for st_idx,st in enumerate(geojson_list):
-            annotation_components.append(
-                dl.Overlay(
-                    dl.LayerGroup(
-                        dl.GeoJSON(
-                            data = st,
-                            id = {'type': 'feature-bounds','index': st_idx},
-                            options = {
-                                'style': self.js_namespace("featureStyle")
-                            },
-                            filter = self.js_namespace("featureFilter"),
-                            hideout = {
-                                'overlayBounds': {},
-                                'overlayProp': {},
-                                'fillOpacity': 0.5,
-                                'lineColor': {st['properties']['name']: '#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255))},
-                                'filterVals': []
-                            },
-                            hoverStyle = arrow_function(
-                                {
-                                    'weight': 5,
-                                    'color': '#9caf00',
-                                    'dashArray':''
-                                }
-                            ),
-                            zoomToBounds = False,
-                            children = [
-                                dl.Popup(
-                                    id = {'type': 'feature-popup','index': st_idx},
-                                    autoPan = False,
-                                )
-                            ]
-                        )
-                    ),
-                    name = st['properties']['name'], checked = True, id = {'type':'feature-overlay','index':st_idx}
+            if type(st)==dict:
+                annotation_components.append(
+                    dl.Overlay(
+                        dl.LayerGroup(
+                            dl.GeoJSON(
+                                data = st,
+                                id = {'type': 'feature-bounds','index': st_idx},
+                                options = {
+                                    'style': self.js_namespace("featureStyle")
+                                },
+                                filter = self.js_namespace("featureFilter"),
+                                hideout = {
+                                    'overlayBounds': {},
+                                    'overlayProp': {},
+                                    'fillOpacity': 0.5,
+                                    'lineColor': {st['properties']['name']: '#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255))},
+                                    'filterVals': []
+                                },
+                                hoverStyle = arrow_function(
+                                    {
+                                        'weight': 5,
+                                        'color': '#9caf00',
+                                        'dashArray':''
+                                    }
+                                ),
+                                zoomToBounds = False,
+                                children = [
+                                    dl.Popup(
+                                        id = {'type': 'feature-popup','index': st_idx},
+                                        autoPan = False,
+                                    )
+                                ]
+                            )
+                        ),
+                        name = st['properties']['name'], checked = True, id = {'type':'feature-overlay','index':st_idx}
+                    )
                 )
-            )
 
         return annotation_components
 
@@ -735,7 +763,8 @@ class SlideImageOverlay(MapComponent):
     """
     def __init__(self,
                  image_path: str,
-                 image_crs: list = [0,0]
+                 image_crs: list = [0,0],
+                 image_properties: Union[dict,None] = None
                 ):
         """Constructor method
 
@@ -745,19 +774,24 @@ class SlideImageOverlay(MapComponent):
         :type image_crs: list, optional
         """
         self.image_path = image_path
+        self.image_crs = image_crs
+        self.image_properties = image_properties
 
-        self.title = 'Slide Image Overlay'
+        self.image_bounds = self.get_image_bounds()
 
-        self.blueprint = DashBlueprint()
-        self.blueprint.layout = self.gen_layout()
+    def get_image_bounds(self):
+        """Get total bounds of image overlay in original CRS (number of pixels)
 
-        self.get_callbacks()
+        :return: List of image bounds in overlay CRS ([minx, miny, maxx, maxy])
+        :rtype: list
+        """
 
-    def gen_layout(self):
-        pass
+        read_image = np.uint8(np.array(Image.open(self.image_path)))
+        image_shape = np.shape(read_image)
 
-    def get_callbacks(self):
-        pass
+        print(image_shape)
+
+        return self.image_crs + [self.image_crs[0]+image_shape[1], self.image_crs[1]-image_shape[0]]
 
 class ChannelMixer(MapComponent):
     """ChannelMixer component that allows users to select various frames from their image to overlay at the same time with different color (styles) applied.
