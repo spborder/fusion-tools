@@ -36,7 +36,7 @@ from dash_extensions.enrich import DashBlueprint, html, Input, Output, State
 
 # fusion-tools imports
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
-from fusion_tools.utils.shapes import find_intersecting
+from fusion_tools.utils.shapes import find_intersecting, extract_geojson_properties
 from fusion_tools.utils.stats import get_label_statistics, run_wilcox_rank_sum
 
 
@@ -55,7 +55,8 @@ class OverlayOptions(Tool):
     def __init__(self,
                  geojson_anns: Union[list,dict],
                  reference_object: Union[str,None] = None,
-                 ignore_list: list = []
+                 ignore_list: list = [],
+                 property_depth: int = 4
                  ):
         """Constructor method
 
@@ -65,10 +66,12 @@ class OverlayOptions(Tool):
         :type reference_object: Union[str,None], optional
         :param ignore_list: List of properties to exclude from visualization. These can include any internal or private properties that are not desired to be viewed by the user or used for filtering/overlay colors., defaults to []
         :type ignore_list: list, optional
+        :param property_depth: Depth at which to search for nested properties. Properties which are nested further than this will be ignored.
+        :type property_depth: int, optional
         """
 
         self.reference_object = reference_object
-        self.overlay_options, self.feature_names, self.overlay_info = self.extract_overlay_options(geojson_anns, reference_object,ignore_list)
+        self.overlay_options, self.feature_names, self.overlay_info = extract_geojson_properties(geojson_anns, reference_object,ignore_list, property_depth)
         
         self.title = 'Overlay Options'
         self.blueprint = DashBlueprint()
@@ -76,106 +79,6 @@ class OverlayOptions(Tool):
 
         # Add callbacks here
         self.get_callbacks()
-
-    def extract_overlay_options(self,geojson_anns: Union[list,dict],reference_object:Union[str,None],ignore_list:list):
-        """Function to extract properties which are accessible for overlay and filters.
-
-        :param geojson_anns: Individual or list of multiple GeoJSON formatted annotations applied to the current image.
-        :type geojson_anns: Union[list,dict]
-        :param reference_object: Path to external data container.
-        :type reference_object: Union[str,None]
-        :param ignore_list: List of properties to exclude from overlay generation and filtering.
-        :type ignore_list: list
-        :return: Properties extracted from GeoJSON objects, names for each structure, and summary information for each property
-        :rtype: tuple
-        """
-        geojson_properties = []
-        feature_names = []
-        property_info = {}
-        for ann in geojson_anns:
-            feature_names.append(ann['properties']['name'])
-            for f in ann['features']:
-                f_props = list(f['properties'].keys())
-                for p in f_props:
-                    # Checking for sub-properties: (only going 1 level)
-                    if type(f['properties'][p])==dict:
-                        sub_props = []
-                        for sup in list(f['properties'][p].keys()):
-                            if not sup==p:
-                                sub_prop_name = f'{p} --> {sup}'
-                                sub_props.append(sub_prop_name)
-                                
-                                f_sup_val = f['properties'][p][sup]
-
-                                if not sub_prop_name in property_info:
-                                    if type(f_sup_val) in [int,float]:
-                                        property_info[sub_prop_name] = {
-                                            'min': f_sup_val,
-                                            'max': f_sup_val,
-                                            'distinct': 1
-                                        }
-                                    elif type(f_sup_val) in [str]:
-                                        property_info[sub_prop_name] = {
-                                            'unique': [f_sup_val],
-                                            'distinct': 1
-                                        }
-
-                                else:
-                                    if type(f_sup_val) in [int,float]:
-                                        if f_sup_val < property_info[sub_prop_name]['min']:
-                                            property_info[sub_prop_name]['min'] = f_sup_val
-                                            property_info[sub_prop_name]['distinct']+=1
-
-                                        if f_sup_val > property_info[sub_prop_name]['max']:
-                                            property_info[sub_prop_name]['max'] = f_sup_val
-                                            property_info[sub_prop_name]['distinct'] += 1
-
-                                    elif type(f_sup_val) in [str]:
-                                        if not f_sup_val in property_info[sub_prop_name]['unique']:
-                                            property_info[sub_prop_name]['unique'].append(f_sup_val)
-                                            property_info[sub_prop_name]['distinct']+=1
-
-                                sub_props.append(sub_prop_name)
-                    else:
-                        sub_props = [p]
-
-                        f_sup_val = f['properties'][p]
-
-                        if not p in property_info:
-                            if type(f_sup_val) in [int,float]:
-                                property_info[p] = {
-                                    'min': f_sup_val,
-                                    'max': f_sup_val,
-                                    'distinct': 1
-                                }
-                            else:
-                                property_info[p] = {
-                                    'unique': [f_sup_val],
-                                    'distinct': 1
-                                }
-                        else:
-                            if type(f_sup_val) in [int,float]:
-                                if f_sup_val < property_info[p]['min']:
-                                    property_info[p]['min'] = f_sup_val
-                                    property_info[p]['distinct'] += 1
-                                
-                                elif f_sup_val > property_info[p]['max']:
-                                    property_info[p]['max'] = f_sup_val
-                                    property_info[p]['distinct']+=1
-
-                            elif type(f_sup_val) in [str]:
-                                if not f_sup_val in property_info[p]['unique']:
-                                    property_info[p]['unique'].append(f_sup_val)
-                                    property_info[p]['distinct']+=1
-
-                    new_props = [i for i in sub_props if not i in geojson_properties and not i in ignore_list]
-                    geojson_properties.extend(new_props)
-
-        #TODO: After loading an experiment, reference the file here for additional properties
-        
-        geojson_properties = sorted(geojson_properties)
-
-        return geojson_properties, feature_names, property_info
 
     def gen_layout(self):
         """Generating OverlayOptions layout, added to DashBlueprint() object to be embedded in larger layout.
@@ -595,8 +498,7 @@ class OverlayOptions(Tool):
                     filter_value = div_children[1]['props']['children']['props']['children']['props']['value']
 
                 processed_filters.append({
-                    'name': filter_name.split(' --> ')[0] if '-->' in filter_name else filter_name,
-                    'value': filter_name.split(' --> ')[1] if '-->' in filter_name else None,
+                    'name': filter_name,
                     'range': filter_value
                 })
 
@@ -664,22 +566,12 @@ class OverlayOptions(Tool):
 
 
         if not use_overlay_value is None:
-            if '-->' in use_overlay_value:
-                split_overlay_value = use_overlay_value.split(' --> ')
-
-                overlay_prop = {
-                    'name': split_overlay_value[0],
-                    'value': split_overlay_value[1]
-                }
-            else:
-                overlay_prop = {
-                    'name': use_overlay_value,
-                    'value': None
-                }
+            overlay_prop = {
+                'name': use_overlay_value,
+            }
         else:
             overlay_prop = {
                 'name': None,
-                'value': None
             }
 
         if not use_transp_value is None:
@@ -828,7 +720,8 @@ class PropertyViewer(Tool):
     def __init__(self,
                  geojson_list: Union[dict,list],
                  reference_object: Union[str,None] = None,
-                 ignore_list: list = []
+                 ignore_list: list = [],
+                 property_depth: int = 4
                  ):
         """Constructor method
 
@@ -838,49 +731,18 @@ class PropertyViewer(Tool):
         :type reference_object: Union[str,None], optional
         :param ignore_list: List of properties not to make available to this component., defaults to []
         :type ignore_list: list, optional
+        :param property_depth: Depth at which to search for nested properties. Properties nested further than this value will be ignored.
+        :type property_depth: int, optional
         """
         self.ignore_list = []
         self.reference_object = reference_object
-        self.available_properties, self.feature_names = self.extract_overlay_options(geojson_list,reference_object,ignore_list)
+        self.available_properties, self.feature_names, self.property_info = extract_geojson_properties(geojson_list,reference_object,ignore_list,property_depth)
     
         self.title = 'Property Viewer'
         self.blueprint = DashBlueprint()
         self.blueprint.layout = self.gen_layout()
 
         self.get_callbacks()   
-        
-    def extract_overlay_options(self,geojson_anns:Union[list,dict],reference_object:Union[str,None],ignore_list:list)->tuple:
-        """Extract all properties which can be used for overlays
-
-        :param geojson_anns: Inividual or list of GeoJSON formatted annotations
-        :type geojson_anns: Union[list,dict]
-        :param reference_object: Path to external reference object containing information on GeoJSON features
-        :type reference_object: Union[str,None]
-        :param ignore_list: List of properties to not make available to this component.
-        :type ignore_list: list
-        :return: List of properties and names of structures
-        :rtype: tuple
-        """
-        geojson_properties = []
-        feature_names = []
-        for ann in geojson_anns:
-            feature_names.append(ann['properties']['name'])
-            for f in ann['features']:
-                f_props = list(f['properties'].keys())
-                for p in f_props:
-                    # Checking for sub-properties: (only going 1 level)
-                    if type(f['properties'][p])==dict:
-                            sub_props = [f'{p} --> {sp}' for sp in list(f['properties'][p].keys()) if not p==sp]
-                    else:
-                        sub_props = [p]
-                    
-                    geojson_properties.extend([i for i in sub_props if not i in geojson_properties and not i in ignore_list])
-
-        #TODO: After loading an experiment, reference the file here for additional properties
-        
-        geojson_properties = sorted(geojson_properties)
-
-        return geojson_properties, feature_names
 
     def gen_layout(self):
         """Generating layout for PropertyViewer Tool
@@ -1001,6 +863,8 @@ class PropertyViewer(Tool):
         plot_components = self.generate_plot_tabs(current_property_data, current_geojson)
 
         # Checking if a selected property has sub-properties
+        #TODO: Update this for arbitrary levels of nested properties
+        #TODO: Enable pie charts for last-level of nesting (main_prop --> {sub_props} would show a pie chart for main_prop)
         main_properties = list(set([i if not '-->' in i else i.split(' --> ')[0] for i in self.available_properties]))
         if not view_type_value is None:
             if view_type_value in list(set([i.split(' --> ')[0] for i in self.available_properties if '-->' in i])):
@@ -1175,7 +1039,8 @@ class PropertyPlotter(Tool):
     def __init__(self,
                  geojson_list: Union[dict,list],
                  reference_object: Union[str,None] = None,
-                 ignore_list: list = []
+                 ignore_list: list = [],
+                 property_depth: int = 4
                  ):
         """Constructor method
 
@@ -1185,10 +1050,12 @@ class PropertyPlotter(Tool):
         :type reference_object: Union[str,None], optional
         :param ignore_list: List of properties to not include in this component, defaults to []
         :type ignore_list: list, optional
+        :param property_depth: Depth at which to search for nested properties. Properties nested further than this will be ignored.
+        :type property_depth: int, optional
         """
         self.reference_object = reference_object
         self.ignore_list = ignore_list
-        self.available_properties, self.feature_names = self.extract_overlay_options(geojson_list,reference_object,ignore_list)
+        self.available_properties, self.feature_names, self.property_info = extract_geojson_properties(geojson_list,reference_object,ignore_list, property_depth)
 
         self.generate_property_dict()
 
@@ -1197,39 +1064,6 @@ class PropertyPlotter(Tool):
         self.blueprint.layout = self.gen_layout()
 
         self.get_callbacks()
-
-    def extract_overlay_options(self,geojson_anns:Union[list,dict],reference_object:Union[str,None],ignore_list:list):
-        """Extract all properties which can be used for overlays
-
-        :param geojson_anns: Individual or list of GeoJSON formatted annotations
-        :type geojson_anns: Union[list,dict]
-        :param reference_object: Path to external object containing information on each GeoJSON feature
-        :type reference_object: Union[str,None]
-        :param ignore_list: List of properties to not include in this component
-        :type ignore_list: list
-        :return: List of GeoJSON properties, List of feature names
-        :rtype: tuple
-        """
-        geojson_properties = []
-        feature_names = []
-        for ann in geojson_anns:
-            feature_names.append(ann['properties']['name'])
-            for f in ann['features']:
-                f_props = list(f['properties'].keys())
-                for p in f_props:
-                    # Checking for sub-properties: (only going 1 level)
-                    if type(f['properties'][p])==dict:
-                            sub_props = [f'{p} --> {sp}' for sp in list(f['properties'][p].keys()) if not p==sp]
-                    else:
-                        sub_props = [p]
-                    
-                    geojson_properties.extend([i for i in sub_props if not i in geojson_properties and not i in ignore_list])
-
-        #TODO: After loading an experiment, reference the file here for additional properties
-        
-        geojson_properties = sorted(geojson_properties)
-
-        return geojson_properties, feature_names
 
     def generate_property_dict(self):
         """Generate nested dictionary used for populating the property dropdown menus
@@ -1357,6 +1191,20 @@ class PropertyPlotter(Tool):
                 State({'type': 'label-list','index': ALL},'value')
             ]
         )(self.update_sub_div)
+
+        # Selecting points in selected data:
+        self.blueprint.callback(
+            [
+                Input({'type': 'property-sub-graph','index': ALL},'selectedData')
+            ],
+            [
+                Output({'type': 'map-marker-div','index': ALL},'children')
+            ],
+            [
+                State({'type': 'property-plotter-store','index': ALL},'data'),
+                State({'type': 'feature-bounds','index': ALL},'data')
+            ]
+        )(self.sub_select_data)
 
     def gen_layout(self):
         """Generating layout for PropertyPlotter Tool
@@ -1551,22 +1399,54 @@ class PropertyPlotter(Tool):
                             f_dict[p] = feature['properties'][p]
             else:
                 split_p = p.split(' --> ')
-                if split_p[0] in feature['properties']:
-                    if split_p[1] in feature['properties'][split_p[0]]:
-                        if not type(feature['properties'][split_p[0]][split_p[1]])==dict:
-                            try:
-                                f_dict[p] = float(feature['properties'][split_p[0]][split_p[1]])
-                            except ValueError:
-                                f_dict[p] = feature['properties'][split_p[0]][split_p[1]]
-        
+                f_props = feature['properties'].copy()
+                for sp in split_p:
+                    if sp in f_props:
+                        f_props = f_props[sp]
+
+                if not type(f_props)==dict:
+                    try:
+                        f_dict[p] = float(f_props)
+                    except ValueError:
+                        f_dict[p] = f_props
+
         if not labels is None:
             if type(labels)==list:
                 for l in labels:
-                    if l in feature['properties']:
-                        f_dict[l] = feature['properties'][l]
+                    if not '-->' in l:
+                        if l in feature['properties']:
+                            f_dict[l] = feature['properties'][l]
+                    else:
+                        l_parts = l.split(' --> ')
+                        f_props_copy = feature['properties'].copy()
+                        for l in l_parts:
+                            if l in f_props_copy:
+                                f_props_copy = f_props_copy[l]
+                        
+                        try:
+                            f_dict[l] = float(f_props_copy)
+                        except ValueError:
+                            f_dict[l] = f_props_copy
+
+
             elif type(labels)==str:
-                if labels in feature['properties']:
-                    f_dict[labels] = feature['properties'][labels]
+                if not '-->' in labels:
+                    if labels in feature['properties']:
+                        try:
+                            f_dict[labels] = float(feature['properties'][labels])
+                        except ValueError:
+                            f_dict[labels] = feature['properties'][labels]
+                else:
+                    l_parts = labels.split(' --> ')
+                    f_props_copy = feature['properties'].copy()
+                    for l in l_parts:
+                        if l in f_props_copy:
+                            f_props_copy = f_props_copy[l]
+
+                    try:
+                        f_dict[labels] = float(f_props_copy)
+                    except ValueError:
+                        f_dict[labels] = f_props_copy
 
         # Getting bounding box info
         f_bbox = list(shape(feature['geometry']).bounds)
@@ -1590,7 +1470,6 @@ class PropertyPlotter(Tool):
         :rtype: list
         """
         extract_data = []
-        print(filter_list)
         if filter_list is None:
             for g_idx, g in enumerate(geo_list):
                 for f_idx, f in enumerate(g['features']):
@@ -1635,7 +1514,8 @@ class PropertyPlotter(Tool):
                 y = data_df[property_column],
                 customdata = data_df[customdata_columns] if not customdata_columns is None else None,
                 points = 'all',
-                pointpos=0
+                pointpos=0,
+                spanmode='hard'
             )
         )
         
@@ -1649,7 +1529,7 @@ class PropertyPlotter(Tool):
             title = '<br>'.join(
                 textwrap.wrap(
                     f'{property_column}',
-                    width=30
+                    width=80
                 )
             ),
             yaxis_title = dict(
@@ -1675,7 +1555,7 @@ class PropertyPlotter(Tool):
 
         return figure
 
-    def gen_scatter_plot(self, data_df:pd.DataFrame, plot_cols:list, label_cols:Union[str,None], customdata_cols:list):
+    def gen_scatter_plot(self, data_df:pd.DataFrame, plot_cols:list, label_col:Union[str,None], customdata_cols:list):
         """Generating a 2D scatter plot using provided data
 
 
@@ -1690,23 +1570,23 @@ class PropertyPlotter(Tool):
         :return: Scatter plot figure
         :rtype: go.Figure
         """
-        if not label_cols is None:
+        if not label_col is None:
             figure = go.Figure(
                 data = px.scatter(
                     data_frame=data_df,
                     x = plot_cols[0],
                     y = plot_cols[1],
-                    color = label_cols,
+                    color = label_col,
                     custom_data = customdata_cols,
                     title = '<br>'.join(
                         textwrap.wrap(
-                            f'Scatter plot of {plot_cols[0]} and {plot_cols[1]} labeled by {label_cols}',
+                            f'Scatter plot of {plot_cols[0]} and {plot_cols[1]} labeled by {label_col}',
                             width = 30
                             )
                         )
                 )
             )
-            if not data_df[label_cols].dtype == np.number:
+            if not data_df[label_col].dtype == np.number:
                 figure.update_layout(
                     legend = dict(
                         orientation='h',
@@ -1726,13 +1606,13 @@ class PropertyPlotter(Tool):
                         customdata = data_df.iloc[:,custom_data_idx].to_dict('records'),
                         mode = 'markers',
                         marker = {
-                            'color': data_df[label_cols].values,
+                            'color': data_df[label_col].values,
                             'colorbar':{
-                                'title': label_cols
+                                'title': label_col
                             },
                             'colorscale':'jet'
                         },
-                        text = data_df[label_cols].values,
+                        text = data_df[label_col].values,
                         hovertemplate = "label: %{text}"
 
                     )
@@ -1809,11 +1689,11 @@ class PropertyPlotter(Tool):
                             options = self.available_properties,
                             value = [],
                             id = {'type': 'selected-sub-drop','index': 0},
-                            multi = False
+                            multi = True
                         ),
                         md = 9
                     )
-                ],align='center'),
+                ],align='center',style = {'marginBottom': '10px'}),
                 dbc.Row(
                     dbc.Button(
                         'Update Sub-Plot',
@@ -1821,7 +1701,8 @@ class PropertyPlotter(Tool):
                         n_clicks = 0,
                         id = {'type': 'selected-sub-butt','index': 0},
                         color = 'primary'
-                    )
+                    ),
+                    style = {'marginBottom': '10px'}
                 ),
                 html.B(),
                 dbc.Row(
@@ -1831,7 +1712,8 @@ class PropertyPlotter(Tool):
                         n_clicks=0,
                         id = {'type': 'selected-sub-markers','index':0},
                         color = 'secondary'
-                    )
+                    ),
+                    style = {'marginBottom': '10px'}
                 ),
                 dbc.Row(
                     html.Div(
@@ -1886,6 +1768,13 @@ class PropertyPlotter(Tool):
                                 id = {'type': 'selected-marker-delete','index': p_idx}
                             ),
                             id = {'type': 'selected-marker-popup','index': p_idx}
+                        ),
+                        html.Div(
+                            children = [
+                                json.dumps(p['customdata'][1])
+                            ],
+                            id = {'type': 'selected-marker-index','index': p_idx},
+                            style = {'display': 'none'}
                         )
                     ]
                 )
@@ -2341,6 +2230,11 @@ class PropertyPlotter(Tool):
         current_labels = get_pattern_matching_value(current_labels)
         sub_div_content = []
 
+        if type(sub_plot_value)==str:
+            sub_plot_value = [sub_plot_value]
+        if type(sub_plot_value[0])==list:
+            sub_plot_value = sub_plot_value[0]
+
         if ctx.triggered_id['type']=='selected-sub-butt':
             if not sub_plot_value is None:
                 # Pulling selected data points from current plot_data
@@ -2348,21 +2242,51 @@ class PropertyPlotter(Tool):
                 
                 selected_data = self.extract_data_from_features(
                     geo_list=current_features,
-                    properties=[sub_plot_value],
+                    properties = sub_plot_value,
                     labels = current_labels,
                     filter_list = [i['customdata'][1] for i in current_selected]
                 )
 
                 if len(selected_data)>0:
-                    data_df = pd.DataFrame.from_records(selected_data).dropna(subset= [sub_plot_value],how='all')
+                    print(f'len of selected_data: {len(selected_data)}')
+                    data_df = pd.DataFrame.from_records(selected_data).dropna(subset = sub_plot_value, how='all')
                     data_df.reset_index(inplace=True,drop=True)
+                    print(f'data_df shape: {data_df.shape}')
 
-                    sub_plot_figure = self.gen_violin_plot(
-                        data_df = data_df,
-                        label_col = current_labels,
-                        property_column = sub_plot_value,
-                        customdata_columns = ['bbox','point_info']
-                    )
+                    if len(sub_plot_value)==1:
+                        sub_plot_figure = self.gen_violin_plot(
+                            data_df = data_df,
+                            label_col = current_labels,
+                            property_column = sub_plot_value,
+                            customdata_columns = ['bbox','point_info']
+                        )
+                    elif len(sub_plot_value)==2:
+                        sub_plot_figure = self.gen_scatter_plot(
+                            data_df = data_df,
+                            plot_cols = sub_plot_value,
+                            label_col = current_labels,
+                            customdata_cols = ['bbox','point_info']
+                        )
+
+                    elif len(sub_plot_value)>2:
+                        umap_cols = self.gen_umap_cols(
+                            data_df = data_df,
+                            property_columns = sub_plot_value
+                        )
+
+                        before_cols = data_df.columns.tolist()
+                        plot_cols = umap_cols.columns.tolist()
+
+                        data_df = pd.concat([data_df,umap_cols],axis=1,ignore_index=True).fillna(0)
+                        data_df.columns = before_cols + plot_cols
+
+                        sub_plot_figure = self.gen_scatter_plot(
+                            data_df = data_df,
+                            plot_cols = ['UMAP1','UMAP2'],
+                            label_col = current_labels,
+                            customdata_cols = ['bbox','point_info']
+                        )
+
 
                     sub_div_content = dcc.Graph(
                         id = {'type': 'property-sub-graph','index': 0},
@@ -2447,6 +2371,64 @@ class PropertyPlotter(Tool):
 
         return [sub_div_content]
 
+    def sub_select_data(self, sub_selected_data, current_plot_data, current_features):
+        """Updating the markers on the map according to selected data in the sub-plot
+
+        :param sub_selected_data: Selected points in the sub-plot
+        :type sub_selected_data: list
+        :param current_plot_data: Plot data in the main-plot
+        :type current_plot_data: list
+        :param current_features: Current GeoJSON features on the map
+        :type current_features: list
+        :return: Updated list of markers applied to the map
+        :rtype: list
+        """
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        sub_selected_data = get_pattern_matching_value(sub_selected_data)
+        
+        if sub_selected_data is None:
+            raise exceptions.PreventUpdate
+        if type(sub_selected_data)==list:
+            if len(sub_selected_data)==0:
+                raise exceptions.PreventUpdate
+
+        map_marker = []
+        for p_idx,p in enumerate(sub_selected_data['points']):
+            map_marker.append(
+                dl.Marker(
+                    position = [
+                        (p['customdata'][0][0]+p['customdata'][0][2])/2,
+                        (p['customdata'][0][1]+p['customdata'][0][3])/2
+                    ][::-1],
+                    children = [
+                        dl.Popup(
+                            dbc.Button(
+                                'Clear Marker',
+                                color = 'danger',
+                                n_clicks = 0,
+                                id = {'type': 'selected-marker-delete','index': p_idx}
+                            ),
+                            id = {'type': 'selected-marker-popup','index': p_idx}
+                        ),
+                        html.Div(
+                            children = [
+                                json.dumps(p['customdata'][1])
+                            ],
+                            id = {'type': 'selected-marker-index','index': p_idx},
+                            style = {'display':'none'}
+                        )
+                    ]
+                )
+            )
+        
+        map_marker_div = html.Div(
+            map_marker
+        )
+
+        return [map_marker_div]
 
 class FeatureAnnotator(Tool):
     """FeatureAnnotator Tool used to annotate individual GeoJSON features.
@@ -2542,7 +2524,7 @@ class HRAViewer(Tool):
                     ])
                 ])
             ])
-        ])
+        ],style = {'width': '100%'})
 
         return layout
 

@@ -49,7 +49,6 @@ class Visualization:
         """
 
         self.components = components
-        #self.layout = layout
         self.app_options = app_options
 
         self.assets_folder = os.getcwd()+'/.fusion_assets/'
@@ -58,8 +57,13 @@ class Visualization:
             'title': 'FUSION',
             'server': 'default',
             'server_options': {},
-            'port': '8080'
+            'port': '8080',
+            'external_scripts': [
+                'https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.1.0/chroma.min.js'
+            ]
         }
+
+        self.app_options = self.default_options | self.app_options
 
         self.viewer_app = DashProxy(
             __name__,
@@ -69,14 +73,15 @@ class Visualization:
                 dbc.icons.BOOTSTRAP,
                 dbc.icons.FONT_AWESOME
             ],
-            external_scripts = ['https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.1.0/chroma.min.js'],
+            external_scripts = self.app_options['external_scripts'],
             assets_folder = self.assets_folder,
             prevent_initial_callbacks=True,
             transforms = [
                 MultiplexerTransform()
             ]
         )
-        self.viewer_app.title = self.app_options['title'] if 'title' in self.app_options else self.default_options['title']
+
+        self.viewer_app.title = self.app_options['title']
         self.viewer_app.layout = self.gen_layout()
     
     def gen_layout(self):
@@ -189,13 +194,13 @@ class Visualization:
             if self.app_options['server']=='default':
                 self.viewer_app.run_server(
                     host = '0.0.0.0',
-                    port = self.app_options['port'] if 'port' in self.app_options else self.default_options['port'],
+                    port = self.app_options['port'],
                     debug = False
                 )
         else:
             self.viewer_app.run_server(
                 host = '0.0.0.0',
-                port = self.app_options['port'] if 'port' in self.app_options else self.default_options['port'],
+                port = self.app_options['port'],
                 debug = False
             )
 

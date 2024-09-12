@@ -34,7 +34,6 @@ def main():
         girderApiUrl = base_url
     )
 
-
     annotations = dsa_handler.get_annotations(
         item = item_id
     )
@@ -55,7 +54,8 @@ def main():
                     ),
                     PropertyPlotter(
                         geojson_list=annotations
-                    )
+                    ),
+                    HRAViewer()
                 ]
             ]
         ]

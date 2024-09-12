@@ -32,18 +32,15 @@ window.fusionTools = Object.assign({}, window.fusionTools, {
                 var overlayVal = Number.Nan;
                 if (overlayProp) {
                     if (overlayProp.name) {
-                        if (overlayProp.name in feature.properties) {
-                            if (overlayProp.value) {
-                                if (overlayProp.value in feature.properties[overlayProp.name]) {
-                                    var overlayVal = feature.properties[overlayProp.name][overlayProp.value];
-                                } else {
-                                    var overlayVal = Number.Nan;
-                                }
+                        var overlaySubProps = overlayProp.name.split(" --> ");
+                        var prop_dict = feature.properties;
+                        for (let i = 0; i < overlaySubProps.length; i++) {
+                            if (overlaySubProps[i] in prop_dict) {
+                                var prop_dict = prop_dict[overlaySubProps[i]];
+                                var overlayVal = prop_dict;
                             } else {
-                                var overlayVal = feature.properties[overlayProp.name];
+                                var overlayVal = Number.Nan;
                             }
-                        } else {
-                            var overlayVal = Number.Nan;
                         }
                     } else {
                         var overlayVal = Number.Nan;
@@ -92,18 +89,15 @@ window.fusionTools = Object.assign({}, window.fusionTools, {
                     // Iterating through filterVals list
                     var filter = filterVals[i];
                     if (filter.name) {
-                        if (filter.name in feature.properties) {
-                            if (filter.value) {
-                                if (filter.value in feature.properties[filter.name]) {
-                                    var testVal = feature.properties[filter.name][filter.value];
-                                } else {
-                                    returnFeature = returnFeature & false;
-                                }
+                        var filterSubProps = filter.name.split(" --> ");
+                        var prop_dict = feature.properties;
+                        for (let j = 0; j < filterSubProps.length; j++) {
+                            if (filterSubProps[j] in prop_dict) {
+                                var prop_dict = prop_dict[filterSubProps[j]];
+                                var testVal = prop_dict;
                             } else {
-                                var testVal = feature.properties[filter.name];
+                                returnFeature = returnFeature & false;
                             }
-                        } else {
-                            returnFeature = returnFeature & false;
                         }
                     }
 
@@ -127,7 +121,6 @@ window.fusionTools = Object.assign({}, window.fusionTools, {
             } else {
                 return returnFeature;
             }
-
             return returnFeature;
 
         }

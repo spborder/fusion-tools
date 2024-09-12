@@ -16,6 +16,7 @@ from shapely.geometry import Polygon, Point, shape
 import pandas as pd
 
 import uuid
+import time
 
 from typing_extensions import Union
 
@@ -543,12 +544,137 @@ def spatially_aggregate(agg_geo:dict, base_geos: list):
 
     return agg_geo
 
+def extract_nested_prop(main_prop_dict: dict, depth: int, path: tuple = (), values_list: list = []):
+    """Extracted nested properties up to depth level.
 
+    :param main_prop_dict: Main dictionary containing nested properties. ex: {'main_prop': {'sub_prop1': value1, 'sub_prop2': value2}}
+    :type main_prop_dict: dict
+    :param depth: Number of levels to extend into nested dictionary
+    :type depth: int
+    """
+    if len(list(main_prop_dict.keys()))>0 and depth>0:
+        for keys, values in main_prop_dict.items():
+            if depth == 1:
+                if type(values) in [int,float,str]:
+                    values_list.append({
+                        ' --> '.join(list(path+(keys,))): values
+                    })
+                else:
+                    # Skipping properties that are still nested
+                    continue
+            else:
+                if type(values)==dict:
+                    extract_nested_prop(values, depth-1, path+ (keys,), values_list)
+                else:
+                    # Only adding properties to the list one time
+                    if not any([' --> '.join(list(path+(keys,))) in list(i.keys()) for i in values_list]):
+                        values_list.append({
+                            ' --> '.join(list(path+(keys,))): values
+                        }) 
 
+    return values_list
 
+def extract_geojson_properties(geo_list: list, reference_object: Union[str,None] = None, ignore_list: Union[list,None]=None, nested_depth:int = 4) -> list:
+    """Extract property names and info for provided list of GeoJSON structures.
 
+    :param geo_list: List of GeoJSON dictionaries containing properties
+    :type geo_list: list
+    :param reference_object: File path to reference object containing more information for each structure, defaults to None
+    :type reference_object: Union[str,None], optional
+    :param ignore_list: List of properties to hide from the main view, defaults to None
+    :type ignore_list: Union[list,None], optional
+    :param nested_depth: For properties stored as nested dictionaries, specify desired depth (depth of 2 = {'property_name': {'sub-prop1': val, etc.}}), defaults to 2
+    :type nested_depth: int, optional
+    :return: List of accessible properties in visualization session.
+    :rtype: list
+    """
 
+    if ignore_list is None:
+        ignore_list = []
 
+    geojson_properties = []
+    feature_names = []
+    property_info = {}
+    for ann in geo_list:
+        feature_names.append(ann['properties']['name'])
+        for f in ann['features']:
+            f_props = [i for i in list(f['properties'].keys()) if not i in ignore_list]
+            for p in f_props:
+                # Checking for sub-properties
+                sub_props = []
+                if type(f['properties'][p])==dict:
+                    nested_value = extract_nested_prop({p: f['properties'][p]}, nested_depth, (), [])
+                    if len(nested_value)>0:
+                        for n in nested_value:
+                            n_key = list(n.keys())[0]
+                            n_value = list(n.values())[0]
+                            if not n_key in property_info:
+                                sub_props.append(n_key)
+                                if type(n_value) in [int,float]:
+                                    property_info[n_key] = {
+                                        'min': n_value,
+                                        'max': n_value,
+                                        'distinct': 1
+                                    }
+                                elif type(n_value) in [str]:
+                                    property_info[n_key] = {
+                                        'unique': [n_value],
+                                        'distinct': 1
+                                    }
+                            else:
+                                if type(n_value) in [int,float]:
+                                    if n_value < property_info[n_key]['min']:
+                                        property_info[n_key]['min'] = n_value
+                                        property_info[n_key]['distinct'] +=1
+                                    
+                                    if n_value > property_info[n_key]['max']:
+                                        property_info[n_key]['max'] = n_value
+                                        property_info[n_key]['distinct'] +=1
+
+                                elif type(n_value) in [str]:
+                                    if not n_value in property_info[n_key]['unique']:
+                                        property_info[n_key]['unique'].append(n_value)
+                                        property_info[n_key]['distinct'] +=1
+
+                else:
+                    f_sup_val = f['properties'][p]
+
+                    if not p in property_info:
+                        sub_props = [p]
+                        if type(f_sup_val) in [int,float]:
+                            property_info[p] = {
+                                'min': f_sup_val,
+                                'max': f_sup_val,
+                                'distinct': 1
+                            }
+                        else:
+                            property_info[p] = {
+                                'unique': [f_sup_val],
+                                'distinct': 1
+                            }
+                    else:
+                        if type(f_sup_val) in [int,float]:
+                            if f_sup_val < property_info[p]['min']:
+                                property_info[p]['min'] = f_sup_val
+                                property_info[p]['distinct'] += 1
+                            
+                            elif f_sup_val > property_info[p]['max']:
+                                property_info[p]['max'] = f_sup_val
+                                property_info[p]['distinct']+=1
+
+                        elif type(f_sup_val) in [str]:
+                            if not f_sup_val in property_info[p]['unique']:
+                                property_info[p]['unique'].append(f_sup_val)
+                                property_info[p]['distinct']+=1
+
+                new_props = [i for i in sub_props if not i in geojson_properties and not i in ignore_list]
+                geojson_properties.extend(new_props)
+
+    #TODO: After loading an experiment, reference the file here for additional properties
+    
+    geojson_properties = sorted(geojson_properties)
+
+    return geojson_properties, feature_names, property_info
 
 
 

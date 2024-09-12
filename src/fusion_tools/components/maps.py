@@ -294,18 +294,15 @@ class SlideMap(MapComponent):
                 var overlayVal = Number.Nan;
                 if (overlayProp) {
                     if (overlayProp.name) {
-                        if (overlayProp.name in feature.properties) {
-                            if (overlayProp.value) {
-                                if (overlayProp.value in feature.properties[overlayProp.name]) {
-                                    var overlayVal = feature.properties[overlayProp.name][overlayProp.value];
-                                } else {
-                                    var overlayVal = Number.Nan;
-                                }
+                        var overlaySubProps = overlayProp.name.split(" --> ");
+                        var prop_dict = feature.properties;
+                        for (let i = 0; i < overlaySubProps.length; i++) {
+                            if (overlaySubProps[i] in prop_dict) {
+                                var prop_dict = prop_dict[overlaySubProps[i]];
+                                var overlayVal = prop_dict;
                             } else {
-                                var overlayVal = feature.properties[overlayProp.name];
+                                var overlayVal = Number.Nan;
                             }
-                        } else {
-                            var overlayVal = Number.Nan;
                         }
                     } else {
                         var overlayVal = Number.Nan;
@@ -352,21 +349,18 @@ class SlideMap(MapComponent):
                         // Iterating through filterVals list
                         var filter = filterVals[i];
                         if (filter.name) {
-                            if (filter.name in feature.properties) {
-                                if (filter.value) {
-                                    if (filter.value in feature.properties[filter.name]) {
-                                        var testVal = feature.properties[filter.name][filter.value];
-                                    } else {
-                                        returnFeature = returnFeature & false;
-                                    }
+                            var filterSubProps = filter.name.split(" --> ");
+                            var prop_dict = feature.properties;
+                            for (let j = 0; j < filterSubProps.length; j++) {
+                                if (filterSubProps[j] in prop_dict) {
+                                    var prop_dict = prop_dict[filterSubProps[j]];
+                                    var testVal = prop_dict;
                                 } else {
-                                    var testVal = feature.properties[filter.name];
+                                    returnFeature = returnFeature & false;
                                 }
-                            } else {
-                                returnFeature = returnFeature & false;
                             }
                         }
-
+                            
                         if (filter.range) {
                             if (typeof filter.range[0]==='number') {
                                 if (testVal < filter.range[0]) {
@@ -384,17 +378,15 @@ class SlideMap(MapComponent):
                             }
                         }
                     }
-                } else {
+                }  else {
                     return returnFeature;
-                }
-                
+                }              
                 return returnFeature;
                 
                 }
                 """,
             name = 'featureFilter'
         )
-
 
         self.js_namespace.dump(
             assets_folder = self.assets_folder
@@ -708,6 +700,12 @@ class MultiFrameSlideMap(SlideMap):
                         rgb_url = self.tiles_url+'/?style='+json.dumps(rgb_style_dict)
                     else:
                         rgb_url = None
+
+                    # Pre-determining indices:
+                    if not rgb_url is None:
+                        layer_indices = list(range(0,len(frame_names)+1))
+                    else:
+                        layer_indices = list(range(0,len(frame_names)))
                     
                     for f_idx,f in enumerate(frame_names):
                         self.frame_layers.append(
@@ -716,11 +714,11 @@ class MultiFrameSlideMap(SlideMap):
                                     url = self.tiles_url+'/?style={"bands": [{"palette":["rgba(0,0,0,0)","rgba(255,255,255,255)"],"framedelta":'+str(f_idx)+'}]}',
                                     tileSize = self.image_metadata['tileWidth'],
                                     maxNativeZoom=self.image_metadata['levels']-1,
-                                    id = {'type': 'tile-layer','index': np.random.randint(0,1000)}
+                                    id = {'type': 'tile-layer','index': layer_indices[f_idx]}
                                 ),
                                 name = f,
                                 checked = f==frame_names[0],
-                                id = {'type': 'base-layer','index': np.random.randint(0,1000)}
+                                id = {'type': 'base-layer','index': layer_indices[f_idx]}
                             )
                         )
                     if rgb_url:
@@ -730,12 +728,12 @@ class MultiFrameSlideMap(SlideMap):
                                     url = rgb_url,
                                     tileSize = self.image_metadata['tileWidth'],
                                     maxNativeZoom=self.image_metadata['levels']-1,
-                                    id = {'type': 'tile-layer','index': np.random.randint(0,1000)},
+                                    id = {'type': 'tile-layer','index': layer_indices[f_idx+1]},
                                     bounds = [[0,0],[-self.image_metadata['tileWidth'], self.image_metadata['tileWidth']]]
                                 ),
                                 name = 'RGB Image',
                                 checked = False,
-                                id = {'type': 'base-layer','index': np.random.randint(0,1000)}
+                                id = {'type': 'base-layer','index': layer_indices[f_idx+1]}
                             )
                         )
             else:
@@ -745,11 +743,11 @@ class MultiFrameSlideMap(SlideMap):
                             url = self.tiles_url,
                             tileSize = self.image_metadata['tileWidth'],
                             maxNativeZoom=self.image_metadata['levels']-1,
-                            id = {'type': 'tile-layer','index': np.random.randint(0,1000)},
+                            id = {'type': 'tile-layer','index': 0},
                             bounds = [[0,0],[-self.image_metadata['tileWidth'],self.image_metadata['tileWidth']]]
                         ),
                         name = 'RGB Image',
-                        id = {'type': 'base-layer','index': np.random.randint(0,1000)}
+                        id = {'type': 'base-layer','index': 0}
                     )
                 )
         else:

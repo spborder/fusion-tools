@@ -1,6 +1,16 @@
 # Changelog
 
 <!--next-version-placeholder-->
+## v0.0.8 (09/12/2024)
+
+### Fix
+- Pre-initializing pattern-matching indices for MultiFrameSlideMap base and tile layers
+- Fixing dimensions of HRAViewer when added to a column
+
+### Features
+- Update markers on the map by selecting data points in a sub-plot in PropertyPlotter
+- Now accepting an arbitrary number of levels in nested sub-properties (use the property_depth argument to adjust +/- 4 levels)
+
 ## v0.0.7 (09/11/2024)
 
 ### Features
