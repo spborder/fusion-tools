@@ -71,7 +71,8 @@ class Visualization:
                 dbc.themes.LUX,
                 dbc.themes.BOOTSTRAP,
                 dbc.icons.BOOTSTRAP,
-                dbc.icons.FONT_AWESOME
+                dbc.icons.FONT_AWESOME,
+                dmc.styles.ALL
             ],
             external_scripts = self.app_options['external_scripts'],
             assets_folder = self.assets_folder,
@@ -135,7 +136,8 @@ class Visualization:
                                     dbc.CardBody(
                                         col.blueprint.embed(self.viewer_app)
                                     )
-                                ])
+                                ]),
+                                width = True
                             )
                         )
                     else:
@@ -163,7 +165,8 @@ class Visualization:
                                             id = {'type': 'vis-layout-tabs','index': np.random.randint(0,1000)}
                                         )
                                     )
-                                ])
+                                ]),
+                                width = True
                             )
                         )
             else:
@@ -174,7 +177,8 @@ class Visualization:
                             dbc.CardBody(
                                 row.blueprint.embed(self.viewer_app)
                             )
-                        ])
+                        ]),
+                        width = True
                     )
                 )
 

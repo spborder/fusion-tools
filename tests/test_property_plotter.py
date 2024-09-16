@@ -21,7 +21,7 @@ def main():
 
     # Grabbing first item from demo DSA instance
     base_url = 'http://ec2-3-230-122-132.compute-1.amazonaws.com:8080/api/v1'
-    item_id = '6495a4df3e6ae3107da10dc2'
+    item_id = '64f545302d82d04be3e39eec'
 
     # Starting visualization session
     tile_server = DSATileServer(
