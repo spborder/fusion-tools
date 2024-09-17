@@ -428,24 +428,6 @@ def export_annotations(
             f.close()
 
 def find_intersecting(geo_source:dict, geo_query:Polygon, return_props:bool = True, return_shapes:bool = True):
-    """
-    Return properties and/or shapes of features from geo_1 that intersect with geo_2
-    
-    Parameters
-    --------
-    geo_source: dict
-        GeoJSON dictionary containing "FeatureCollection" with "features" key
-
-    geo_query: dict
-        GeoJSON dictionary containing "FeatureCollection" with "features" key
-
-    return_props: bool = True
-        Whether to return properties of features from geo_source that intersect with geo_query
-
-    return_shapes: bool = True
-        Whether to return shape (geometries) of features from geo_source that intersect with geo_query
-    
-    """
     """Return properties and/or shapes of features from geo_source that intersect with geo_query
 
     :param geo_source: Source GeoJSON where you are searching for intersecting features
