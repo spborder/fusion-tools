@@ -571,7 +571,6 @@ class SlideMap(MapComponent):
             ]
         )(self.export_image_overlay_bounds)
 
-
     def get_click_popup(self, clicked):
         """Populating popup Div with summary information on the clicked GeoJSON feature
 
@@ -823,7 +822,17 @@ class SlideMap(MapComponent):
             raise exceptions.PreventUpdate
 
     def export_image_overlay_bounds(self, button_click, current_position):
-        
+        """Exporting position of image overlay
+
+        :param button_click: Export button clicked
+        :type button_click: int
+        :param current_position: Current position of the image overlay
+        :type current_position: list
+        :raises exceptions.PreventUpdate: Preventing callback if button isn't clicked
+        :return: JSON file containing original image path and current position on the slide 
+        :rtype: dict
+        """
+
         if button_click:
             image_overlay_index = ctx.triggered_id['index']
 

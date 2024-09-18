@@ -337,6 +337,8 @@ class OverlayOptions(Tool):
             ]
         )(self.update_filter_selector)
 
+
+
     def add_filter(self, add_filter_click, delete_filter_click,overlay_info_state):
         """Adding a new filter to apply to GeoJSON features
 
@@ -2429,29 +2431,6 @@ class PropertyPlotter(Tool):
         )
 
         return [map_marker_div]
-
-class FeatureAnnotator(Tool):
-    """FeatureAnnotator Tool used to annotate individual GeoJSON features.
-    These annotations can include either drawings highlighting regions within a feature or labels for a feature.
-
-    :param Tool: General class for interactive components that visualize, edit, or perform analyses on data.
-    :type Tool: None
-    """
-    def __init__(self):
-        """Constructor method
-        """
-
-        self.title = 'Feature Annotator'
-        self.blueprint = DashBlueprint()
-        self.blueprint.layout = self.gen_layout()
-
-        self.get_callbacks()
-
-    def gen_layout(self):
-        pass
-
-    def get_callbacks(self):
-        pass
 
 class HRAViewer(Tool):
     """HRAViewer Tool which enables hierarchy visualization for organs, cell types, biomarkers, and proteins in the Human Reference Atlas
