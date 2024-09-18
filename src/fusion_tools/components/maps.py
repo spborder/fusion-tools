@@ -156,6 +156,20 @@ class SlideMap(MapComponent):
                                                             className = 'd-grid col-12 mx-auto'
                                                         )
                                                     )
+                                                ]),
+                                                dbc.Row([
+                                                    dbc.Col([
+                                                        dbc.Button(
+                                                            'Save Position',
+                                                            id = {'type': 'image-overlay-save-position','index': st_idx},
+                                                            n_clicks = 0,
+                                                            className = 'd-grid col-12 mx-auto',
+                                                            color = 'secondary'
+                                                        ),
+                                                        dcc.Download(
+                                                            id = {'type': 'image-overlay-save-position-download','index': st_idx}
+                                                        )
+                                                    ])
                                                 ])
                                             ]
                                         )
@@ -531,6 +545,7 @@ class SlideMap(MapComponent):
             ]
         )(self.gen_image_mover)
 
+        # Moving image overlay to location of draggable marker
         self.blueprint.callback(
             [
                 Input({'type': 'image-overlay-mover','index': MATCH},'data')
@@ -542,6 +557,20 @@ class SlideMap(MapComponent):
                 State({'type': 'image-overlay','index': MATCH},'bounds')
             ]
         )(self.move_image_overlay)
+
+        # Downloading position of image overlay
+        self.blueprint.callback(
+            [
+                Input({'type': 'image-overlay-save-position','index': MATCH},'n_clicks')
+            ],
+            [
+                Output({'type': 'image-overlay-save-position-download','index': MATCH},'data')
+            ],
+            [
+                State({'type': 'image-overlay','index': MATCH},'bounds')
+            ]
+        )(self.export_image_overlay_bounds)
+
 
     def get_click_popup(self, clicked):
         """Populating popup Div with summary information on the clicked GeoJSON feature
@@ -790,6 +819,27 @@ class SlideMap(MapComponent):
             ]
 
             return new_bounds
+        else:
+            raise exceptions.PreventUpdate
+
+    def export_image_overlay_bounds(self, button_click, current_position):
+        
+        if button_click:
+            image_overlay_index = ctx.triggered_id['index']
+
+            scaled_position = [
+                [current_position[0][1]/self.x_scale, current_position[0][0]/self.y_scale],
+                [current_position[1][1]/self.x_scale, current_position[1][0]/self.y_scale]
+            ]
+            export_data = {
+                'content': json.dumps({
+                    'imagePath': self.annotations[image_overlay_index].image_path,
+                    'imageBounds': scaled_position
+                }),
+                'filename': "fusion_image_overlay_position.json"
+            }
+
+            return export_data
         else:
             raise exceptions.PreventUpdate
 

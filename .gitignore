@@ -1,4 +1,4 @@
 dist/*
 fusion_tools.egg-info/*
 update_instructions.md
-.fusion_assets/
+.vscode/*
