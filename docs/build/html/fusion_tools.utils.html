@@ -20,7 +20,9 @@
         <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
-    <link rel="search" title="Search" href="search.html" /> 
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="next" title="fusion_tools.visualization package" href="fusion_tools.visualization.html" />
+    <link rel="prev" title="fusion_tools.components package" href="fusion_tools.components.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -42,26 +44,26 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <!-- Local TOC -->
-              <div class="local-toc"><ul>
-<li><a class="reference internal" href="#">fusion_tools.utils package</a><ul>
-<li><a class="reference internal" href="#submodules">Submodules</a></li>
-<li><a class="reference internal" href="#module-fusion_tools.utils.shapes">fusion_tools.utils.shapes module</a><ul>
-<li><a class="reference internal" href="#fusion_tools.utils.shapes.align_object_props"><code class="docutils literal notranslate"><span class="pre">align_object_props()</span></code></a></li>
-<li><a class="reference internal" href="#fusion_tools.utils.shapes.export_annotations"><code class="docutils literal notranslate"><span class="pre">export_annotations()</span></code></a></li>
-<li><a class="reference internal" href="#fusion_tools.utils.shapes.find_intersecting"><code class="docutils literal notranslate"><span class="pre">find_intersecting()</span></code></a></li>
-<li><a class="reference internal" href="#fusion_tools.utils.shapes.load_aperio"><code class="docutils literal notranslate"><span class="pre">load_aperio()</span></code></a></li>
-<li><a class="reference internal" href="#fusion_tools.utils.shapes.load_geojson"><code class="docutils literal notranslate"><span class="pre">load_geojson()</span></code></a></li>
-<li><a class="reference internal" href="#fusion_tools.utils.shapes.load_histomics"><code class="docutils literal notranslate"><span class="pre">load_histomics()</span></code></a></li>
-<li><a class="reference internal" href="#fusion_tools.utils.shapes.load_polygon_csv"><code class="docutils literal notranslate"><span class="pre">load_polygon_csv()</span></code></a></li>
-<li><a class="reference internal" href="#fusion_tools.utils.shapes.spatially_aggregate"><code class="docutils literal notranslate"><span class="pre">spatially_aggregate()</span></code></a></li>
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="modules.html">src</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="fusion_tools.html">fusion_tools package</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="fusion_tools.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="fusion_tools.components.html">fusion_tools.components package</a></li>
+<li class="toctree-l4 current"><a class="current reference internal" href="#">fusion_tools.utils package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusion_tools.visualization.html">fusion_tools.visualization package</a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#module-fusion_tools.utils">Module contents</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusion_tools.html#submodules">Submodules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusion_tools.html#module-fusion_tools.handler">fusion_tools.handler module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusion_tools.html#module-fusion_tools.tileserver">fusion_tools.tileserver module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="fusion_tools.html#module-fusion_tools">Module contents</a></li>
 </ul>
 </li>
 </ul>
-</div>
+</li>
+</ul>
+
         </div>
       </div>
     </nav>
@@ -76,6 +78,8 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="modules.html">src</a></li>
+          <li class="breadcrumb-item"><a href="fusion_tools.html">fusion_tools package</a></li>
       <li class="breadcrumb-item active">fusion_tools.utils package</li>
       <li class="wy-breadcrumbs-aside">
             <a href="_sources/fusion_tools.utils.rst.txt" rel="nofollow"> View page source</a>
@@ -133,17 +137,59 @@
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="fusion_tools.utils.shapes.find_intersecting">
-<span class="sig-prename descclassname"><span class="pre">fusion_tools.utils.shapes.</span></span><span class="sig-name descname"><span class="pre">find_intersecting</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">geo_source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">geo_query</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Polygon</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_props</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_shapes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.utils.shapes.find_intersecting" title="Link to this definition"></a></dt>
-<dd><p>Return properties and/or shapes of features from geo_1 that intersect with geo_2</p>
+<dt class="sig sig-object py" id="fusion_tools.utils.shapes.extract_geojson_properties">
+<span class="sig-prename descclassname"><span class="pre">fusion_tools.utils.shapes.</span></span><span class="sig-name descname"><span class="pre">extract_geojson_properties</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">geo_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reference_object</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ignore_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">nested_depth</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#fusion_tools.utils.shapes.extract_geojson_properties" title="Link to this definition"></a></dt>
+<dd><p>Extract property names and info for provided list of GeoJSON structures.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>geo_source</strong> (<em>dict</em>) – GeoJSON dictionary containing “FeatureCollection” with “features” key</p></li>
-<li><p><strong>geo_query</strong> (<em>dict</em>) – GeoJSON dictionary containing “FeatureCollection” with “features” key</p></li>
-<li><p><strong>return_props</strong> (<em>bool = True</em>) – Whether to return properties of features from geo_source that intersect with geo_query</p></li>
-<li><p><strong>return_shapes</strong> (<em>bool = True</em>) – Whether to return shape (geometries) of features from geo_source that intersect with geo_query</p></li>
+<li><p><strong>geo_list</strong> (<em>list</em>) – List of GeoJSON dictionaries containing properties</p></li>
+<li><p><strong>reference_object</strong> (<em>Union</em><em>[</em><em>str</em><em>,</em><em>None</em><em>]</em><em>, </em><em>optional</em>) – File path to reference object containing more information for each structure, defaults to None</p></li>
+<li><p><strong>ignore_list</strong> (<em>Union</em><em>[</em><em>list</em><em>,</em><em>None</em><em>]</em><em>, </em><em>optional</em>) – List of properties to hide from the main view, defaults to None</p></li>
+<li><p><strong>nested_depth</strong> (<em>int</em><em>, </em><em>optional</em>) – For properties stored as nested dictionaries, specify desired depth (depth of 2 = {‘property_name’: {‘sub-prop1’: val, etc.}}), defaults to 2</p></li>
 </ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>List of accessible properties in visualization session.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>list</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fusion_tools.utils.shapes.extract_nested_prop">
+<span class="sig-prename descclassname"><span class="pre">fusion_tools.utils.shapes.</span></span><span class="sig-name descname"><span class="pre">extract_nested_prop</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">main_prop_dict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">depth</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">tuple</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">()</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">values_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[]</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.utils.shapes.extract_nested_prop" title="Link to this definition"></a></dt>
+<dd><p>Extracted nested properties up to depth level.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>main_prop_dict</strong> (<em>dict</em>) – Main dictionary containing nested properties. ex: {‘main_prop’: {‘sub_prop1’: value1, ‘sub_prop2’: value2}}</p></li>
+<li><p><strong>depth</strong> (<em>int</em>) – Number of levels to extend into nested dictionary</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="fusion_tools.utils.shapes.find_intersecting">
+<span class="sig-prename descclassname"><span class="pre">fusion_tools.utils.shapes.</span></span><span class="sig-name descname"><span class="pre">find_intersecting</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">geo_source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">geo_query</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">Polygon</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_props</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">return_shapes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.utils.shapes.find_intersecting" title="Link to this definition"></a></dt>
+<dd><p>Return properties and/or shapes of features from geo_source that intersect with geo_query</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>geo_source</strong> (<em>dict</em>) – Source GeoJSON where you are searching for intersecting features</p></li>
+<li><p><strong>geo_query</strong> (<em>shapely.geometry.Polygon</em>) – Query polygon used to filter source GeoJSON features</p></li>
+<li><p><strong>return_props</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether or not to return properties of intersecting features</p></li>
+<li><p><strong>return_shapes</strong> (<em>bool</em><em>, </em><em>optional</em>) – Whether or not to return shape information of intersecting features</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Intersecting properties and/or shapes from geo_source</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>tuple</p>
 </dd>
 </dl>
 </dd></dl>
@@ -241,7 +287,10 @@ shape_options: dict with “radius” for point annotations (can be number or co
 
            </div>
           </div>
-          <footer>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="fusion_tools.components.html" class="btn btn-neutral float-left" title="fusion_tools.components package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="fusion_tools.visualization.html" class="btn btn-neutral float-right" title="fusion_tools.visualization package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
 
   <hr/>
 
