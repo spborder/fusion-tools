@@ -13,6 +13,7 @@ import uuid
 from typing_extensions import Union
 import geojson
 import json
+import base64
 
 from PIL import Image
 
@@ -96,6 +97,76 @@ class SlideMap(MapComponent):
 
         return x_scale, y_scale
 
+    def get_image_overlay_popup(self, st, st_idx):
+        """Getting popup components for image overlay annotations
+
+        :param st: New ImageOverlay annotation
+        :type st: SlideImageOverlay
+        :param st_idx: Index to use for interactive components
+        :type st_idx: int
+        """
+
+        image_overlay_popup = dl.Popup(
+                                dbc.Accordion(
+                                    children = [
+                                        dbc.AccordionItem(
+                                            title = 'Info',
+                                            children = [
+                                                html.P(f'Path: {st.image_path}'),
+                                            ]
+                                        ),
+                                        dbc.AccordionItem(
+                                            title = 'Properties',
+                                            children = [
+                                                f'{k}: {v}'
+                                                for k,v in st.image_properties.items()
+                                            ]
+                                        ),
+                                        dbc.AccordionItem(
+                                            title = 'Transparency',
+                                            children = [
+                                                dbc.Label(
+                                                    'Transparency Slider:',
+                                                    html_for = {'type': 'image-overlay-transparency','index': st_idx},
+                                                    style = {'marginBottom': '5px'}
+                                                ),
+                                                dcc.Slider(
+                                                    id = {'type': 'image-overlay-transparency','index': st_idx},
+                                                    min = 0,
+                                                    max = 1.0,
+                                                    step = 0.1,
+                                                    value = 0.5,
+                                                    marks = None,
+                                                    tooltip = {
+                                                        'always_visible': True,
+                                                        'placement': 'bottom'
+                                                    }
+                                                )
+                                            ]
+                                        ),
+                                        dbc.AccordionItem(
+                                            title = 'Position',
+                                            children = [
+                                                dbc.Row([
+                                                    dbc.Col(
+                                                        dbc.Button(
+                                                            'Move it!',
+                                                            id = {'type': 'image-overlay-position-butt','index': st_idx},
+                                                            n_clicks = 0,
+                                                            className = 'd-grid col-12 mx-auto'
+                                                        )
+                                                    )
+                                                ])
+                                            ]
+                                        )
+                                    ],
+                                    style = {'width':'300px'}
+                                ),
+                                autoPan = False
+                            )
+
+        return image_overlay_popup
+
     def process_annotations(self):
         """Process incoming annotations and generate dl.Overlay components applied to the SlideMap
 
@@ -159,28 +230,35 @@ class SlideMap(MapComponent):
                     )
 
                 elif type(st)==SlideImageOverlay:
-
-                    adjusted_image_crs = [
-                        [0,0],
-                        [-120,120]
+                    
+                    scaled_image_bounds = [
+                        [st.image_bounds[1]*self.y_scale, st.image_bounds[0]*self.x_scale],
+                        [st.image_bounds[3]*self.y_scale, st.image_bounds[2]*self.x_scale]
                     ]
 
-                    # Copying image over to assets folder
-                    read_image = Image.open(st.image_path)
-                    new_image_path = self.assets_folder+f'image_{st_idx}.png'
-                    print(new_image_path)
-                    read_image.save(new_image_path)
+                    # Creating data: path for image
+                    with open(st.image_path,'rb') as f:
+                        new_image_path = f'data:image/{st.image_path.split(".")[-1]};base64,{base64.b64encode(f.read()).decode("ascii")}'
+                        f.close()
 
-                    print(adjusted_image_crs)
+                    image_overlay_popup = self.get_image_overlay_popup(st, st_idx)
 
-                    image_overlays.append(
+                    image_overlays.extend([
                         dl.ImageOverlay(
                             url = new_image_path,
                             opacity = 0.5,
-                            bounds = adjusted_image_crs,
-                            id = {'type': 'image-overlay','index': st_idx}
+                            interactive = True,
+                            bounds = scaled_image_bounds,
+                            id = {'type': 'image-overlay','index': st_idx},
+                            children = [
+                                image_overlay_popup
+                            ],
+                        ),
+                        dl.LayerGroup(
+                            id = {'type': 'image-overlay-mover-layergroup','index': st_idx},
+                            children = []
                         )
-                    )
+                    ])
 
         return annotation_components, image_overlays
 
@@ -388,6 +466,17 @@ class SlideMap(MapComponent):
             name = 'featureFilter'
         )
 
+        self.js_namespace.add(
+            src = """
+            function(e,ctx){
+                ctx.setProps({
+                    data: e.latlng
+                });
+            }
+            """,
+            name = 'sendPosition'
+        )
+
         self.js_namespace.dump(
             assets_folder = self.assets_folder
         )
@@ -416,6 +505,43 @@ class SlideMap(MapComponent):
                 Output({'type': 'map-layers-control','index': ALL},'children')
             ]
         )(self.add_manual_roi)
+
+        # Image overlay transparency adjustment
+        self.blueprint.callback(
+            [
+                Input({'type': 'image-overlay-transparency','index': MATCH},'value')
+            ],
+            [
+                Output({'type': 'image-overlay','index': MATCH},'opacity')
+            ]
+        )(self.update_image_overlay_transparency)
+
+        # Creating a draggable marker to move an image overlay
+        self.blueprint.callback(
+            [
+                Input({'type':'image-overlay-position-butt','index': MATCH},'n_clicks')
+            ],
+            [
+                Output({'type': 'image-overlay-mover-layergroup','index': MATCH},'children'),
+                Output({'type': 'image-overlay-position-butt','index': MATCH},'children')
+            ],
+            [
+                State({'type': 'image-overlay','index': MATCH},'bounds'),
+                State({'type': 'image-overlay-position-butt','index': MATCH},'children')
+            ]
+        )(self.gen_image_mover)
+
+        self.blueprint.callback(
+            [
+                Input({'type': 'image-overlay-mover','index': MATCH},'data')
+            ],
+            [
+                Output({'type': 'image-overlay','index': MATCH},'bounds')
+            ],
+            [
+                State({'type': 'image-overlay','index': MATCH},'bounds')
+            ]
+        )(self.move_image_overlay)
 
     def get_click_popup(self, clicked):
         """Populating popup Div with summary information on the clicked GeoJSON feature
@@ -557,6 +683,7 @@ class SlideMap(MapComponent):
         :return: List of new children to dl.LayerControl() consisting of overlaid GeoJSON components.
         :rtype: list
         """
+        
         new_geojson = get_pattern_matching_value(new_geojson)
         if not new_geojson is None:
             new_geojson['properties'] = {
@@ -582,6 +709,90 @@ class SlideMap(MapComponent):
                     raise exceptions.PreventUpdate
         else:
             raise exceptions.PreventUpdate
+
+    def update_image_overlay_transparency(self, new_opacity: float):
+        """Update transparency of image overlay component
+
+        :param new_opacity: New opacity level (0-1 (0.1 increments)) from slider
+        :type new_opacity: float
+        :return: New opacity level
+        :rtype: float
+        """
+        if new_opacity is not None:
+            return new_opacity
+        else:
+            raise exceptions.PreventUpdate
+
+    def gen_image_mover(self,button_click,current_bounds,button_text):
+        """Creates a draggable Marker to facilitate moving an image overlay around
+
+        :param button_click: Position button is clicked
+        :type button_click: dict
+        :param current_bounds: Current bounds of the image overlay, used for setting initial position of mover Marker
+        :type current_bounds: list
+        :param button_text: Text displayed on position button.
+        :type button_text: str
+        :raises exceptions.PreventUpdate: Prevent update if button is not pressed.
+        :return: New text for the position button and mover Marker
+        :rtype: tuple
+        """
+        if button_click:
+            if button_text=='Move it!':
+                
+                new_button_text = 'Lock in!'
+                mover = dl.DivMarker(
+                    id = {'type': 'image-overlay-mover','index': ctx.triggered_id['index']},
+                    position = current_bounds[0],
+                    draggable = True,
+                    iconOptions = {
+                        'className': 'fa-solid fa-crosshairs fa-xl',
+                    },
+                    children = [
+                        dl.Tooltip(
+                            'Double click to move the image!'
+                        )
+                    ],
+                    eventHandlers={
+                        'dblclick': self.js_namespace('sendPosition')
+                    }
+                )
+
+            elif button_text == 'Lock in!':
+
+                new_button_text = 'Move it!'
+                mover = []
+
+            return mover, new_button_text
+        else:
+            raise exceptions.PreventUpdate
+
+    def move_image_overlay(self, new_position, old_bounds):
+        """Move image overlay to location of mover Marker
+
+        :param new_position: New top-left position of image overlay (keys: lat, lng)
+        :type new_position: dict
+        :param old_bounds: Old bounds of the image, used for determining bottom-right coordinates
+        :type old_bounds: list
+        :raises exceptions.PreventUpdate: Prevents callback execution until a position is set
+        :return: New bounds for image overlay component
+        :rtype: list
+        """
+
+        if not new_position is None:
+            old_size = [
+                old_bounds[1][0] - old_bounds[0][0],
+                old_bounds[1][1] - old_bounds[0][1]
+            ]
+
+            new_bounds = [
+                [new_position['lat'],new_position['lng']],
+                [new_position['lat']+old_size[0], new_position['lng']+old_size[1]]
+            ]
+
+            return new_bounds
+        else:
+            raise exceptions.PreventUpdate
+
 
 class MultiFrameSlideMap(SlideMap):
     """MultiFrameSlideMap component, containing an image with multiple frames which are added as additional, selectable dl.TileLayer() components
@@ -762,7 +973,7 @@ class SlideImageOverlay(MapComponent):
     def __init__(self,
                  image_path: str,
                  image_crs: list = [0,0],
-                 image_properties: Union[dict,None] = None
+                 image_properties: Union[dict,None] = {"None": ""}
                 ):
         """Constructor method
 
@@ -787,9 +998,7 @@ class SlideImageOverlay(MapComponent):
         read_image = np.uint8(np.array(Image.open(self.image_path)))
         image_shape = np.shape(read_image)
 
-        print(image_shape)
-
-        return self.image_crs + [self.image_crs[0]+image_shape[1], self.image_crs[1]-image_shape[0]]
+        return self.image_crs + [self.image_crs[0]+image_shape[1], self.image_crs[1]+image_shape[0]]
 
 class ChannelMixer(MapComponent):
     """ChannelMixer component that allows users to select various frames from their image to overlay at the same time with different color (styles) applied.

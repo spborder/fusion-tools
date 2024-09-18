@@ -49,9 +49,7 @@ def gen_clusters(feature_data, feature_cols, eps = 0.3, min_samples = 10):
 
     clusterer = DBSCAN(eps = eps, min_samples = min_samples).fit(umap_data)
     cluster_labels = clusterer.labels_
-    print(cluster_labels)
     string_labels = [f'Cluster {i}' if not i==-1 else 'Noise' for i in cluster_labels]
-    print(string_labels)
 
     return string_labels
 

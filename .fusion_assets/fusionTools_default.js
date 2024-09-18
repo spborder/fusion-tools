@@ -75,54 +75,61 @@ window.fusionTools = Object.assign({}, window.fusionTools, {
 
             ,
         featureFilter: function(feature, context) {
-            const {
-                overlayBounds,
-                overlayProp,
-                fillOpacity,
-                lineColor,
-                filterVals
-            } = context.hideout;
+                const {
+                    overlayBounds,
+                    overlayProp,
+                    fillOpacity,
+                    lineColor,
+                    filterVals
+                } = context.hideout;
 
-            var returnFeature = true;
-            if (filterVals) {
-                for (let i = 0; i < filterVals.length; i++) {
-                    // Iterating through filterVals list
-                    var filter = filterVals[i];
-                    if (filter.name) {
-                        var filterSubProps = filter.name.split(" --> ");
-                        var prop_dict = feature.properties;
-                        for (let j = 0; j < filterSubProps.length; j++) {
-                            if (filterSubProps[j] in prop_dict) {
-                                var prop_dict = prop_dict[filterSubProps[j]];
-                                var testVal = prop_dict;
+                var returnFeature = true;
+                if (filterVals) {
+                    for (let i = 0; i < filterVals.length; i++) {
+                        // Iterating through filterVals list
+                        var filter = filterVals[i];
+                        if (filter.name) {
+                            var filterSubProps = filter.name.split(" --> ");
+                            var prop_dict = feature.properties;
+                            for (let j = 0; j < filterSubProps.length; j++) {
+                                if (filterSubProps[j] in prop_dict) {
+                                    var prop_dict = prop_dict[filterSubProps[j]];
+                                    var testVal = prop_dict;
+                                } else {
+                                    returnFeature = returnFeature & false;
+                                }
+                            }
+                        }
+
+                        if (filter.range) {
+                            if (typeof filter.range[0] === 'number') {
+                                if (testVal < filter.range[0]) {
+                                    returnFeature = returnFeature & false;
+                                }
+                                if (testVal > filter.range[1]) {
+                                    returnFeature = returnFeature & false;
+                                }
                             } else {
-                                returnFeature = returnFeature & false;
+                                if (filter.range.includes(testVal)) {
+                                    returnFeature = returnFeature & true;
+                                } else {
+                                    returnFeature = returnFeature & false;
+                                }
                             }
                         }
                     }
-
-                    if (filter.range) {
-                        if (typeof filter.range[0] === 'number') {
-                            if (testVal < filter.range[0]) {
-                                returnFeature = returnFeature & false;
-                            }
-                            if (testVal > filter.range[1]) {
-                                returnFeature = returnFeature & false;
-                            }
-                        } else {
-                            if (filter.range.includes(testVal)) {
-                                returnFeature = returnFeature & true;
-                            } else {
-                                returnFeature = returnFeature & false;
-                            }
-                        }
-                    }
+                } else {
+                    return returnFeature;
                 }
-            } else {
                 return returnFeature;
-            }
-            return returnFeature;
 
+            }
+
+            ,
+        sendPosition: function(e, ctx) {
+            ctx.setProps({
+                data: e.latlng
+            });
         }
 
     }
