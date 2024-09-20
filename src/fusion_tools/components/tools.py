@@ -338,7 +338,6 @@ class OverlayOptions(Tool):
         )(self.update_filter_selector)
 
 
-
     def add_filter(self, add_filter_click, delete_filter_click,overlay_info_state):
         """Adding a new filter to apply to GeoJSON features
 

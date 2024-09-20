@@ -1,0 +1,82 @@
+"""Testing FeatureAnnotation component
+"""
+
+import os
+import sys
+import threading
+sys.path.append('./src/')
+from fusion_tools import Visualization, DSAHandler
+from fusion_tools.tileserver import DSATileServer
+from fusion_tools.components import SlideMap, FeatureAnnotation
+
+
+import pandas as pd
+
+def main():
+
+    # Grabbing first item from demo DSA instance
+    base_url = 'http://ec2-3-230-122-132.compute-1.amazonaws.com:8080/api/v1'
+    item_id = '64f545302d82d04be3e39eec'
+
+    # Starting visualization session
+    tile_server = DSATileServer(
+        api_url = base_url,
+        item_id = item_id
+    )
+
+    # Starting the DSAHandler to grab information:
+    dsa_handler = DSAHandler(
+        girderApiUrl = base_url
+    )
+
+    annotations = dsa_handler.get_annotations(
+        item = item_id
+    )
+    
+    vis_session = Visualization(
+        components = [
+            [
+                SlideMap(
+                    tile_server = tile_server,
+                    annotations = annotations
+                ),
+                [
+                    FeatureAnnotation(
+                        storage_path = os.getcwd()+'\\tests\\Test_Annotations\\',
+                        tile_server = tile_server,
+                        labels_format = 'json',
+                        annotations_format = 'rgb'
+                    )
+                ]
+            ]
+        ]
+    )
+
+    vis_session.start()
+
+
+if __name__=='__main__':
+    main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -13,6 +13,9 @@ import numpy as np
 
 import geopandas as gpd
 from shapely.geometry import Polygon, Point, shape
+from skimage import draw
+from scipy import ndimage
+
 import pandas as pd
 
 import uuid
@@ -659,7 +662,32 @@ def extract_geojson_properties(geo_list: list, reference_object: Union[str,None]
 
     return geojson_properties, feature_names, property_info
 
+# Taken from plotly image annotation tutorial: https://dash.plotly.com/annotations#changing-the-style-of-annotations
+def path_to_indices(path):
+    """
+    From SVG path to numpy array of coordinates, each row being a (row, col) point
+    """
+    indices_str = [
+        el.replace("M", "").replace("Z", "").split(",") for el in path.split("L")
+    ]
+    return np.rint(np.array(indices_str, dtype=float)).astype(int)
 
+def path_to_mask(path, shape):
+    """
+    From SVG path to a boolean array where all pixels enclosed by the path
+    are True, and the other pixels are False.
+    """
+    cols, rows = path_to_indices(path).T
+    rr, cc = draw.polygon(rows, cols)
+
+    # Clipping values for rows and columns to "shape" (annotations on the edge are counted as dimension+1)
+    rr = np.clip(rr,a_min=0,a_max=int(shape[0]-1))
+    cc = np.clip(cc,a_min=0,a_max=int(shape[1]-1))
+
+    mask = np.zeros(shape, dtype=bool)
+    mask[rr, cc] = True
+    mask = ndimage.binary_fill_holes(mask)
+    return mask
 
 
 
