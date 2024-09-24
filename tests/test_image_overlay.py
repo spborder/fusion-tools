@@ -35,7 +35,10 @@ def main():
                     annotations = annotations
                 )
             ]
-        ]
+        ],
+        app_options = {
+            'port': '8060'
+        }
     )
 
     vis_session.start()

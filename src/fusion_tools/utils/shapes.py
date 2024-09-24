@@ -13,6 +13,9 @@ import numpy as np
 
 import geopandas as gpd
 from shapely.geometry import Polygon, Point, shape
+from skimage import draw
+from scipy import ndimage
+
 import pandas as pd
 
 import uuid
@@ -495,10 +498,10 @@ def spatially_aggregate(agg_geo:dict, base_geos: list):
                     numeric_props = intersecting_props.select_dtypes(exclude='object')
                     if not numeric_props.empty:
                         for c in numeric_props.columns.tolist():
-                            c_max = numeric_props[c].nanmax()
-                            c_min = numeric_props[c].nanmin()
-                            c_mean = numeric_props[c].nanmean()
-                            c_sum = numeric_props[c].nansum()
+                            c_max = numeric_props[c].max()
+                            c_min = numeric_props[c].min()
+                            c_mean = numeric_props[c].mean()
+                            c_sum = numeric_props[c].sum()
 
                             f['properties'][b_name][f'{c} Max'] = c_max
                             f['properties'][b_name][f'{c} Min'] = c_min
@@ -509,23 +512,60 @@ def spatially_aggregate(agg_geo:dict, base_geos: list):
                     if not object_props.empty:
                         for c in object_props.columns.tolist():
                             col_type = list(set([type(i) for i in object_props[c].tolist()]))
-
                             if len(col_type)==1:
                                 if col_type[0]==str:
                                     c_counts = object_props[c].value_counts().to_dict()
                                     for i,j in c_counts.items():
                                         f['properties'][b_name][i] = j
                                 elif col_type[0]==dict:
-                                    c_df = pd.DataFrame.from_records(object_props[c].tolist())
-                                    f['properties'][b_name][c] = {
-                                        'mean': c_df.nanmean(axis=0).to_dict(),
-                                        'max': c_df.nanmax(axis=0).to_dict(),
-                                        'min': c_df.nanmin(axis=0).to_dict(),
-                                        'sum': c_df.nansum(axis=0).to_dict()
-                                    }
+                                    nested_prop_list = []
+                                    for i in object_props[c].tolist():
+                                        nested_levels = find_nested_levels({c:i})
+                                        nested_props = extract_nested_prop({c: i}, nested_levels, (), [])
+                                        nested_prop_list.append({i:j for k in nested_props for i,j in k.items()})
+                                    
+                                    nested_prop_df = pd.DataFrame.from_records(nested_prop_list)
 
+                                    nested_mean_props = nested_prop_df.mean(axis=0).to_dict()
+                                    nested_max_props = nested_prop_df.max(axis=0).to_dict()
+                                    nested_min_props = nested_prop_df.min(axis=0).to_dict()
+                                    nested_sum_props = nested_prop_df.sum(axis=0).to_dict()
+
+                                    nested_columns = nested_prop_df.columns.tolist()
+                                    for n_c in nested_columns:
+                                        n_c_parts = n_c.split(' --> ')
+
+                                        n_c_mean_dict = nested_mean_props[n_c]
+                                        n_c_max_dict = nested_max_props[n_c]
+                                        n_c_min_dict = nested_min_props[n_c]
+                                        n_c_sum_dict = nested_sum_props[n_c]
+
+                                        n_c_dict = {
+                                            'Mean': n_c_mean_dict,
+                                            'Max': n_c_max_dict,
+                                            'Min': n_c_min_dict,
+                                            'Sum': n_c_sum_dict
+                                        }
+                                        for part in reversed(n_c_parts):
+                                            n_c_dict = {part: n_c_dict}
+
+                                        if not part in f['properties'][b_name]:
+                                            f['properties'][b_name][part] = n_c_dict[part]
+                                        else:
+                                            f['properties'][b_name][part] = f['properties'][b_name][part] | n_c_dict[part]
 
     return agg_geo
+
+def find_nested_levels(nested_dict)->int:
+    """Find number of levels for nested dictionary
+
+    :param nested_dict: dictionary containing nested values
+    :type nested_dict: dict
+    :return: number of levels for nested dictionary
+    :rtype: int
+    """
+    
+    return max(find_nested_levels(v) if isinstance(v,dict) else 0 for v in nested_dict.values()) + 1
 
 def extract_nested_prop(main_prop_dict: dict, depth: int, path: tuple = (), values_list: list = []):
     """Extracted nested properties up to depth level.
@@ -659,7 +699,32 @@ def extract_geojson_properties(geo_list: list, reference_object: Union[str,None]
 
     return geojson_properties, feature_names, property_info
 
+# Taken from plotly image annotation tutorial: https://dash.plotly.com/annotations#changing-the-style-of-annotations
+def path_to_indices(path):
+    """
+    From SVG path to numpy array of coordinates, each row being a (row, col) point
+    """
+    indices_str = [
+        el.replace("M", "").replace("Z", "").split(",") for el in path.split("L")
+    ]
+    return np.rint(np.array(indices_str, dtype=float)).astype(int)
 
+def path_to_mask(path, shape):
+    """
+    From SVG path to a boolean array where all pixels enclosed by the path
+    are True, and the other pixels are False.
+    """
+    cols, rows = path_to_indices(path).T
+    rr, cc = draw.polygon(rows, cols)
+
+    # Clipping values for rows and columns to "shape" (annotations on the edge are counted as dimension+1)
+    rr = np.clip(rr,a_min=0,a_max=int(shape[0]-1))
+    cc = np.clip(cc,a_min=0,a_max=int(shape[1]-1))
+
+    mask = np.zeros(shape, dtype=bool)
+    mask[rr, cc] = True
+    mask = ndimage.binary_fill_holes(mask)
+    return mask
 
 
 

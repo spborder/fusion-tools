@@ -2,3 +2,4 @@ dist/*
 fusion_tools.egg-info/*
 update_instructions.md
 .vscode/*
+tests/Test_Annotations/*
