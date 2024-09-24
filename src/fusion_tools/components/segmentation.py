@@ -942,7 +942,11 @@ class BulkLabels(Tool):
         return x_scale, y_scale
 
     def gen_layout(self):
+        """Generating layout for BulkLabels component
 
+        :return: BulkLabels layout
+        :rtype: html.Div
+        """
         layout = html.Div([
             dbc.Card([
                 dbc.CardBody([
@@ -966,6 +970,10 @@ class BulkLabels(Tool):
                                     n_clicks = 0,
                                     id = {'type': 'bulk-labels-refresh-icon','index': 0}
                                 )
+                            ),
+                            dbc.Tooltip(
+                                target = {'type': 'bulk-labels-refresh-icon','index': 0},
+                                children = 'Click to reset labeling components'
                             )
                         ],md = 3)
                     ],justify='left'),
@@ -1000,6 +1008,10 @@ class BulkLabels(Tool):
                                     n_clicks = 0,
                                     style = {'marginLeft': '50%'}
                                 )
+                            ),
+                            dbc.Tooltip(
+                                target = {'type': 'bulk-labels-spatial-query-icon','index': 0},
+                                children = 'Click to add a spatial query'
                             )
                         ])
                     ],style={'marginBottom': '10px','marginTop':'10px'}),
@@ -1030,6 +1042,10 @@ class BulkLabels(Tool):
                                     n_clicks = 0,
                                     style = {'marginLeft': '50%'}
                                 )
+                            ),
+                            dbc.Tooltip(
+                                target = {'type': 'bulk-labels-add-property-icon','index': 0},
+                                children = 'Click to add a property filter'
                             )
                         ],align='center')
                     ],style = {'marginBottom': '10px'}),
@@ -1278,7 +1294,17 @@ class BulkLabels(Tool):
         )(self.download_data)
 
     def update_current_structures(self, slide_bounds, current_features, active_tab):
+        """Updating available structures for inclusion and spatial queries
 
+        :param slide_bounds: Current boundaries of the slide viewport
+        :type slide_bounds: list
+        :param current_features: Current GeoJSON objects in the SlideMap
+        :type current_features: list
+        :param active_tab: Current active tool tab (prevents some unnecessary background processes)
+        :type active_tab: list
+        :return: Updated set of options for labels and spatial queries.
+        :rtype: tuple
+        """
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
 
@@ -1303,7 +1329,13 @@ class BulkLabels(Tool):
             return [include_options], []
 
     def update_spatial_query_definition(self, query_type):
+        """Returning the definition for the selected spatial predicate type
 
+        :param query_type: Name of spatial predicate
+        :type query_type: str
+        :return: Markdown string
+        :rtype: dcc.Markdown
+        """
 
         if query_type is None:
             raise exceptions.PreventUpdate
@@ -1315,19 +1347,42 @@ class BulkLabels(Tool):
             'intersects': '''
             Returns `True` if the *boundary* or *interior* of the object intersect in any way with those of the other.
             ''',
-            'covered_by': '''
-            Returns `True` if every point of *object* is a point on the interior or boundary of *other*.
-            ''',
-            'disjoint': '''
-            Returns `True` if the *boundary* and *interior* of the object do not intersect at all with those of the other (opposite of `intersects()`).
-            ''',
             'crosses': '''
             Returns `True` if the *interior* of the object intersects the *interior* of the other but does not contain it, and the dimension of the intersection is less than the dimension of the one or the other.
             ''',
+            'contains': '''
+            Returns `True` if no points of *other* lie in the exterior of the *object* and at least one point of the interior of *other* lies in the interior of *object*
+            ''',
+            'touches': '''
+            Returns `True` if the objects have at least one point in common and their interiors do not intersect with any part of the other.
+            ''',
+            'overlaps': '''
+            Returns `True` if the geometries have more than one but not all points in common, have the same dimension, and the intersection of the interiors of the geometries has the same dimension as the geometries themselves.
+            ''',
+            'nearest': '''
+            Returns `True` if *other* is within `max_distance` of *object* 
+            '''
         }
 
         if query_type in query_types:
-            return dcc.Markdown(query_types[query_type])
+            if query_type=='nearest':
+                return [
+                    dmc.NumberInput(
+                        label = 'Pixel distance',
+                        stepHoldDelay = 500,
+                        stepHoldInterval=100,
+                        value = 0,
+                        step = 1,
+                        min = 0,
+                        style = {'width': '100%'},
+                        id = {'type': 'bulk-labels-spatial-query-nearest','index':ctx.triggered_id['index']}
+                    ), 
+                    dcc.Markdown(
+                        query_types[query_type]
+                    )
+                ]
+            else:
+                return [dcc.Markdown(query_types[query_type])]
         else:
             raise exceptions.PreventUpdate
 
@@ -1354,7 +1409,7 @@ class BulkLabels(Tool):
                                     {'label': 'touches','value': 'touches'},
                                     {'label': 'crosses','value': 'crosses'},
                                     {'label': 'overlaps','value': 'overlaps'},
-                                    {'label': 'nearest','value': 'nearest', 'disabled': True}
+                                    {'label': 'nearest','value': 'nearest'}
                                 ],
                                 value = [],
                                 multi= False,
@@ -1434,10 +1489,21 @@ class BulkLabels(Tool):
                 query_structure = div_children[1]['props']['children'][0]['props']['value']
                 
                 if not any([i is None for i in [query_type,query_structure]]):
-                    processed_queries.append({
-                        'type': query_type,
-                        'structure': query_structure
-                    })
+                    if not query_type=='nearest':
+                        processed_queries.append({
+                            'type': query_type,
+                            'structure': query_structure
+                        })
+                    else:
+                        distance_div = div['props']['children'][1]['props']['children']
+                        query_distance = distance_div[0]['props']['value']
+
+                        if not query_distance is None:
+                            processed_queries.append({
+                                'type': query_type,
+                                'structure': query_structure,
+                                'distance': query_distance*self.x_scale
+                            })
 
         return processed_queries
 
@@ -1456,7 +1522,21 @@ class BulkLabels(Tool):
                     sq_geo = [i for i in all_geo_list if i['properties']['name']==s_q['structure']][0]
                     sq_structure = gpd.GeoDataFrame.from_features(sq_geo['features'])
 
-                    intermediate_gdf = gpd.sjoin(left_df = intermediate_gdf, right_df = sq_structure, how = 'inner', predicate=s_q['type'])
+                    if not s_q['type'] == 'nearest':
+                        intermediate_gdf = gpd.sjoin(
+                            left_df = intermediate_gdf, 
+                            right_df = sq_structure, 
+                            how = 'inner', 
+                            predicate=s_q['type']
+                        )
+                    else:
+                        intermediate_gdf = gpd.sjoin_nearest(
+                            left_df = intermediate_gdf, 
+                            right_df = sq_structure,
+                            how = 'inner',
+                            max_distance = s_q['distance']
+                        )
+                    
                     intermediate_gdf = intermediate_gdf.drop([i for i in ['index_left','index_right'] if i in intermediate_gdf], axis = 1)
 
                 remainder_structures.append(intermediate_gdf)
