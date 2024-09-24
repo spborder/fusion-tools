@@ -12,6 +12,7 @@ import re
 
 from typing_extensions import Union
 from shapely.geometry import box, shape
+import geopandas as gpd
 import plotly.express as px
 import plotly.graph_objects as go
 from umap import UMAP
@@ -880,34 +881,877 @@ class BulkLabels(Tool):
     :type Tool: None
     """
     def __init__(self,
-                 storage_path: str):
-        pass
+                 geojson_anns: Union[list,dict],
+                 tile_server: TileServer,
+                 reference_object: Union[str,None] = None,
+                 ignore_list: list = [],
+                 property_depth: int = 4,
+                 storage_path: str = "./",
+                 labels_format: str = "json"):
+        """Constructor method
+
+        :param storage_path: Path to save labels and outputs to
+        :type storage_path: str
+        :param labels_format: Format for labels, defaults to "json"
+        :type labels_format: str, optional
+        """
+
+        self.tile_server = tile_server
+        self.reference_object = reference_object
+        self.property_options, self.feature_names, self.property_info = extract_geojson_properties(geojson_anns, self.reference_object, ignore_list, property_depth)
+
+        self.x_scale, self.y_scale = self.get_scale_factors()
+
+        self.storage_path = storage_path
+        self.labels_format = labels_format
+
+        assert self.labels_format in ['json','csv']
+
+        self.title = 'Bulk Labels'
+        self.blueprint = DashBlueprint()
+        self.blueprint.layout = self.gen_layout()
+
+        self.get_callbacks()
+
+    def get_scale_factors(self):
+        """Getting x and y scale factors to convert from map coordinates back to pixel coordinates
+        """
+
+        if hasattr(self.tile_server,'image_metadata'):
+            base_dims = [
+                self.tile_server.image_metadata['sizeX']/(2**(self.tile_server.image_metadata['levels']-1)),
+                self.tile_server.image_metadata['sizeY']/(2**(self.tile_server.image_metadata['levels']-1))
+            ]
+        
+            x_scale = base_dims[0] / self.tile_server.image_metadata['sizeX']
+            y_scale = -(base_dims[1] / self.tile_server.image_metadata['sizeY'])
+        
+        elif hasattr(self.tile_server,'tiles_metadata'):
+            base_dims = [
+                self.tile_server.tiles_metadata['sizeX']/(2**(self.tile_server.tiles_metadata['levels']-1)),
+                self.tile_server.tiles_metadata['sizeY']/(2**(self.tile_server.tiles_metadata['levels']-1))
+            ]
+        
+            x_scale = base_dims[0] / self.tile_server.tiles_metadata['sizeX']
+            y_scale = -(base_dims[1] / self.tile_server.tiles_metadata['sizeY'])
+
+        else:
+            raise AttributeError("Missing image or tiles metadata")
 
 
+        return x_scale, y_scale
+
+    def gen_layout(self):
+
+        layout = html.Div([
+            dbc.Card([
+                dbc.CardBody([
+                    dbc.Row(
+                        html.H3('Bulk Labels')
+                    ),
+                    html.Hr(),
+                    dbc.Row(
+                        'Apply labels to structures based on several different inclusion and exclusion criteria.'
+                    ),
+                    html.Hr(),
+                    dbc.Row([
+                        dbc.Col(
+                            html.H5('Step 1: Where?'),
+                            md = 9
+                        ),
+                        dbc.Col([
+                            html.A(
+                                html.I(
+                                    className = 'fa-solid fa-rotate fa-xl',
+                                    n_clicks = 0,
+                                    id = {'type': 'bulk-labels-refresh-icon','index': 0}
+                                )
+                            )
+                        ],md = 3)
+                    ],justify='left'),
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Label('Include',html_for = {'type': 'bulk-labels-include-structures','index': 0})
+                        ],md = 3),
+                        dbc.Col([
+                            dcc.Dropdown(
+                                options = self.feature_names,
+                                value = [],
+                                multi = True,
+                                placeholder = 'Include Structures',
+                                id = {'type': 'bulk-labels-include-structures','index': 0}
+                            )
+                        ],md = 9),
+                    ]),
+                    dbc.Row([
+                        dbc.Col([
+                            html.Div(
+                                id = {'type': 'bulk-labels-spatial-query-div','index': 0},
+                                children = []
+                            )
+                        ])
+                    ],style={'marginTop':'10px'}),
+                    dbc.Row([
+                        dbc.Col([
+                            html.A(
+                                html.I(
+                                    className = 'fa-solid fa-map-location fa-xl',
+                                    id = {'type': 'bulk-labels-spatial-query-icon','index': 0},
+                                    n_clicks = 0,
+                                    style = {'marginLeft': '50%'}
+                                )
+                            )
+                        ])
+                    ],style={'marginBottom': '10px','marginTop':'10px'}),
+                    html.Hr(),
+                    dbc.Row(
+                        html.H5('Step 2: What?')
+                    ),
+                    html.Hr(),
+                    dcc.Store(
+                        id = {'type': 'bulk-labels-property-info','index': 0},
+                        storage_type='memory',
+                        data = json.dumps(self.property_info)
+                    ),
+                    dbc.Row([
+                        dbc.Col([
+                            html.Div(
+                                id = {'type': 'bulk-labels-add-property-div','index': 0},
+                                children = []
+                            )
+                        ])
+                    ]),
+                    dbc.Row([
+                        dbc.Col([
+                            html.A(
+                                html.I(
+                                    className = 'fa-solid fa-square-plus fa-xl',
+                                    id = {'type': 'bulk-labels-add-property-icon','index': 0},
+                                    n_clicks = 0,
+                                    style = {'marginLeft': '50%'}
+                                )
+                            )
+                        ],align='center')
+                    ],style = {'marginBottom': '10px'}),
+                    dbc.Row([
+                        dbc.Col(
+                            dcc.Loading(dbc.Button(
+                                'Update Structures',
+                                n_clicks = 0,
+                                id = {'type': 'bulk-labels-update-structures','index': 0},
+                                className = 'd-grid col-12 mx-auto'
+                            ))
+                        )
+                    ]),
+                    dbc.Row([
+                        dbc.Col([
+                            html.Div(
+                                id = {'type': 'bulk-labels-current-structures','index': 0},
+                                children = []
+                            )
+                        ])
+                    ],style = {'marginBottom': '10px'}),
+                    html.Hr(),
+                    dbc.Row([
+                        html.H5('Step 3: Label!')
+                    ]),
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Label('Label: ',html_for = {'type': 'bulk-labels-label-text','index': 0})
+                        ],md = 2),
+                        dbc.Col([
+                            dcc.Input(
+                                id = {'type': 'bulk-labels-label-type','index': 0},
+                                value = [],
+                                placeholder = 'Label Type',
+                                disabled = True,
+                                style = {'width': '100%'}
+                            )
+                        ],md = 5),
+                        dbc.Col([
+                            dcc.Textarea(
+                                id = {'type': 'bulk-labels-label-text','index': 0},
+                                value = [],
+                                maxLength = 1000,
+                                placeholder = 'Enter Label Here',
+                                required=True,
+                                style = {'width': '100%','height':'100px'},
+                                disabled = True
+                            )
+                        ],md = 5)
+                    ]),
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Label('Additional Rationale: ',html_for = {'type': 'bulk-labels-label-rationale','index': 0})
+                        ],md = 3),
+                        dbc.Col([
+                            dcc.Textarea(
+                                id = {'type': 'bulk-labels-label-rationale','index': 0},
+                                value = [],
+                                maxLength = 1000,
+                                placeholder = 'Enter Additional Rationale Here',
+                                style = {'width': '100%','height': '100px'},
+                                disabled = True
+                            )
+                        ], md = 9)
+                    ]),
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Label('Label Source: ',html_for = {'type': 'bulk-labels-label-source','index': 0})
+                        ],md = 3),
+                        dbc.Col([
+                            dcc.Markdown(
+                                '`Label Source Data`',
+                                id = {'type': 'bulk-labels-label-source','index': 0},
+                                style = {'width': '100%','maxHeight': '150px','overflow': 'scroll'}                            
+                            )
+                        ])
+                    ]),
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Button(
+                                'Apply Label!',
+                                className = 'd-grid col-12 mx-auto',
+                                n_clicks = 0,
+                                id = {'type': 'bulk-labels-apply-labels','index': 0},
+                                disabled = True
+                            )
+                        ])
+                    ]),
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Button(
+                                'Download Labels!',
+                                className = 'd-grid col-12 mx-auto',
+                                n_clicks = 0,
+                                id = {'type': 'bulk-labels-download-labels','index': 0},
+                                disabled = True
+                            ),
+                            dcc.Download(
+                                id = {'type':'bulk-labels-download-data','index': 0}
+                            )
+                        ])
+                    ],style = {'marginTop': '10px'})
+                ])
+            ])
+        ],style = {'maxHeight': '100vh','overflow': 'scroll'})
+
+        return layout
+    
+    def get_callbacks(self):
+        """Adding callbacks to DashBlueprint object
+        """
+        
+        # Updating structure options based on current features:
+        self.blueprint.callback(
+            [
+                Input({'type': 'slide-map','index': ALL},'bounds')
+            ],
+            [
+                Output({'type': 'bulk-labels-include-structures','index':ALL},'options'),
+                Output({'type': 'bulk-labels-spatial-query-structures','index':ALL},'options')
+            ],
+            [
+                State({'type': 'feature-bounds','index':ALL},'data'),
+                State({'type': 'vis-tools-tabs','index': ALL},'active_tab')
+            ]
+        )(self.update_current_structures)
+
+        # Adding spatial relationships 
+        self.blueprint.callback(
+            [
+                Input({'type': 'bulk-labels-spatial-query-icon','index': ALL},'n_clicks'),
+                Input({'type': 'bulk-labels-remove-spatial-query-icon','index':ALL},'n_clicks')
+            ],
+            [
+                Output({'type': 'bulk-labels-spatial-query-div','index': ALL},'children')
+            ]
+        )(self.update_spatial_queries)
+
+        # Updating inclusion/inclusion criteria
+        self.blueprint.callback(
+            [
+                Input({'type':'bulk-labels-update-structures','index':ALL},'n_clicks')
+            ],
+            [
+                Output({'type': 'bulk-labels-current-structures','index': ALL},'children'),
+                Output({'type': 'map-marker-div','index': ALL},'children'),
+                Output({'type': 'bulk-labels-label-source','index': ALL},'children'),
+                Output({'type': 'bulk-labels-label-type','index': ALL},'disabled'),
+                Output({'type': 'bulk-labels-label-text','index': ALL},'disabled'),
+                Output({'type': 'bulk-labels-label-rationale','index': ALL},'disabled'),
+                Output({'type': 'bulk-labels-apply-labels','index': ALL},'disabled'),
+                Output({'type': 'bulk-labels-download-labels','index': ALL},'disabled')
+            ],
+            [
+                State({'type': 'bulk-labels-include-structures','index': ALL},'value'),
+                State({'type': 'bulk-labels-add-property-div','index': ALL},'children'),
+                State({'type':'bulk-labels-spatial-query-div','index': ALL},'children'),
+                State({'type': 'feature-bounds','index': ALL},'data')
+            ]
+        )(self.update_label_structures)
+
+        # Adding new property
+        self.blueprint.callback(
+            [
+                Input({'type': 'bulk-labels-add-property-icon','index': ALL},'n_clicks'),
+                Input({'type': 'bulk-labels-remove-property-icon','index': ALL},'n_clicks')
+            ],
+            [
+                Output({'type': 'bulk-labels-add-property-div','index': ALL},'children')
+            ]
+        )(self.update_label_properties)
+
+        # Updating property selector
+        self.blueprint.callback(
+            [
+                Input({'type':'bulk-labels-filter-property-drop','index': MATCH},'value')
+            ],
+            [
+                Output({'type':'bulk-labels-property-selector-div','index':MATCH},'children')
+            ],
+            [
+                State({'type': 'bulk-labels-property-info','index': ALL},'data')
+            ]
+        )(self.update_property_selector)
+
+        # Updating spatial query definition:
+        self.blueprint.callback(
+            [
+                Input({'type': 'bulk-labels-spatial-query-drop','index':MATCH},'value')
+            ],
+            [
+                Output({'type': 'bulk-labels-spatial-query-definition','index': MATCH},'children')
+            ]
+        )(self.update_spatial_query_definition)
+
+        # Applying labels to marked points:
+        self.blueprint.callback(
+            [
+                Input({'type': 'bulk-labels-apply-labels','index': ALL},'n_clicks')
+            ],
+            [
+                Output({'type': 'bulk-labels-property-info','index': ALL},'data')
+            ],
+            [
+                State({'type': 'map-marker-div','index': ALL},'children'),
+                State({'type': 'bulk-labels-property-info','index': ALL},'data'),
+                State({'type': 'bulk-labels-label-type','index': ALL},'value'),
+                State({'type': 'bulk-labels-label-text','index': ALL},'value'),
+                State({'type': 'bulk-labels-label-rationale','index': ALL},'value'),
+                State({'type': 'bulk-labels-label-source','index': ALL},'children')
+            ]
+        )(self.apply_labels)
+
+        # Resetting everything:
+        self.blueprint.callback(
+            [
+                Input({'type': 'bulk-labels-refresh-icon','index': ALL},'n_clicks')
+            ],
+            [
+                Output({'type':'bulk-labels-include-structures','index': ALL},'value'),
+                Output({'type': 'bulk-labels-spatial-query-div','index':ALL},'children'),
+                Output({'type': 'bulk-labels-add-property-div','index': ALL},'children'),
+                Output({'type': 'bulk-labels-current-structures','index': ALL},'children'),
+                Output({'type': 'bulk-labels-label-type','index': ALL},'value'),
+                Output({'type': 'bulk-labels-label-type','index': ALL},'disabled'),
+                Output({'type': 'bulk-labels-label-text','index': ALL},'value'),
+                Output({'type': 'bulk-labels-label-text','index':ALL},'disabled'),
+                Output({'type': 'bulk-labels-label-rationale','index': ALL},'value'),
+                Output({'type': 'bulk-labels-label-rationale','index': ALL},'disabled'),
+                Output({'type': 'bulk-labels-label-source','index': ALL},'children'),
+                Output({'type': 'bulk-labels-apply-labels','index': ALL},'disabled')
+            ]
+        )(self.refresh_labels)
+
+        # Downloading labels
+        self.blueprint.callback(
+            [
+                Input({'type': 'bulk-labels-download-labels','index': ALL},'n_clicks')
+            ],
+            [
+                Output({'type': 'bulk-labels-download-data','index': ALL},'data')
+            ],
+            [
+                State({'type': 'bulk-labels-property-info','index': ALL},'data')
+            ]
+        )(self.download_data)
+
+    def update_current_structures(self, slide_bounds, current_features, active_tab):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        slide_bounds = get_pattern_matching_value(slide_bounds)
+        slide_box = box(slide_bounds[0][1], slide_bounds[0][0], slide_bounds[1][1],slide_bounds[1][0])
+
+        structure_options = []
+        for g_idx, g in enumerate(current_features):
+            intersecting_shapes, intersecting_properties = find_intersecting(g,slide_box)
+
+            if len(intersecting_shapes['features'])>0:
+                structure_options.append(g['properties']['name'])
+        
+        self.feature_names = structure_options
+        
+        include_options = [{'label': i, 'value': i} for i in structure_options]
+        if len(ctx.outputs_list[1])>0:
+            spatial_queries = [{'label': i,'value': i} for i in structure_options]
+        
+            return [include_options], [spatial_queries for i in range(len(ctx.outputs_list[1]))]
+        else:
+            return [include_options], []
+
+    def update_spatial_query_definition(self, query_type):
 
 
+        if query_type is None:
+            raise exceptions.PreventUpdate
+        
+        query_types = {
+            'within': '''
+            Returns `True` if the *boundary* and *interior* of the object intsect only with the *interior* of the other (not its *boundary* or *exterior*)
+            ''',
+            'intersects': '''
+            Returns `True` if the *boundary* or *interior* of the object intersect in any way with those of the other.
+            ''',
+            'covered_by': '''
+            Returns `True` if every point of *object* is a point on the interior or boundary of *other*.
+            ''',
+            'disjoint': '''
+            Returns `True` if the *boundary* and *interior* of the object do not intersect at all with those of the other (opposite of `intersects()`).
+            ''',
+            'crosses': '''
+            Returns `True` if the *interior* of the object intersects the *interior* of the other but does not contain it, and the dimension of the intersection is less than the dimension of the one or the other.
+            ''',
+        }
+
+        if query_type in query_types:
+            return dcc.Markdown(query_types[query_type])
+        else:
+            raise exceptions.PreventUpdate
+
+    def update_spatial_queries(self, add_click, remove_click):
+        
+        
+        queries_div = Patch()
+        add_click = get_pattern_matching_value(add_click)
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        if ctx.triggered_id['type']=='bulk-labels-spatial-query-icon':
+
+            def new_query_div():
+                return html.Div([
+                    dbc.Row([
+                        dbc.Col([
+                            dcc.Dropdown(
+                                options = [
+                                    {'label': 'intersects','value': 'intersects'},
+                                    {'label': 'contains','value': 'contains'},
+                                    {'label': 'within','value': 'within'},
+                                    {'label': 'touches','value': 'touches'},
+                                    {'label': 'crosses','value': 'crosses'},
+                                    {'label': 'overlaps','value': 'overlaps'},
+                                    {'label': 'nearest','value': 'nearest', 'disabled': True}
+                                ],
+                                value = [],
+                                multi= False,
+                                id = {'type': 'bulk-labels-spatial-query-drop','index': add_click}
+                            )
+                        ],md = 5),
+                        dbc.Col([
+                            dcc.Dropdown(
+                                options = self.feature_names,
+                                value = [],
+                                multi = False,
+                                placeholder = 'Select structure',
+                                id = {'type': 'bulk-labels-spatial-query-structures','index':add_click}
+                            )
+                        ],md=5),
+                        dbc.Col([
+                            html.A(
+                                html.I(
+                                    id = {'type': 'bulk-labels-remove-spatial-query-icon','index': add_click},
+                                    n_clicks = 0,
+                                    className = 'bi bi-x-circle-fill fa-2x',
+                                    style = {'color': 'rgb(255,0,0)'}
+                                )
+                            )
+                        ], md = 2)
+                    ]),
+                    html.Div(
+                        id = {'type': 'bulk-labels-spatial-query-definition','index': add_click},
+                        children = []
+                    )
+                ])
+
+            queries_div.append(new_query_div())
+
+        elif ctx.triggered_id['type']=='bulk-labels-remove-spatial-query-icon':
+
+            values_to_remove = []
+            for i, val in enumerate(remove_click):
+                if val:
+                    values_to_remove.insert(0,i)
+
+            for v in values_to_remove:
+                del queries_div[v]
+
+        
+        return [queries_div]
+
+    def parse_filter_divs(self, add_property_parent: list)->list:
+
+        processed_filters = []
+        if not add_property_parent is None:
+            for div in add_property_parent:
+                div_children = div['props']['children']
+                filter_name = div_children[0]['props']['children'][0]['props']['children'][0]['props']['value']
+
+                if 'value' in div_children[1]['props']['children']['props']:
+                    filter_value = div_children[1]['props']['children']['props']['value']
+                else:
+                    filter_value = div_children[1]['props']['children']['props']['children']['props']['value']
+
+                if not any([i is None for i in [filter_name,filter_value]]):
+                    processed_filters.append({
+                        'name': filter_name,
+                        'range': filter_value
+                    })
+
+        return processed_filters
+
+    def parse_spatial_divs(self, spatial_query_parent: list)->list:
+
+        processed_queries = []
+        if not spatial_query_parent is None:
+            for div in spatial_query_parent:
+                div_children = div['props']['children'][0]['props']['children']
+
+                query_type = div_children[0]['props']['children'][0]['props']['value']
+                query_structure = div_children[1]['props']['children'][0]['props']['value']
+                
+                if not any([i is None for i in [query_type,query_structure]]):
+                    processed_queries.append({
+                        'type': query_type,
+                        'structure': query_structure
+                    })
+
+        return processed_queries
+
+    def process_filters_queries(self, filter_list, spatial_list, structures, all_geo_list):
+
+        # First getting the listed structures:
+        structure_filtered = [gpd.GeoDataFrame.from_features(i['features']) for i in all_geo_list if i['properties']['name'] in structures]
+
+        # Now going through spatial queries
+        if len(spatial_list)>0:
+            remainder_structures = []
+
+            for s in structure_filtered:
+                intermediate_gdf = s.copy()
+                for s_q in spatial_list:
+                    sq_geo = [i for i in all_geo_list if i['properties']['name']==s_q['structure']][0]
+                    sq_structure = gpd.GeoDataFrame.from_features(sq_geo['features'])
+
+                    intermediate_gdf = gpd.sjoin(left_df = intermediate_gdf, right_df = sq_structure, how = 'inner', predicate=s_q['type'])
+                    intermediate_gdf = intermediate_gdf.drop([i for i in ['index_left','index_right'] if i in intermediate_gdf], axis = 1)
+
+                remainder_structures.append(intermediate_gdf)
+        else:
+            remainder_structures = structure_filtered
+
+        # Combining into one GeoJSON
+        combined_geojson = {
+            'type': 'FeatureCollection',
+            'features': []
+        }
+        for g in remainder_structures:
+            g_json = json.loads(g.to_json(show_bbox=True))
+
+            if len(g_json['features'])>0:
+                combined_geojson['features'].extend(g_json['features'])
+
+        # Going through property filters:
+        if len(filter_list)>0:
+            filtered_geojson = {
+                'type': 'FeatureCollection',
+                'features': []
+            }
+            for f in filter_list:
+                filter_name_parts = f['name'].split(' --> ')
+
+                for feat in combined_geojson['features']:
+                    include = True
+                    feat_props = feat['properties'].copy()
+                    feat_props = {i.replace('_left',''):j for i,j in feat_props.items()}
+
+                    for filt in filter_name_parts:
+                        if filt in feat_props:
+                            feat_props = feat_props[filt]
+                        else:
+                            include = False
+                            break
+
+                    
+                    if include:
+                        if all([type(i) in [int,float] for i in f['range']]):
+                            if f['range'][0]<=feat_props and feat_props<=f['range'][1]:
+                                include = True
+                            else:
+                                include = False
+                        
+                        elif all([type(i)==str for i in f['range']]):
+                            if feat_props in f['range']:
+                                include = True
+                            else:
+                                include = False
+                    
+                    if include:
+                        filtered_geojson['features'].append(feat)
+
+        else:
+            filtered_geojson = combined_geojson
+        
+        return filtered_geojson
+
+    def update_label_structures(self, update_structures_click, include_structures, filter_properties, spatial_queries, current_features):
 
 
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        include_structures = get_pattern_matching_value(include_structures)
+
+        include_properties = get_pattern_matching_value(filter_properties)
+        spatial_queries = get_pattern_matching_value(spatial_queries)
+
+        processed_filters = self.parse_filter_divs(include_properties)
+        processed_spatial_queries = self.parse_spatial_divs(spatial_queries)
+
+        filtered_geojson = self.process_filters_queries(processed_filters, processed_spatial_queries, include_structures, current_features)
+
+        new_structures_div = [
+            dbc.Alert(
+                f'{len(filtered_geojson["features"])} Structures Included!',
+                color = 'success' if len(filtered_geojson['features'])>0 else 'danger'
+            )
+        ]
+
+        new_markers_div = [
+            html.Div([
+                dl.Marker(
+                    position = [
+                        (f['bbox'][0]+f['bbox'][2])/2,
+                        (f['bbox'][1]+f['bbox'][3])/2
+                    ][::-1],
+                    children = [
+                        dl.Popup(
+                            dbc.Button(
+                                'Clear Marker',
+                                color = 'danger',
+                                n_clicks = 0,
+                                id = {'type': 'label-marker-delete','index': f_idx}
+                            ),
+                            id = {'type':'label-marker-popup','index': f_idx}
+                        )
+                    ]
+                )
+                for f_idx, f in enumerate(filtered_geojson['features'])
+            ])
+        ]
+
+        new_labels_source = f'`{json.dumps({"Spatial": processed_spatial_queries,"Filters": processed_filters})}`'
 
 
+        if len(filtered_geojson['features'])>0:
+            labels_type_disabled = False
+            labels_text_disabled = False
+            labels_rationale_disabled = False
+            labels_apply_button_disabled = False
+            labels_download_button_disabled = False
+        else:
+            labels_type_disabled = True
+            labels_text_disabled = True
+            labels_rationale_disabled = True
+            labels_apply_button_disabled = True
+            labels_download_button_disabled = True
 
 
+        return [new_structures_div], [new_markers_div], [new_labels_source], [labels_type_disabled], [labels_text_disabled], [labels_rationale_disabled], [labels_apply_button_disabled], [labels_download_button_disabled]
+
+    def update_label_properties(self, add_click, remove_click):
 
 
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        properties_div = Patch()
+        add_click = get_pattern_matching_value(add_click)
+
+        if ctx.triggered_id['type']=='bulk-labels-add-property-icon':
+
+            def new_property_div():
+                return html.Div([
+                    dbc.Row([
+                        dbc.Col([
+                            dcc.Dropdown(
+                                options = self.property_options,
+                                value = [],
+                                multi = False,
+                                placeholder = 'Select property',
+                                id = {'type': 'bulk-labels-filter-property-drop','index':add_click}
+                            )
+                        ],md=10),
+                        dbc.Col([
+                            html.A(
+                                html.I(
+                                    id = {'type': 'bulk-labels-remove-property-icon','index': add_click},
+                                    n_clicks = 0,
+                                    className = 'bi bi-x-circle-fill fa-2x',
+                                    style = {'color': 'rgb(255,0,0)'}
+                                )
+                            )
+                        ], md = 2)
+                    ]),
+                    html.Div(
+                        id = {'type': 'bulk-labels-property-selector-div','index': add_click},
+                        children = []
+                    )
+                ])
+
+            properties_div.append(new_property_div())
+
+        elif ctx.triggered_id['type']=='bulk-labels-remove-property-icon':
+
+            values_to_remove = []
+            for i, val in enumerate(remove_click):
+                if val:
+                    values_to_remove.insert(0,i)
+
+            for v in values_to_remove:
+                del properties_div[v]
+
+        
+        return [properties_div]
+
+    def update_property_selector(self, property_value, property_info):
+
+        property_info = json.loads(get_pattern_matching_value(property_info))
+
+        property_values = property_info[property_value]
+
+        if 'min' in property_values:
+            # Used for numeric type filters
+            values_selector = html.Div(
+                dcc.RangeSlider(
+                    id = {'type':'bulk-labels-filter-selector','index': ctx.triggered_id['index']},
+                    min = property_values['min'] - 0.01,
+                    max = property_values['max'] + 0.01,
+                    value = [property_values['min'], property_values['max']],
+                    step = 0.01,
+                    marks = None,
+                    tooltip = {
+                        'placement': 'bottom',
+                        'always_visible': True
+                    },
+                    allowCross=True,
+                    disabled = False
+                ),
+                style = {'display': 'inline-block','margin':'auto','width': '100%'}
+            )
+
+        elif 'unique' in property_values:
+            values_selector = html.Div(
+                dcc.Dropdown(
+                    id = {'type': 'bulk-labels-filter-selector','index': ctx.triggered_id['index']},
+                    options = property_values['unique'],
+                    value = property_values['unique'],
+                    multi = True
+                )
+            )
+
+        return values_selector
+
+    def parse_marker_div(self, parent_marker_div):
 
 
+        marker_coords = []
+        for p in parent_marker_div:
+            for m in p['props']['children']:
+                coords = m['props']['position']
 
+                marker_coords.append(
+                    [coords[1]/self.x_scale,coords[0]/self.y_scale]
+                )
 
+        return marker_coords        
 
+    def apply_labels(self, button_click, current_markers, current_data, label_type, label_text, label_rationale, label_source):
 
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
 
+        label_type = get_pattern_matching_value(label_type)
+        label_text = get_pattern_matching_value(label_text)
 
+        if label_text is None or label_type is None:
+            raise exceptions.PreventUpdate
 
+        label_rationale = get_pattern_matching_value(label_rationale)
+        label_source = json.loads(get_pattern_matching_value(label_source).replace('`',''))
+        current_data = json.loads(get_pattern_matching_value(current_data))
+        current_markers = get_pattern_matching_value(current_markers)
 
+        marker_positions = self.parse_marker_div(current_markers)
 
+        if 'labels' in current_data:
+            current_data['labels'].extend([
+                {'centroid': m, 'label_type': label_type, 'label_text': label_text, 'label_rationale': label_rationale, 'label_source': label_source}
+                for m in marker_positions
+            ])
+        
+        else:
+            current_data['labels'] = [
+                {'centroid': m, 'label_type': label_type, 'label_text': label_text, 'label_rationale': label_rationale, 'label_source': label_source}
+                for m in marker_positions
+            ]
 
+        new_data = json.dumps(current_data)
 
+        return [new_data]
 
+    def refresh_labels(self, refresh_click):
+        
+        if refresh_click:
+
+            include_structures = []
+            spatial_queries = []
+            add_property = []
+            current_structures = []
+            label_type = []
+            type_disable = True
+            label_text = []
+            text_disable = True
+            label_rationale = []
+            rationale_disable = True
+            label_source = '`Label Source`'
+            apply_disable = True
+
+            return [include_structures], [spatial_queries], [add_property], [current_structures],[label_type],[type_disable],[label_text], [text_disable], [label_rationale], [rationale_disable], [label_source], [apply_disable]
+        else:
+            raise exceptions.PreventUpdate
+
+    def download_data(self, button_click, label_data):
+
+        if button_click:
+            label_data = json.loads(get_pattern_matching_value(label_data))
+
+            return [{'content': json.dumps(label_data['labels']),'filename': 'label_data.json'}]
+        else:
+            raise exceptions.PreventUpdate
 
 
 

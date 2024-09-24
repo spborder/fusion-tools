@@ -7,7 +7,7 @@ import threading
 sys.path.append('./src/')
 from fusion_tools import Visualization, DSAHandler
 from fusion_tools.tileserver import DSATileServer
-from fusion_tools.components import SlideMap, FeatureAnnotation
+from fusion_tools.components import SlideMap, FeatureAnnotation, BulkLabels
 
 
 import pandas as pd
@@ -46,6 +46,11 @@ def main():
                         tile_server = tile_server,
                         labels_format = 'json',
                         annotations_format = 'rgb'
+                    ),
+                    BulkLabels(
+                        geojson_anns = annotations,
+                        tile_server = tile_server,
+                        storage_path = os.getcwd()+'\\tests\\Test_Annotations\\'
                     )
                 ]
             ]
