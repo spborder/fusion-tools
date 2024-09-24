@@ -15,8 +15,8 @@ import pandas as pd
 def main():
 
     # Grabbing first item from demo DSA instance
-    base_url = 'http://ec2-3-230-122-132.compute-1.amazonaws.com:8080/api/v1'
-    item_id = '64f545302d82d04be3e39eec'
+    base_url = 'https://demo.kitware.com/histomicstk/api/v1'
+    item_id = '5bbdeed1e629140048d01bcb'
 
     # Starting visualization session
     tile_server = DSATileServer(
