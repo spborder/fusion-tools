@@ -868,12 +868,6 @@ class FeatureAnnotation(Tool):
 
         return ['Saved!']
 
-
-
-
-
-
-
 class BulkLabels(Tool):
     """Add labels to many structures at the same time
 
