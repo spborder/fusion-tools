@@ -4,12 +4,10 @@
 ## v0.0.9 (09//2025)
 
 ### Fix
-- 
+- Fixing spatial aggregation function for nested properties
 
 ### Features
 - Adding segmentation, annotation, and bulk labeling functionality
-
-
 
 
 ## v0.0.8 (09/18/2024)
