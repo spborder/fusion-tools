@@ -207,6 +207,17 @@ def load_polygon_csv(
                 # Just make sure that they're x,y format
                 coord_list = json.loads(g_rows[shape_cols[0]])
 
+            if len(list(shape_options.keys()))>0:
+                if 'radius' in shape_options:
+                    # buffering to create circle with set radius:
+                    if len(coord_list)>3:
+                        pre_poly = Polygon(coord_list)
+                    elif len(coord_list)==2:
+                        pre_poly = Point(*coord_list)
+
+                    post_poly = pre_poly.buffer(shape_options['radius'])
+                    coord_list = [list(i) for i in list(post_poly.exterior.coords)]
+
             props = {}
             if not property_cols is None:
                 for p in property_cols:
@@ -216,7 +227,7 @@ def load_polygon_csv(
             geojson_anns['features'].append({
                 'type': 'Feature',
                 'geometry': {
-                    'type': 'Polygon' if len(coord_list)>1 else 'Point',
+                    'type': 'Polygon' if len(coord_list)>3 else 'Point',
                     'coordinates': [coord_list]
                 },
                 'properties': props
@@ -694,6 +705,8 @@ def extract_geojson_properties(geo_list: list, reference_object: Union[str,None]
                 geojson_properties.extend(new_props)
 
     #TODO: After loading an experiment, reference the file here for additional properties
+    
+
     
     geojson_properties = sorted(geojson_properties)
 
