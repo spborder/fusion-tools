@@ -67,7 +67,7 @@ def main():
     plt.imshow(cosmx_numpy)
     plt.show()
 
-    test_zarr = 'C:\\Users\\samuelborder\\Downloads\\WD1.1_17-03_WT_MP.ome.zarr\\WD1.1_17-03_WT_MP.zarr'
+    test_zarr = 'C:\\Users\\samuelborder\\Downloads\\WD1.1_17-03_WT_MP.ome.zarr\\.zgroup'
     zarr_zarr = zarr.open(test_zarr)
     print(zarr_zarr.tree())
     l_i_cosmx = large_image_source_zarr.open(test_zarr)

@@ -864,6 +864,9 @@ class PropertyViewer(Tool):
             if update_viewer:
                 current_property_data['bounds'] = slide_map_bounds
 
+        elif ctx.triggered_id['type']=='property-view-type':
+            view_subtype_value = []
+
         current_property_data['update_view'] = update_viewer
         current_property_data['property'] = view_type_value
         current_property_data['sub_property'] = view_subtype_value
@@ -874,37 +877,129 @@ class PropertyViewer(Tool):
 
         if ctx.triggered_id['type'] in ['property-view-type','property-view-subtype']:
             # Making new subtype children to correspond to new property selection
-            if not view_type_value is None:
-                child_properties = [i for i in self.available_properties if i.split(' --> ')[0]==view_type_value]
-                n_levels = max(list(set([len(i.split(' --> ')) for i in child_properties])))
-                sub_dropdowns = []
-                if n_levels>0:
-                    for i in range(1,n_levels):
-                        sub_drop = []
-                        for j in child_properties:
-                            if len(j.split(' --> ')) > i:
-                                sub_drop.append(j.split(' --> ')[i])
+            sub_dropdowns = []
+            if ctx.triggered_id['type']=='property-view-type':
+                if not view_type_value is None:
+                    child_properties = [i for i in self.available_properties if i.split(' --> ')[0]==view_type_value]
+                    n_levels = max(list(set([len(i.split(' --> ')) for i in child_properties])))
 
-                        sub_dropdowns.append(
-                            dbc.Row([
-                                dbc.Col([
-                                    dbc.Label(f'Sub-Property: {i}: ',html_for = {'type': 'property-view-subtype','index': i-1})
-                                ],md = 2),
-                                dbc.Col([
-                                    dcc.Dropdown(
-                                        options = sub_drop if i<(n_levels-1) else ["All"]+sub_drop,
-                                        value = view_subtype_value[i-1] if not view_subtype_value is None and len(view_subtype_value)>=i else [],
-                                        id = {'type': 'property-view-subtype','index': i-1},
-                                        placeholder = f'Sub-Property: {i}',
-                                        multi = False
-                                    )
-                                ],md = 10)
-                            ])
-                        )
+                    if n_levels>0:
+                        for i in range(1,n_levels):
+                            if i==1:
+                                sub_drop = []
+                                for j in child_properties:
+                                    if len(j.split(' --> '))>i and not j.split(' --> ')[i] in sub_drop:
+                                        sub_drop.append(j.split(' --> ')[i])
 
-                current_subtype_children = html.Div(sub_dropdowns)
-            else:
-                current_subtype_children = None
+                                sub_dropdowns.append(
+                                    dbc.Row([
+                                        dbc.Col([
+                                            dbc.Label(f'Sub-Property: {i}: ',html_for = {'type': 'property-view-subtype','index': i-1})
+                                        ],md = 4),
+                                        dbc.Col([
+                                            dcc.Dropdown(
+                                                options = sub_drop,
+                                                value = [],
+                                                multi = False,
+                                                id = {'type': 'property-view-subtype','index': i-1},
+                                                placeholder = f'Sub-Property: {i}',
+                                                disabled = False
+                                            )
+                                        ])
+                                    ])
+                                )
+
+                            else:
+                                sub_dropdowns.append(
+                                    dbc.Row([
+                                        dbc.Col([
+                                            dbc.Label(f'Sub-Property: {i}: ',html_for={'type': 'property-view-subtype','index': i-1})
+                                        ],md = 4),
+                                        dbc.Col([
+                                            dcc.Dropdown(
+                                                options = [],
+                                                value = [],
+                                                multi = False,
+                                                id = {'type': 'property-view-subtype','index': i-1},
+                                                placeholder = f'Sub-Property: {i}',
+                                                disabled = True
+                                            )
+                                        ],md = 8)
+                                    ])
+                                )
+
+
+            elif ctx.triggered_id['type']=='property-view-subtype':
+                if not view_type_value is None:
+                    child_properties = [i for i in self.available_properties if i.split(' --> ')[0]==view_type_value]
+
+                    # Finding which one is empty:
+                    if not all([type(i)==str for i in view_subtype_value]):
+                        min_blank = min([i for i in range(len(view_subtype_value)) if not type(view_subtype_value[i])==str])
+                        view_subtype_value = [view_subtype_value[i] if i<min_blank else [] for i in range(len(view_subtype_value))]
+
+                    prev_value = view_type_value
+                    for sub_idx, sub in enumerate(view_subtype_value):
+                        if type(sub)==str:
+                            new_options = [i.split(' --> ')[sub_idx+1] for i in child_properties if len(i.split(' --> '))>(sub_idx+1) and i.split(' --> ')[sub_idx]==prev_value]
+
+                            sub_dropdowns.append(
+                                dbc.Row([
+                                    dbc.Col([
+                                        dbc.Label(f'Sub-Property: {sub_idx+1}: ',html_for = {'type': 'property-view-subtype','index': sub_idx})
+                                    ],md = 4),
+                                    dbc.Col([
+                                        dcc.Dropdown(
+                                            options = new_options,
+                                            value = view_subtype_value[sub_idx],
+                                            placeholder = f'Sub-Property: {sub_idx+1}',
+                                            disabled = False,
+
+                                        )
+                                    ])
+                                ])
+                            )
+
+                            prev_value = sub
+                        else:
+                            if sub_idx==min_blank:
+                                new_options = [i.split(' --> ')[sub_idx+1] for i in child_properties if len(i.split(' --> '))>(sub_idx+1) and i.split(' --> ')[sub_idx]==prev_value]
+
+                                sub_dropdowns.append(
+                                    dbc.Row([
+                                        dbc.Col([
+                                            dbc.Label(f'Sub-Property: {sub_idx+1}: ',html_for = {'type': 'property-view-subtype','index': sub_idx})
+                                        ],md = 4),
+                                        dbc.Col([
+                                            dcc.Dropdown(
+                                                options = new_options,
+                                                value = view_subtype_value[sub_idx],
+                                                placeholder = f'Sub-Property: {sub_idx+1}',
+                                                disabled = False,
+
+                                            )
+                                        ])
+                                    ])
+                                )
+                            else:
+                                sub_dropdowns.append(
+                                    dbc.Row([
+                                        dbc.Col([
+                                            dbc.Label(f'Sub-Property: {sub_idx+1}: ',html_for = {'type': 'property-view-subtype','index': sub_idx})
+                                        ],md = 4),
+                                        dbc.Col([
+                                            dcc.Dropdown(
+                                                options = [],
+                                                value = [],
+                                                placeholder = f'Sub-Property: {sub_idx+1}',
+                                                disabled = True,
+                                                id = {'type': 'property-view-subtype','index': sub_idx}
+                                            )
+                                        ])
+                                    ])
+                                )
+
+            current_subtype_children = html.Div(sub_dropdowns)
 
         return_div = html.Div([
             dbc.Row([
@@ -1007,6 +1102,8 @@ class PropertyViewer(Tool):
                                 sub_property_df = pd.DataFrame.from_records(intersecting_properties[current_property_data['property']].tolist()) 
                                 sub_properties = sub_property_df.columns.tolist()
                                 if 'sub_property' in current_property_data:
+
+                                    print(current_property_data['sub_property'])
                                     if len(current_property_data['sub_property'])==1:
                                         if not current_property_data['sub_property']==['All']:
                                             if current_property_data['sub_property'][0] in sub_property_df:
@@ -1055,23 +1152,28 @@ class PropertyViewer(Tool):
 
                                     elif len(current_property_data['sub_property'])>1:
                                         for sp in current_property_data['sub_property'][:-2]:
-                                            if sp in sub_property_df:
-                                                sub_property_df = pd.DataFrame.from_records(sub_property_df[sp].tolist())
+                                            if type(sp)==str:
+                                                if sp in sub_property_df:
+                                                    sub_property_df = pd.DataFrame.from_records(sub_property_df[sp].tolist())
 
-                                        if not current_property_data['sub_property']=='All':
-                                            g_plot = html.Div(
-                                                    dcc.Graph(
-                                                        figure = go.Figure(
-                                                            px.histogram(
-                                                                data_frame = sub_property_df,
-                                                                x = current_property_data['sub_property'][0],
-                                                                title = f'Histogram of {current_property_data["sub_property"]} in {g["properties"]["name"]}'
+                                        if not current_property_data['sub_property'][-1]=='All':
+                                            if type(current_property_data['sub_property'][-1])==str:
+                                                g_plot = html.Div(
+                                                        dcc.Graph(
+                                                            figure = go.Figure(
+                                                                px.histogram(
+                                                                    data_frame = sub_property_df,
+                                                                    x = current_property_data['sub_property'][-1],
+                                                                    title = f'Histogram of {current_property_data["sub_property"]} in {g["properties"]["name"]}'
+                                                                )
                                                             )
                                                         )
                                                     )
-                                                )
+                                            else:
+                                                g_plot = f'Select a sub-property within {current_property_data["sub_property"][-2]}'
                                         else:
                                             # Making the pie chart data
+                                            print(sub_property_df)
                                             column_dtypes = [str(i) for i in sub_property_df.dtypes]
                                             if all([any([i in j for i in ['int','float']]) for j in column_dtypes]):
                                                 # This would be all numeric
