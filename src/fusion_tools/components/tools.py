@@ -891,6 +891,9 @@ class PropertyViewer(Tool):
                                     if len(j.split(' --> '))>i and not j.split(' --> ')[i] in sub_drop:
                                         sub_drop.append(j.split(' --> ')[i])
 
+                                if i==n_levels-1:
+                                    sub_drop = ['All'] + sub_drop
+
                                 sub_dropdowns.append(
                                     dbc.Row([
                                         dbc.Col([
@@ -910,6 +913,7 @@ class PropertyViewer(Tool):
                                 )
 
                             else:
+
                                 sub_dropdowns.append(
                                     dbc.Row([
                                         dbc.Col([
@@ -932,16 +936,18 @@ class PropertyViewer(Tool):
             elif ctx.triggered_id['type']=='property-view-subtype':
                 if not view_type_value is None:
                     child_properties = [i for i in self.available_properties if i.split(' --> ')[0]==view_type_value]
+                    n_levels = max(list(set([len(i.split(' --> ')) for i in child_properties])))
 
-                    # Finding which one is empty:
-                    if not all([type(i)==str for i in view_subtype_value]):
-                        min_blank = min([i for i in range(len(view_subtype_value)) if not type(view_subtype_value[i])==str])
-                        view_subtype_value = [view_subtype_value[i] if i<min_blank else [] for i in range(len(view_subtype_value))]
+                    view_subtype_value = [view_subtype_value[i] if i <= ctx.triggered_id['index'] else [] for i in range(len(view_subtype_value))]
 
                     prev_value = view_type_value
                     for sub_idx, sub in enumerate(view_subtype_value):
                         if type(sub)==str:
-                            new_options = [i.split(' --> ')[sub_idx+1] for i in child_properties if len(i.split(' --> '))>(sub_idx+1) and i.split(' --> ')[sub_idx]==prev_value]
+                            new_options = list(set([i.split(' --> ')[sub_idx+1] for i in child_properties if len(i.split(' --> '))>(sub_idx+1) and i.split(' --> ')[sub_idx]==prev_value]))
+
+                            print(f'sub_idx: {sub_idx}')
+                            if sub_idx+1==n_levels-1:
+                                new_options = ['All']+new_options
 
                             sub_dropdowns.append(
                                 dbc.Row([
@@ -954,7 +960,7 @@ class PropertyViewer(Tool):
                                             value = view_subtype_value[sub_idx],
                                             placeholder = f'Sub-Property: {sub_idx+1}',
                                             disabled = False,
-
+                                            id = {'type': 'property-view-subtype','index': sub_idx}
                                         )
                                     ])
                                 ])
@@ -962,9 +968,12 @@ class PropertyViewer(Tool):
 
                             prev_value = sub
                         else:
-                            if sub_idx==min_blank:
-                                new_options = [i.split(' --> ')[sub_idx+1] for i in child_properties if len(i.split(' --> '))>(sub_idx+1) and i.split(' --> ')[sub_idx]==prev_value]
+                            if sub_idx<=ctx.triggered_id['index']+1:
+                                new_options = list(set([i.split(' --> ')[sub_idx+1] for i in child_properties if len(i.split(' --> '))>(sub_idx+1) and i.split(' --> ')[sub_idx]==prev_value]))
 
+                                if sub_idx+1==n_levels-1:
+                                    new_options = ['All'] + new_options
+                                
                                 sub_dropdowns.append(
                                     dbc.Row([
                                         dbc.Col([
@@ -976,7 +985,7 @@ class PropertyViewer(Tool):
                                                 value = view_subtype_value[sub_idx],
                                                 placeholder = f'Sub-Property: {sub_idx+1}',
                                                 disabled = False,
-
+                                                id = {'type': 'property-view-subtype','index': sub_idx}
                                             )
                                         ])
                                     ])
@@ -1100,10 +1109,7 @@ class PropertyViewer(Tool):
                                 )
                             elif column_type[0]==dict:
                                 sub_property_df = pd.DataFrame.from_records(intersecting_properties[current_property_data['property']].tolist()) 
-                                sub_properties = sub_property_df.columns.tolist()
-                                if 'sub_property' in current_property_data:
-
-                                    print(current_property_data['sub_property'])
+                                if 'sub_property' in current_property_data and not sub_property_df.empty:
                                     if len(current_property_data['sub_property'])==1:
                                         if not current_property_data['sub_property']==['All']:
                                             if current_property_data['sub_property'][0] in sub_property_df:
@@ -1136,8 +1142,7 @@ class PropertyViewer(Tool):
                                                 pie_chart_list.append({
                                                     'Label': key, 'Total': val
                                                 })
-                                            
-                                            
+                                                                                        
                                             g_plot = html.Div(
                                                 dcc.Graph(
                                                     figure = go.Figure(
@@ -1151,57 +1156,73 @@ class PropertyViewer(Tool):
                                             )
 
                                     elif len(current_property_data['sub_property'])>1:
-                                        for sp in current_property_data['sub_property'][:-2]:
-                                            if type(sp)==str:
-                                                if sp in sub_property_df:
-                                                    sub_property_df = pd.DataFrame.from_records(sub_property_df[sp].tolist())
+                                        for sp in current_property_data['sub_property'][:-1]:
 
-                                        if not current_property_data['sub_property'][-1]=='All':
-                                            if type(current_property_data['sub_property'][-1])==str:
+                                            if type(sp)==str and not sub_property_df.empty:
+                                                if sp in sub_property_df:
+                                                    sub_property_df = pd.DataFrame.from_records([i for i in sub_property_df[sp].tolist() if type(i)==dict])                                               
+                                                
+                                                elif sp=='All':
+                                                    continue
+                                                
+                                                else:
+                                                    sub_property_df = pd.DataFrame()
+                                            else:
+                                                sub_property_df = pd.DataFrame()
+
+                                        if not sub_property_df.empty:
+                                            if not current_property_data['sub_property'][-1]=='All':
+                                                if type(current_property_data['sub_property'][-1])==str:
+                                                    if current_property_data['sub_property'][-1] in sub_property_df:
+                                                        g_plot = html.Div(
+                                                                dcc.Graph(
+                                                                    figure = go.Figure(
+                                                                        px.histogram(
+                                                                            data_frame = sub_property_df,
+                                                                            x = current_property_data['sub_property'][-1],
+                                                                            title = f'Histogram of {current_property_data["sub_property"]} in {g["properties"]["name"]}'
+                                                                        )
+                                                                    )
+                                                                ),
+                                                                style = {'width': '100%'}
+                                                            )
+                                                    else:
+                                                        g_plot = f'{current_property_data["sub_property"]} is not in {current_property_data["property"]}'
+                                                else:
+                                                    g_plot = f'Select a sub-property within {current_property_data["sub_property"][-2]}'
+                                            else:
+                                                # Making the pie chart data
+                                                column_dtypes = [str(i) for i in sub_property_df.dtypes]
+                                                if all([any([i in j for i in ['int','float']]) for j in column_dtypes]):
+                                                    # This would be all numeric
+                                                    pie_chart_data = sub_property_df.sum(axis=0).to_dict()
+                                                else:
+                                                    # This would have some un-numeric
+                                                    pie_chart_data = sub_property_df.value_counts().to_dict()
+
+                                                pie_chart_list = []
+                                                for key,val in pie_chart_data.items():
+                                                    pie_chart_list.append({
+                                                        'Label': key, 'Total': val
+                                                    })
+                                                
                                                 g_plot = html.Div(
-                                                        dcc.Graph(
-                                                            figure = go.Figure(
-                                                                px.histogram(
-                                                                    data_frame = sub_property_df,
-                                                                    x = current_property_data['sub_property'][-1],
-                                                                    title = f'Histogram of {current_property_data["sub_property"]} in {g["properties"]["name"]}'
-                                                                )
+                                                    dcc.Graph(
+                                                        figure = go.Figure(
+                                                            px.pie(
+                                                                data_frame = pd.DataFrame.from_records(pie_chart_list),
+                                                                values = 'Total',
+                                                                names = 'Label'
                                                             )
                                                         )
-                                                    )
-                                            else:
-                                                g_plot = f'Select a sub-property within {current_property_data["sub_property"][-2]}'
+                                                    ),
+                                                    style = {'width': '100%'}
+                                                )
+                                        
                                         else:
-                                            # Making the pie chart data
-                                            print(sub_property_df)
-                                            column_dtypes = [str(i) for i in sub_property_df.dtypes]
-                                            if all([any([i in j for i in ['int','float']]) for j in column_dtypes]):
-                                                # This would be all numeric
-                                                pie_chart_data = sub_property_df.sum(axis=0).to_dict()
-                                            else:
-                                                # This would have some un-numeric
-                                                pie_chart_data = sub_property_df.value_counts().to_dict()
+                                            g_plot = f'{current_property_data["sub_property"]} is not in {current_property_data["property"]}'
 
-                                            pie_chart_list = []
-                                            for key,val in pie_chart_data.items():
-                                                pie_chart_list.append({
-                                                    'Label': key, 'Total': val
-                                                })
-                                            
-                                            
-                                            g_plot = html.Div(
-                                                dcc.Graph(
-                                                    figure = go.Figure(
-                                                        px.pie(
-                                                            data_frame = pd.DataFrame.from_records(pie_chart_list),
-                                                            values = 'Total',
-                                                            names = 'Label'
-                                                        )
-                                                    )
-                                                ),
-                                                style = {'width': '100%'}
-                                            )
-                                    
+
                                     else:
                                         g_plot = f'Select a sub-property within {current_property_data["property"]}'
 
