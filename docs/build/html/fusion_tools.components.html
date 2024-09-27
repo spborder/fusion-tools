@@ -197,7 +197,7 @@ For more information see dash-leaflet: <a class="reference external" href="https
 </dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.MultiFrameSlideMap.gen_layout">
-<span class="sig-name descname"><span class="pre">gen_layout</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.MultiFrameSlideMap.gen_layout" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">gen_layout</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">annotations</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotation_components</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_overlays</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_layers</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.MultiFrameSlideMap.gen_layout" title="Link to this definition"></a></dt>
 <dd><p>Generating layout for MultiFrameSlideMap</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -208,6 +208,11 @@ For more information see dash-leaflet: <a class="reference external" href="https
 </dd>
 </dl>
 </dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.maps.MultiFrameSlideMap.initialize_map">
+<span class="sig-name descname"><span class="pre">initialize_map</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.MultiFrameSlideMap.initialize_map" title="Link to this definition"></a></dt>
+<dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.MultiFrameSlideMap.process_frames">
@@ -256,11 +261,17 @@ Also initializes base tile url and styled tile url</p>
 </dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.SlideMap.add_manual_roi">
-<span class="sig-name descname"><span class="pre">add_manual_roi</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_geojson</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.add_manual_roi" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">add_manual_roi</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_geojson</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_annotations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotation_names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_layers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_layer_names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.add_manual_roi" title="Link to this definition"></a></dt>
 <dd><p>Adding a manual region of interest (ROI) to the SlideMap using dl.EditControl() tools including polygon, rectangle, and markers.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>new_geojson</strong> (<em>list</em>) – Incoming GeoJSON object that is emitted by dl.EditControl() following annotation on SlideMap</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>new_geojson</strong> (<em>list</em>) – Incoming GeoJSON object that is emitted by dl.EditControl() following annotation on SlideMap</p></li>
+<li><p><strong>initial_annotations</strong> (<em>list</em>) – Initial annotations added to the map on initialization</p></li>
+<li><p><strong>annotation_names</strong> (<em>list</em>) – Names for each annotation layer on the slide map</p></li>
+<li><p><strong>frame_layers</strong> (<em>list</em>) – Frame layers for multi-frame visualization</p></li>
+<li><p><strong>frame_layer_names</strong> (<em>list</em>) – Names for each frame layer</p></li>
+</ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
 <dd class="field-even"><ul class="simple">
@@ -326,7 +337,7 @@ Also initializes base tile url and styled tile url</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.SlideMap.gen_layout">
-<span class="sig-name descname"><span class="pre">gen_layout</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.gen_layout" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">gen_layout</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">annotations</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotation_components</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_overlays</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_layers</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.gen_layout" title="Link to this definition"></a></dt>
 <dd><p>Generating SlideMap layout</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -406,12 +417,20 @@ and
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.maps.SlideMap.initialize_map">
+<span class="sig-name descname"><span class="pre">initialize_map</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.initialize_map" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.SlideMap.make_geojson_layers">
-<span class="sig-name descname"><span class="pre">make_geojson_layers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">geojson_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.make_geojson_layers" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">make_geojson_layers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">geojson_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">names_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.make_geojson_layers" title="Link to this definition"></a></dt>
 <dd><p>Creates new dl.Overlay() dl.GeoJSON components from list of GeoJSON FeatureCollection objects</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>geojson_list</strong> (<em>list</em>) – List of GeoJSON FeatureCollection objects</p>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>geojson_list</strong> (<em>list</em>) – List of GeoJSON FeatureCollection objects</p></li>
+<li><p><strong>names_list</strong> (<em>list</em>) – List of names for each layer</p></li>
+</ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p>Overlay components on SlideMap.</p>
@@ -907,7 +926,7 @@ Allows for generation of violin plots, scatter plots, and UMAP plots.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyPlotter.sub_select_data">
-<span class="sig-name descname"><span class="pre">sub_select_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sub_selected_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_plot_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_features</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter.sub_select_data" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">sub_select_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">sub_selected_data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter.sub_select_data" title="Link to this definition"></a></dt>
 <dd><p>Updating the markers on the map according to selected data in the sub-plot</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1032,7 +1051,7 @@ Allows for generation of violin plots, scatter plots, and UMAP plots.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyViewer.update_property_viewer">
-<span class="sig-name descname"><span class="pre">update_property_viewer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">slide_map_bounds</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">view_type_value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">view_subtype_value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">view_butt_click</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">active_tab</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_property_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">update_viewer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_geojson</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyViewer.update_property_viewer" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">update_property_viewer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">slide_map_bounds</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">view_type_value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">view_subtype_value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">view_butt_click</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">active_tab</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_property_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">update_viewer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_subtype_children</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_geojson</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyViewer.update_property_viewer" title="Link to this definition"></a></dt>
 <dd><p>Updating visualization of properties within the current viewport</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1044,6 +1063,7 @@ Allows for generation of violin plots, scatter plots, and UMAP plots.</p>
 <li><p><strong>active_tab</strong> (<em>list</em>) – Which tool tab is currently in view. Prevents update if the current tab isn’t “property-viewer”</p></li>
 <li><p><strong>current_property_data</strong> (<em>list</em>) – Data used in current set of plots</p></li>
 <li><p><strong>update_viewer</strong> (<em>list</em>) – Switch value for whether or not to update the plots based on panning around in the SlideMap</p></li>
+<li><p><strong>current_subtype_children</strong> (<em>list</em>) – Parent container of all sub-type dropdown divs.</p></li>
 <li><p><strong>current_geojson</strong> (<em>list</em>) – Current set of GeoJSON features and their properties</p></li>
 </ul>
 </dd>

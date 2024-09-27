@@ -1,7 +1,17 @@
 # Changelog
 
 <!--next-version-placeholder-->
-## v0.0.9 (09//2025)
+## v0.0.10 (09/27/2024)
+
+### Fix:
+- Fixing callbacks initialization for MultiFrameSlideMap
+- Fixing dropdown menus for PropertyViewer with >2 levels of nested properties (now works with arbitrary levels)
+
+### Features
+- Switching from in-memory GeoJSON to geobuf for added efficiency with >10k structures
+- Manual ROIs now able to be used individually as opposed to as members of one single FeatureCollection
+
+## v0.0.9 (09/24/2024)
 
 ### Fix
 - Fixing spatial aggregation function for nested properties
