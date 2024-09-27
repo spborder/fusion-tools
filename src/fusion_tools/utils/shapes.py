@@ -10,11 +10,16 @@ import geojson
 import lxml.etree as ET
 
 import numpy as np
+import base64
 
+
+import rasterio
+import rasterio.features
 import geopandas as gpd
 from shapely.geometry import Polygon, Point, shape
 from skimage import draw
 from scipy import ndimage
+import geobuf
 
 import pandas as pd
 
@@ -37,7 +42,7 @@ def load_geojson(geojson_path: str, name:Union[str,None]=None) -> dict:
     assert os.path.exists(geojson_path)
 
     with open(geojson_path,'r') as f:
-        geojson_anns = geojson.load(f)
+        geojson_anns = json.load(f)
 
         f.close()
 
@@ -265,6 +270,19 @@ def load_polygon_csv(
 
     return geojson_anns
 
+def load_label_mask(label_mask: np.ndarray) -> dict:
+
+    full_geo = {
+        'type': 'FeatureCollection',
+        'features': []
+    }
+
+    for geo, val in rasterio.features.shapes(label_mask):
+
+        full_geo['features'].append(geo)
+
+    return full_geo
+
 def align_object_props(
         geo_ann: dict, 
         prop_df: Union[pd.DataFrame, list],
@@ -330,6 +348,9 @@ def export_annotations(
     :type ann_options: dict, optional
     """
     assert format in ['geojson','aperio','histomics']
+
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
 
     if format in ['histomics','geojson']:
         if format=='geojson':
@@ -441,7 +462,7 @@ def export_annotations(
 
             f.close()
 
-def find_intersecting(geo_source:dict, geo_query:Polygon, return_props:bool = True, return_shapes:bool = True):
+def find_intersecting(geo_source:Union[dict,str], geo_query:Polygon, return_props:bool = True, return_shapes:bool = True):
     """Return properties and/or shapes of features from geo_source that intersect with geo_query
 
     :param geo_source: Source GeoJSON where you are searching for intersecting features
@@ -457,6 +478,9 @@ def find_intersecting(geo_source:dict, geo_query:Polygon, return_props:bool = Tr
     :rtype: tuple
     """
     assert return_props or return_shapes
+
+    if type(geo_source)==str:
+        geo_source = json.loads(geo_source)[0]
 
     # Automatically assigned properties by Leaflet (DO NOT ADD "cluster" AS A PROPERTY)
     ignore_properties = ['geometry','cluster','id']

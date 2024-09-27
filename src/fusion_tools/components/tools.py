@@ -812,7 +812,7 @@ class PropertyViewer(Tool):
                 State({'type': 'property-viewer-data','index': ALL},'data'),
                 State({'type': 'property-viewer-update','index': ALL},'checked'),
                 State({'type':'property-view-subtype-parent','index':ALL},'children'),
-                State({'type': 'feature-bounds','index': ALL},'data')
+                State({'type': 'map-annotations-store','index': ALL},'data')
             ]
         )(self.update_property_viewer)
 
@@ -855,9 +855,10 @@ class PropertyViewer(Tool):
         
         slide_map_bounds = get_pattern_matching_value(slide_map_bounds)
         view_type_value = get_pattern_matching_value(view_type_value)
-        #view_subtype_value = get_pattern_matching_value(view_subtype_value)
         current_property_data = json.loads(get_pattern_matching_value(current_property_data))
         current_subtype_children = get_pattern_matching_value(current_subtype_children)
+
+        current_geojson = json.loads(get_pattern_matching_value(current_geojson))
 
         if ctx.triggered_id['type']=='slide-map':
             # Only update the region info when this is checked
@@ -1056,6 +1057,10 @@ class PropertyViewer(Tool):
         :return: Tabs object containing a tab for each structure with a plot of the selected property value
         :rtype: dbc.Tabs
         """
+
+
+        if len(current_features)==0:
+            raise exceptions.PreventUpdate
 
         current_bounds_bounds = current_property_data['bounds']
         current_bounds_box = box(current_bounds_bounds[0][1],current_bounds_bounds[0][0],current_bounds_bounds[1][1],current_bounds_bounds[1][0])
@@ -1317,6 +1322,7 @@ class PropertyPlotter(Tool):
 
         # Adding branch properties first
         property_dict_children = []
+        t_idx = 0
         for t_idx,t in enumerate(trunk_properties):
             trunk_dict = {
                 'title': t,
@@ -1371,7 +1377,7 @@ class PropertyPlotter(Tool):
             [
                 State({'type': 'property-list','index': ALL},'checked'),
                 State({'type': 'label-list','index': ALL},'value'),
-                State({'type': 'feature-bounds','index':ALL},'data'),
+                State({'type': 'map-annotations-store','index':ALL},'data'),
                 State({'type': 'property-plotter-store','index': ALL},'data')
             ]
         )(self.update_property_graph)
@@ -1418,7 +1424,7 @@ class PropertyPlotter(Tool):
             [
                 State({'type': 'selected-sub-drop','index': ALL},'value'),
                 State({'type': 'property-plotter-store','index': ALL},'data'),
-                State({'type': 'feature-bounds','index': ALL},'data'),
+                State({'type': 'map-annotations-store','index': ALL},'data'),
                 State({'type': 'label-list','index': ALL},'value')
             ]
         )(self.update_sub_div)
@@ -1430,10 +1436,6 @@ class PropertyPlotter(Tool):
             ],
             [
                 Output({'type': 'map-marker-div','index': ALL},'children')
-            ],
-            [
-                State({'type': 'property-plotter-store','index': ALL},'data'),
-                State({'type': 'feature-bounds','index': ALL},'data')
             ]
         )(self.sub_select_data)
 
@@ -1551,6 +1553,8 @@ class PropertyPlotter(Tool):
 
         property_list = get_pattern_matching_value(property_list)
         label_names = get_pattern_matching_value(label_list)
+
+        current_features = json.loads(get_pattern_matching_value(current_features))
 
         # Don't do anything if not given properties
         if property_list is None:
@@ -2461,6 +2465,7 @@ class PropertyPlotter(Tool):
         current_labels = get_pattern_matching_value(current_labels)
         sub_div_content = []
 
+        current_features = json.loads(get_pattern_matching_value(current_features))
 
         if ctx.triggered_id['type']=='selected-sub-butt':
             if not sub_plot_value is None:
@@ -2602,7 +2607,7 @@ class PropertyPlotter(Tool):
 
         return [sub_div_content]
 
-    def sub_select_data(self, sub_selected_data, current_plot_data, current_features):
+    def sub_select_data(self, sub_selected_data):
         """Updating the markers on the map according to selected data in the sub-plot
 
         :param sub_selected_data: Selected points in the sub-plot

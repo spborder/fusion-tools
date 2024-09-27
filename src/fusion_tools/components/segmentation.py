@@ -22,6 +22,8 @@ from PIL import Image
 import requests
 
 from skimage.measure import label
+import geobuf
+import base64
 
 # Dash imports
 import dash
@@ -315,7 +317,7 @@ class FeatureAnnotation(Tool):
                 Output({'type': 'feature-annotation-current-structures','index': ALL},'data')
             ],
             [
-                State({'type': 'feature-bounds','index': ALL},'data'),
+                State({'type': 'map-annotations-store','index': ALL},'data'),
                 State({'type': 'vis-layout-tabs','index': ALL},'active_tab')
             ]
         )(self.update_structure_options)
@@ -552,6 +554,8 @@ class FeatureAnnotation(Tool):
             
         slide_map_bounds = get_pattern_matching_value(slide_bounds)
         slide_map_box = box(slide_map_bounds[0][1],slide_map_bounds[0][0],slide_map_bounds[1][1],slide_map_bounds[1][0])
+
+        current_features = json.loads(get_pattern_matching_value(current_features))
 
         structure_options = []
         structure_bboxes = {}
@@ -1152,21 +1156,6 @@ class BulkLabels(Tool):
         """Adding callbacks to DashBlueprint object
         """
         
-        # Updating structure options based on current features:
-        self.blueprint.callback(
-            [
-                Input({'type': 'slide-map','index': ALL},'bounds')
-            ],
-            [
-                Output({'type': 'bulk-labels-include-structures','index':ALL},'options'),
-                Output({'type': 'bulk-labels-spatial-query-structures','index':ALL},'options')
-            ],
-            [
-                State({'type': 'feature-bounds','index':ALL},'data'),
-                State({'type': 'vis-tools-tabs','index': ALL},'active_tab')
-            ]
-        )(self.update_current_structures)
-
         # Adding spatial relationships 
         self.blueprint.callback(
             [
@@ -1175,6 +1164,9 @@ class BulkLabels(Tool):
             ],
             [
                 Output({'type': 'bulk-labels-spatial-query-div','index': ALL},'children')
+            ],
+            [
+                State({'type':'feature-overlay','index': ALL},'name')
             ]
         )(self.update_spatial_queries)
 
@@ -1197,7 +1189,7 @@ class BulkLabels(Tool):
                 State({'type': 'bulk-labels-include-structures','index': ALL},'value'),
                 State({'type': 'bulk-labels-add-property-div','index': ALL},'children'),
                 State({'type':'bulk-labels-spatial-query-div','index': ALL},'children'),
-                State({'type': 'feature-bounds','index': ALL},'data')
+                State({'type': 'map-annotations-store','index': ALL},'data')
             ]
         )(self.update_label_structures)
 
@@ -1270,7 +1262,12 @@ class BulkLabels(Tool):
                 Output({'type': 'bulk-labels-label-rationale','index': ALL},'value'),
                 Output({'type': 'bulk-labels-label-rationale','index': ALL},'disabled'),
                 Output({'type': 'bulk-labels-label-source','index': ALL},'children'),
-                Output({'type': 'bulk-labels-apply-labels','index': ALL},'disabled')
+                Output({'type': 'bulk-labels-apply-labels','index': ALL},'disabled'),
+                Output({'type': 'bulk-labels-include-structures','index':ALL},'options'),
+                Output({'type': 'bulk-labels-spatial-query-structures','index':ALL},'options')
+            ],
+            [
+                State({'type': 'feature-overlay','index':ALL},'name')
             ]
         )(self.refresh_labels)
 
@@ -1286,41 +1283,6 @@ class BulkLabels(Tool):
                 State({'type': 'bulk-labels-property-info','index': ALL},'data')
             ]
         )(self.download_data)
-
-    def update_current_structures(self, slide_bounds, current_features, active_tab):
-        """Updating available structures for inclusion and spatial queries
-
-        :param slide_bounds: Current boundaries of the slide viewport
-        :type slide_bounds: list
-        :param current_features: Current GeoJSON objects in the SlideMap
-        :type current_features: list
-        :param active_tab: Current active tool tab (prevents some unnecessary background processes)
-        :type active_tab: list
-        :return: Updated set of options for labels and spatial queries.
-        :rtype: tuple
-        """
-        if not any([i['value'] for i in ctx.triggered]):
-            raise exceptions.PreventUpdate
-
-        slide_bounds = get_pattern_matching_value(slide_bounds)
-        slide_box = box(slide_bounds[0][1], slide_bounds[0][0], slide_bounds[1][1],slide_bounds[1][0])
-
-        structure_options = []
-        for g_idx, g in enumerate(current_features):
-            intersecting_shapes, intersecting_properties = find_intersecting(g,slide_box)
-
-            if len(intersecting_shapes['features'])>0:
-                structure_options.append(g['properties']['name'])
-        
-        self.feature_names = structure_options
-        
-        include_options = [{'label': i, 'value': i} for i in structure_options]
-        if len(ctx.outputs_list[1])>0:
-            spatial_queries = [{'label': i,'value': i} for i in structure_options]
-        
-            return [include_options], [spatial_queries for i in range(len(ctx.outputs_list[1]))]
-        else:
-            return [include_options], []
 
     def update_spatial_query_definition(self, query_type):
         """Returning the definition for the selected spatial predicate type
@@ -1380,7 +1342,7 @@ class BulkLabels(Tool):
         else:
             raise exceptions.PreventUpdate
 
-    def update_spatial_queries(self, add_click, remove_click):
+    def update_spatial_queries(self, add_click, remove_click, structure_names):
         
         
         queries_div = Patch()
@@ -1412,7 +1374,7 @@ class BulkLabels(Tool):
                         ],md = 5),
                         dbc.Col([
                             dcc.Dropdown(
-                                options = self.feature_names,
+                                options = structure_names,
                                 value = [],
                                 multi = False,
                                 placeholder = 'Select structure',
@@ -1504,6 +1466,12 @@ class BulkLabels(Tool):
     def process_filters_queries(self, filter_list, spatial_list, structures, all_geo_list):
 
         # First getting the listed structures:
+        for g_idx, g in enumerate(all_geo_list):
+            if type(g)==str:
+                print(len(g))
+                print(g[0:100])
+                all_geo_list[g_idx] = geobuf.decode(g.encode('utf-8'))
+
         structure_filtered = [gpd.GeoDataFrame.from_features(i['features']) for i in all_geo_list if i['properties']['name'] in structures]
 
         # Now going through spatial queries
@@ -1554,37 +1522,39 @@ class BulkLabels(Tool):
                 'type': 'FeatureCollection',
                 'features': []
             }
-            for f in filter_list:
-                filter_name_parts = f['name'].split(' --> ')
 
-                for feat in combined_geojson['features']:
-                    include = True
-                    feat_props = feat['properties'].copy()
-                    feat_props = {i.replace('_left',''):j for i,j in feat_props.items()}
-
-                    for filt in filter_name_parts:
-                        if filt in feat_props:
-                            feat_props = feat_props[filt]
-                        else:
-                            include = False
-                            break
-
-                    
+            for feat in combined_geojson['features']:
+                include = True
+                for f in filter_list:
                     if include:
-                        if all([type(i) in [int,float] for i in f['range']]):
-                            if f['range'][0]<=feat_props and feat_props<=f['range'][1]:
-                                include = True
+                        filter_name_parts = f['name'].split(' --> ')
+
+                        include = True
+                        feat_props = feat['properties'].copy()
+                        feat_props = {i.replace('_left',''):j for i,j in feat_props.items()}
+
+                        for filt in filter_name_parts:
+                            if filt in feat_props:
+                                feat_props = feat_props[filt]
                             else:
-                                include = False
+                                include = include & False
+                                break
                         
-                        elif all([type(i)==str for i in f['range']]):
-                            if feat_props in f['range']:
-                                include = True
-                            else:
-                                include = False
+                        if include:
+                            if all([type(i) in [int,float] for i in f['range']]):
+                                if f['range'][0]<=feat_props and feat_props<=f['range'][1]:
+                                    include = include & True
+                                else:
+                                    include = include & False
+                            
+                            elif all([type(i)==str for i in f['range']]):
+                                if feat_props in f['range']:
+                                    include = include & True
+                                else:
+                                    include = include & False
                     
-                    if include:
-                        filtered_geojson['features'].append(feat)
+                if include:
+                    filtered_geojson['features'].append(feat)
 
         else:
             filtered_geojson = combined_geojson
@@ -1598,6 +1568,7 @@ class BulkLabels(Tool):
             raise exceptions.PreventUpdate
         
         include_structures = get_pattern_matching_value(include_structures)
+        current_features = json.loads(get_pattern_matching_value(current_features))
 
         include_properties = get_pattern_matching_value(filter_properties)
         spatial_queries = get_pattern_matching_value(spatial_queries)
@@ -1797,7 +1768,7 @@ class BulkLabels(Tool):
 
         return [new_data]
 
-    def refresh_labels(self, refresh_click):
+    def refresh_labels(self, refresh_click, structure_options):
         
         if refresh_click:
 
@@ -1814,7 +1785,13 @@ class BulkLabels(Tool):
             label_source = '`Label Source`'
             apply_disable = True
 
-            return [include_structures], [spatial_queries], [add_property], [current_structures],[label_type],[type_disable],[label_text], [text_disable], [label_rationale], [rationale_disable], [label_source], [apply_disable]
+            include_options = [{'label': i, 'value': i} for i in structure_options]
+            if len(ctx.outputs_list[13])>0:
+                spatial_queries = [include_options for i in range(len(ctx.outputs_list[13]))]        
+            else:
+                spatial_queries = []
+
+            return [include_structures], [spatial_queries], [add_property], [current_structures],[label_type],[type_disable],[label_text], [text_disable], [label_rationale], [rationale_disable], [label_source], [apply_disable], [include_options], spatial_queries
         else:
             raise exceptions.PreventUpdate
 

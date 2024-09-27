@@ -3,6 +3,7 @@
 
 import os
 import sys
+sys.path.append('./src/')
 import numpy as np
 
 import anndata as ad
@@ -15,7 +16,7 @@ import zarr
 from PIL import Image
 
 import matplotlib.pyplot as plt
-
+from fusion_tools.utils.shapes import load_label_mask
 
 def main():
     
@@ -63,19 +64,20 @@ def main():
 
     plt.imshow(labels_numpy)
     plt.show()
-
     plt.imshow(cosmx_numpy)
     plt.show()
 
-    test_zarr = 'C:\\Users\\samuelborder\\Downloads\\WD1.1_17-03_WT_MP.ome.zarr\\.zgroup'
-    zarr_zarr = zarr.open(test_zarr)
-    print(zarr_zarr.tree())
-    l_i_cosmx = large_image_source_zarr.open(test_zarr)
-    print(l_i_cosmx)
+    #test_zarr = 'C:\\Users\\samuelborder\\Downloads\\WD1.1_17-03_WT_MP.ome.zarr.zip'
+    #zarr_zarr = zarr.open(test_zarr)
+    #print(zarr_zarr.tree())
+    #l_i_cosmx = large_image_source_zarr.open(test_zarr)
+    #print(l_i_cosmx)
 
     #test_ad_zarr = ad.read_zarr(cosmx_zarr)
     #print(test_ad_zarr)
 
+    #l_i_cosmx = large_image_source_zarr.open(cosmx_zarr+'\\images\\')
+    #print(l_i_cosmx)
 
 
 

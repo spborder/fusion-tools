@@ -17,6 +17,8 @@ import base64
 
 from PIL import Image
 
+#os.environ['PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION'] = 'python'
+
 # Dash imports
 import dash
 dash._dash_renderer._set_react_version('18.2.0')
@@ -71,11 +73,18 @@ class SlideMap(MapComponent):
         # Add Namespace functions here:
         self.get_namespace()
 
-        self.annotation_components, self.image_overlays = self.process_annotations()
+        self.initialize_map()
+
+    def initialize_map(self):
+
+        annotations, annotation_components, image_overlays = self.process_annotations()
 
         self.title = 'Slide Map'
         self.blueprint = DashBlueprint()        
-        self.blueprint.layout = self.gen_layout()
+
+        frame_layers = []
+
+        self.blueprint.layout = self.gen_layout(annotations, annotation_components, image_overlays, frame_layers)
 
         # Add callback functions here
         self.get_callbacks()
@@ -190,6 +199,7 @@ class SlideMap(MapComponent):
 
         annotation_components = []
         image_overlays = []
+        annotations_list = []
         if not self.annotations is None:
             if type(self.annotations)==dict:
                 self.annotations = [self.annotations]
@@ -205,12 +215,21 @@ class SlideMap(MapComponent):
                             st['properties']['name'] = st['features'][0]['properties']['name']
                         else:
                             st['properties']['name'] = f'Structure {st_idx}'
+                    else:
+                        if not 'name' in st['properties']:
+                            if 'name' in st['features'][0]['properties']:
+                                st['properties']['name'] = st['features'][0]['properties']['name']
+                            else:
+                                st['properties']['name'] = f'Structure {st_idx}'
                     
+                    annotations_list.append(st)
+
                     annotation_components.append(
                         dl.Overlay(
                             dl.LayerGroup(
                                 dl.GeoJSON(
-                                    data = st,
+                                    data = dlx.geojson_to_geobuf(st),
+                                    format = 'geobuf',
                                     id = {'type': 'feature-bounds','index': st_idx},
                                     options = {
                                         'style': self.js_namespace("featureStyle")
@@ -274,9 +293,9 @@ class SlideMap(MapComponent):
                         )
                     ])
 
-        return annotation_components, image_overlays
+        return annotations_list, annotation_components, image_overlays
 
-    def gen_layout(self):
+    def gen_layout(self, annotations, annotation_components, image_overlays, frame_layers):
         """Generating SlideMap layout
 
         :return: Div object containing interactive components for the SlideMap object.
@@ -315,9 +334,16 @@ class SlideMap(MapComponent):
                         id = {'type': 'map-colorbar-div','index': 0},
                         children = []
                     ),
+                    html.Div(
+                        dcc.Store(
+                            id = {'type': 'map-annotations-store','index': 0},
+                            data = json.dumps(annotations),
+                            storage_type = 'memory'
+                        )
+                    ),
                     dl.LayersControl(
                         id = {'type': 'map-layers-control','index': 0},
-                        children = self.annotation_components
+                        children = frame_layers + annotation_components
                     ),
                     dl.EasyButton(
                         icon = 'fa-solid fa-arrows-to-dot',
@@ -332,7 +358,7 @@ class SlideMap(MapComponent):
                         id = {'type': 'map-marker-div','index': 0},
                         children = []
                     ),
-                    *self.image_overlays
+                    *image_overlays
                 ]
             )
         )
@@ -516,7 +542,14 @@ class SlideMap(MapComponent):
                 Input({'type':'edit-control','index': ALL},'geojson')
             ],
             [
-                Output({'type': 'map-layers-control','index': ALL},'children')
+                Output({'type': 'map-layers-control','index': ALL},'children'),
+                Output({'type': 'map-annotations-store','index': ALL},'data')
+            ],
+            [
+                State({'type': 'map-annotations-store','index': ALL},'data'),
+                State({'type': 'feature-overlay','index': ALL},'name'),
+                State({'type': 'base-layer','index': ALL},'children'),
+                State({'type': 'base-layer','index': ALL},'name')
             ]
         )(self.add_manual_roi)
 
@@ -650,62 +683,90 @@ class SlideMap(MapComponent):
 
         return popup_div
     
-    def make_geojson_layers(self, geojson_list:list) -> list:
+    def make_geojson_layers(self, geojson_list:list, names_list:list) -> list:
         """Creates new dl.Overlay() dl.GeoJSON components from list of GeoJSON FeatureCollection objects
 
         :param geojson_list: List of GeoJSON FeatureCollection objects
         :type geojson_list: list
+        :param names_list: List of names for each layer
+        :type names_list: list
         :return: Overlay components on SlideMap.
         :rtype: list
         """
 
+        #TODO: pass the color list here as well
+        if any(['Manual' in i for i in names_list]):
+            manual_rois = [
+                {
+                    'type': 'FeatureCollection',
+                    'features': [
+                        i
+                    ],
+                    'properties': i['properties'] if '_id' in i['properties'] else i['properties'] | {'_id': uuid.uuid4().hex[:24], 'name': f'Manual ROI {idx+1}'}
+                }
+                for idx,i in enumerate(geojson_list[-1]['features'])
+            ]
+
+            non_manual_n = len(geojson_list)-1
+            manual_n = len(manual_rois)
+            geojson_list[non_manual_n:non_manual_n+manual_n] = manual_rois
+
         annotation_components = []
-        for st_idx,st in enumerate(geojson_list):
-            if type(st)==dict:
-                annotation_components.append(
-                    dl.Overlay(
-                        dl.LayerGroup(
-                            dl.GeoJSON(
-                                data = st,
-                                id = {'type': 'feature-bounds','index': st_idx},
-                                options = {
-                                    'style': self.js_namespace("featureStyle")
-                                },
-                                filter = self.js_namespace("featureFilter"),
-                                hideout = {
-                                    'overlayBounds': {},
-                                    'overlayProp': {},
-                                    'fillOpacity': 0.5,
-                                    'lineColor': {st['properties']['name']: '#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255))},
-                                    'filterVals': []
-                                },
-                                hoverStyle = arrow_function(
-                                    {
-                                        'weight': 5,
-                                        'color': '#9caf00',
-                                        'dashArray':''
-                                    }
-                                ),
-                                zoomToBounds = False,
-                                children = [
-                                    dl.Popup(
-                                        id = {'type': 'feature-popup','index': st_idx},
-                                        autoPan = False,
-                                    )
-                                ]
-                            )
-                        ),
-                        name = st['properties']['name'], checked = True, id = {'type':'feature-overlay','index':st_idx}
-                    )
+        for st_idx,(st,st_name) in enumerate(zip(geojson_list,names_list)):
+
+            annotation_components.append(
+                dl.Overlay(
+                    dl.LayerGroup(
+                        dl.GeoJSON(
+                            data = dlx.geojson_to_geobuf(st) if type(st)==dict else st,
+                            format = 'geobuf',
+                            id = {'type': 'feature-bounds','index': st_idx},
+                            options = {
+                                'style': self.js_namespace("featureStyle")
+                            },
+                            filter = self.js_namespace("featureFilter"),
+                            hideout = {
+                                'overlayBounds': {},
+                                'overlayProp': {},
+                                'fillOpacity': 0.5,
+                                'lineColor': {st_name: '#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255))},
+                                'filterVals': []
+                            },
+                            hoverStyle = arrow_function(
+                                {
+                                    'weight': 5,
+                                    'color': '#9caf00',
+                                    'dashArray':''
+                                }
+                            ),
+                            zoomToBounds = False,
+                            children = [
+                                dl.Popup(
+                                    id = {'type': 'feature-popup','index': st_idx},
+                                    autoPan = False,
+                                )
+                            ]
+                        )
+                    ),
+                    name = st_name, checked = True, id = {'type':'feature-overlay','index':st_idx}
                 )
+            )
 
         return annotation_components
 
-    def add_manual_roi(self,new_geojson:list) -> list:
+    def add_manual_roi(self,new_geojson:list,initial_annotations:list,annotation_names: list, frame_layers:list, frame_layer_names:list) -> list:
         """Adding a manual region of interest (ROI) to the SlideMap using dl.EditControl() tools including polygon, rectangle, and markers.
 
         :param new_geojson: Incoming GeoJSON object that is emitted by dl.EditControl() following annotation on SlideMap
         :type new_geojson: list
+        :param initial_annotations: Initial annotations added to the map on initialization
+        :type initial_annotations: list
+        :param annotation_names: Names for each annotation layer on the slide map
+        :type annotation_names: list
+        :param frame_layers: Frame layers for multi-frame visualization
+        :type frame_layers: list
+        :param frame_layer_names: Names for each frame layer
+        :type frame_layer_names: list
         :raises exceptions.PreventUpdate: new_geojson input is None
         :raises exceptions.PreventUpdate: No new features are added, this can occur after deletion of previous manual ROIs.
         :return: List of new children to dl.LayerControl() consisting of overlaid GeoJSON components.
@@ -713,25 +774,56 @@ class SlideMap(MapComponent):
         """
         
         new_geojson = get_pattern_matching_value(new_geojson)
-        if not new_geojson is None:
-            new_geojson['properties'] = {
-                'name': 'Manual ROI',
-                '_id': uuid.uuid4().hex[:24]
-            }
+        initial_annotations = json.loads(get_pattern_matching_value(initial_annotations))
 
-            if not self.annotations is None:
+        new_children = []
+        if not new_geojson is None:
+            
+            if len(new_geojson['features'])>0:
+                manual_roi_names = [i for i in annotation_names if 'Manual' in i]
+
+                new_geojson['properties'] = {
+                    'name': f'Manual ROI {len(manual_roi_names)+1}',
+                    '_id': uuid.uuid4().hex[:24]
+                }
+
+                annotation_names += [f'Manual ROI {len(manual_roi_names)+1}']
+
+            if not len(initial_annotations)==0:
 
                 if len(new_geojson['features'])>0:
-                    new_geojson = spatially_aggregate(new_geojson, self.annotations)
-                    new_children = self.make_geojson_layers(self.annotations+[new_geojson])
+                    new_geojson = spatially_aggregate(new_geojson, initial_annotations)
+                    new_children += self.make_geojson_layers(initial_annotations+[new_geojson],annotation_names)
                 else:
-                    new_children = self.make_geojson_layers(self.annotations)
+                    new_children += self.make_geojson_layers(initial_annotations,annotation_names)
 
-                return [new_children]
+                annotations_data = json.dumps(initial_annotations+[new_geojson])
+
+                new_children += [
+                    dl.BaseLayer(
+                        i,
+                        name=j,
+                        id={'type':'base-layer','index':idx}
+                    ) 
+                    for idx, (i,j) in enumerate(zip(frame_layers,frame_layer_names))
+                ]
+
+                return [new_children], [annotations_data]
             else:
                 if len(new_geojson['features'])>0:
-                    new_children = self.make_geojson_layers([new_geojson])
-                    return [new_children]
+                    new_children += self.make_geojson_layers([new_geojson],annotation_names)
+
+                    annotations_data = json.dumps([new_geojson])
+
+                    new_children += [
+                        dl.BaseLayer(
+                            i,
+                            name = j,
+                            id = {'type': 'base-layer','idx': idx}
+                        )
+                        for idx, (i,j) in enumerate(zip(frame_layers, frame_layer_names))
+                    ]
+                    return [new_children], [annotations_data]
                 
                 else:
                     raise exceptions.PreventUpdate
@@ -852,7 +944,6 @@ class SlideMap(MapComponent):
         else:
             raise exceptions.PreventUpdate
 
-
 class MultiFrameSlideMap(SlideMap):
     """MultiFrameSlideMap component, containing an image with multiple frames which are added as additional, selectable dl.TileLayer() components
 
@@ -873,15 +964,19 @@ class MultiFrameSlideMap(SlideMap):
         self.frame_layers = []
 
         super().__init__(tile_server,annotations)
-
+    
+    def initialize_map(self):
+        
+        annotations, annotation_components, image_overlays = super().process_annotations()
         self.title = 'Multi-Frame Slide Map'
-        self.process_frames()
+        frame_layers = self.process_frames()
 
         self.blueprint = DashBlueprint()
-        self.blueprint.layout = self.gen_layout()
-        # Changing up the layout so that it generates different tile layers for each frame
-    
-    def gen_layout(self):
+        self.blueprint.layout = super().gen_layout(annotations, annotation_components,image_overlays, frame_layers)
+
+        super().get_callbacks()
+
+    def gen_layout(self, annotations, annotation_components, image_overlays, frame_layers):
         """Generating layout for MultiFrameSlideMap
 
         :return: Layout added to DashBlueprint object to be embedded in larger layout.
@@ -912,9 +1007,15 @@ class MultiFrameSlideMap(SlideMap):
                         id = {'type': 'map-colorbar-div','index': 0},
                         children = []
                     ),
+                    html.Div(
+                        dcc.Store(
+                            id = {'type':'map-annotations-store','index': 0},
+                            data = json.dumps(annotations)
+                        )
+                    ),
                     dl.LayersControl(
                         id = {'type': 'map-layers-control','index': 0},
-                        children = self.frame_layers + self.annotation_components
+                        children = frame_layers + annotation_components
                     ),
                     dl.EasyButton(
                         icon = 'fa-solid fa-arrows-to-dot',
@@ -928,7 +1029,8 @@ class MultiFrameSlideMap(SlideMap):
                     html.Div(
                         id = {'type': 'map-marker-div','index': 0},
                         children = []
-                    )
+                    ),
+                    *image_overlays
                 ]
             )
         )
@@ -940,7 +1042,7 @@ class MultiFrameSlideMap(SlideMap):
         Also initializes base tile url and styled tile url
         """
 
-        self.frame_layers = []
+        frame_layers = []
 
         if 'frames' in self.image_metadata:
             if len(self.image_metadata['frames'])>0:
@@ -978,7 +1080,7 @@ class MultiFrameSlideMap(SlideMap):
                         layer_indices = list(range(0,len(frame_names)))
                     
                     for f_idx,f in enumerate(frame_names):
-                        self.frame_layers.append(
+                        frame_layers.append(
                             dl.BaseLayer(
                                 dl.TileLayer(
                                     url = self.tiles_url+'/?style={"bands": [{"palette":["rgba(0,0,0,0)","rgba(255,255,255,255)"],"framedelta":'+str(f_idx)+'}]}',
@@ -992,7 +1094,7 @@ class MultiFrameSlideMap(SlideMap):
                             )
                         )
                     if rgb_url:
-                        self.frame_layers.append(
+                        frame_layers.append(
                             dl.BaseLayer(
                                 dl.TileLayer(
                                     url = rgb_url,
@@ -1007,7 +1109,7 @@ class MultiFrameSlideMap(SlideMap):
                             )
                         )
             else:
-                self.frame_layers.append(
+                frame_layers.append(
                     dl.BaseLayer(
                         dl.TileLayer(
                             url = self.tiles_url,
@@ -1022,6 +1124,8 @@ class MultiFrameSlideMap(SlideMap):
                 )
         else:
             raise TypeError("Missing 'frames' key in image metadata")
+        
+        return frame_layers
 
 class SlideImageOverlay(MapComponent):
     """Image overlay on specific coordinates within a SlideMap
