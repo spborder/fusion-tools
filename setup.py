@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="fusion-tools",
-    version="0.0.9",
+    version="0.0.10",
     author="Sam Border",
     author_email="sam.border2256@gmail.com",
     description="Utility functions for generating, saving, and converting annotation files",
@@ -20,7 +20,7 @@ setuptools.setup(
         "numpy>=1.20.0",
         "large-image[common]",
         "wsi-annotations-kit",
-        "dash-leaflet",
+        "dash-leaflet[all]",
         "dash-extensions",
         "dash-bootstrap-components",
         "dash-mantine-components",

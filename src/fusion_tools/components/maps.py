@@ -221,6 +221,7 @@ class SlideMap(MapComponent):
                                 st['properties']['name'] = st['features'][0]['properties']['name']
                             else:
                                 st['properties']['name'] = f'Structure {st_idx}'
+                        
                     
                     annotations_list.append(st)
 
@@ -781,23 +782,24 @@ class SlideMap(MapComponent):
             
             if len(new_geojson['features'])>0:
                 manual_roi_names = [i for i in annotation_names if 'Manual' in i]
-
                 new_geojson['properties'] = {
                     'name': f'Manual ROI {len(manual_roi_names)+1}',
                     '_id': uuid.uuid4().hex[:24]
                 }
 
-                annotation_names += [f'Manual ROI {len(manual_roi_names)+1}']
+                if new_geojson['features'][-1]['geometry']['type']=='Polygon':
+                    annotation_names += [f'Manual ROI {len(manual_roi_names)+1}']
 
             if not len(initial_annotations)==0:
 
                 if len(new_geojson['features'])>0:
                     new_geojson = spatially_aggregate(new_geojson, initial_annotations)
                     new_children += self.make_geojson_layers(initial_annotations+[new_geojson],annotation_names)
+                    annotations_data = json.dumps(initial_annotations+[new_geojson])
+
                 else:
                     new_children += self.make_geojson_layers(initial_annotations,annotation_names)
-
-                annotations_data = json.dumps(initial_annotations+[new_geojson])
+                    annotations_data = no_update
 
                 new_children += [
                     dl.BaseLayer(
@@ -812,7 +814,6 @@ class SlideMap(MapComponent):
             else:
                 if len(new_geojson['features'])>0:
                     new_children += self.make_geojson_layers([new_geojson],annotation_names)
-
                     annotations_data = json.dumps([new_geojson])
 
                     new_children += [
@@ -826,7 +827,7 @@ class SlideMap(MapComponent):
                     return [new_children], [annotations_data]
                 
                 else:
-                    raise exceptions.PreventUpdate
+                    return [], [json.dumps({})]
         else:
             raise exceptions.PreventUpdate
 

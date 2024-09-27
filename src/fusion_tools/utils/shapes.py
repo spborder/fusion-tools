@@ -514,80 +514,81 @@ def spatially_aggregate(agg_geo:dict, base_geos: list):
         if type(b)==dict:
             b_name = b['properties']['name']
             for f in agg_geo['features']:
-                f_shape = shape(f['geometry'])
-                intersecting_shapes, intersecting_props = find_intersecting(b,f_shape)
+                if f['geometry']['type']=='Polygon':
+                    f_shape = shape(f['geometry'])
+                    intersecting_shapes, intersecting_props = find_intersecting(b,f_shape)
 
-                if len(intersecting_shapes['features'])>0:
-                    
-                    f['properties'][b_name] = {}
+                    if len(intersecting_shapes['features'])>0:
+                        
+                        f['properties'][b_name] = {}
 
-                    intersecting_areas = [
-                        shape(i['geometry']).intersection(f_shape).area
-                        for i in intersecting_shapes['features']
-                    ]
+                        intersecting_areas = [
+                            shape(i['geometry']).intersection(f_shape).area
+                            for i in intersecting_shapes['features']
+                        ]
 
-                    f['properties'][b_name]['count'] = len(intersecting_shapes['features'])
-                    f['properties'][b_name]['area'] = sum(intersecting_areas)
+                        f['properties'][b_name]['count'] = len(intersecting_shapes['features'])
+                        f['properties'][b_name]['area'] = sum(intersecting_areas)
 
-                    intersecting_props_cols = intersecting_props.columns.tolist()
-                    numeric_props = intersecting_props.select_dtypes(exclude='object')
-                    if not numeric_props.empty:
-                        for c in numeric_props.columns.tolist():
-                            c_max = numeric_props[c].max()
-                            c_min = numeric_props[c].min()
-                            c_mean = numeric_props[c].mean()
-                            c_sum = numeric_props[c].sum()
+                        intersecting_props_cols = intersecting_props.columns.tolist()
+                        numeric_props = intersecting_props.select_dtypes(exclude='object')
+                        if not numeric_props.empty:
+                            for c in numeric_props.columns.tolist():
+                                c_max = numeric_props[c].max()
+                                c_min = numeric_props[c].min()
+                                c_mean = numeric_props[c].mean()
+                                c_sum = numeric_props[c].sum()
 
-                            f['properties'][b_name][f'{c} Max'] = c_max
-                            f['properties'][b_name][f'{c} Min'] = c_min
-                            f['properties'][b_name][f'{c} Mean'] = c_mean
-                            f['properties'][b_name][f'{c} Sum'] = c_sum
-                    
-                    object_props = intersecting_props.iloc[:,[i for i in range(len(intersecting_props_cols)) if not intersecting_props_cols[i] in numeric_props]]
-                    if not object_props.empty:
-                        for c in object_props.columns.tolist():
-                            col_type = list(set([type(i) for i in object_props[c].tolist()]))
-                            if len(col_type)==1:
-                                if col_type[0]==str:
-                                    c_counts = object_props[c].value_counts().to_dict()
-                                    for i,j in c_counts.items():
-                                        f['properties'][b_name][i] = j
-                                elif col_type[0]==dict:
-                                    nested_prop_list = []
-                                    for i in object_props[c].tolist():
-                                        nested_levels = find_nested_levels({c:i})
-                                        nested_props = extract_nested_prop({c: i}, nested_levels, (), [])
-                                        nested_prop_list.append({i:j for k in nested_props for i,j in k.items()})
-                                    
-                                    nested_prop_df = pd.DataFrame.from_records(nested_prop_list)
+                                f['properties'][b_name][f'{c} Max'] = c_max
+                                f['properties'][b_name][f'{c} Min'] = c_min
+                                f['properties'][b_name][f'{c} Mean'] = c_mean
+                                f['properties'][b_name][f'{c} Sum'] = c_sum
+                        
+                        object_props = intersecting_props.iloc[:,[i for i in range(len(intersecting_props_cols)) if not intersecting_props_cols[i] in numeric_props]]
+                        if not object_props.empty:
+                            for c in object_props.columns.tolist():
+                                col_type = list(set([type(i) for i in object_props[c].tolist()]))
+                                if len(col_type)==1:
+                                    if col_type[0]==str:
+                                        c_counts = object_props[c].value_counts().to_dict()
+                                        for i,j in c_counts.items():
+                                            f['properties'][b_name][i] = j
+                                    elif col_type[0]==dict:
+                                        nested_prop_list = []
+                                        for i in object_props[c].tolist():
+                                            nested_levels = find_nested_levels({c:i})
+                                            nested_props = extract_nested_prop({c: i}, nested_levels, (), [])
+                                            nested_prop_list.append({i:j for k in nested_props for i,j in k.items()})
+                                        
+                                        nested_prop_df = pd.DataFrame.from_records(nested_prop_list)
 
-                                    nested_mean_props = nested_prop_df.mean(axis=0).to_dict()
-                                    nested_max_props = nested_prop_df.max(axis=0).to_dict()
-                                    nested_min_props = nested_prop_df.min(axis=0).to_dict()
-                                    nested_sum_props = nested_prop_df.sum(axis=0).to_dict()
+                                        nested_mean_props = nested_prop_df.mean(axis=0).to_dict()
+                                        nested_max_props = nested_prop_df.max(axis=0).to_dict()
+                                        nested_min_props = nested_prop_df.min(axis=0).to_dict()
+                                        nested_sum_props = nested_prop_df.sum(axis=0).to_dict()
 
-                                    nested_columns = nested_prop_df.columns.tolist()
-                                    for n_c in nested_columns:
-                                        n_c_parts = n_c.split(' --> ')
+                                        nested_columns = nested_prop_df.columns.tolist()
+                                        for n_c in nested_columns:
+                                            n_c_parts = n_c.split(' --> ')
 
-                                        n_c_mean_dict = nested_mean_props[n_c]
-                                        n_c_max_dict = nested_max_props[n_c]
-                                        n_c_min_dict = nested_min_props[n_c]
-                                        n_c_sum_dict = nested_sum_props[n_c]
+                                            n_c_mean_dict = nested_mean_props[n_c]
+                                            n_c_max_dict = nested_max_props[n_c]
+                                            n_c_min_dict = nested_min_props[n_c]
+                                            n_c_sum_dict = nested_sum_props[n_c]
 
-                                        n_c_dict = {
-                                            'Mean': n_c_mean_dict,
-                                            'Max': n_c_max_dict,
-                                            'Min': n_c_min_dict,
-                                            'Sum': n_c_sum_dict
-                                        }
-                                        for part in reversed(n_c_parts):
-                                            n_c_dict = {part: n_c_dict}
+                                            n_c_dict = {
+                                                'Mean': n_c_mean_dict,
+                                                'Max': n_c_max_dict,
+                                                'Min': n_c_min_dict,
+                                                'Sum': n_c_sum_dict
+                                            }
+                                            for part in reversed(n_c_parts):
+                                                n_c_dict = {part: n_c_dict}
 
-                                        if not part in f['properties'][b_name]:
-                                            f['properties'][b_name][part] = n_c_dict[part]
-                                        else:
-                                            f['properties'][b_name][part] = f['properties'][b_name][part] | n_c_dict[part]
+                                            if not part in f['properties'][b_name]:
+                                                f['properties'][b_name][part] = n_c_dict[part]
+                                            else:
+                                                f['properties'][b_name][part] = f['properties'][b_name][part] | n_c_dict[part]
 
     return agg_geo
 
