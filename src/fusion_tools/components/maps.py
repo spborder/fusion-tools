@@ -215,12 +215,17 @@ class SlideMap(MapComponent):
                             st['properties']['name'] = st['features'][0]['properties']['name']
                         else:
                             st['properties']['name'] = f'Structure {st_idx}'
+
+                        st['properties']['_id'] = uuid.uuid4().hex[:24]
                     else:
                         if not 'name' in st['properties']:
                             if 'name' in st['features'][0]['properties']:
                                 st['properties']['name'] = st['features'][0]['properties']['name']
                             else:
                                 st['properties']['name'] = f'Structure {st_idx}'
+
+                        if not '_id' in st['properties']:
+                            st['properties']['_id'] = uuid.uuid4().hex[:24]
                         
                     
                     annotations_list.append(st)
