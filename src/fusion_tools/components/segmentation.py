@@ -1284,6 +1284,20 @@ class BulkLabels(Tool):
             ]
         )(self.download_data)
 
+        # Clearing markers:
+        self.blueprint.callback(
+            [
+                Input({'type': 'label-marker-delete','index': ALL},'n_clicks')
+            ],
+            [
+                Output({'type': 'map-marker-div','index': ALL},'children'),
+                Output({'type': 'bulk-labels-current-structures','index': ALL},'children'),
+            ],
+            [
+                State({'type': 'map-marker-div','index': ALL},'children')
+            ]
+        )(self.remove_marker)
+
     def update_spatial_query_definition(self, query_type):
         """Returning the definition for the selected spatial predicate type
 
@@ -1586,7 +1600,6 @@ class BulkLabels(Tool):
         ]
 
         new_markers_div = [
-            html.Div([
                 dl.Marker(
                     position = [
                         (f['bbox'][0]+f['bbox'][2])/2,
@@ -1602,14 +1615,13 @@ class BulkLabels(Tool):
                             ),
                             id = {'type':'label-marker-popup','index': f_idx}
                         )
-                    ]
+                    ],
+                    id = {'type': 'label-marker','index': f_idx}
                 )
                 for f_idx, f in enumerate(filtered_geojson['features'])
-            ])
-        ]
+            ]
 
         new_labels_source = f'`{json.dumps({"Spatial": processed_spatial_queries,"Filters": processed_filters})}`'
-
 
         if len(filtered_geojson['features'])>0:
             labels_type_disabled = False
@@ -1684,6 +1696,10 @@ class BulkLabels(Tool):
 
     def update_property_selector(self, property_value, property_info):
 
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
         property_info = json.loads(get_pattern_matching_value(property_info))
 
         property_values = property_info[property_value]
@@ -1804,6 +1820,28 @@ class BulkLabels(Tool):
         else:
             raise exceptions.PreventUpdate
 
+    def remove_marker(self, clear_click, current_markers):
 
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        n_marked = len(get_pattern_matching_value(current_markers))
 
+        patched_list = Patch()
+        values_to_remove = []
+        for i,val in enumerate(clear_click):
+            if val:
+                values_to_remove.insert(0,i)
+
+        for v in values_to_remove:
+            del patched_list[v]
+        
+        new_structures_div = [
+            dbc.Alert(
+                f'{n_marked-1} Structures Included!',
+                color = 'success' if (n_marked-1)>0 else 'danger'
+            )
+        ]
+
+        return [patched_list], [new_structures_div]
 

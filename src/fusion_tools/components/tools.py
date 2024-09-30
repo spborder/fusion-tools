@@ -2014,18 +2014,14 @@ class PropertyPlotter(Tool):
                     ]
                 )
             )
-        
-        map_marker_div = html.Div(
-            map_marker
-        )
+
         current_plot_data['selected'] = selected_data
         current_plot_data = [json.dumps(current_plot_data)]
 
         # Update property_graph_selected_div
         property_graph_selected_div = self.gen_selected_div(len(map_marker))
 
-
-        return property_graph_selected_div, [map_marker_div], current_plot_data
+        return property_graph_selected_div, [map_marker], current_plot_data
 
     def make_property_plot_tabs(self, data_df:pd.DataFrame, label_col: Union[str,None],property_cols: list, customdata_cols:list)->list:
         """Generate property plot description tabs
@@ -2433,12 +2429,11 @@ class PropertyPlotter(Tool):
             del patched_list[v]
             del current_plot_data['selected']['points'][v]
         
-        
         current_plot_data = [json.dumps(current_plot_data)]
 
-        new_selected_div = self.update_selected_div(n_marked-1)
+        new_selected_div = self.gen_selected_div(n_marked-1)
 
-        return patched_list, current_plot_data, new_selected_div
+        return [patched_list], current_plot_data, new_selected_div
 
     def update_sub_div(self, plot_butt_clicked, marker_butt_clicked, sub_plot_value, current_plot_data, current_features, current_labels):
         """Updating the property-graph-selected-div based on selection of either a property to plot a sub-plot of or whether the marker properties button was clicked
