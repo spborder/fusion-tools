@@ -331,7 +331,7 @@ class SlideMap(MapComponent):
                         children = [
                             dl.EditControl(
                                 id = {'type': 'edit-control','index': 0},
-                                draw = dict(polyline=False, line=False, circle = False, circlemarker=False),
+                                draw = dict(polyline=False, line=False, circle = False, circlemarker=False, marker = False),
                                 position='topleft'
                             )
                         ]
@@ -610,6 +610,19 @@ class SlideMap(MapComponent):
             ]
         )(self.export_image_overlay_bounds)
 
+        # Downloading manual ROI
+        self.blueprint.callback(
+            [
+                Input({'type': 'download-manual-roi','index': MATCH},'n_clicks')
+            ],
+            [
+                Output({'type': 'download-manual-roi-download','index': MATCH},'data')
+            ],
+            [
+                State({'type': 'edit-control','index': ALL},'geojson')
+            ]
+        )(self.download_manual_roi)
+
     def get_click_popup(self, clicked):
         """Populating popup Div with summary information on the clicked GeoJSON feature
 
@@ -651,7 +664,6 @@ class SlideMap(MapComponent):
 
             return return_table
 
-
         accordion_children = []
         all_properties = list(clicked['properties'].keys())
 
@@ -665,6 +677,7 @@ class SlideMap(MapComponent):
                 ])
             ], title = 'Properties')
         )
+
 
         # Now loading the dict properties as sub-accordions
         dict_properties = [i for i in all_properties if type(clicked['properties'][i])==dict]
@@ -681,6 +694,27 @@ class SlideMap(MapComponent):
                     ],title = d)
                 )
 
+        # If this is a manual ROI then add a download option:
+        if 'Manual' in clicked['properties']['name']:
+            clicked_idx = int(float(clicked['properties']['name'].split(' ')[-1]))
+            accordion_children.append(
+                dbc.AccordionItem([
+                    html.Div([
+                        dbc.Button(
+                            'Download Shape',
+                            id = {'type': 'download-manual-roi','index': clicked_idx},
+                            n_clicks = 0,
+                            className = 'd-grid col-12 mx-auto'
+                        ),
+                        dcc.Download(
+                            id = {'type': 'download-manual-roi-download','index': clicked_idx}
+                        )
+                    ])
+                ],
+                title = 'Download Shape')
+            )
+
+
         popup_div = html.Div(
             dbc.Accordion(
                 children = accordion_children
@@ -689,13 +723,15 @@ class SlideMap(MapComponent):
 
         return popup_div
     
-    def make_geojson_layers(self, geojson_list:list, names_list:list) -> list:
+    def make_geojson_layers(self, geojson_list:list, names_list:list, index_list: list) -> list:
         """Creates new dl.Overlay() dl.GeoJSON components from list of GeoJSON FeatureCollection objects
 
         :param geojson_list: List of GeoJSON FeatureCollection objects
         :type geojson_list: list
         :param names_list: List of names for each layer
         :type names_list: list
+        :param index_list: List of indices to apply to each component
+        :type index_list: list
         :return: Overlay components on SlideMap.
         :rtype: list
         """
@@ -718,7 +754,7 @@ class SlideMap(MapComponent):
             geojson_list[non_manual_n:non_manual_n+manual_n] = manual_rois
 
         annotation_components = []
-        for st_idx,(st,st_name) in enumerate(zip(geojson_list,names_list)):
+        for st,st_name,st_idx in zip(geojson_list,names_list,index_list):
 
             annotation_components.append(
                 dl.Overlay(
@@ -760,13 +796,13 @@ class SlideMap(MapComponent):
 
         return annotation_components
 
-    def add_manual_roi(self,new_geojson:list,initial_annotations:list,annotation_names: list, frame_layers:list, frame_layer_names:list) -> list:
+    def add_manual_roi(self,new_geojson:list,current_annotations:list,annotation_names: list, frame_layers:list, frame_layer_names:list) -> list:
         """Adding a manual region of interest (ROI) to the SlideMap using dl.EditControl() tools including polygon, rectangle, and markers.
 
         :param new_geojson: Incoming GeoJSON object that is emitted by dl.EditControl() following annotation on SlideMap
         :type new_geojson: list
-        :param initial_annotations: Initial annotations added to the map on initialization
-        :type initial_annotations: list
+        :param current_annotations: Initial annotations added to the map on initialization
+        :type current_annotations: list
         :param annotation_names: Names for each annotation layer on the slide map
         :type annotation_names: list
         :param frame_layers: Frame layers for multi-frame visualization
@@ -778,63 +814,62 @@ class SlideMap(MapComponent):
         :return: List of new children to dl.LayerControl() consisting of overlaid GeoJSON components.
         :rtype: list
         """
-        
         new_geojson = get_pattern_matching_value(new_geojson)
-        initial_annotations = json.loads(get_pattern_matching_value(initial_annotations))
+        current_annotations = json.loads(get_pattern_matching_value(current_annotations))
 
-        new_children = []
-        if not new_geojson is None:
-            
-            if len(new_geojson['features'])>0:
-                manual_roi_names = [i for i in annotation_names if 'Manual' in i]
-                new_geojson['properties'] = {
-                    'name': f'Manual ROI {len(manual_roi_names)+1}',
-                    '_id': uuid.uuid4().hex[:24]
+        # All but the last one which holds the manual ROIs
+        initial_annotations = [i for i in current_annotations if not 'Manual' in i['properties']['name']]
+        # Current manual rois (used for determining if a new ROI has been created/edited)
+        manual_roi_idxes = [0]+[int(i.split(' ')[-1]) for i in annotation_names if 'Manual' in i]
+        manual_rois = [i for i in current_annotations if 'Manual' in i['properties']['name']]
+
+        # Initializing layers with partial update object
+        new_children = Patch()
+        added_rois = []
+        added_roi_names = []
+        deleted_rois = []
+        # Checking for new manual ROIs
+        for f_idx, f in enumerate(new_geojson['features']):
+            # If this feature is not a match for one of the current_manual_rois (in annotation store)
+            if not any([f['geometry']==i['features'][0]['geometry'] for i in manual_rois]):
+                # Create a new manual ROI (This would also be the case for edited ROIs which is acceptable as the spatial aggregation merits new item creation).
+                new_roi_name = f'Manual ROI {max(manual_roi_idxes)+1}'
+                new_roi = {
+                    'type': 'FeatureCollection',
+                    'features': [f],
+                    'properties':{
+                        'name': new_roi_name,
+                        '_id': uuid.uuid4().hex[:24]
+                    }
                 }
-
-                if new_geojson['features'][-1]['geometry']['type']=='Polygon':
-                    annotation_names += [f'Manual ROI {len(manual_roi_names)+1}']
-
-            if not len(initial_annotations)==0:
-
-                if len(new_geojson['features'])>0:
-                    new_geojson = spatially_aggregate(new_geojson, initial_annotations)
-                    new_children += self.make_geojson_layers(initial_annotations+[new_geojson],annotation_names)
-                    annotations_data = json.dumps(initial_annotations+[new_geojson])
-
-                else:
-                    new_children += self.make_geojson_layers(initial_annotations,annotation_names)
-                    annotations_data = no_update
-
-                new_children += [
-                    dl.BaseLayer(
-                        i,
-                        name=j,
-                        id={'type':'base-layer','index':idx}
-                    ) 
-                    for idx, (i,j) in enumerate(zip(frame_layers,frame_layer_names))
-                ]
-
-                return [new_children], [annotations_data]
-            else:
-                if len(new_geojson['features'])>0:
-                    new_children += self.make_geojson_layers([new_geojson],annotation_names)
-                    annotations_data = json.dumps([new_geojson])
-
-                    new_children += [
-                        dl.BaseLayer(
-                            i,
-                            name = j,
-                            id = {'type': 'base-layer','idx': idx}
-                        )
-                        for idx, (i,j) in enumerate(zip(frame_layers, frame_layer_names))
-                    ]
-                    return [new_children], [annotations_data]
                 
-                else:
-                    return [], [json.dumps({})]
-        else:
-            raise exceptions.PreventUpdate
+                manual_roi_idxes.append(max(manual_roi_idxes)+1)
+                
+                # Aggregate if any initial annotations are present
+                if len(initial_annotations)>0:
+                    # Spatial aggregation performed just between individual manual ROIs and initial annotations (no manual ROI to manual ROI aggregation)
+                    new_roi = spatially_aggregate(new_roi, initial_annotations)
+
+                added_rois.append(new_roi)
+                added_roi_names.append(new_roi_name)
+
+        # Checking for deleted manual ROIs
+        for m_idx,m in enumerate(manual_rois):
+            if not m['features'][0]['geometry'] in [j['geometry'] for j  in new_geojson['features']]:
+                deleted_rois.append(m_idx)
+
+        if len(added_rois)>0:
+            new_children.extend(self.make_geojson_layers(added_rois,added_roi_names,[len(initial_annotations)+max(manual_roi_idxes)]))
+            current_annotations.extend(added_rois)
+        
+        if len(deleted_rois)>0:
+            for d in deleted_rois:
+                del new_children[d+len(frame_layers)+len(initial_annotations)]
+                del current_annotations[d+len(initial_annotations)]
+
+        annotations_data = json.dumps(current_annotations)
+
+        return [new_children], [annotations_data]
 
     def update_image_overlay_transparency(self, new_opacity: float):
         """Update transparency of image overlay component
@@ -949,6 +984,27 @@ class SlideMap(MapComponent):
             return export_data
         else:
             raise exceptions.PreventUpdate
+
+    def download_manual_roi(self, button_click, current_manual_geojson):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        manual_roi_feature_index = ctx.triggered_id['index']-1
+        manual_roi_geojson = get_pattern_matching_value(current_manual_geojson)['features'][manual_roi_feature_index]
+
+        manual_roi = {
+            'type': 'FeatureCollection',
+            'features': [
+                manual_roi_geojson
+            ]
+        }
+
+        scaled_manual_roi = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/self.x_scale,c[1]/self.y_scale),g),manual_roi)
+
+        return {'content': json.dumps(scaled_manual_roi),'filename': f'Manual ROI {manual_roi_feature_index+1}.json'}
+
+
 
 class MultiFrameSlideMap(SlideMap):
     """MultiFrameSlideMap component, containing an image with multiple frames which are added as additional, selectable dl.TileLayer() components

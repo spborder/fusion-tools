@@ -1741,12 +1741,10 @@ class BulkLabels(Tool):
 
         marker_coords = []
         for p in parent_marker_div:
-            for m in p['props']['children']:
-                coords = m['props']['position']
-
-                marker_coords.append(
-                    [coords[1]/self.x_scale,coords[0]/self.y_scale]
-                )
+            coords = p['props']['position']
+            marker_coords.append(
+                [coords[1]/self.x_scale,coords[0]/self.y_scale]
+            )
 
         return marker_coords        
 
