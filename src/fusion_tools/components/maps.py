@@ -308,7 +308,7 @@ class SlideMap(MapComponent):
         :rtype: dash.html.Div.Div
         """
 
-        layout = html.Div(
+        layout = html.Div([
             dl.Map(
                 id = {'type': 'slide-map','index': 0},
                 crs = 'Simple',
@@ -360,14 +360,36 @@ class SlideMap(MapComponent):
                             'click': self.js_namespace('centerMap')
                         }
                     ),
+                    dl.EasyButton(
+                        icon = 'fa-solid fa-upload',
+                        title = 'Upload Shapes',
+                        id = {'type': 'upload-shape','index':0},
+                        position = 'top-left'
+                    ),
                     html.Div(
                         id = {'type': 'map-marker-div','index': 0},
                         children = []
                     ),
                     *image_overlays
                 ]
+            ),
+            dbc.Modal(
+                id = {'type': 'upload-shape-modal','index':0},
+                is_open = False,
+                children = [
+                    html.Div(
+                        dcc.Upload(
+                            children = [
+                                'Drag and Drop or ',
+                                html.A('Select a File')
+                            ], 
+                            id = {'type': 'upload-shape-data','index':0},
+                            style={'width': '100%','height': '60px','lineHeight': '60px','borderWidth': '1px','borderStyle': 'dashed','borderRadius': '5px','textAlign': 'center'}
+                        )
+                    )
+                ]
             )
-        )
+        ])
 
         return layout
 
@@ -545,7 +567,8 @@ class SlideMap(MapComponent):
         # Drawing manual ROIs and spatially aggregating underlying info
         self.blueprint.callback(
             [
-                Input({'type':'edit-control','index': ALL},'geojson')
+                Input({'type':'edit-control','index': ALL},'geojson'),
+                Input({'type':'upload-shape-data','index': ALL},'contents')
             ],
             [
                 Output({'type': 'map-layers-control','index': ALL},'children'),
@@ -622,6 +645,26 @@ class SlideMap(MapComponent):
                 State({'type': 'edit-control','index': ALL},'geojson')
             ]
         )(self.download_manual_roi)
+
+        # Open upload modal
+        self.blueprint.callback(
+            [
+                Input({'type': 'upload-shape','index': ALL},'n_clicks'),
+            ],
+            [
+                Output({'type': 'upload-shape-modal','index': ALL},'is_open'),
+            ],
+            [
+                State({'type': 'upload-shape-modal','index': ALL},'is_open')
+            ]
+        )(self.upload_shape)
+
+    def upload_shape(self, upload_clicked, is_open):
+        upload_clicked = get_pattern_matching_value(upload_clicked)
+        is_open = get_pattern_matching_value(is_open)
+        if upload_clicked:
+            print(not is_open)
+            return [not is_open]
 
     def get_click_popup(self, clicked):
         """Populating popup Div with summary information on the clicked GeoJSON feature
@@ -760,8 +803,8 @@ class SlideMap(MapComponent):
                 dl.Overlay(
                     dl.LayerGroup(
                         dl.GeoJSON(
-                            data = dlx.geojson_to_geobuf(st) if type(st)==dict else st,
-                            format = 'geobuf',
+                            data = st,
+                            #format = 'geobuf',
                             id = {'type': 'feature-bounds','index': st_idx},
                             options = {
                                 'style': self.js_namespace("featureStyle")
@@ -796,7 +839,7 @@ class SlideMap(MapComponent):
 
         return annotation_components
 
-    def add_manual_roi(self,new_geojson:list,current_annotations:list,annotation_names: list, frame_layers:list, frame_layer_names:list) -> list:
+    def add_manual_roi(self,new_geojson:list, uploaded_shape: list, current_annotations:list,annotation_names: list, frame_layers:list, frame_layer_names:list) -> list:
         """Adding a manual region of interest (ROI) to the SlideMap using dl.EditControl() tools including polygon, rectangle, and markers.
 
         :param new_geojson: Incoming GeoJSON object that is emitted by dl.EditControl() following annotation on SlideMap
@@ -814,6 +857,9 @@ class SlideMap(MapComponent):
         :return: List of new children to dl.LayerControl() consisting of overlaid GeoJSON components.
         :rtype: list
         """
+        
+
+        uploaded_shape = get_pattern_matching_value(uploaded_shape)
         new_geojson = get_pattern_matching_value(new_geojson)
         current_annotations = json.loads(get_pattern_matching_value(current_annotations))
 
@@ -828,30 +874,62 @@ class SlideMap(MapComponent):
         added_rois = []
         added_roi_names = []
         deleted_rois = []
-        # Checking for new manual ROIs
-        for f_idx, f in enumerate(new_geojson['features']):
-            # If this feature is not a match for one of the current_manual_rois (in annotation store)
-            if not any([f['geometry']==i['features'][0]['geometry'] for i in manual_rois]):
-                # Create a new manual ROI (This would also be the case for edited ROIs which is acceptable as the spatial aggregation merits new item creation).
-                new_roi_name = f'Manual ROI {max(manual_roi_idxes)+1}'
-                new_roi = {
-                    'type': 'FeatureCollection',
-                    'features': [f],
-                    'properties':{
-                        'name': new_roi_name,
+
+        if ctx.triggered_id['type']=='edit-control':
+            # Checking for new manual ROIs
+            for f_idx, f in enumerate(new_geojson['features']):
+                # If this feature is not a match for one of the current_manual_rois (in annotation store)
+                if not any([f['geometry']==i['features'][0]['geometry'] for i in manual_rois]):
+                    # Create a new manual ROI (This would also be the case for edited ROIs which is acceptable as the spatial aggregation merits new item creation).
+                    new_roi_name = f'Manual ROI {max(manual_roi_idxes)+1}'
+                    new_roi = {
+                        'type': 'FeatureCollection',
+                        'features': [f],
+                        'properties':{
+                            'name': new_roi_name,
+                            '_id': uuid.uuid4().hex[:24]
+                        }
+                    }
+                    
+                    manual_roi_idxes.append(max(manual_roi_idxes)+1)
+                    
+                    # Aggregate if any initial annotations are present
+                    if len(initial_annotations)>0:
+                        # Spatial aggregation performed just between individual manual ROIs and initial annotations (no manual ROI to manual ROI aggregation)
+                        new_roi = spatially_aggregate(new_roi, initial_annotations)
+
+                    added_rois.append(new_roi)
+                    added_roi_names.append(new_roi_name)
+
+        elif ctx.triggered_id['type']=='upload-shape-data':
+            if not uploaded_shape is None:
+                uploaded_roi = json.loads(base64.b64decode(uploaded_shape.split(',')[-1]).decode())
+                uploaded_roi = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*self.x_scale,c[1]*self.y_scale),g),uploaded_roi)
+
+                # Checking if there is a name or _id property:
+                if 'properties' in uploaded_roi:
+                    if 'name' in uploaded_roi['properties']:
+                        if 'Manual' in uploaded_roi['properties']['name']:
+                            uploaded_roi['properties']['name'] = uploaded_roi['properties']['name'].replace('Manual','Upload')
+                    
+                    uploaded_roi['properties']['_id'] = uuid.uuid4().hex[:24]
+
+                else:
+                    uploaded_roi['properties'] = {
+                        'name': f'Upload {len([i for i in annotation_names if "Upload" in i])+1}',
                         '_id': uuid.uuid4().hex[:24]
                     }
-                }
-                
-                manual_roi_idxes.append(max(manual_roi_idxes)+1)
-                
+
                 # Aggregate if any initial annotations are present
+                new_roi_name = uploaded_roi['properties']['name']
                 if len(initial_annotations)>0:
                     # Spatial aggregation performed just between individual manual ROIs and initial annotations (no manual ROI to manual ROI aggregation)
-                    new_roi = spatially_aggregate(new_roi, initial_annotations)
+                    new_roi = spatially_aggregate(uploaded_roi, initial_annotations)
 
                 added_rois.append(new_roi)
                 added_roi_names.append(new_roi_name)
+                manual_roi_idxes.append(max(manual_roi_idxes)+1)
+
 
         # Checking for deleted manual ROIs
         for m_idx,m in enumerate(manual_rois):
