@@ -663,7 +663,6 @@ class SlideMap(MapComponent):
         upload_clicked = get_pattern_matching_value(upload_clicked)
         is_open = get_pattern_matching_value(is_open)
         if upload_clicked:
-            print(not is_open)
             return [not is_open]
 
     def get_click_popup(self, clicked):

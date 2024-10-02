@@ -946,7 +946,6 @@ class PropertyViewer(Tool):
                         if type(sub)==str:
                             new_options = list(set([i.split(' --> ')[sub_idx+1] for i in child_properties if len(i.split(' --> '))>(sub_idx+1) and i.split(' --> ')[sub_idx]==prev_value]))
 
-                            print(f'sub_idx: {sub_idx}')
                             if sub_idx+1==n_levels-1:
                                 new_options = ['All']+new_options
 
@@ -1057,7 +1056,6 @@ class PropertyViewer(Tool):
         :return: Tabs object containing a tab for each structure with a plot of the selected property value
         :rtype: dbc.Tabs
         """
-
 
         if len(current_features)==0:
             raise exceptions.PreventUpdate
@@ -1226,7 +1224,6 @@ class PropertyViewer(Tool):
                                         
                                         else:
                                             g_plot = f'{current_property_data["sub_property"]} is not in {current_property_data["property"]}'
-
 
                                     else:
                                         g_plot = f'Select a sub-property within {current_property_data["property"]}'
