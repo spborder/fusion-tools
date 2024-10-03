@@ -1351,7 +1351,13 @@ class BulkLabels(Tool):
         )(self.update_method_explanation)
 
     def update_method_explanation(self, method):
+        """Updating explanation given for the selected label method
 
+        :param method: Name of method selected
+        :type method: list
+        :return: Description of the labeling method selected
+        :rtype: list
+        """
         
         method = get_pattern_matching_value(method)
         method_types = {
@@ -1427,7 +1433,17 @@ class BulkLabels(Tool):
             raise exceptions.PreventUpdate
 
     def update_spatial_queries(self, add_click, remove_click, structure_names):
-        
+        """Generating a new spatial query selector once the add/remove icons are clicked
+
+        :param add_click: Add spatial query icon selected
+        :type add_click: list
+        :param remove_click: Delete spatial query icon selected
+        :type remove_click: list
+        :param structure_names: Names of current overlay structures
+        :type structure_names: list
+        :return: Spatial query selectors (two dropdown menus and delete icon)
+        :rtype: tuple
+        """
         
         queries_div = Patch()
         add_click = get_pattern_matching_value(add_click)
@@ -1498,7 +1514,13 @@ class BulkLabels(Tool):
         return [queries_div]
 
     def parse_filter_divs(self, add_property_parent: list)->list:
+        """Processing parent div object and extracting name and range for each property filter.
 
+        :param add_property_parent: Parent div containing property filters
+        :type add_property_parent: list
+        :return: List of property filters (dicts with keys: name and range)
+        :rtype: list
+        """
         processed_filters = []
         if not add_property_parent is None:
             for div in add_property_parent:
@@ -1519,7 +1541,13 @@ class BulkLabels(Tool):
         return processed_filters
 
     def parse_spatial_divs(self, spatial_query_parent: list)->list:
+        """Parsing through parent div containing all spatial queries and returning them in list form
 
+        :param spatial_query_parent: Div containing spatial query child divs
+        :type spatial_query_parent: list
+        :return: Processed queries with keys "type", "structure", and "distance" (if "nearest" selected)
+        :rtype: list
+        """
         processed_queries = []
         if not spatial_query_parent is None:
             for div in spatial_query_parent:
