@@ -86,6 +86,29 @@ class OverlayOptions(Tool):
         :return: OverlayOptions layout
         :rtype: dash.html.Div.Div
         """
+
+        adv_colormaps = [
+            'Custom Palettes',
+            'blue->red',
+            'white->black',
+            'Sequential Palettes',
+            'OrRd', 'PuBu', 'BuPu', 
+            'Oranges', 'BuGn', 'YlOrBr', 
+            'YlGn', 'Reds', 'RdPu', 
+            'Greens', 'YlGnBu', 'Purples', 
+            'GnBu', 'Greys', 'YlOrRd', 
+            'PuRd', 'Blues', 'PuBuGn', 
+            'Diverging Palettes',
+            'Viridis', 'Spectral', 'RdYlGn', 
+            'RdBu', 'PiYG', 'PRGn', 'RdYlBu', 
+            'BrBG', 'RdGy', 'PuOr', 
+            'Qualitative Palettes',
+            'Set2', 'Accent', 'Set1', 
+            'Set3', 'Dark2', 'Paired', 
+            'Pastel2', 'Pastel1',
+        ]
+
+
         layout = html.Div([
             dbc.Card(
                 dbc.CardBody([
@@ -191,7 +214,7 @@ class OverlayOptions(Tool):
                                 for f_idx, f in enumerate(self.feature_names)
                             ]
                         )
-                    ]),
+                    ],style = {'marginBottom':'10px'}),
                     dbc.Row([
                         dbc.Accordion(
                             id = {'type':'adv-overlay-accordion','index': 0},
@@ -222,30 +245,14 @@ class OverlayOptions(Tool):
                                                         'Width of colorbar'
                                                     ),
                                                     html.Hr(),
-                                                    dbc.InputGroup([
-                                                        dbc.Input(
-                                                            id = {'type': 'adv-overlay-line-width','index': 0},
-                                                            placeholder = 'Line Width',
-                                                            type = 'number',
-                                                            value = 5,
-                                                            min = 0,
-                                                            max = 100,
-                                                            step = 1
-                                                        ),
-                                                        dbc.InputGroupText(
-                                                            'pixels'
-                                                        )
-                                                    ]),
-                                                    dbc.FormText(
-                                                        'Width of annotation boundary lines'
-                                                    ),
-                                                    html.Hr(),
                                                     dbc.Select(
                                                         id = {'type': 'adv-overlay-colormap','index': 0},
                                                         placeholder = 'Select colormap options',
                                                         options = [
-                                                            {'label': '','value': '', 'disabled': False}
-                                                        ]
+                                                            {'label': i, 'value': i, 'disabled': ' ' in i}
+                                                            for i in adv_colormaps
+                                                        ],
+                                                        value = 'blue->red'
                                                     )
                                                 ]),
                                                 html.Div(
@@ -254,7 +261,8 @@ class OverlayOptions(Tool):
                                                         className = 'd-grid col-12 mx-auto',
                                                         id = {'type': 'adv-overlay-butt','index': 0},
                                                         n_clicks = 0
-                                                    )
+                                                    ),
+                                                    style = {'marginTop':'10px'}
                                                 )
                                             ])
                                         ])
@@ -291,6 +299,7 @@ class OverlayOptions(Tool):
                 State({'type': 'overlay-trans-slider','index': ALL},'value'),
                 State({'type': 'overlay-property-info','index': ALL},'data'),
                 State({'type': 'feature-lineColor','index': ALL},'value'),
+                State({'type': 'feature-bounds','index': ALL},'hideout')
             ]
         )(self.update_overlays)
 
@@ -504,7 +513,7 @@ class OverlayOptions(Tool):
 
         return processed_filters
 
-    def update_overlays(self, overlay_value, transp_value, lineColor_butt, filter_parent, filter_value, delete_filter, overlay_state, transp_state, overlay_info_state, lineColor_state):
+    def update_overlays(self, overlay_value, transp_value, lineColor_butt, filter_parent, filter_value, delete_filter, overlay_state, transp_state, overlay_info_state, lineColor_state, current_hideout):
         """Update overlay transparency and color based on property selection
 
         Adding new values to the "hideout" property of the GeoJSON layers triggers the featureStyle Namespace function
@@ -627,14 +636,14 @@ class OverlayOptions(Tool):
         filterVals = self.parse_added_filters(get_pattern_matching_value(filter_parent))
 
         geojson_hideout = [
-            {
+            j | {
                 'overlayBounds': overlay_bounds,
                 'overlayProp': overlay_prop,
                 'fillOpacity': fillOpacity,
                 'lineColor': lineColor,
-                'filterVals': filterVals 
+                'filterVals': filterVals,
             }
-            for i in range(len(ctx.outputs_list[0]))
+            for i,j in zip(range(len(ctx.outputs_list[0])),current_hideout)
         ]
 
         return geojson_hideout, colorbar
@@ -681,7 +690,7 @@ class OverlayOptions(Tool):
 
             if 'min' in overlay_bounds:
                 colorbar_div_children = [dl.Colorbar(
-                    colorscale = ['blue','red'],
+                    colorscale = colormap_val,
                     width = colorbar_width,
                     height = 15,
                     position = 'bottomleft',
@@ -692,7 +701,7 @@ class OverlayOptions(Tool):
             elif 'unique' in overlay_bounds:
                 colorbar_div_children = [dlx.categorical_colorbar(
                     categories = overlay_bounds['unique'],
-                    colorscale = ['blue','red'],
+                    colorscale = colormap_val,
                     style = color_bar_style,
                     position = 'bottomleft',
                     id = f'colorbar{np.random.randint(0,100)}',
@@ -706,8 +715,7 @@ class OverlayOptions(Tool):
             colorbar_div_children = [html.Div()]
 
         # Updating line width:
-        new_hideout = [i | {'lineWidth': line_width} for i in current_feature_hideout]
-
+        new_hideout = [i | {'lineWidth': line_width, 'colorMap': colormap_val} for i in current_feature_hideout]
 
         return new_hideout, colorbar_div_children
 

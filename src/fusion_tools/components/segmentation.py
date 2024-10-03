@@ -1547,7 +1547,7 @@ class BulkLabels(Tool):
 
         return processed_queries
 
-    def process_filters_queries(self, filter_list, spatial_list, structures, method, all_geo_list):
+    def process_filters_queries(self, filter_list, spatial_list, structures, all_geo_list):
 
         # First getting the listed structures:
         structure_filtered = [gpd.GeoDataFrame.from_features(i['features']) for i in all_geo_list if i['properties']['name'] in structures]
@@ -1614,12 +1614,6 @@ class BulkLabels(Tool):
             for feat_idx, feat in enumerate(combined_geojson['features']):
                 include = True
 
-                #TODO: Need to also pass the label type here but at this point this is not known (maybe remove)
-                # Incorporating the label method here
-                if method == 'un':
-                    if 'fusion_labels' in feat['properties']:
-                        include = include & False
-
                 for f in filter_list:
                     if include:
                         filter_name_parts = f['name'].split(' --> ')
@@ -1681,7 +1675,7 @@ class BulkLabels(Tool):
         processed_filters = self.parse_filter_divs(include_properties)
         processed_spatial_queries = self.parse_spatial_divs(spatial_queries)
 
-        filtered_geojson, filtered_ref_list = self.process_filters_queries(processed_filters, processed_spatial_queries, include_structures, label_method, current_features)
+        filtered_geojson, filtered_ref_list = self.process_filters_queries(processed_filters, processed_spatial_queries, include_structures, current_features)
 
         new_structures_div = [
             dbc.Alert(
@@ -2008,11 +2002,11 @@ class BulkLabels(Tool):
 
             include_options = [{'label': i, 'value': i} for i in structure_options]
             if len(ctx.outputs_list[13])>0:
-                spatial_queries = [include_options for i in range(len(ctx.outputs_list[13]))]        
+                spatial_queries_structures = [include_options for i in range(len(ctx.outputs_list[13]))]        
             else:
-                spatial_queries = []
+                spatial_queries_structures = []
 
-            return [include_structures], [spatial_queries], [add_property], [current_structures],[label_type],[type_disable],[label_text], [text_disable], [label_rationale], [rationale_disable], [label_source], [apply_disable], [include_options], spatial_queries
+            return [include_structures], [spatial_queries], [add_property], [current_structures],[label_type],[type_disable],[label_text], [text_disable], [label_rationale], [rationale_disable], [label_source], [apply_disable], [include_options], spatial_queries_structures
         else:
             raise exceptions.PreventUpdate
 

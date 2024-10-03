@@ -246,7 +246,9 @@ class SlideMap(MapComponent):
                                         'overlayProp': {},
                                         'fillOpacity': 0.5,
                                         'lineColor': {st['properties']['name']: '#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255))},
-                                        'filterVals': []
+                                        'filterVals': [],
+                                        'lineWidth': 5,
+                                        'colorMap': 'blue->red'
                                     },
                                     hoverStyle = arrow_function(
                                         {
@@ -418,13 +420,19 @@ class SlideMap(MapComponent):
         self.js_namespace.add(
             src = """
                 function(feature,context){
-                const {overlayBounds, overlayProp, fillOpacity, lineColor, filterVals} = context.hideout;
+                var {overlayBounds, overlayProp, fillOpacity, lineColor, filterVals, lineWidth, colorMap} = context.hideout;
                 var style = {};
+                if (Object.keys(chroma.brewer).includes(colorMap)){
+                    colorMap = colorMap;
+                } else {
+                    colorMap = colorMap.split("->");
+                }
+
                 if ("min" in overlayBounds) {
-                    var csc = chroma.scale(["blue","red"]).domain([overlayBounds.min,overlayBounds.max]);
+                    var csc = chroma.scale(colorMap).domain([overlayBounds.min,overlayBounds.max]);
                 } else if ("unique" in overlayBounds) {
                     var class_indices = overlayBounds.unique.map(str => overlayBounds.unique.indexOf(str));
-                    var csc = chroma.scale(["blue","red"]).colors(class_indices.length);
+                    var csc = chroma.scale(colorMap).colors(class_indices.length);
                 } else {
                     style.fillColor = 'white';
                     style.fillOpacity = fillOpacity;
@@ -487,7 +495,7 @@ class SlideMap(MapComponent):
         self.js_namespace.add(
             src = """
                 function(feature,context){
-                const {overlayBounds, overlayProp, fillOpacity, lineColor, filterVals} = context.hideout;
+                const {overlayBounds, overlayProp, fillOpacity, lineColor, filterVals, lineWidth, colorMap} = context.hideout;
 
                 var returnFeature = true;
                 if (filterVals) {
