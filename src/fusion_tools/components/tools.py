@@ -719,6 +719,7 @@ class OverlayOptions(Tool):
 
         return new_hideout, colorbar_div_children
 
+
 class PropertyViewer(Tool):
     """PropertyViewer Tool which allows users to view distribution of properties across the current viewport of the SlideMap
 

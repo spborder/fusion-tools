@@ -1547,8 +1547,20 @@ class BulkLabels(Tool):
 
         return processed_queries
 
-    def process_filters_queries(self, filter_list, spatial_list, structures, all_geo_list):
+    def process_filters_queries(self, filter_list:list, spatial_list:list, structures:list, all_geo_list:list):
+        """Filter GeoJSON list based on lists of both spatial and property filters.
 
+        :param filter_list: List of property filters (keys = name: "name of property", range: "either a list of categorical values or min-max for quantitative")
+        :type filter_list: list
+        :param spatial_list: List of spatial filters (keys= type: "predicate", structure: "name of structure that is basis of predicate")
+        :type spatial_list: list
+        :param structures: List of included structures in final GeoJSON
+        :type structures: list
+        :param all_geo_list: List of GeoJSON objects to search
+        :type all_geo_list: list
+        :return: Filtered GeoJSON where all included structures are included as one FeatureCollection and a reference list containing original structure name and index
+        :rtype: tuple
+        """
         # First getting the listed structures:
         structure_filtered = [gpd.GeoDataFrame.from_features(i['features']) for i in all_geo_list if i['properties']['name'] in structures]
         all_names = [i['properties']['name'] for i in all_geo_list]
@@ -1659,8 +1671,22 @@ class BulkLabels(Tool):
 
         return filtered_geojson, final_filter_reference_list
 
-    def update_label_structures(self, update_structures_click, include_structures, filter_properties, spatial_queries, label_method, current_features):
+    def update_label_structures(self, update_structures_click:list, include_structures:list, filter_properties:list, spatial_queries:list, current_features:list):
+        """Go through current structures and return all those that pass spatial and property filters.
 
+        :param update_structures_click: Button clicked
+        :type update_structures_click: list
+        :param include_structures: List of structures to include in the final filtered GeoJSON
+        :type include_structures: list
+        :param filter_properties: List of property filters to apply to current GeoJSON
+        :type filter_properties: list
+        :param spatial_queries: List of spatial filters to apply to current GeoJSON
+        :type spatial_queries: list
+        :param current_features: Current structures in slide map
+        :type current_features: list
+        :return: Markers over structures that pass the spatial and property filters, count of structures, enabled label components
+        :rtype: tuple
+        """
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
@@ -1670,7 +1696,6 @@ class BulkLabels(Tool):
 
         include_properties = get_pattern_matching_value(filter_properties)
         spatial_queries = get_pattern_matching_value(spatial_queries)
-        label_method = get_pattern_matching_value(label_method)
 
         processed_filters = self.parse_filter_divs(include_properties)
         processed_spatial_queries = self.parse_spatial_divs(spatial_queries)
@@ -1729,8 +1754,16 @@ class BulkLabels(Tool):
 
         return [new_structures_div], [new_markers_div], [new_labels_source], [labels_type_disabled], [labels_text_disabled], [labels_rationale_disabled], [labels_apply_button_disabled], [labels_download_button_disabled]
 
-    def update_label_properties(self, add_click, remove_click):
+    def update_label_properties(self, add_click:list, remove_click:list):
+        """Adding/removing property filter dropdown
 
+        :param add_click: Add property filter clicked
+        :type add_click: list
+        :param remove_click: Remove property filter clicked
+        :type remove_click: list
+        :return: Property filter dropdown and parent div of range selector
+        :rtype: tuple
+        """
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
@@ -1784,8 +1817,16 @@ class BulkLabels(Tool):
         
         return [properties_div]
 
-    def update_property_selector(self, property_value, property_info):
+    def update_property_selector(self, property_value:str, property_info:list):
+        """Updating property filter range selector
 
+        :param property_value: Name of property to generate selector for
+        :type property_value: str
+        :param property_info: Dictionary containing range/unique values for each property
+        :type property_info: list
+        :return: Either a multi-dropdown for categorical properties or a RangeSlider for quantitative values
+        :rtype: tuple
+        """
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
@@ -1827,7 +1868,13 @@ class BulkLabels(Tool):
         return values_selector
 
     def parse_marker_div(self, parent_marker_div):
+        """Parse div containing markers, extracting position and data from each
 
+        :param parent_marker_div: Div containing all current Markers
+        :type parent_marker_div: list
+        :return: Coordinates for all markers and associated data (source structure and index)
+        :rtype: tuple
+        """
 
         marker_coords = []
         marker_data = []
@@ -1844,7 +1891,21 @@ class BulkLabels(Tool):
         return marker_coords, marker_data        
 
     def search_labels(self, marker_centroids, current_labels, label_type, label_text, label_method):
+        """Checking current labels and adding the new label based on label_method (inclusive, exclusive, or unlabeled).
 
+        :param marker_centroids: Centroids for all new markers
+        :type marker_centroids: list
+        :param current_labels: List of all current labels (dicts with keys: centroid, labels)
+        :type current_labels: list
+        :param label_type: String corresponding to the type for the new label
+        :type label_type: str
+        :param label_text: String corresponding to the new label to apply to each centroid
+        :type label_text: str
+        :param label_method: One of: in (inclusive, append new label to current regardless of type), over (exclusive, replace existing labels of same type), or un (unlabeled, only apply label to structures that do not have a label for this type)
+        :type label_method: str
+        :return: Updated set of labels, including original set
+        :rtype: dict
+        """
         if 'labels' in current_labels:
             current_centroids = [i['centroid'] for i in current_labels['labels']]
         else:
@@ -1898,6 +1959,29 @@ class BulkLabels(Tool):
         return current_labels
 
     def apply_labels(self, button_click, current_markers, current_data, label_type, label_text, label_rationale, label_source, label_method, current_annotations):
+        """Applying current label to marked structures
+
+        :param button_click: Button clicked
+        :type button_click: list
+        :param current_markers: Current markers on the slide-map
+        :type current_markers: list
+        :param current_data: Current labels data
+        :type current_data: list
+        :param label_type: Type of label being added
+        :type label_type: list
+        :param label_text: Label being added to structures
+        :type label_text: list
+        :param label_rationale: Optional additional rationale to save with label decision
+        :type label_rationale: list
+        :param label_source: Property and spatial filters incorporated to generate markers
+        :type label_source: list
+        :param label_method: Method used to apply labels to structures
+        :type label_method: list
+        :param current_annotations: Current GeoJSON annotations on the slide map
+        :type current_annotations: list
+        :return: Updated labels data and annotations with label added as a property
+        :rtype: tuple
+        """
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
@@ -1984,7 +2068,15 @@ class BulkLabels(Tool):
         return [new_data], [new_annotations]
 
     def refresh_labels(self, refresh_click, structure_options):
-        
+        """Clear current label components and start over
+
+        :param refresh_click: Refresh icon clicked
+        :type refresh_click: list
+        :param structure_options: Names of current overlay layers
+        :type structure_options: list
+        :return: Cleared labeling components
+        :rtype: tuple
+        """
         if refresh_click:
 
             include_structures = []
@@ -2011,7 +2103,15 @@ class BulkLabels(Tool):
             raise exceptions.PreventUpdate
 
     def download_data(self, button_click, label_data):
+        """Download both the labels applied to the current session as well as the labeling metadata
 
+        :param button_click: Download button clicked
+        :type button_click: list
+        :param label_data: Current label data and metadata
+        :type label_data: list
+        :return: Data sent to the two download components in the layout containing JSON formatted label data and metadata
+        :rtype: tuple
+        """
         if button_click:
             label_data = json.loads(get_pattern_matching_value(label_data))
 
@@ -2020,7 +2120,15 @@ class BulkLabels(Tool):
             raise exceptions.PreventUpdate
 
     def remove_marker(self, clear_click, current_markers):
+        """Removing a marker from the current map
 
+        :param clear_click: Clear Marker button clicked
+        :type clear_click: list
+        :param current_markers: All current markers in the slide map
+        :type current_markers: list
+        :return: Updated set of markers and count of markers
+        :rtype: tuple
+        """
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
