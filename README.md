@@ -1,5 +1,5 @@
-# fusion-tools
-Some utilities, accession, and visualization tools for data derived from FUSION (Functional Unit State Identification in WSIs).
+# *fusion-tools*
+Modular visualization and analysis dashboard creation for high-resolution microscopy images.
 
 
 ## Installation

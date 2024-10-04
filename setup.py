@@ -8,7 +8,7 @@ setuptools.setup(
     version="0.0.10",
     author="Sam Border",
     author_email="sam.border2256@gmail.com",
-    description="Utility functions for generating, saving, and converting annotation files",
+    description="Modular visualization and analysis dashboard creation for high-resolution microscopy images",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/spborder/fusion-tools",

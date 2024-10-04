@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 import textwrap
 import re
+import uuid
 
 from typing_extensions import Union
 from shapely.geometry import box, shape
@@ -33,10 +34,11 @@ import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import dash_treeview_antd as dta
 from dash_extensions.enrich import DashBlueprint, html, Input, Output, State
+from dash_extensions.javascript import Namespace, arrow_function
 
 # fusion-tools imports
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
-from fusion_tools.utils.shapes import find_intersecting, extract_geojson_properties
+from fusion_tools.utils.shapes import find_intersecting, extract_geojson_properties, process_filters_queries
 from fusion_tools.utils.stats import get_label_statistics, run_wilcox_rank_sum
 
 
@@ -76,6 +78,7 @@ class OverlayOptions(Tool):
         self.title = 'Overlay Options'
         self.blueprint = DashBlueprint()
         self.blueprint.layout = self.gen_layout()
+        self.js_namespace = Namespace("fusionTools","default")
 
         # Add callbacks here
         self.get_callbacks()
@@ -176,16 +179,40 @@ class OverlayOptions(Tool):
                         html.Div(
                             id = {'type': 'add-filter-parent','index': 0},
                             children = []
-                        ),
-                        html.Div(
-                            html.A(html.I(
-                                className = 'bi bi-filter-circle fa-2x',
-                                n_clicks = 0,
-                                id = {'type': 'add-filter-butt','index': 0},
-                                style = {'display': 'inline-block','position': 'relative','left': '45%','right':'50%'}
-                            ))
                         )
                     ],align='center'),
+                    dbc.Row([
+                        dbc.Col([
+                            html.Div([
+                                html.A(
+                                    html.I(
+                                        className = 'bi bi-filter-circle fa-2x',
+                                        n_clicks = 0,
+                                        id = {'type': 'add-filter-butt','index': 0},
+                                    )
+                                ),
+                                dbc.Tooltip(
+                                    target = {'type': 'add-filter-butt','index': 0},
+                                    children = 'Click to add a filter'
+                                )
+                            ])
+                        ],md = 2),
+                        dbc.Col([
+                            html.Div([
+                                html.A(
+                                    html.I(
+                                        className = 'fa-solid fa-layer-group fa-2x',
+                                        n_clicks = 0,
+                                        id = {'type': 'create-layer-from-filter','index': 0},
+                                    )
+                                ),
+                                dbc.Tooltip(
+                                    target = {'type': 'create-layer-from-filter','index': 0},
+                                    children = 'Create new layer from filters'
+                                )
+                            ])
+                        ],md = 2)
+                    ],align='center', justify='center'),
                     html.Hr(),
                     dbc.Row(
                         dbc.Label('Update Structure Boundary Color',html_for = {'type': 'feature-lineColor-opts','index': 0})
@@ -221,8 +248,7 @@ class OverlayOptions(Tool):
                             start_collapsed = True,
                             children = [
                                 dbc.AccordionItem(
-                                    id = {'type':'adv-overlay-accordionitem','index':0},
-                                    title = html.P('Advanced Overlay Options',style={'font-style':'italic'}),
+                                    title = dcc.Markdown('*Advanced Overlay Options*'),
                                     children = [
                                         dbc.Card([
                                             dbc.CardBody([
@@ -256,14 +282,36 @@ class OverlayOptions(Tool):
                                                     )
                                                 ]),
                                                 html.Div(
-                                                    dbc.Button(
-                                                        'Update Overlays!',
-                                                        className = 'd-grid col-12 mx-auto',
-                                                        id = {'type': 'adv-overlay-butt','index': 0},
-                                                        n_clicks = 0
-                                                    ),
+                                                    children = [
+                                                        dbc.Button(
+                                                            'Update Overlays!',
+                                                            className = 'd-grid col-12 mx-auto',
+                                                            id = {'type': 'adv-overlay-butt','index': 0},
+                                                            n_clicks = 0
+                                                        )
+                                                    ],
                                                     style = {'marginTop':'10px'}
                                                 )
+                                            ])
+                                        ])
+                                    ]
+                                ),
+                                dbc.AccordionItem(
+                                    title = dcc.Markdown('*Export Layers*'),
+                                    children = [
+                                        dbc.Card([
+                                            dbc.CardBody([
+                                                html.Div([
+                                                    dbc.Button(
+                                                        'Export Current Layers',
+                                                        id = {'type': 'export-current-layers','index': 0},
+                                                        n_clicks = 0,
+                                                        className = 'd-grid col-12 mx-auto'
+                                                    ),
+                                                    dcc.Download(
+                                                        id = {'type': 'export-current-layers-data','index': 0}
+                                                    )
+                                                ])
                                             ])
                                         ])
                                     ]
@@ -299,6 +347,7 @@ class OverlayOptions(Tool):
                 State({'type': 'overlay-trans-slider','index': ALL},'value'),
                 State({'type': 'overlay-property-info','index': ALL},'data'),
                 State({'type': 'feature-lineColor','index': ALL},'value'),
+                State({'type': 'feature-overlay','index': ALL},'name'),
                 State({'type': 'adv-overlay-colormap','index': ALL},'value'),
                 State({'type': 'feature-bounds','index': ALL},'hideout')
             ]
@@ -347,6 +396,47 @@ class OverlayOptions(Tool):
             ]
         )(self.update_filter_selector)
 
+        # Opening create layer options from filter (if any filters are specified)
+        self.blueprint.callback(
+            [
+                Input({'type':'create-layer-from-filter','index': ALL},'n_clicks')
+            ],
+            [
+                Output({'type': 'map-layers-control','index': ALL},'children'),
+                Output({'type': 'map-annotations-store','index': ALL},'data')
+            ],
+            [
+                State({'type': 'add-filter-parent','index': ALL},'children'),
+                State({'type': 'map-annotations-store','index': ALL},'data'),
+                State({'type': 'feature-overlay','index': ALL},'name'),
+                State({'type': 'feature-lineColor','index': ALL},'value'),
+                State({'type': 'adv-overlay-colormap','index': ALL},'value'),
+            ]
+        )(self.create_layer_from_filter)
+
+        # Adding new structures to the line color selector
+        self.blueprint.callback(
+            [
+                Input({'type': 'feature-overlay','index':ALL},'name')
+            ],
+            [
+                Output({'type': 'feature-lineColor-opts','index': ALL},'children')
+            ]
+        )(self.add_structure_line_color)
+
+        # Exporting current layers
+        self.blueprint.callback(
+            [
+                Input({'type': 'export-current-layers','index': ALL},'n_clicks')
+            ],
+            [
+                Output({'type': 'export-current-layers-data','index': ALL},'data')
+            ],
+            [
+                State({'type': 'map-annotations-store','index': ALL},'data')
+            ]
+        )(self.export_layers)
+        
     def add_filter(self, add_filter_click, delete_filter_click,overlay_info_state):
         """Adding a new filter to apply to GeoJSON features
 
@@ -426,13 +516,18 @@ class OverlayOptions(Tool):
                             ),
                             md = 10
                         ),
-                        dbc.Col(
+                        dbc.Col([
                             html.I(
                                 id = {'type': 'delete-filter','index': add_filter_click},
                                 n_clicks = 0,
                                 className = 'bi bi-x-circle-fill fa-2x',
                                 style = {'color': 'rgb(255,0,0)'}
                             ),
+                            dbc.Tooltip(
+                                target = {'type': 'delete-filter','index': add_filter_click},
+                                children = 'Delete this filter'
+                            )
+                            ],
                             md = 2
                         )
                     ],align='center'),
@@ -514,7 +609,7 @@ class OverlayOptions(Tool):
 
         return processed_filters
 
-    def update_overlays(self, overlay_value, transp_value, lineColor_butt, filter_parent, filter_value, delete_filter, overlay_state, transp_state, overlay_info_state, lineColor_state, colormap_val, current_hideout):
+    def update_overlays(self, overlay_value, transp_value, lineColor_butt, filter_parent, filter_value, delete_filter, overlay_state, transp_state, overlay_info_state, lineColor_state, overlay_names, colormap_val, current_hideout):
         """Update overlay transparency and color based on property selection
 
         Adding new values to the "hideout" property of the GeoJSON layers triggers the featureStyle Namespace function
@@ -601,7 +696,7 @@ class OverlayOptions(Tool):
 
         lineColor = {
             i: j
-            for i,j in zip(self.feature_names, lineColor_state)
+            for i,j in zip(overlay_names, lineColor_state)
         }
         
         color_bar_style = {
@@ -722,6 +817,120 @@ class OverlayOptions(Tool):
 
         return new_hideout, colorbar_div_children
 
+    def create_layer_from_filter(self, icon_click:list, current_filters:list, current_annotations:list, current_overlay_names:list, line_colors: list, colormap: list):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        current_filters = get_pattern_matching_value(current_filters)
+        colormap = get_pattern_matching_value(colormap)
+
+        if not current_filters is None:
+            filter_list = self.parse_added_filters(current_filters)
+            if len(filter_list)>0:
+
+                current_annotations = json.loads(get_pattern_matching_value(current_annotations))
+                filtered_geojson, filter_reference_list = process_filters_queries(filter_list,[],['all'],current_annotations)
+                filtered_geojson['properties'] = {
+                    'name': f'Filtered {len([i for i in current_overlay_names if "Filtered" in i])}',
+                    '_id': uuid.uuid4().hex[:24]
+                }
+
+                line_colors_dict = {
+                    i:j
+                    for i,j in zip(current_overlay_names,line_colors)
+                }
+                line_colors_dict[filtered_geojson['properties']['name']] = '#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255))
+
+                for f in filtered_geojson['features']:
+                    f['properties']['name'] = filtered_geojson['properties']['name']
+
+                if len(filtered_geojson['features'])>0:
+                    new_children = Patch()
+                    new_children.append(
+                        dl.Overlay(
+                            dl.LayerGroup(
+                                dl.GeoJSON(
+                                    data = filtered_geojson,
+                                    id = {'type': 'feature-bounds','index': len(current_overlay_names)+1},
+                                    options = {
+                                        'style': self.js_namespace("featureStyle")
+                                    },
+                                    filter = self.js_namespace('featureFilter'),
+                                    hideout = {
+                                        'overlayBounds': {},
+                                        'overlayProp': {},
+                                        'fillOpacity': 0.5,
+                                        'lineColor': line_colors_dict,
+                                        'filterVals': [],
+                                        'colorMap': colormap
+                                    },
+                                    hoverStyle = arrow_function(
+                                        {
+                                            'weight': 5,
+                                            'color': '#9caf00',
+                                            'dashArray': ''
+                                        }
+                                    ),
+                                    zoomToBounds=False,
+                                    children = [
+                                        dl.Popup(
+                                            id = {'type': 'feature-popup','index': len(current_overlay_names)+1},
+                                            autoPan = False,
+                                        )
+                                    ]
+                                )
+                            ),
+                            name = filtered_geojson['properties']['name'], checked = True, id = {'type': 'feature-overlay','index': len(current_overlay_names)}
+                        )
+                    )
+
+                    current_annotations.append(filtered_geojson)
+
+
+
+                    return [new_children], [json.dumps(current_annotations)]
+                else:
+                    raise exceptions.PreventUpdate
+            else:
+                raise exceptions.PreventUpdate
+        else:
+            raise exceptions.PreventUpdate
+
+    def add_structure_line_color(self, overlay_names:list):
+
+        if not any([i['value'] for i in ctx.triggered]) or overlay_names==self.feature_names:
+            raise exceptions.PreventUpdate
+        
+        line_color_tabs = Patch()
+        line_color_tabs.append(
+            dbc.Tab(
+                children = [
+                    dmc.ColorPicker(
+                        id = {'type': 'feature-lineColor','index': len(overlay_names)},
+                        format = 'hex',
+                        value = '#FFFFFF',
+                        fullWidth=True
+                    ),
+                    dbc.Button(
+                        id = {'type': 'feature-lineColor-butt','index': len(overlay_names)},
+                        children = ['Update Boundary Color'],
+                        className = 'd-grid col-12 mx-auto',
+                        n_clicks = 0
+                    )
+                ],
+                label = overlay_names[-1]
+            )
+        )
+
+        return [line_color_tabs]
+
+    def export_layers(self, button_click, current_layers):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        return [{'content': get_pattern_matching_value(current_layers),'filename': 'fusion-tools-current-layers.json'}]
 
 class PropertyViewer(Tool):
     """PropertyViewer Tool which allows users to view distribution of properties across the current viewport of the SlideMap

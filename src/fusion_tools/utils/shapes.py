@@ -754,9 +754,15 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
     :rtype: tuple
     """
     # First getting the listed structures:
-    structure_filtered = [gpd.GeoDataFrame.from_features(i['features']) for i in all_geo_list if i['properties']['name'] in structures]
+    if not structures == ['all']:
+        structure_filtered = [gpd.GeoDataFrame.from_features(i['features']) for i in all_geo_list if i['properties']['name'] in structures]
+        name_order = [i['properties']['name'] for i in all_geo_list if i['properties']['name'] in structures]
+
+    else:
+        structure_filtered = [gpd.GeoDataFrame.from_features(i['features']) for i in all_geo_list]
+        name_order = [i['properties']['name'] for i in all_geo_list]
+
     all_names = [i['properties']['name'] for i in all_geo_list]
-    name_order = [i['properties']['name'] for i in all_geo_list if i['properties']['name'] in structures]
 
     # Now going through spatial queries
     filter_reference_list = {
@@ -849,7 +855,9 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
             if include:
                 filtered_geojson['features'].append(feat)
             else:
-                del filter_reference_list[name][feat_idx]
+                for name in filter_reference_list:
+                    if feat_idx in filter_reference_list[name].values():
+                        del filter_reference_list[name][list(filter_reference_list[name].keys())[list(filter_reference_list[name].values()).index(feat_idx)]]
 
     else:
         filtered_geojson = combined_geojson
@@ -862,7 +870,6 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
             )
 
     return filtered_geojson, final_filter_reference_list
-
 
 # Taken from plotly image annotation tutorial: https://dash.plotly.com/annotations#changing-the-style-of-annotations
 def path_to_indices(path):

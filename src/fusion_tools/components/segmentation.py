@@ -3,38 +3,29 @@
 
 
 import os
-import sys
 import json
 import numpy as np
 import pandas as pd
-import textwrap
-import re
 
 from typing_extensions import Union
 from shapely.geometry import box, shape
 import geopandas as gpd
 import plotly.express as px
 import plotly.graph_objects as go
-from umap import UMAP
 
 from io import BytesIO
 from PIL import Image
 import requests
 
 from skimage.measure import label
-import geobuf
-import base64
 
 # Dash imports
 import dash
 dash._dash_renderer._set_react_version('18.2.0')
 import dash_leaflet as dl
-import dash_leaflet.express as dlx
 from dash import dcc, callback, ctx, ALL, MATCH, exceptions, Patch, no_update, dash_table
-from dash.dash_table.Format import Format, Scheme
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-import dash_treeview_antd as dta
 from dash_extensions.enrich import DashBlueprint, html, Input, Output, State
 
 # fusion-tools imports
