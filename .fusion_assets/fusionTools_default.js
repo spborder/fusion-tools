@@ -28,7 +28,6 @@ window.fusionTools = Object.assign({}, window.fusionTools, {
                 } else {
                     style.fillColor = 'white';
                     style.fillOpacity = fillOpacity;
-                    style.strokeWidth = lineWidth;
                     if ('name' in feature.properties) {
                         style.color = lineColor[feature.properties.name];
                     } else {
@@ -72,7 +71,6 @@ window.fusionTools = Object.assign({}, window.fusionTools, {
                 }
 
                 style.fillOpacity = fillOpacity;
-                style.strokeWidth = lineWidth;
                 if (feature.properties.name in lineColor) {
                     style.color = lineColor[feature.properties.name];
                 } else {

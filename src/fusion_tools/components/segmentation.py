@@ -39,7 +39,7 @@ from dash_extensions.enrich import DashBlueprint, html, Input, Output, State
 
 # fusion-tools imports
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
-from fusion_tools.utils.shapes import find_intersecting, extract_geojson_properties, path_to_mask
+from fusion_tools.utils.shapes import find_intersecting, extract_geojson_properties, path_to_mask, process_filters_queries
 from fusion_tools.components import Tool
 from fusion_tools.tileserver import TileServer
 
@@ -883,15 +883,8 @@ class BulkLabels(Tool):
                  tile_server: TileServer,
                  reference_object: Union[str,None] = None,
                  ignore_list: list = [],
-                 property_depth: int = 4,
-                 storage_path: str = "./",
-                 labels_format: str = "json"):
+                 property_depth: int = 4):
         """Constructor method
-
-        :param storage_path: Path to save labels and outputs to
-        :type storage_path: str
-        :param labels_format: Format for labels, defaults to "json"
-        :type labels_format: str, optional
         """
 
         self.tile_server = tile_server
@@ -899,11 +892,6 @@ class BulkLabels(Tool):
         self.property_options, self.feature_names, self.property_info = extract_geojson_properties(geojson_anns, self.reference_object, ignore_list, property_depth)
 
         self.x_scale, self.y_scale = self.get_scale_factors()
-
-        self.storage_path = storage_path
-        self.labels_format = labels_format
-
-        assert self.labels_format in ['json','csv']
 
         self.title = 'Bulk Labels'
         self.blueprint = DashBlueprint()
@@ -1575,130 +1563,6 @@ class BulkLabels(Tool):
 
         return processed_queries
 
-    def process_filters_queries(self, filter_list:list, spatial_list:list, structures:list, all_geo_list:list):
-        """Filter GeoJSON list based on lists of both spatial and property filters.
-
-        :param filter_list: List of property filters (keys = name: "name of property", range: "either a list of categorical values or min-max for quantitative")
-        :type filter_list: list
-        :param spatial_list: List of spatial filters (keys= type: "predicate", structure: "name of structure that is basis of predicate")
-        :type spatial_list: list
-        :param structures: List of included structures in final GeoJSON
-        :type structures: list
-        :param all_geo_list: List of GeoJSON objects to search
-        :type all_geo_list: list
-        :return: Filtered GeoJSON where all included structures are included as one FeatureCollection and a reference list containing original structure name and index
-        :rtype: tuple
-        """
-        # First getting the listed structures:
-        structure_filtered = [gpd.GeoDataFrame.from_features(i['features']) for i in all_geo_list if i['properties']['name'] in structures]
-        all_names = [i['properties']['name'] for i in all_geo_list]
-        name_order = [i['properties']['name'] for i in all_geo_list if i['properties']['name'] in structures]
-
-        # Now going through spatial queries
-        filter_reference_list = {
-            n: {}
-            for n in name_order
-        }
-        if len(spatial_list)>0:
-            remainder_structures = []
-
-            for s,name in zip(structure_filtered,name_order):
-                intermediate_gdf = s.copy()
-                for s_q in spatial_list:
-                    sq_geo = [i for i in all_geo_list if i['properties']['name']==s_q['structure']][0]
-                    sq_structure = gpd.GeoDataFrame.from_features(sq_geo['features'])
-
-                    if not s_q['type'] == 'nearest':
-                        intermediate_gdf = gpd.sjoin(
-                            left_df = intermediate_gdf, 
-                            right_df = sq_structure, 
-                            how = 'inner', 
-                            predicate=s_q['type']
-                        )
-                    else:
-                        intermediate_gdf = gpd.sjoin_nearest(
-                            left_df = intermediate_gdf, 
-                            right_df = sq_structure,
-                            how = 'inner',
-                            max_distance = s_q['distance']
-                        )
-
-                    intermediate_gdf = intermediate_gdf.drop([i for i in ['index_left','index_right'] if i in intermediate_gdf], axis = 1)
-
-                remainder_structures.append(intermediate_gdf)
-        else:
-            remainder_structures = structure_filtered
-
-        # Combining into one GeoJSON
-        combined_geojson = {
-            'type': 'FeatureCollection',
-            'features': []
-        }
-        for g,name in zip(remainder_structures,name_order):
-            g_json = json.loads(g.to_json(show_bbox=True))
-            feature_geos = [i['geometry'] for i in g_json['features']]
-
-            if len(g_json['features'])>0:
-                for idx, i in enumerate(all_geo_list[all_names.index(name)]['features']):
-                    if i['geometry'] in feature_geos:
-                        filter_reference_list[name][len(combined_geojson['features'])] = idx
-                        combined_geojson['features'].append(g_json['features'][feature_geos.index(i['geometry'])])
-
-        # Going through property filters:
-        if len(filter_list)>0:
-            filtered_geojson = {
-                'type': 'FeatureCollection',
-                'features': []
-            }
-
-            for feat_idx, feat in enumerate(combined_geojson['features']):
-                include = True
-
-                for f in filter_list:
-                    if include:
-                        filter_name_parts = f['name'].split(' --> ')
-
-                        include = True
-                        feat_props = feat['properties'].copy()
-                        feat_props = {i.replace('_left',''):j for i,j in feat_props.items()}
-
-                        for filt in filter_name_parts:
-                            if filt in feat_props:
-                                feat_props = feat_props[filt]
-                            else:
-                                include = include & False
-                                break
-                        
-                        if include:
-                            if all([type(i) in [int,float] for i in f['range']]):
-                                if f['range'][0]<=feat_props and feat_props<=f['range'][1]:
-                                    include = include & True
-                                else:
-                                    include = include & False
-                            
-                            elif all([type(i)==str for i in f['range']]):
-                                if feat_props in f['range']:
-                                    include = include & True
-                                else:
-                                    include = include & False
-                    
-                if include:
-                    filtered_geojson['features'].append(feat)
-                else:
-                    del filter_reference_list[name][feat_idx]
-
-        else:
-            filtered_geojson = combined_geojson
-        
-        final_filter_reference_list = []
-        for n in filter_reference_list:
-            for combined_idx in filter_reference_list[n]:
-                final_filter_reference_list.append(
-                    {'name': n, 'feature_index': filter_reference_list[n][combined_idx]}
-                )
-
-        return filtered_geojson, final_filter_reference_list
-
     def update_label_structures(self, update_structures_click:list, include_structures:list, filter_properties:list, spatial_queries:list, current_features:list):
         """Go through current structures and return all those that pass spatial and property filters.
 
@@ -1728,7 +1592,7 @@ class BulkLabels(Tool):
         processed_filters = self.parse_filter_divs(include_properties)
         processed_spatial_queries = self.parse_spatial_divs(spatial_queries)
 
-        filtered_geojson, filtered_ref_list = self.process_filters_queries(processed_filters, processed_spatial_queries, include_structures, current_features)
+        filtered_geojson, filtered_ref_list = process_filters_queries(processed_filters, processed_spatial_queries, include_structures, current_features)
 
         new_structures_div = [
             dbc.Alert(

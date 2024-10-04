@@ -299,10 +299,12 @@ class OverlayOptions(Tool):
                 State({'type': 'overlay-trans-slider','index': ALL},'value'),
                 State({'type': 'overlay-property-info','index': ALL},'data'),
                 State({'type': 'feature-lineColor','index': ALL},'value'),
+                State({'type': 'adv-overlay-colormap','index': ALL},'value'),
                 State({'type': 'feature-bounds','index': ALL},'hideout')
             ]
         )(self.update_overlays)
 
+        # Updating overlays based on additional options
         self.blueprint.callback(
             [
                 Input({'type':'adv-overlay-butt','index': ALL},'n_clicks')
@@ -313,7 +315,6 @@ class OverlayOptions(Tool):
             ],
             [
                 State({'type': 'adv-overlay-colorbar-width','index': ALL},'value'),
-                State({'type': 'adv-overlay-line-width','index': ALL},'value'),
                 State({'type': 'adv-overlay-colormap','index': ALL},'value'),
                 State({'type': 'feature-bounds','index': ALL},'hideout')
             ]
@@ -513,7 +514,7 @@ class OverlayOptions(Tool):
 
         return processed_filters
 
-    def update_overlays(self, overlay_value, transp_value, lineColor_butt, filter_parent, filter_value, delete_filter, overlay_state, transp_state, overlay_info_state, lineColor_state, current_hideout):
+    def update_overlays(self, overlay_value, transp_value, lineColor_butt, filter_parent, filter_value, delete_filter, overlay_state, transp_state, overlay_info_state, lineColor_state, colormap_val, current_hideout):
         """Update overlay transparency and color based on property selection
 
         Adding new values to the "hideout" property of the GeoJSON layers triggers the featureStyle Namespace function
@@ -538,6 +539,10 @@ class OverlayOptions(Tool):
         :type overlay_info_state: list
         :param lineColor_state: Current selected lineColors to apply to current GeoJSON features
         :type lineColor_state: list
+        :param colormap_val: Current colormap applied to overlays,
+        :type colormap_val: list
+        :param current_hideout: Current hideout properties assigned to each GeoJSON layer
+        :type current_hideout: list
         :return: List of dictionaries added to the GeoJSONs' "hideout" property (used by Namespace functions) and a colorbar based on overlay value.
         :rtype: tuple
         """
@@ -546,6 +551,7 @@ class OverlayOptions(Tool):
         transp_value = get_pattern_matching_value(transp_value)
         overlay_state = get_pattern_matching_value(overlay_state)
         transp_state = get_pattern_matching_value(transp_state)
+        colormap_val = get_pattern_matching_value(colormap_val)
         overlay_info_state = json.loads(get_pattern_matching_value(overlay_info_state))
 
         if ctx.triggered_id['type']=='overlay-drop':
@@ -610,7 +616,7 @@ class OverlayOptions(Tool):
 
         if 'min' in overlay_bounds:
             colorbar = [dl.Colorbar(
-                colorscale = ['blue','red'],
+                colorscale = colormap_val if not '->' in colormap_val else colormap_val.split('->'),
                 width = 300,
                 height = 15,
                 position = 'bottomleft',
@@ -621,7 +627,7 @@ class OverlayOptions(Tool):
         elif 'unique' in overlay_bounds:
             colorbar = [dlx.categorical_colorbar(
                 categories = overlay_bounds['unique'],
-                colorscale = ['blue','red'],
+                colorscale = colormap_val if not '->' in colormap_val else colormap_val.split('->'),
                 style = color_bar_style,
                 position = 'bottomleft',
                 id = f'colorbar{np.random.randint(0,100)}',
@@ -648,15 +654,13 @@ class OverlayOptions(Tool):
 
         return geojson_hideout, colorbar
 
-    def adv_update_overlays(self, butt_click: list, colorbar_width:list, line_width:list, colormap_val:list, current_feature_hideout:list):
+    def adv_update_overlays(self, butt_click: list, colorbar_width:list, colormap_val:list, current_feature_hideout:list):
         """Update some additional properties of the overlays and display.
 
         :param butt_click: Button clicked to update overlay properties 
         :type butt_click: list
         :param colorbar_width: Width of colorbar in pixels
         :type colorbar_width: list
-        :param line_width: Width of structure boundaries in pixels
-        :type line_width: list
         :param colormap_val: Colormap option to pass to chroma
         :type colormap_val: list
         :param current_feature_hideout: Current hideout properties for all structures
@@ -671,7 +675,6 @@ class OverlayOptions(Tool):
         new_hideout = [no_update]*len(ctx.outputs_list[1])
 
         colorbar_width = get_pattern_matching_value(colorbar_width)
-        line_width = get_pattern_matching_value(line_width)
         colormap_val = get_pattern_matching_value(colormap_val)
 
         # Updating colorbar width and colormap:
@@ -715,7 +718,7 @@ class OverlayOptions(Tool):
             colorbar_div_children = [html.Div()]
 
         # Updating line width:
-        new_hideout = [i | {'lineWidth': line_width, 'colorMap': colormap_val} for i in current_feature_hideout]
+        new_hideout = [i | {'colorMap': colormap_val} for i in current_feature_hideout]
 
         return new_hideout, colorbar_div_children
 

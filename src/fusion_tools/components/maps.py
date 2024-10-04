@@ -586,7 +586,8 @@ class SlideMap(MapComponent):
                 State({'type': 'map-annotations-store','index': ALL},'data'),
                 State({'type': 'feature-overlay','index': ALL},'name'),
                 State({'type': 'base-layer','index': ALL},'children'),
-                State({'type': 'base-layer','index': ALL},'name')
+                State({'type': 'feature-lineColor','index': ALL},'value'),
+                State({'type': 'adv-overlay-colormap','index': ALL},'value'),
             ]
         )(self.add_manual_roi)
 
@@ -773,7 +774,7 @@ class SlideMap(MapComponent):
 
         return popup_div
     
-    def make_geojson_layers(self, geojson_list:list, names_list:list, index_list: list) -> list:
+    def make_geojson_layers(self, geojson_list:list, names_list:list, index_list: list, line_color:list, colormap: str) -> list:
         """Creates new dl.Overlay() dl.GeoJSON components from list of GeoJSON FeatureCollection objects
 
         :param geojson_list: List of GeoJSON FeatureCollection objects
@@ -804,7 +805,7 @@ class SlideMap(MapComponent):
             geojson_list[non_manual_n:non_manual_n+manual_n] = manual_rois
 
         annotation_components = []
-        for st,st_name,st_idx in zip(geojson_list,names_list,index_list):
+        for st,st_name,st_idx,st_color in zip(geojson_list,names_list,index_list,line_color):
 
             annotation_components.append(
                 dl.Overlay(
@@ -821,8 +822,9 @@ class SlideMap(MapComponent):
                                 'overlayBounds': {},
                                 'overlayProp': {},
                                 'fillOpacity': 0.5,
-                                'lineColor': {st_name: '#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255))},
-                                'filterVals': []
+                                'lineColor': {st_name: st_color},
+                                'filterVals': [],
+                                'colorMap': colormap
                             },
                             hoverStyle = arrow_function(
                                 {
@@ -846,7 +848,7 @@ class SlideMap(MapComponent):
 
         return annotation_components
 
-    def add_manual_roi(self,new_geojson:list, uploaded_shape: list, current_annotations:list,annotation_names: list, frame_layers:list, frame_layer_names:list) -> list:
+    def add_manual_roi(self,new_geojson:list, uploaded_shape: list, current_annotations:list,annotation_names: list, frame_layers:list, line_colors:list, colormap:list) -> list:
         """Adding a manual region of interest (ROI) to the SlideMap using dl.EditControl() tools including polygon, rectangle, and markers.
 
         :param new_geojson: Incoming GeoJSON object that is emitted by dl.EditControl() following annotation on SlideMap
@@ -857,19 +859,20 @@ class SlideMap(MapComponent):
         :type annotation_names: list
         :param frame_layers: Frame layers for multi-frame visualization
         :type frame_layers: list
-        :param frame_layer_names: Names for each frame layer
-        :type frame_layer_names: list
         :raises exceptions.PreventUpdate: new_geojson input is None
         :raises exceptions.PreventUpdate: No new features are added, this can occur after deletion of previous manual ROIs.
         :return: List of new children to dl.LayerControl() consisting of overlaid GeoJSON components.
         :rtype: list
         """
         
-
         uploaded_shape = get_pattern_matching_value(uploaded_shape)
         new_geojson = get_pattern_matching_value(new_geojson)
         current_annotations = json.loads(get_pattern_matching_value(current_annotations))
+        colormap = get_pattern_matching_value(colormap)
 
+        if colormap is None:
+            colormap = ['blue','red']
+        
         # All but the last one which holds the manual ROIs
         initial_annotations = [i for i in current_annotations if not 'Manual' in i['properties']['name']]
         # Current manual rois (used for determining if a new ROI has been created/edited)
@@ -944,13 +947,24 @@ class SlideMap(MapComponent):
                 deleted_rois.append(m_idx)
 
         if len(added_rois)>0:
-            new_children.extend(self.make_geojson_layers(added_rois,added_roi_names,[len(initial_annotations)+max(manual_roi_idxes)]))
+            if line_colors is None:
+                line_colors = ['#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255)) for i in added_roi_names]
+
+            new_children.extend(
+                self.make_geojson_layers(
+                    added_rois,
+                    added_roi_names,
+                    [len(initial_annotations)+max(manual_roi_idxes)],
+                    line_colors,
+                    colormap
+                )
+            )
             current_annotations.extend(added_rois)
         
         if len(deleted_rois)>0:
-            for d in deleted_rois:
-                del new_children[d+len(frame_layers)+len(initial_annotations)]
-                del current_annotations[d+len(initial_annotations)]
+            for d_idx,d in enumerate(deleted_rois):
+                del new_children[(d-d_idx)+len(frame_layers)+len(initial_annotations)]
+                del current_annotations[(d-d_idx)+len(initial_annotations)]
 
         annotations_data = json.dumps(current_annotations)
 
@@ -1088,8 +1102,6 @@ class SlideMap(MapComponent):
         scaled_manual_roi = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/self.x_scale,c[1]/self.y_scale),g),manual_roi)
 
         return {'content': json.dumps(scaled_manual_roi),'filename': f'Manual ROI {manual_roi_feature_index+1}.json'}
-
-
 
 class MultiFrameSlideMap(SlideMap):
     """MultiFrameSlideMap component, containing an image with multiple frames which are added as additional, selectable dl.TileLayer() components
