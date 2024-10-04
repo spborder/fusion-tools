@@ -1,6 +1,17 @@
 # Changelog
 
 <!--next-version-placeholder-->
+## V0.0.11 (10/04/2024)
+
+### Fix:
+- Fixed adding/deleting manual ROIs (keeping _id property)
+
+### Features:
+- Create new annotation layers based off of selected filters in `OverlayOptions`
+- Apply labels to properties in `BulkLabels`
+- Adding `process_filter_queries` to `shapes` for external access. Allows users to pass a list of spatial and property queries to a GeoJSON and returns a unified FeatureCollection
+- Select different colormaps in `OverlayOptions` under "Advanced Overlay Options". This includes all colormaps detailed [here](https://colorbrewer2.org/#type=sequential&scheme=BuGn&n=3)
+
 ## v0.0.10 (09/27/2024)
 
 ### Fix:

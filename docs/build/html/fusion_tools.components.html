@@ -261,16 +261,15 @@ Also initializes base tile url and styled tile url</p>
 </dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.SlideMap.add_manual_roi">
-<span class="sig-name descname"><span class="pre">add_manual_roi</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_geojson</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_annotations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotation_names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_layers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_layer_names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.add_manual_roi" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">add_manual_roi</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_geojson</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">uploaded_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_annotations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotation_names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_layers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">line_colors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">colormap</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.add_manual_roi" title="Link to this definition"></a></dt>
 <dd><p>Adding a manual region of interest (ROI) to the SlideMap using dl.EditControl() tools including polygon, rectangle, and markers.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>new_geojson</strong> (<em>list</em>) – Incoming GeoJSON object that is emitted by dl.EditControl() following annotation on SlideMap</p></li>
-<li><p><strong>initial_annotations</strong> (<em>list</em>) – Initial annotations added to the map on initialization</p></li>
+<li><p><strong>current_annotations</strong> (<em>list</em>) – Initial annotations added to the map on initialization</p></li>
 <li><p><strong>annotation_names</strong> (<em>list</em>) – Names for each annotation layer on the slide map</p></li>
 <li><p><strong>frame_layers</strong> (<em>list</em>) – Frame layers for multi-frame visualization</p></li>
-<li><p><strong>frame_layer_names</strong> (<em>list</em>) – Names for each frame layer</p></li>
 </ul>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
@@ -287,6 +286,11 @@ Also initializes base tile url and styled tile url</p>
 </dd>
 </dl>
 </dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.maps.SlideMap.download_manual_roi">
+<span class="sig-name descname"><span class="pre">download_manual_roi</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">button_click</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_manual_geojson</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.download_manual_roi" title="Link to this definition"></a></dt>
+<dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.SlideMap.export_image_overlay_bounds">
@@ -423,13 +427,14 @@ and
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.SlideMap.make_geojson_layers">
-<span class="sig-name descname"><span class="pre">make_geojson_layers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">geojson_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">names_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.make_geojson_layers" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">make_geojson_layers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">geojson_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">names_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">index_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">line_color</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">colormap</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.make_geojson_layers" title="Link to this definition"></a></dt>
 <dd><p>Creates new dl.Overlay() dl.GeoJSON components from list of GeoJSON FeatureCollection objects</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>geojson_list</strong> (<em>list</em>) – List of GeoJSON FeatureCollection objects</p></li>
 <li><p><strong>names_list</strong> (<em>list</em>) – List of names for each layer</p></li>
+<li><p><strong>index_list</strong> (<em>list</em>) – List of indices to apply to each component</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -494,6 +499,11 @@ and
 </dd>
 </dl>
 </dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.maps.SlideMap.upload_shape">
+<span class="sig-name descname"><span class="pre">upload_shape</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">upload_clicked</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_open</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.upload_shape" title="Link to this definition"></a></dt>
+<dd></dd></dl>
 
 </dd></dl>
 
@@ -586,15 +596,19 @@ and
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.tools.OverlayOptions.add_structure_line_color">
+<span class="sig-name descname"><span class="pre">add_structure_line_color</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">overlay_names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.OverlayOptions.add_structure_line_color" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.OverlayOptions.adv_update_overlays">
-<span class="sig-name descname"><span class="pre">adv_update_overlays</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">butt_click</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">colorbar_width</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">line_width</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">colormap_val</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_feature_hideout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.OverlayOptions.adv_update_overlays" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">adv_update_overlays</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">butt_click</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">colorbar_width</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">colormap_val</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_feature_hideout</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.OverlayOptions.adv_update_overlays" title="Link to this definition"></a></dt>
 <dd><p>Update some additional properties of the overlays and display.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>butt_click</strong> (<em>list</em>) – Button clicked to update overlay properties</p></li>
 <li><p><strong>colorbar_width</strong> (<em>list</em>) – Width of colorbar in pixels</p></li>
-<li><p><strong>line_width</strong> (<em>list</em>) – Width of structure boundaries in pixels</p></li>
 <li><p><strong>colormap_val</strong> (<em>list</em>) – Colormap option to pass to chroma</p></li>
 <li><p><strong>current_feature_hideout</strong> (<em>list</em>) – Current hideout properties for all structures</p></li>
 </ul>
@@ -607,6 +621,16 @@ and
 </dd>
 </dl>
 </dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.tools.OverlayOptions.create_layer_from_filter">
+<span class="sig-name descname"><span class="pre">create_layer_from_filter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">icon_click</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_filters</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_annotations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_overlay_names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">line_colors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">colormap</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.OverlayOptions.create_layer_from_filter" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.tools.OverlayOptions.export_layers">
+<span class="sig-name descname"><span class="pre">export_layers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">button_click</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_layers</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.OverlayOptions.export_layers" title="Link to this definition"></a></dt>
+<dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.OverlayOptions.gen_layout">
@@ -670,7 +694,7 @@ and
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.OverlayOptions.update_overlays">
-<span class="sig-name descname"><span class="pre">update_overlays</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">overlay_value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transp_value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lineColor_butt</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filter_parent</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filter_value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">delete_filter</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overlay_state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transp_state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overlay_info_state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lineColor_state</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.OverlayOptions.update_overlays" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">update_overlays</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">overlay_value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transp_value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lineColor_butt</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filter_parent</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">filter_value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">delete_filter</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overlay_state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transp_state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overlay_info_state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lineColor_state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overlay_names</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">colormap_val</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_hideout</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.OverlayOptions.update_overlays" title="Link to this definition"></a></dt>
 <dd><p>Update overlay transparency and color based on property selection</p>
 <p>Adding new values to the “hideout” property of the GeoJSON layers triggers the featureStyle Namespace function</p>
 <dl class="field-list simple">
@@ -686,6 +710,8 @@ and
 <li><p><strong>transp_state</strong> (<em>list</em>) – State of transparency slider if not triggered by transparency slider adjustment</p></li>
 <li><p><strong>overlay_info_state</strong> (<em>list</em>) – Information on overlay properties for current GeoJSON features</p></li>
 <li><p><strong>lineColor_state</strong> (<em>list</em>) – Current selected lineColors to apply to current GeoJSON features</p></li>
+<li><p><strong>colormap_val</strong> (<em>list</em>) – Current colormap applied to overlays,</p></li>
+<li><p><strong>current_hideout</strong> (<em>list</em>) – Current hideout properties assigned to each GeoJSON layer</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
