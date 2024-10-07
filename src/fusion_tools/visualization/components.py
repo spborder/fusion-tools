@@ -194,20 +194,24 @@ class Visualization:
         """Starting visualization session based on provided app_options
         """
         
-        if 'server' in self.app_options:
-            if self.app_options['server']=='default':
+        if not 'jupyter_mode' in self.app_options:
+            if 'server' in self.app_options:
+                if self.app_options['server']=='default':
+                    self.viewer_app.run_server(
+                        host = '0.0.0.0',
+                        port = self.app_options['port'],
+                        debug = False
+                    )
+            else:
                 self.viewer_app.run_server(
                     host = '0.0.0.0',
                     port = self.app_options['port'],
                     debug = False
                 )
         else:
-            self.viewer_app.run_server(
-                host = '0.0.0.0',
-                port = self.app_options['port'],
-                debug = False
+            self.viewer_app.run(
+                jupyter_mode=self.app_options['jupyter_mode']
             )
-
 
 
 

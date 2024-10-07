@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="fusion-tools",
-    version="0.0.12",
+    version="0.0.16",
     author="Sam Border",
     author_email="sam.border2256@gmail.com",
     description="Modular visualization and analysis dashboard creation for high-resolution microscopy images",
@@ -16,6 +16,8 @@ setuptools.setup(
         "lxml>=4.9.2",
         "geojson>=3.0.1",
         "shapely>=2.0.1",
+        "geopandas",
+        "girder-client",
         "tqdm",
         "numpy>=1.20.0",
         "large-image[common]",
@@ -31,12 +33,11 @@ setuptools.setup(
         "umap-learn",
         "fastapi",
         "uvicorn",
-        "threading",
-        "sphinx",
-        "sphinx-rtd-theme",
-        "statsmodels"
+        "statsmodels",
+        "typing-extensions"
     ],
-    packages=setuptools.find_packages('src/'),
+    packages=setuptools.find_packages(where = 'src',include=["fusion_tools*"]),
+    package_dir={"":"src"},
     classifiers=[
         "Development Status :: 4 - Beta",
         "Programming Language :: Python :: 3",
