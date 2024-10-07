@@ -10,8 +10,6 @@ import geojson
 import lxml.etree as ET
 
 import numpy as np
-import base64
-
 
 import rasterio
 import rasterio.features
@@ -19,12 +17,10 @@ import geopandas as gpd
 from shapely.geometry import Polygon, Point, shape
 from skimage import draw
 from scipy import ndimage
-import geobuf
 
 import pandas as pd
 
 import uuid
-import time
 
 from typing_extensions import Union
 
