@@ -1,5 +1,5 @@
 """
-Handler for requests made to a running FUSION instance.
+Handler for requests made to a running DSA instance.
 
 """
 
@@ -18,6 +18,8 @@ from typing_extensions import Union
 from skimage.draw import polygon
 from PIL import Image
 from io import BytesIO
+
+from fusion_tools.tileserver import DSATileServer
 
 
 class DSAHandler:
@@ -335,7 +337,15 @@ class DSAHandler:
 
         return annotations
 
+    def get_tile_server(self, item:str)->DSATileServer:
+        """Create a tileserver for a given item
 
+        :param item: Girder Item Id for the slide you want to create a tileserver for
+        :type item: str
+        :return: DSATileServer instance 
+        :rtype: DSATileServer
+        """
 
+        return DSATileServer(api_url = self.girderApiUrl, item_id = item)
 
-
+    

@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="fusion-tools",
-    version="0.0.11",
+    version="0.0.12",
     author="Sam Border",
     author_email="sam.border2256@gmail.com",
     description="Modular visualization and analysis dashboard creation for high-resolution microscopy images",
@@ -36,7 +36,7 @@ setuptools.setup(
         "sphinx-rtd-theme",
         "statsmodels"
     ],
-    packages=setuptools.find_packages(),
+    packages=setuptools.find_packages('src/'),
     classifiers=[
         "Development Status :: 4 - Beta",
         "Programming Language :: Python :: 3",
