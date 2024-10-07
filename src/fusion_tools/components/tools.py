@@ -2638,17 +2638,12 @@ class PropertyPlotter(Tool):
         n_marked = len(current_plot_data['selected']['points'])
 
         patched_list = Patch()
-        values_to_remove = []
-        for i, val in enumerate(delete_click):
-            if val:
-                values_to_remove.insert(0,i)
-
+        values_to_remove = np.where(delete_click)[0].tolist()
         for v in values_to_remove:
             del patched_list[v]
             del current_plot_data['selected']['points'][v]
         
         current_plot_data = [json.dumps(current_plot_data)]
-
         new_selected_div = self.gen_selected_div(n_marked-1)
 
         return [patched_list], current_plot_data, new_selected_div

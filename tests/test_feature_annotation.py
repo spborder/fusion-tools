@@ -50,7 +50,6 @@ def main():
                     BulkLabels(
                         geojson_anns = annotations,
                         tile_server = tile_server,
-                        storage_path = os.getcwd()+'\\tests\\Test_Annotations\\'
                     )
                 ]
             ]

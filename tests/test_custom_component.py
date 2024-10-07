@@ -36,7 +36,6 @@ def gen_clusters(feature_data, feature_cols, eps = 0.3, min_samples = 10):
         return None
 
     quant_data = feature_data.loc[:,[i for i in feature_cols if i in feature_data.columns]].values
-    #label_data = feature_data.loc[:,[i for i in label_and_custom_cols if i in feature_data.columns]]
 
     feature_data_means = np.nanmean(quant_data,axis=0)
     feature_data_stds = np.nanstd(quant_data,axis=0)

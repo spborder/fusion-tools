@@ -1,7 +1,7 @@
 # Changelog
 
 <!--next-version-placeholder-->
-## v0.0.12->v0.0.20 (10/07/2024)
+## v0.0.12->v0.0.21 (10/07/2024)
 
 ### Fix:
 - External testing performed, restructuring of package and setup in response to errors encountered

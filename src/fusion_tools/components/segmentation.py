@@ -1205,7 +1205,6 @@ class BulkLabels(Tool):
                 State({'type': 'bulk-labels-include-structures','index': ALL},'value'),
                 State({'type': 'bulk-labels-add-property-div','index': ALL},'children'),
                 State({'type':'bulk-labels-spatial-query-div','index': ALL},'children'),
-                State({'type': 'bulk-labels-label-method','index': ALL},'value'),
                 State({'type': 'map-annotations-store','index': ALL},'data')
             ]
         )(self.update_label_structures)
@@ -2018,11 +2017,7 @@ class BulkLabels(Tool):
         n_marked = len(get_pattern_matching_value(current_markers))
 
         patched_list = Patch()
-        values_to_remove = []
-        for i,val in enumerate(clear_click):
-            if val:
-                values_to_remove.insert(0,i)
-
+        values_to_remove = np.where(clear_click)[0].tolist()
         for v in values_to_remove:
             del patched_list[v]
         
