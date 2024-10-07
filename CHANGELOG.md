@@ -1,7 +1,15 @@
 # Changelog
 
 <!--next-version-placeholder-->
-## V0.0.11 (10/04/2024)
+## v0.0.12->v0.0.20 (10/07/2024)
+
+### Fix:
+- External testing performed, restructuring of package and setup in response to errors encountered
+
+### Features:
+- Support for Jupyter Notebook visualization (excluding JupyterHub hosted over HTTPS)
+
+## v0.0.11 (10/04/2024)
 
 ### Fix:
 - Fixed adding/deleting manual ROIs (keeping _id property)
