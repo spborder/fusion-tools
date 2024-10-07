@@ -1,6 +1,8 @@
 lxml>=4.9.2
 geojson>=3.0.1
 shapely>=2.0.1
+geopandas
+girder-client
 tqdm
 numpy>=1.20.0
 large-image[common]

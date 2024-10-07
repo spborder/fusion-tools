@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: fusion-tools
-Version: 0.0.16
+Version: 0.0.18
 Summary: Modular visualization and analysis dashboard creation for high-resolution microscopy images
 Home-page: https://github.com/spborder/fusion-tools
 Author: Sam Border
@@ -14,6 +14,8 @@ License-File: LICENSE
 Requires-Dist: lxml>=4.9.2
 Requires-Dist: geojson>=3.0.1
 Requires-Dist: shapely>=2.0.1
+Requires-Dist: geopandas
+Requires-Dist: girder-client
 Requires-Dist: tqdm
 Requires-Dist: numpy>=1.20.0
 Requires-Dist: large-image[common]

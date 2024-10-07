@@ -194,7 +194,7 @@ class Visualization:
         """Starting visualization session based on provided app_options
         """
         
-        if not 'jupyter_mode' in self.app_options:
+        if not 'jupyter' in self.app_options:
             if 'server' in self.app_options:
                 if self.app_options['server']=='default':
                     self.viewer_app.run_server(
@@ -210,7 +210,8 @@ class Visualization:
                 )
         else:
             self.viewer_app.run(
-                jupyter_mode=self.app_options['jupyter_mode']
+                jupyter_mode=self.app_options['jupyter']['jupyter_mode'] if 'jupyter_mode' in self.app_options['jupyter'] else 'inline',
+                jupyter_server_url = self.app_options['jupyter']['jupyter_server_url'] if 'jupyter_server_url' in self.app_options['jupyter'] else 'http://127.0.0.1:8050/'
             )
 
 

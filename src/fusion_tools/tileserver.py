@@ -23,7 +23,8 @@ class LocalTileServer(TileServer):
     """
     def __init__(self,
                  local_image_path: str,
-                 tile_server_port = '8050'
+                 tile_server_port:str = '8050',
+                 host: str = 'http://localhost'
                  ):
         """Constructor method
 
@@ -34,11 +35,11 @@ class LocalTileServer(TileServer):
         """
 
         self.local_image_path = local_image_path
-
         self.tile_server_port = tile_server_port
+        self.host = host
 
-        self.tiles_url = f'http://localhost:{self.tile_server_port}/tiles/'+'{z}/{x}/{y}'
-        self.regions_url = f'http://locahost:{self.tile_server_port}/tiles/region'
+        self.tiles_url = f'{self.host}:{self.tile_server_port}/tiles/'+'{z}/{x}/{y}'
+        self.regions_url = f'{self.host}:{self.tile_server_port}/tiles/region'
 
         self.tile_source = large_image.open(self.local_image_path,encoding='PNG')
         self.tiles_metadata = self.tile_source.getMetadata()
@@ -50,7 +51,7 @@ class LocalTileServer(TileServer):
         self.router.add_api_route('/tiles/region',self.get_region,methods=["GET"])
     
     def __str__(self):
-        return f'TileServer class for {self.local_image_path} to http://localhost:{self.tile_server_port}'
+        return f'TileServer class for {self.local_image_path} to {self.host}:{self.tile_server_port}'
 
     def root(self):
         return {'message': "Oh yeah, now we're cooking"}
