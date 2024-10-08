@@ -91,7 +91,7 @@ class LocalTileServer(TileServer):
         """
         return Response(content = json.dumps(self.tiles_metadata),media_type = 'application/json')
     
-    def get_region(self, top: int, left: int, bottom:int,right:int):
+    def get_region(self, top: int, left: int, bottom:int, right:int):
         """
         Grabbing a specific region in the image based on bounding box coordinates
         """
