@@ -1,6 +1,12 @@
 # Changelog
 
 <!--next-version-placeholder-->
+## v0.0.22 (10/08/2024)
+
+### Features:
+- FeatureExtraction functionality added with parallelization (non-interactive)
+
+
 ## v0.0.12->v0.0.21 (10/07/2024)
 
 ### Fix:

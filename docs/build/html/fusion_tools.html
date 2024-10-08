@@ -249,7 +249,7 @@
 </section>
 <section id="module-fusion_tools.handler">
 <span id="fusion-tools-handler-module"></span><h2>fusion_tools.handler module<a class="headerlink" href="#module-fusion_tools.handler" title="Link to this heading"></a></h2>
-<p>Handler for requests made to a running FUSION instance.</p>
+<p>Handler for requests made to a running DSA instance.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="fusion_tools.handler.DSAHandler">
 <em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.handler.</span></span><span class="sig-name descname"><span class="pre">DSAHandler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">girderApiUrl</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">username</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">password</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.handler.DSAHandler" title="Link to this definition"></a></dt>
@@ -326,6 +326,23 @@
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.handler.DSAHandler.get_tile_server">
+<span class="sig-name descname"><span class="pre">get_tile_server</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">item</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#fusion_tools.tileserver.DSATileServer" title="fusion_tools.tileserver.DSATileServer"><span class="pre">DSATileServer</span></a></span></span><a class="headerlink" href="#fusion_tools.handler.DSAHandler.get_tile_server" title="Link to this definition"></a></dt>
+<dd><p>Create a tileserver for a given item</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>item</strong> (<em>str</em>) – Girder Item Id for the slide you want to create a tileserver for</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>DSATileServer instance</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#fusion_tools.tileserver.DSATileServer" title="fusion_tools.tileserver.DSATileServer">DSATileServer</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.handler.DSAHandler.make_boundary_mask">
 <span class="sig-name descname"><span class="pre">make_boundary_mask</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exterior_coords</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">ndarray</span></span></span><a class="headerlink" href="#fusion_tools.handler.DSAHandler.make_boundary_mask" title="Link to this definition"></a></dt>
 <dd><p>Making boundary mask for a set of exterior coordinates</p>
@@ -381,7 +398,7 @@
 
 <dl class="py class">
 <dt class="sig sig-object py" id="fusion_tools.tileserver.LocalTileServer">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.tileserver.</span></span><span class="sig-name descname"><span class="pre">LocalTileServer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">local_image_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tile_server_port</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'8050'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.tileserver.LocalTileServer" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.tileserver.</span></span><span class="sig-name descname"><span class="pre">LocalTileServer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">local_image_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tile_server_port</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'8050'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">host</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'http://localhost'</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.tileserver.LocalTileServer" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#fusion_tools.tileserver.TileServer" title="fusion_tools.tileserver.TileServer"><code class="xref py py-class docutils literal notranslate"><span class="pre">TileServer</span></code></a></p>
 <p>Tile server from image saved locally. Uses large-image to read and parse image formats (default: [common])</p>
 <dl class="py method">
