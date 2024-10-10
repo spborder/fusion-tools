@@ -124,8 +124,7 @@ def load_aperio(xml_path: str) -> list:
             for vert in vertices:
                 coords.append([
                     int(float(vert.attrib['X'])),
-                    int(float(vert.attrib['Y'])),
-                    int(1.0)
+                    int(float(vert.attrib['Y']))
                 ])
             
             geojson_anns['features'].append({
@@ -801,7 +800,7 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
         'features': []
     }
     for g,name in zip(remainder_structures,name_order):
-        g_json = json.loads(g.to_json(show_bbox=True))
+        g_json = g.to_geo_dict(show_bbox=True)
         feature_geos = [i['geometry'] for i in g_json['features']]
 
         if len(g_json['features'])>0:
