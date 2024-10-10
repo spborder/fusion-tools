@@ -1,6 +1,12 @@
 # Changelog
 
 <!--next-version-placeholder-->
+## v0.0.23 (10/10/2024)
+
+### Features:
+- `dataset` module added
+    - Implements `SegmentationDataset` and `ClassificationDataset` which are PyTorch-formatted Dataset classes which allow for iteration of annotated structures in a set of slides. `SegmentationDataset` returns images and masks while `ClassificationDataset` returns images and labels (stored in GeoJSON properties). PyTorch installation is not required with this implementation, however, to integrate these datasets into a ML-pipeline one of the image/target/label transforms has to convert the data to a Tensor.
+
 ## v0.0.22 (10/08/2024)
 
 ### Features:

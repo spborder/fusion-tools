@@ -29,9 +29,6 @@ from skimage.draw import polygon2mask
 from PIL import Image
 from io import BytesIO
 
-#import torch
-#from torch.utils.data import Dataset
-
 from typing import Callable
 from typing_extensions import Union
 
@@ -1020,3 +1017,5 @@ class ClassificationDataset:
 
         with open(save_path,'w') as f:
             json.dump(key_configs, f, indent=4)
+
+
