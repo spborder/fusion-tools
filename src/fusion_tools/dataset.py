@@ -16,6 +16,7 @@ import numpy as np
 import pandas as pd
 import geopandas as gpd
 import large_image
+from tqdm import tqdm
 
 from fusion_tools.utils.shapes import process_filters_queries
 
@@ -32,6 +33,8 @@ from io import BytesIO
 from typing import Callable
 from typing_extensions import Union
 
+from joblib import Parallel, delayed
+
 
 class SegmentationDataset:
     def __init__(self,
@@ -40,7 +43,6 @@ class SegmentationDataset:
                  transforms: Union[None, Callable] = None,
                  target_transforms: Union[None, Callable] = None,
                  mask_key: Union[dict,None] = None,
-                 iter_mode: str = 'random',
                  patch_size: list = [256,256],
                  patch_mode: str = 'bbox',
                  patch_region: Union[str,list,dict] = 'all',
@@ -49,7 +51,10 @@ class SegmentationDataset:
                  use_structures: Union[str,list] = 'all',
                  use_cache: bool = True,
                  shuffle: bool = True,
-                 seed_val: int = 1701
+                 seed_val: int = 1701,
+                 verbose: bool = False,
+                 use_parallel: bool = True,
+                 n_jobs: int = 1
                  ):
         
         self.slides = slides
@@ -57,9 +62,6 @@ class SegmentationDataset:
         self.transforms = transforms
         self.target_transforms = target_transforms
         self.mask_key = mask_key
-        self.iter_mode = iter_mode
-        assert self.iter_mode in ['random','all']
-
         self.patch_size = patch_size
         self.patch_mode = patch_mode
         self.patch_region = patch_region
@@ -86,6 +88,9 @@ class SegmentationDataset:
         # Setting seed for reproducibility (🖖)
         self.seed_val = seed_val
         self.plant_seed(seed_val)
+        self.verbose = verbose
+        self.use_parallel = use_parallel
+        self.n_jobs = n_jobs
 
         self.process_annotations()
         self.gen_slide_patches()
@@ -265,6 +270,7 @@ class SegmentationDataset:
                 y_coords.append(np.maximum(int(available_bbox[1]-(self.patch_size[1]/2)),0+(self.patch_size[1]/2)))
 
                 # Iterating through both and adding to self.data
+                bbox_list = []
                 for x in x_coords:
                     for y in y_coords:
                         bbox = [
@@ -273,56 +279,24 @@ class SegmentationDataset:
                             int(x+(self.patch_size[0]/2)),
                             int(y+(self.patch_size[1]/2))
                         ]
-
-                        # Finding features which intersect with this bbox
-                        features = slide_annotations_gdf[slide_annotations_gdf.intersects(box(*bbox))].to_geo_dict(show_bbox=True)['features']
-                        if not self.use_cache:
-                            self.data.append({
-                                'bbox': bbox, 'features': features,'slide_idx': s_idx
-                            })
-                        else:
-                            image, mask = self.make_image_and_mask(bbox,s_idx,features)
-
-                            self.data.append({
-                                'bbox': bbox, 'features': features, 'slide_idx': s_idx, 'image': image, 'mask': mask 
-                            })
+                        bbox = [np.maximum(i,0) for i in bbox]
+                        bbox_list.append(bbox)
 
             elif self.patch_mode=='bbox':
                 # 'bbox' means each patch will be formed from the bbox of each feature (structure) (patches will initially be different sizes)
+                bbox_list = []
                 for i in filtered_slide_annotations['features']:
                     bbox = i['bbox']
-                    features = slide_annotations_gdf[slide_annotations_gdf.intersects(box(*bbox))].to_geo_dict(show_bbox=True)['features']
-                    if not self.use_cache:
-                        self.data.append({
-                            'bbox': bbox, 'features': features, 'slide_idx': s_idx
-                        })
-                    else:
-                        
-                        image, mask = self.make_image_and_mask(bbox,s_idx,features)
-
-                        self.data.append({
-                            'bbox': bbox, 'features': features, 'slide_idx':s_idx, 'image':image, 'mask': mask
-                        })
+                    bbox_list.append(bbox)
 
             elif self.patch_mode=='centered_bbox':
                 # 'centered_bbox' means each patch uses the center of the bbox of each feature and expands out to "patch_size"
                 centroids = [[(i['bbox'][0]+i['bbox'][2])/2, (i['bbox'][1]+i['bbox'][3])/2] for i in filtered_slide_annotations['features']]
-
+                bbox_list = []
                 for c in centroids:
                     bbox = [int(c[0]-(self.patch_size[0]/2)),int(c[1]-(self.patch_size[1]/2)),int(c[0]+(self.patch_size[0]/2)), int(c[1]+(self.patch_size[1]/2))]
                     bbox = [np.maximum(i,0) for i in bbox]
-                    features = slide_annotations_gdf[slide_annotations_gdf.intersects(box(*bbox))].to_geo_dict(show_bbox=True)['features']
-
-                    if not self.use_cache:
-                        self.data.append({
-                            'bbox': bbox, 'features': features, 'slide_idx': s_idx
-                        })
-                    else:
-                        image, mask = self.make_image_and_mask(bbox,s_idx,features)
-
-                        self.data.append({
-                            'bbox': bbox, 'features': features, 'slide_idx':s_idx, 'image':image, 'mask': mask
-                        })
+                    bbox_list.append(bbox)
 
             elif self.patch_mode=='random_bbox':
                 # 'random_bbox' means each patch uses the center of the bbox of each feature and expands out to a random amount +/- 0.25 patch_size (patches will initially be different sizes)
@@ -330,24 +304,62 @@ class SegmentationDataset:
                 width_list = [np.random.randint(int(self.patch_size[0]-(0.25*self.patch_size[0])),int(self.patch_size[0]+(0.25*self.patch_size[0]))) for i in range(len(centroids))]
                 height_list = [np.random.randint(int(self.patch_size[1]-(0.25*self.patch_size[1])),int(self.patch_size[1]+(0.25*self.patch_size[1]))) for i in range(len(centroids))]
 
+                bbox_list = []
                 for c,w,h in zip(centroids,width_list,height_list):
                     bbox = [int(c[0]-(w/2)),int(c[1]-(h/2)),int(c[0]+(w/2)),int(c[1]+(h/2))]
                     bbox = [np.maximum(i,0) for i in bbox]
-                    features = slide_annotations_gdf[slide_annotations_gdf.intersects(box(*bbox))].to_geo_dict(show_bbox=True)['features']
+                    
+                    bbox_list.append(bbox)
 
-                    if not self.use_cache:
-                        self.data.append({
-                            'bbox': bbox, 'features': features, 'slide_idx': s_idx
-                        })
-                    else:
-                        image, mask = self.make_image_and_mask(bbox,s_idx,features)
-
-                        self.data.append({
-                            'bbox': bbox, 'features': features, 'slide_idx':s_idx, 'image':image, 'mask': mask
-                        })
+            if self.use_parallel:
+                self.data.extend(Parallel(
+                    n_jobs = self.n_jobs,
+                    verbose = 50 if self.verbose else 0,
+                    backend = 'threading',
+                    return_as = 'list'
+                )(
+                    delayed(
+                        self.make_patch
+                    )(i,s_idx,slide_annotations_gdf)
+                    for i in bbox_list
+                ))
+            else:
+                if not self.verbose:
+                    for i in bbox_list:
+                        self.data.append(
+                            self.make_patch(i,s_idx,slide_annotations_gdf)
+                        )
+                else:
+                    for i in tqdm(bbox_list):
+                        self.data.append(
+                            self.make_patch(i,s_idx,slide_annotations_gdf)
+                        )
 
         if self.shuffle:
             random.shuffle(self.data)
+
+    def make_patch(self, bbox:list, slide_idx:int, annotations:gpd.GeoDataFrame):
+        
+        features = annotations[annotations.intersects(box(*bbox))].to_geo_dict(show_bbox=True)['features']
+
+        if not self.use_cache:
+            return_dict = {
+                'bbox': bbox,
+                'features': features,
+                'slide_idx': slide_idx
+            }
+        else:
+            image, mask = self.make_image_and_mask(bbox,slide_idx,features)
+
+            return_dict = {
+                'bbox': bbox,
+                'features': features,
+                'slide_idx': slide_idx,
+                'image': image,
+                'mask': mask
+            }
+
+        return return_dict
 
     def find_tissue(self, slide_tile_source, slide_metadata):
         
@@ -504,7 +516,7 @@ class SegmentationDataset:
             mask = next_data['mask']
 
         else:
-            image, mask = self.make_image_and_mask(next_data['bbox'], next_data['slide_idx'], next_data['features'], next_data['features_reference'])
+            image, mask = self.make_image_and_mask(next_data['bbox'], next_data['slide_idx'], next_data['features'])
         
         return image, mask
 
@@ -538,7 +550,6 @@ class SegmentationDataset:
             'property_filters': self.property_filters,
             'spatial_filters': self.spatial_filters,
             'mask_key': self.mask_key,
-            'iter_mode': self.iter_mode,
             'use_structures': self.use_structures,
             'use_cache': self.use_cache,
             'shuffle': self.shuffle,
@@ -549,7 +560,7 @@ class SegmentationDataset:
 
     def export_configs(self, save_path: str):
         
-        # mask_key, iter_mode, patch_size, patch_mode, patch_region
+        # mask_key, patch_size, patch_mode, patch_region
         # spatial filters, property_filters, use_structures, use_cache, shuffle, seed_val
         key_configs = {
             'slide_data': [
@@ -564,7 +575,6 @@ class SegmentationDataset:
             'property_filters': self.property_filters,
             'spatial_filters': self.spatial_filters,
             'mask_key': self.mask_key,
-            'iter_mode': self.iter_mode,
             'use_structures': self.use_structures,
             'use_cache': self.use_cache,
             'shuffle': self.shuffle,
@@ -582,7 +592,6 @@ class ClassificationDataset:
                  label_property: Union[list,str,None] = None,
                  transforms: Union[None, Callable] = None,
                  label_transforms: Union[None, Callable] = None,
-                 iter_mode: str = 'random',
                  patch_size: list = [256,256],
                  patch_mode: str = 'bbox',
                  patch_region: Union[str,list,dict] = 'all',
@@ -591,15 +600,17 @@ class ClassificationDataset:
                  use_structures: Union[str,list] = 'all',
                  use_cache: bool = True,
                  shuffle: bool = True,
-                 seed_val: int = 1701):
+                 seed_val: int = 1701,
+                 verbose: bool = False,
+                 use_parallel: bool = True,
+                 n_jobs: int = 1
+                 ):
         
         self.slides = slides
         self.pre_annotations = annotations
         self.label_property = label_property
         self.transforms = transforms
         self.label_transforms = label_transforms
-        self.iter_mode = iter_mode
-        assert self.iter_mode in ['random','all']
 
         self.patch_size = patch_size
         self.patch_mode = patch_mode
@@ -622,7 +633,9 @@ class ClassificationDataset:
         # Setting seed for reproducibility (🖖)
         self.seed_val = seed_val
         self.plant_seed(seed_val)
-
+        self.verbose = verbose
+        self.use_parallel = use_parallel
+        self.n_jobs = n_jobs
         self.process_annotations()
         self.gen_slide_patches()
 
@@ -646,7 +659,7 @@ class ClassificationDataset:
                 self.annotations = []
                 for a in self.pre_annotations:
                     if type(a)==dict:
-                        self.annotations.append(gpd.GeoDataFrame.from_features(a['features']))
+                        self.annotations.append([gpd.GeoDataFrame.from_features(a['features'])])
                         self.slide_annotation_names.append([a['properties']['name']])
                     elif type(a)==list:
                         self.annotations.append([gpd.GeoDataFrame.from_features(b['features']) for b in a if type(b)==dict])
@@ -730,7 +743,7 @@ class ClassificationDataset:
             if not self.annotations is None:
 
                 # Filtering annotations by available_regions
-                if type(pre_slide_annotations)==dict:
+                if type(pre_slide_annotations)==gpd.GeoDataFrame:
                     available_slide_annotations = gpd.sjoin(
                         left_df = pre_slide_annotations,
                         right_df = gpd.GeoDataFrame.from_features(available_regions['features']),
@@ -792,6 +805,7 @@ class ClassificationDataset:
                 y_coords.append(np.maximum(int(available_bbox[1]-(self.patch_size[1]/2)),0+(self.patch_size[1]/2)))
 
                 # Iterating through both and adding to self.data
+                bbox_list = []
                 for x in x_coords:
                     for y in y_coords:
                         bbox = [
@@ -800,57 +814,26 @@ class ClassificationDataset:
                             int(x+(self.patch_size[0]/2)),
                             int(y+(self.patch_size[1]/2))
                         ]
-
-                        # Finding features which intersect with this bbox
-                        features = slide_annotations_gdf[slide_annotations_gdf.intersects(box(*bbox))].to_geo_dict(show_bbox=True)['features']
-                        if not self.use_cache:
-                            self.data.append({
-                                'bbox': bbox, 'features': features,'slide_idx': s_idx
-                            })
-                        else:
-                            image, label = self.make_image_and_label(bbox,s_idx,features)
-
-                            self.data.append({
-                                'bbox': bbox, 'features': features, 'slide_idx': s_idx, 'image': image, 'label': label
-                            })
+                        bbox = [np.maximum(i,0) for i in bbox]
+                        bbox_list.append(bbox)
 
             elif self.patch_mode=='bbox':
                 # 'bbox' means each patch will be formed from the bbox of each feature (structure) (patches will initially be different sizes)
+                bbox_list = []
                 for i in filtered_slide_annotations['features']:
                     bbox = i['bbox']
-                    features = slide_annotations_gdf[slide_annotations_gdf.intersects(box(*bbox))].to_geo_dict(show_bbox=True)['features']
-
-                    if not self.use_cache:
-                        self.data.append({
-                            'bbox': bbox, 'features': features,'slide_idx': s_idx
-                        })
-                    else:
-                        
-                        image, label = self.make_image_and_label(bbox,s_idx,features)
-
-                        self.data.append({
-                            'bbox': bbox, 'features': features,'slide_idx':s_idx, 'image':image, 'label': label
-                        })
+                    bbox_list.append(bbox)
 
             elif self.patch_mode=='centered_bbox':
                 # 'centered_bbox' means each patch uses the center of the bbox of each feature and expands out to "patch_size"
                 centroids = [[(i['bbox'][0]+i['bbox'][2])/2, (i['bbox'][1]+i['bbox'][3])/2] for i in filtered_slide_annotations['features']]
 
+                bbox_list = []
                 for c in centroids:
                     bbox = [int(c[0]-(self.patch_size[0]/2)),int(c[1]-(self.patch_size[1]/2)),int(c[0]+(self.patch_size[0]/2)), int(c[1]+(self.patch_size[1]/2))]
                     bbox = [np.maximum(i,0) for i in bbox]
-                    features = slide_annotations_gdf[slide_annotations_gdf.intersects(box(*bbox))].to_geo_dict(show_bbox=True)['features']
 
-                    if not self.use_cache:
-                        self.data.append({
-                            'bbox': bbox, 'features': features,'slide_idx': s_idx
-                        })
-                    else:
-                        image, label = self.make_image_and_label(bbox,s_idx,features)
-
-                        self.data.append({
-                            'bbox': bbox, 'features': features,'slide_idx':s_idx, 'image':image, 'label': label
-                        })
+                    bbox_list.append(bbox)
 
             elif self.patch_mode=='random_bbox':
                 # 'random_bbox' means each patch uses the center of the bbox of each feature and expands out to a random amount +/- 0.25 patch_size (patches will initially be different sizes)
@@ -858,25 +841,62 @@ class ClassificationDataset:
                 width_list = [np.random.randint(int(self.patch_size[0]-(0.25*self.patch_size[0])),int(self.patch_size[0]+(0.25*self.patch_size[0]))) for i in range(len(centroids))]
                 height_list = [np.random.randint(int(self.patch_size[1]-(0.25*self.patch_size[1])),int(self.patch_size[1]+(0.25*self.patch_size[1]))) for i in range(len(centroids))]
 
+                bbox_list = []
                 for c,w,h in zip(centroids,width_list,height_list):
                     bbox = [int(c[0]-(w/2)),int(c[1]-(h/2)),int(c[0]+(w/2)),int(c[1]+(h/2))]
                     bbox = [np.maximum(i,0) for i in bbox]
-                    features = slide_annotations_gdf[slide_annotations_gdf.intersects(box(*bbox))].to_geo_dict(show_bbox=True)['features']
 
-                    if not self.use_cache:
-                        self.data.append({
-                            'bbox': bbox, 'features': features,'slide_idx': s_idx
-                        })
-                    else:
-                        image, label = self.make_image_and_label(bbox,s_idx,features)
+                    bbox_list.append(bbox)
 
-                        self.data.append({
-                            'bbox': bbox, 'features': features,'slide_idx':s_idx, 'image':image, 'label': label
-                        })
-
+            if self.use_parallel:
+                self.data.extend(Parallel(
+                    n_jobs = self.n_jobs,
+                    verbose = 50 if self.verbose else 0,
+                    backend = 'threading',
+                    return_as = 'list'
+                )(
+                    delayed(
+                        self.make_patch
+                    )(i,s_idx,slide_annotations_gdf)
+                    for i in bbox_list
+                ))
+            else:
+                if not self.verbose:
+                    for i in bbox_list:
+                        self.data.append(
+                            self.make_patch(i,s_idx,slide_annotations_gdf)
+                        )
+                else:
+                    for i in tqdm(bbox_list):
+                        self.data.append(
+                            self.make_patch(i,s_idx,slide_annotations_gdf)
+                        )
 
         if self.shuffle:
             random.shuffle(self.data)
+
+    def make_patch(self,bbox:list, slide_idx: int, annotations:gpd.GeoDataFrame):
+
+        features = annotations[annotations.intersects(box(*bbox))].to_geo_dict(show_bbox=True)['features']
+
+        if not self.use_cache:
+            return_dict = {
+                'bbox': bbox,
+                'features': features,
+                'slide_idx': slide_idx
+            }
+        else:
+            image, label = self.make_image_and_label(bbox,slide_idx,features)
+
+            return_dict = {
+                'bbox': bbox,
+                'features': features,
+                'slide_idx': slide_idx,
+                'image': image,
+                'label': label
+            }
+
+        return return_dict
 
     def make_image_and_label(self, bbox:list, slide_idx:int, features: list):
 
@@ -948,7 +968,7 @@ class ClassificationDataset:
             label = next_data['label']
 
         else:
-            image, label = self.make_image_and_label(next_data['bbox'], next_data['slide_idx'], next_data['features'], next_data['features_reference'])
+            image, label = self.make_image_and_label(next_data['bbox'], next_data['slide_idx'], next_data['features'])
         
         return image, label
 
@@ -956,7 +976,6 @@ class ClassificationDataset:
         return len(self.data)
 
     def __getitem__(self,idx):
-        
         image, label = self.get_next_image(idx)
 
         if self.transforms:
@@ -982,7 +1001,6 @@ class ClassificationDataset:
             'property_filters': self.property_filters,
             'spatial_filters': self.spatial_filters,
             'label_property': self.label_property,
-            'iter_mode': self.iter_mode,
             'use_structures': self.use_structures,
             'use_cache': self.use_cache,
             'shuffle': self.shuffle,
@@ -993,7 +1011,7 @@ class ClassificationDataset:
 
     def export_configs(self, save_path:str):
         
-        # iter_mode, patch_size, patch_mode, patch_region, label_property
+        # patch_size, patch_mode, patch_region, label_property
         # spatial filters, property_filters, use_structures, use_cache, shuffle, seed_val
         key_configs = {
             'slide_data': [
@@ -1008,7 +1026,6 @@ class ClassificationDataset:
             'property_filters': self.property_filters,
             'spatial_filters': self.spatial_filters,
             'label_property': self.label_property,
-            'iter_mode': self.iter_mode,
             'use_structures': self.use_structures,
             'use_cache': self.use_cache,
             'shuffle': self.shuffle,

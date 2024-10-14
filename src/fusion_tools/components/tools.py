@@ -887,8 +887,6 @@ class OverlayOptions(Tool):
 
                     current_annotations.append(filtered_geojson)
 
-
-
                     return [new_children], [json.dumps(current_annotations)]
                 else:
                     raise exceptions.PreventUpdate

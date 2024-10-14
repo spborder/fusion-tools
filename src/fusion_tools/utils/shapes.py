@@ -42,8 +42,15 @@ def load_geojson(geojson_path: str, name:Union[str,None]=None) -> dict:
 
         f.close()
 
-    if not name is None:
-        geojson_anns['properties'] = geojson_anns['properties'] | {'name': name, '_id': uuid.uuid4().hex[:24]}
+    if not 'properties' in geojson_anns:
+        geojson_anns['properties'] = {}
+
+    geo_id = uuid.uuid4().hex[:24] if not '_id' in geojson_anns['properties'] else geojson_anns['properties']['_id']
+    geojson_anns['properties'] = geojson_anns['properties'] | {'name': name if not name is None else geo_id, '_id': geo_id}
+
+    
+    for f_idx, f in enumerate(geojson_anns['features']):
+        f['properties'] = f['properties'] | {'name': name if not name is None else geo_id, '_id': uuid.uuid4().hex[:24], '_index': f_idx}
 
     return geojson_anns
 
@@ -72,7 +79,7 @@ def load_histomics(json_path: str) -> list:
 
         geojson_anns = {
             'type': 'FeatureCollection',
-            'properties': ann['annotation']['name'],
+            'properties': {'name': ann['annotation']['name']},
             'features': [
                 {
                     'type':'Feature',
@@ -82,7 +89,7 @@ def load_histomics(json_path: str) -> list:
                             el['points']
                         ]
                     },
-                    'properties': el['user'] if 'user' in el else {} | {'name': f'{ann["annotation"]["name"]}_{el_idx}', '_id': ann['annotation']['_id']}
+                    'properties': el['user'] | {'name': f'{ann["annotation"]["name"]}', '_id': uuid.uuid4().hex[:24],'_index': el_idx} if 'user' in el else {'name': f'{ann["annotation"]["name"]}_{el_idx}', '_id': ann['annotation']['_id'], '_index': el_idx}
                 }
                 for el_idx,el in enumerate(ann['annotation']['elements'])
             ]
@@ -118,7 +125,7 @@ def load_aperio(xml_path: str) -> list:
         }
         this_structure = tree.getroot().findall(f'Annotation[@Id="{str(ann_idx+1)}"]/Regions/Region')
 
-        for obj in this_structure:
+        for obj_idx,obj in enumerate(this_structure):
             vertices = obj.findall('./Vertices/Vertex')
             coords = []
             for vert in vertices:
@@ -134,7 +141,9 @@ def load_aperio(xml_path: str) -> list:
                     'coordinates': [coords]
                 },
                 'properties': {
-                    'name': f'Layer{ann_idx+1}'
+                    'name': f'Layer{ann_idx+1}',
+                    '_id': uuid.uuid4().hex[:24],
+                    '_index': obj_idx
                 }
             })
 
@@ -195,7 +204,7 @@ def load_polygon_csv(
     if not group_by_col is None:
         groups = csv_anns[group_by_col].unique().tolist()
 
-        for g in groups:
+        for g_idx,g in enumerate(groups):
 
             g_rows = csv_anns[csv_anns[group_by_col].str.match(g)]
             if len(shape_cols)==2:
@@ -230,12 +239,12 @@ def load_polygon_csv(
                     'type': 'Polygon' if len(coord_list)>3 else 'Point',
                     'coordinates': [coord_list]
                 },
-                'properties': props
+                'properties': props | {'name': name, '_id': uuid.uuid4().hex[:24], '_index': g_idx}
             })
 
     else:
         # Each row is one structure
-        for g in csv_anns.shape[0]:
+        for g in range(csv_anns.shape[0]):
             
             if len(shape_cols)==2:
                 x_coord = csv_anns.iloc[g,shape_cols[0]].tolist()[0]
@@ -259,13 +268,13 @@ def load_polygon_csv(
                     'type': 'Polygon' if len(coords)>1 else 'Point',
                     'coordinates': [coords]
                 },
-                'properties': props
+                'properties': props | {'name': name, '_id': uuid.uuid4().hex[:24], '_index': g}
             })
             
 
     return geojson_anns
 
-def load_label_mask(label_mask: np.ndarray) -> dict:
+def load_label_mask(label_mask: np.ndarray, name: str) -> dict:
 
     full_geo = {
         'type': 'FeatureCollection',
@@ -274,6 +283,7 @@ def load_label_mask(label_mask: np.ndarray) -> dict:
 
     for geo, val in rasterio.features.shapes(label_mask):
 
+        geo['properties'] = geo['properties'] | {'name': name, '_id': uuid.uuid4().hex[:24], '_index': int(val)}
         full_geo['features'].append(geo)
 
     return full_geo
@@ -757,7 +767,7 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
         structure_filtered = [gpd.GeoDataFrame.from_features(i['features']) for i in all_geo_list]
         name_order = [i['properties']['name'] for i in all_geo_list]
 
-    all_names = [i['properties']['name'] for i in all_geo_list]
+    #all_names = [i['properties']['name'] for i in all_geo_list]
 
     # Now going through spatial queries
     filter_reference_list = {
@@ -801,13 +811,21 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
     }
     for g,name in zip(remainder_structures,name_order):
         g_json = g.to_geo_dict(show_bbox=True)
-        feature_geos = [i['geometry'] for i in g_json['features']]
+        #feature_geos = [i['geometry'] for i in g_json['features']]
 
+
+        filter_reference_list[name] = {
+            i+len(combined_geojson['features']):j['properties']['_index']
+            for i,j in enumerate(g_json['features'])
+        }
+        combined_geojson['features'].extend(g_json['features'])
+        """
         if len(g_json['features'])>0:
             for idx, i in enumerate(all_geo_list[all_names.index(name)]['features']):
                 if i['geometry'] in feature_geos:
                     filter_reference_list[name][len(combined_geojson['features'])] = idx
                     combined_geojson['features'].append(g_json['features'][feature_geos.index(i['geometry'])])
+        """
 
     # Going through property filters:
     if len(filter_list)>0:
