@@ -1,6 +1,11 @@
 # Changelog
 
 <!--next-version-placeholder-->
+## v0.0.24 (10/16/2024)
+
+### Fix:
+- Updating labels returned by `ClassificationDataset` (returning 0.0 for structures that do not include the "label_property")
+
 ## v0.0.23 (10/10/2024)
 
 ### Features:

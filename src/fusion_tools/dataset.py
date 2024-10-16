@@ -956,7 +956,9 @@ class ClassificationDataset:
                             label.append(float(f_props_copy))
                         except ValueError:
                             label.append(f_props_copy)
-                    
+                    else:
+                        label.append(float(0))
+        
         return image, label
 
     def get_next_image(self, idx:int):
