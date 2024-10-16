@@ -22,6 +22,7 @@ src/fusion_tools/utils/stats.py
 src/fusion_tools/visualization/__init__.py
 src/fusion_tools/visualization/components.py
 src/fusion_tools/visualization/vis_utils.py
+tests/test_classification_model.py
 tests/test_custom_component.py
 tests/test_dataset_classes.py
 tests/test_extract_nested_prop.py
