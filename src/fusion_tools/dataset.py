@@ -36,6 +36,87 @@ from typing_extensions import Union
 from joblib import Parallel, delayed
 
 
+class FUSIONDataset:
+    def __init__(self,
+                 slides: list = [],
+                 annotations: Union[list,dict,None] = None,
+                 image_transforms: Union[Callable, None] = None,
+                 target_transforms: Union[Callable, None] = None,
+                 patch_size: list = [256,256],
+                 patch_mode: str = 'bbox',
+                 patch_region: Union[str,list,dict] = 'all',
+                 overlap: Union[float,None] = None,
+                 spatial_filters: Union[list,None] = None,
+                 property_filters: Union[list,None] = None,
+                 use_cache: bool = False,
+                 shuffle: bool = True,
+                 seed_val: int = 1701,
+                 verbose: bool = False,
+                 use_parallel: bool = True,
+                 n_jobs: int = 1):
+        
+        self.slides = slides
+        self.pre_annotations = annotations
+        self.image_transforms = image_transforms
+        self.target_transforms = target_transforms
+        self.patch_size = patch_size
+        self.patch_mode = patch_mode
+        self.patch_region = patch_region
+        self.overlap = overlap
+        self.spatial_filters = spatial_filters
+        self.property_filters = property_filters
+        self.use_cache = use_cache
+        self.shuffle = shuffle
+        self.seed_val = seed_val
+        self.verbose = verbose
+        self.use_parallel = use_parallel
+        self.n_jobs = n_jobs
+
+        # Checking inputs
+        assert self.patch_mode in ['all','even','overlap','bbox','centered_bbox','random_bbox']
+        if self.pre_annotations is None:
+            if 'bbox' in self.patch_mode:
+                raise AssertionError('If no annotations are passed, patch_mode must be "all"')
+        if type(self.patch_region)==str:
+            assert self.patch_region in ['all','tissue']
+        elif type(self.patch_region)==list:
+            assert all([any([i==j for j in ['all','tissue']]) if type(i)==str else type(i)==dict for i in self.patch_region])
+        
+        # Setting seed for reproducibility (🖖)
+        self.seed_val = seed_val
+        self.plant_seed(seed_val)
+        self.verbose = verbose
+        self.use_parallel = use_parallel
+        self.n_jobs = n_jobs
+
+    def plant_seed(self, seed_val):
+
+        random.seed(seed_val)
+        os.environ["PYTHONHASHSEED"] = str(seed_val)
+        np.random.seed(seed_val)
+        #torch.manual_seed(seed_val)
+        #torch.cuda.manual_seed(seed_val)
+
+    def process_annotations(self):
+        pass
+
+    def gen_slide_patches(self):
+        pass
+
+    def find_tissue(self):
+        pass
+
+    def __len__(self):
+        pass
+
+    def __getitem__(self, idx:int):
+        pass
+
+    def __str__(self):
+        pass
+
+
+
 class SegmentationDataset:
     def __init__(self,
                  slides: list = [],
@@ -65,7 +146,7 @@ class SegmentationDataset:
         self.patch_size = patch_size
         self.patch_mode = patch_mode
         self.patch_region = patch_region
-        assert self.patch_mode in ['all','bbox','centered_bbox','random_bbox']
+        assert self.patch_mode in ['all','even','overlap','bbox','centered_bbox','random_bbox']
         if self.pre_annotations is None:
             if 'bbox' in self.patch_mode:
                 raise AssertionError('If no annotations are passed, patch_mode must be "all"')
@@ -131,14 +212,15 @@ class SegmentationDataset:
                     for idx,name in enumerate(list(set(all_names)))
                 }
         else:
-            self.annotations = None
+            self.annotations = [None for s in self.slides]
+            self.slide_annotation_names = [None for s in self.slides]
 
     def gen_slide_patches(self):
          
         # Records-style list of bbox, feature or just bbox if no annotations are passed
         self.data = []
         self.slide_data = []
-        # Iterating through 
+        # Iterating through
         for s_idx, (slide, pre_slide_annotations, annotation_names) in enumerate(zip(self.slides,self.annotations,self.slide_annotation_names)):
             single_slide_data = {}
             if type(slide)==str:
@@ -154,7 +236,7 @@ class SegmentationDataset:
             # Find available regions to extract patches from
             if type(self.patch_region)==str:
                 if self.patch_region=='tissue':
-                    available_regions = self.find_tissue(slide_tile_source)
+                    available_regions = self.find_tissue(slide_tile_source, slide_metadata)
                 elif self.patch_region=='all':
                     available_regions = {
                         'type': 'FeatureCollection',
@@ -177,7 +259,7 @@ class SegmentationDataset:
             elif type(self.patch_region)==list:
                 if type(self.patch_region[s_idx])==str:
                     if self.patch_region[s_idx]=='tissue':
-                        available_regions = self.find_tissue(slide_tile_source)
+                        available_regions = self.find_tissue(slide_tile_source,slide_metadata)
                     elif self.patch_region[s_idx]=='all':
                         available_regions = {
                             'type': 'FeatureCollection',
@@ -205,7 +287,7 @@ class SegmentationDataset:
             single_slide_data['available_regions'] = available_regions
 
             # Finding current annotations
-            if not self.annotations is None:
+            if not pre_slide_annotations is None:
 
                 # Filtering annotations by available_regions
                 if type(pre_slide_annotations)==dict:
@@ -244,13 +326,68 @@ class SegmentationDataset:
             else:
                 filtered_slide_annotations = {'features': []}
                 single_slide_data['filtered_annotations'] = []
-            
 
             self.slide_data.append(single_slide_data)
             slide_annotations_gdf = gpd.GeoDataFrame.from_features(filtered_slide_annotations['features'])
             # Finding patch coordinates
-            if self.patch_mode== 'all':
-                # 'all' means all patches within available_regions (with and without intersection with features)
+            if self.patch_mode=='all':
+                available_bbox = gpd.GeoDataFrame.from_features(available_regions['features']).total_bounds
+
+                x_start = np.maximum(self.patch_size[0]/2,int(available_bbox[0]-(self.patch_size[0]/2)))
+                y_start = np.maximum(self.patch_size[1]/2,int(available_bbox[1]-(self.patch_size[1]/2)))
+                n_x = floor((available_bbox[2]-available_bbox[0])/self.patch_size[0])
+                n_y = floor((available_bbox[3]-available_bbox[1])/self.patch_size[1])
+
+                bbox_list = []
+                for x in range(0,n_x):
+                    for y in range(0,n_y):
+
+                        # Adding column of bboxes
+                        bbox = [
+                            int(x_start-(self.patch_size[0]/2)),
+                            int(y_start-(self.patch_size[1]/2)),
+                            int(x_start+(self.patch_size[0]/2)),
+                            int(y_start+(self.patch_size[1]/2))
+                        ]
+                        bbox_list.append(bbox)
+                        y_start+=self.patch_size[1]
+
+                    bottom_row_bbox = [
+                        int(x_start - (self.patch_size[0]/2)),
+                        int(available_bbox[3]-self.patch_size[1]),
+                        int(x_start + (self.patch_size[0]/2)),
+                        int(available_bbox[3])
+                    ]
+                    bbox_list.append(bottom_row_bbox)
+                    x_start += self.patch_size[0]
+                    y_start = np.maximum(self.patch_size[1]/2,available_bbox[1]-(self.patch_size[1]/2))
+
+                # Adding right-side column
+                for y in range(0,n_y):
+                    right_column_bbox = [
+                        int(available_bbox[2] - self.patch_size[0]),
+                        int(y_start - (self.patch_size[1]/2)),
+                        int(available_bbox[2]),
+                        int(y_start + (self.patch_size[1]/2))
+                    ]
+                    bbox_list.append(right_column_bbox)
+                    y_start+=self.patch_size[1]
+
+                # Adding bottom-right corner
+                bottom_right_bbox = [
+                    int(available_bbox[2]-self.patch_size[0]),
+                    int(available_bbox[3]-self.patch_size[1]),
+                    int(available_bbox[2]),
+                    int(available_bbox[3])
+                ]
+                bbox_list.append(bottom_right_bbox)
+
+            if self.patch_mode=='overlap':
+                #TODO: add overlap patch_mode
+                raise NotImplementedError
+
+            if self.patch_mode== 'even':
+                # 'even' means all patches within available_regions (with and without intersection with features)
                 # Starting out with the bounding box of available regions
                 available_bbox = gpd.GeoDataFrame.from_features(available_regions['features']).total_bounds
 
@@ -340,7 +477,10 @@ class SegmentationDataset:
 
     def make_patch(self, bbox:list, slide_idx:int, annotations:gpd.GeoDataFrame):
         
-        features = annotations[annotations.intersects(box(*bbox))].to_geo_dict(show_bbox=True)['features']
+        if not annotations.empty:
+            features = annotations[annotations.intersects(box(*bbox))].to_geo_dict(show_bbox=True)['features']
+        else:
+            features = []
 
         if not self.use_cache:
             return_dict = {
@@ -432,7 +572,7 @@ class SegmentationDataset:
         thumbnail_geojson = {
             'type': 'FeatureCollection',
             'features': [
-                {'type':'Feature','geometry': {'type': 'Polygon','coordinates': list(i.exterior.coords)}}
+                {'type':'Feature','geometry': {'type': 'Polygon','coordinates': [list(i.exterior.coords)]}}
                 for i in merged_tissue if i.geom_type=='Polygon'
             ]
         }
@@ -467,42 +607,46 @@ class SegmentationDataset:
                 )
                 image[:,:,f] += image_frame
 
-        mask = np.zeros((int(bbox[3]-bbox[1]),int(bbox[2]-bbox[0]),len(list(self.mask_key.keys()))))
-        bbox_box = box(*bbox)
-        height = int(bbox[3]-bbox[1])
-        width = int(bbox[2]-bbox[0])
-        for f in features:
-            feature_shape = shape(f['geometry'])
-            bbox_intersection = feature_shape.intersection(bbox_box)
 
-            if bbox_intersection.area>0 and bbox_intersection.geom_type=='Polygon':
-                int_coords = np.array(list(bbox_intersection.exterior.coords))
-                min_x = bbox[0]
-                min_y = bbox[1]
+        if len(features)>0:
+            mask = np.zeros((int(bbox[3]-bbox[1]),int(bbox[2]-bbox[0]),len(list(self.mask_key.keys()))))
+            bbox_box = box(*bbox)
+            height = int(bbox[3]-bbox[1])
+            width = int(bbox[2]-bbox[0])
+            for f in features:
+                feature_shape = shape(f['geometry'])
+                bbox_intersection = feature_shape.intersection(bbox_box)
 
-                scaled_coords = np.flip(np.squeeze(int_coords) - np.array([min_x, min_y]),axis=1)
-                f_mask = polygon2mask(
-                    image_shape = (height,width),
-                    polygon = scaled_coords
-                ).astype(int)
+                if bbox_intersection.area>0 and bbox_intersection.geom_type=='Polygon':
+                    int_coords = np.array(list(bbox_intersection.exterior.coords))
+                    min_x = bbox[0]
+                    min_y = bbox[1]
 
-                mask[:,:,self.mask_key[f['properties']['name']]] += f_mask
-            
-            elif bbox_intersection.area>0 and bbox_intersection.geom_type=='GeometryCollection':
-                for g in bbox_intersection.geoms:
-                    if g.geom_type=='Polygon':
-                        int_coords = np.array(list(g.exterior.coords))
-                        min_x = bbox[0]
-                        min_y = bbox[1]
+                    scaled_coords = np.flip(np.squeeze(int_coords) - np.array([min_x, min_y]),axis=1)
+                    f_mask = polygon2mask(
+                        image_shape = (height,width),
+                        polygon = scaled_coords
+                    ).astype(int)
 
-                        scaled_coords = np.flip(np.squeeze(int_coords) - np.array([min_x, min_y]),axis=1)
-                        f_mask = polygon2mask(
-                            image_shape = (height,width),
-                            polygon = scaled_coords
-                        ).astype(int)
+                    mask[:,:,self.mask_key[f['properties']['name']]] += f_mask
+                
+                elif bbox_intersection.area>0 and bbox_intersection.geom_type=='GeometryCollection':
+                    for g in bbox_intersection.geoms:
+                        if g.geom_type=='Polygon':
+                            int_coords = np.array(list(g.exterior.coords))
+                            min_x = bbox[0]
+                            min_y = bbox[1]
 
-                        mask[:,:,self.mask_key[f['properties']['name']]] += f_mask
+                            scaled_coords = np.flip(np.squeeze(int_coords) - np.array([min_x, min_y]),axis=1)
+                            f_mask = polygon2mask(
+                                image_shape = (height,width),
+                                polygon = scaled_coords
+                            ).astype(int)
 
+                            mask[:,:,self.mask_key[f['properties']['name']]] += f_mask
+
+        else:
+            mask = np.zeros((int(bbox[3]-bbox[1]),int(bbox[2]-bbox[0])))
 
 
         return image, mask
@@ -667,6 +811,7 @@ class ClassificationDataset:
         else:       
             self.annotations = None
 
+
     def gen_slide_patches(self):
         
         # Records-style list of bbox, feature or just bbox if no annotations are passed
@@ -689,7 +834,7 @@ class ClassificationDataset:
             # Find available regions to extract patches from
             if type(self.patch_region)==str:
                 if self.patch_region=='tissue':
-                    available_regions = self.find_tissue(slide_tile_source)
+                    available_regions = self.find_tissue(slide_tile_source,slide_metadata)
                 elif self.patch_region=='all':
                     available_regions = {
                         'type': 'FeatureCollection',
@@ -712,7 +857,7 @@ class ClassificationDataset:
             elif type(self.patch_region)==list:
                 if type(self.patch_region[s_idx])==str:
                     if self.patch_region[s_idx]=='tissue':
-                        available_regions = self.find_tissue(slide_tile_source)
+                        available_regions = self.find_tissue(slide_tile_source,slide_metadata)
                     elif self.patch_region[s_idx]=='all':
                         available_regions = {
                             'type': 'FeatureCollection',

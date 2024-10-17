@@ -281,10 +281,13 @@ def load_label_mask(label_mask: np.ndarray, name: str) -> dict:
         'features': []
     }
 
-    for geo, val in rasterio.features.shapes(label_mask):
-
-        geo['properties'] = geo['properties'] | {'name': name, '_id': uuid.uuid4().hex[:24], '_index': int(val)}
-        full_geo['features'].append(geo)
+    for geo, val in rasterio.features.shapes(label_mask, mask = label_mask>0):
+        feature = {
+            'type': 'Feature',
+            'geometry': geo,
+            'properties': {'name': name, '_id': uuid.uuid4().hex[:24], '_index': int(val)}
+        }
+        full_geo['features'].append(feature)
 
     return full_geo
 

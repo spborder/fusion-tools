@@ -207,7 +207,7 @@ class SlideMap(MapComponent):
             for st_idx,st in enumerate(self.annotations):
                 if type(st)==dict:
                     # Scale annotations to fit within base tile dimensions
-                    st = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*self.x_scale,c[1]*self.y_scale, c[2]), g), st)
+                    st = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*self.x_scale,c[1]*self.y_scale), g), st)
 
                     if 'properties' not in st:
                         st['properties'] = {}
