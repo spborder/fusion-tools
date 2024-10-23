@@ -111,7 +111,7 @@ class LocalTileServer(TileServer):
 
         return Response(content = image, media_type = 'image/png')
 
-    def start(self, port:str = '8050'):
+    def start(self):
         """Starting tile server instance on a provided port
 
         :param port: Tile server port from which tiles are accessed, defaults to '8050'
@@ -120,7 +120,7 @@ class LocalTileServer(TileServer):
         app = FastAPI()
         app.include_router(self.router)
 
-        uvicorn.run(app,host='0.0.0.0',port=port)
+        uvicorn.run(app,host=self.host,port=self.tile_server_port)
 
 class DSATileServer(TileServer):
     """Use for linking visualization with remote tiles API (DSA server)

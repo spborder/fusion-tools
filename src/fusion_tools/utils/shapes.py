@@ -19,6 +19,7 @@ from skimage import draw
 from scipy import ndimage
 
 import pandas as pd
+import anndata as ad
 
 import uuid
 
@@ -291,11 +292,100 @@ def load_label_mask(label_mask: np.ndarray, name: str) -> dict:
 
     return full_geo
 
+def load_visium(visium_path:str, include_var_names:list = [], mpp:Union[float,None]=None):
+    """Loading 10x Visium Spot annotations from an h5ad file. Adds any of the variables
+    listed in var_names and also the barcodes associated with each spot.
+
+    :param visium_path: Path to the h5ad (anndata) formatted Visium data
+    :type visium_path: str
+    :param include_var_names: List of additional variables to add to the generated annotations (barcode is added by default), defaults to []
+    :type include_var_names: list, optional
+    :param mpp: If the Microns Per Pixel (MPP) is known for this image then pass it here to save time calculating spot diameter., defaults to None
+    :type mpp: Union[float,None], optional
+    """
+
+    assert os.path.exists(visium_path)
+
+    anndata_object = ad.read_h5ad(visium_path)
+
+    if 'spatial' in anndata_object.obsm_keys():
+
+        spot_coords = pd.DataFrame(
+            data = anndata_object.obsm['spatial'],
+            index = anndata_object.obs_names,
+            columns = ['imagecol','imagerow']
+        )
+    elif all([i in anndata_object.obs_keys() for i in ['imagecol','imagerow']]):
+        spot_coords = pd.DataFrame(
+            data = {
+                'imagecol': anndata_object.obs['imagecol'],
+                'imagerow': anndata_object.obs['imagerow']
+            },
+            index = anndata_object.obs_names
+        )
+
+    # Quick way to calculate how large the radius of each spot should be (minimum distance will be 100um between adjacent spot centroids )
+    if mpp is None:
+        spot_centers = spot_coords.values
+        distance = np.sqrt(
+            np.square(
+                spot_centers[:,0]-spot_centers[:,0].reshape(-1,1)
+            ) + 
+            np.square(
+                spot_centers[:,1]-spot_centers[:,1].reshape(-1,1)
+            )
+        )
+
+        min_dist = np.min(distance[distance>0])
+        mpp = 1 / (min_dist/100)
+    
+    # For 55um spot radius
+    spot_pixel_radius = int((1/mpp)*55*0.5)
+
+    spot_annotations = {
+        'type': 'FeatureCollection',
+        'features': [],
+        'properties': {
+            'name': 'Spots'
+        }
+    }
+
+    if len(include_var_names)>0:
+        include_vars = [i for i in include_var_names if i in anndata_object.var_names]
+    else:
+        include_vars = []
+    
+
+    barcodes = list(spot_coords.index)
+    for idx in range(spot_coords.shape[0]):
+        spot = Point(*spot_coords.iloc[idx,:].tolist()).buffer(spot_pixel_radius)
+
+        additional_props = {}
+        for i in include_vars:
+            additional_props[i] = anndata_object.X[idx,list(anndata_object.var_names).index(i)]
+
+        spot_feature = {
+            'type': 'Feature',
+            'geometry': {
+                'type': 'Polygon',
+                'coordinates': [list(spot.exterior.coords)]
+            },
+            'properties': {
+                'name': 'Spots',
+                'barcode': barcodes[idx]
+            } | additional_props
+        }
+
+        spot_annotations['features'].append(spot_feature)
+
+    return spot_annotations
+
 def align_object_props(
         geo_ann: dict, 
         prop_df: Union[pd.DataFrame, list],
         prop_cols: Union[list,str],
-        alignment_type: str) -> dict:
+        alignment_type: str,
+        prop_key: Union[None,str]=None) -> dict:
     """Aligning GeoJSON formatted annotations with an external file containing properties for each feature
 
     :param geo_ann: GeoJSON formatted annotations to align with external file
@@ -318,11 +408,20 @@ def align_object_props(
     for p in prop_df:
         if alignment_type=='index':
             # Lining up horizontally
-            for r in prop_cols:
-                if r in p:
-                    prop_list = p[r].tolist()
-                    for i in range(len(geo_ann['features'])):
-                        geo_ann['features'][i]['properties'] = geo_ann['features'][i]['properties'] | {r: prop_list[i]}
+            if prop_key is None:
+                for r in prop_cols:
+                    if r in p:
+                        prop_list = p[r].tolist()
+                        for i in range(len(geo_ann['features'])):
+                            geo_ann['features'][i]['properties'] = geo_ann['features'][i]['properties'] | {r: prop_list[i]}
+            else:
+                for i in range(len(geo_ann['features'])):
+                    prop_dict = {
+                        k:v
+                        for k,v in p.iloc[i,:].to_dict().items()
+                        if k in prop_cols
+                    }
+                    geo_ann['features'][i]['properties'] = geo_ann['features'][i]['properties'] | {prop_key: prop_dict}
 
         elif alignment_type in p:
             # Lining up by column/property name
@@ -331,11 +430,15 @@ def align_object_props(
 
             for a_idx,a in enumerate(align_vals):
                 if a in align_geo:
-                    add_props = p.iloc[a_idx,:].to_dict()
-                    geo_ann['features'][align_geo.index(a)]['properties'] = geo_ann['features'][align_geo.index(a)]['properties'] | add_props
-
-
-
+                    add_props = {
+                        k:v
+                        for k,v in p.iloc[a_idx,:].to_dict().items()
+                        if k in prop_cols
+                    }
+                    if prop_key is None:
+                        geo_ann['features'][align_geo.index(a)]['properties'] = geo_ann['features'][align_geo.index(a)]['properties'] | add_props
+                    else:
+                        geo_ann['features'][align_geo.index(a)]['properties'] = geo_ann['features'][align_geo.index(a)]['properties'] | {prop_key: add_props}
 
     return geo_ann
 

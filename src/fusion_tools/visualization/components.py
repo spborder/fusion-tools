@@ -211,7 +211,7 @@ class Visualization:
         else:
             self.viewer_app.run(
                 jupyter_mode=self.app_options['jupyter']['jupyter_mode'] if 'jupyter_mode' in self.app_options['jupyter'] else 'inline',
-                jupyter_server_url = self.app_options['jupyter']['jupyter_server_url'] if 'jupyter_server_url' in self.app_options['jupyter'] else 'http://127.0.0.1:8050/'
+                jupyter_server_url = self.app_options['jupyter']['jupyter_server_url'] if 'jupyter_server_url' in self.app_options['jupyter'] else f'http://127.0.0.1:{self.app_options["port"]}/'
             )
 
 

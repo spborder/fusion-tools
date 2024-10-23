@@ -1,6 +1,25 @@
 # Changelog
 
 <!--next-version-placeholder-->
+## v1.1.0 (10/23/2024)
+
+### Fix:
+- Fixed a bug in Jupyter mode so that the actual port specified in __init__ is the one that is used (previously was hardcoded for 8050).
+- Removed "port" argument in `LocalTileServer.start()`, conflicts with "port" argument in __init__
+
+### Features:
+- Adding `load_visium` function to `.utils.shapes`. This enables loading an *.h5ad* formatted *10x Visium* dataset. Barcodes for each spot are added by default but users can also pass a list of *var_names* to include in per-spot properties.
+- Users can add aligned object props (from `.utils.shapes.align_object_props`) to a sub-property in the annotation
+
+## v1.0.0 (10/21/2024)
+
+### Fix:
+- Debugging some items in `ClassificationDataset` and `SegmentationDataset`
+
+### Features:
+- Version now starts with 1! 😎
+
+
 ## v0.0.24 (10/16/2024)
 
 ### Fix:

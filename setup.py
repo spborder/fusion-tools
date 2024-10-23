@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="fusion-tools",
-    version="1.0.0",
+    version="1.1.0",
     author="Sam Border",
     author_email="sam.border2256@gmail.com",
     description="Modular visualization and analysis dashboard creation for high-resolution microscopy images",
