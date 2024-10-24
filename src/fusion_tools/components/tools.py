@@ -928,6 +928,8 @@ class OverlayOptions(Tool):
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
+        #TODO: Re-scale these so that the annotations are in the image CRS
+        
         return [{'content': get_pattern_matching_value(current_layers),'filename': 'fusion-tools-current-layers.json'}]
 
 class PropertyViewer(Tool):

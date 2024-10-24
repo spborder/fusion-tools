@@ -24,7 +24,7 @@ class LocalTileServer(TileServer):
     def __init__(self,
                  local_image_path: str,
                  tile_server_port:str = '8050',
-                 host: str = 'http://localhost'
+                 host: str = 'localhost'
                  ):
         """Constructor method
 
@@ -38,8 +38,8 @@ class LocalTileServer(TileServer):
         self.tile_server_port = tile_server_port
         self.host = host
 
-        self.tiles_url = f'{self.host}:{self.tile_server_port}/tiles/'+'{z}/{x}/{y}'
-        self.regions_url = f'{self.host}:{self.tile_server_port}/tiles/region'
+        self.tiles_url = f'http://{self.host}:{self.tile_server_port}/tiles/'+'{z}/{x}/{y}'
+        self.regions_url = f'http://{self.host}:{self.tile_server_port}/tiles/region'
 
         self.tile_source = large_image.open(self.local_image_path,encoding='PNG')
         self.tiles_metadata = self.tile_source.getMetadata()
@@ -119,7 +119,6 @@ class LocalTileServer(TileServer):
         """
         app = FastAPI()
         app.include_router(self.router)
-
         uvicorn.run(app,host=self.host,port=self.tile_server_port)
 
 class DSATileServer(TileServer):

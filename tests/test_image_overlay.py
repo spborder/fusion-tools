@@ -14,10 +14,11 @@ def main():
 
     # Starting local tile server
     tile_server = LocalTileServer(
-        local_image_path = 'C:\\Users\\samuelborder\\Downloads\\10H_LargeGlobalFlatfield.tifStitchedO.svs'
+        local_image_path = 'C:\\Users\\samuelborder\\Downloads\\10H_LargeGlobalFlatfield.tifStitchedO.svs',
+        tile_server_port='8080',
+        host = 'localhost'
     )
-
-    new_thread = threading.Thread(target = tile_server.start, name = 'local_tile_server', args = ['8050'])
+    new_thread = threading.Thread(target = tile_server.start, name = 'local_tile_server', args = [])
     new_thread.daemon = True
     new_thread.start()
 

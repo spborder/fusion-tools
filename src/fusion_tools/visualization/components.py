@@ -58,6 +58,7 @@ class Visualization:
             'server': 'default',
             'server_options': {},
             'port': '8080',
+            'host': 'localhost',
             'external_scripts': [
                 'https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.1.0/chroma.min.js'
             ]
@@ -198,20 +199,20 @@ class Visualization:
             if 'server' in self.app_options:
                 if self.app_options['server']=='default':
                     self.viewer_app.run_server(
-                        host = '0.0.0.0',
+                        host = self.app_options['host'],
                         port = self.app_options['port'],
                         debug = False
                     )
             else:
                 self.viewer_app.run_server(
-                    host = '0.0.0.0',
+                    host = self.app_options['host'],
                     port = self.app_options['port'],
                     debug = False
                 )
         else:
             self.viewer_app.run(
                 jupyter_mode=self.app_options['jupyter']['jupyter_mode'] if 'jupyter_mode' in self.app_options['jupyter'] else 'inline',
-                jupyter_server_url = self.app_options['jupyter']['jupyter_server_url'] if 'jupyter_server_url' in self.app_options['jupyter'] else f'http://127.0.0.1:{self.app_options["port"]}/'
+                jupyter_server_url = self.app_options['jupyter']['jupyter_server_url'] if 'jupyter_server_url' in self.app_options['jupyter'] else f'{self.app_options["host"]}:{self.app_options["port"]}'
             )
 
 
