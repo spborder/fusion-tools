@@ -1,6 +1,11 @@
 # Changelog
 
 <!--next-version-placeholder-->
+## v2.0.0 (10//2024)
+
+### Features
+- More flexibility added to `.utils.shapes.spatially_aggregate` allowing users to specify whether they want to separate out properties aggregated from different structures and whether they would like a summary for each aggregated property or just the mean. (see ./tests/test_spatial_aggregation.py)
+
 ## v1.1.0 (10/23/2024)
 
 ### Fix:

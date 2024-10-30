@@ -135,7 +135,6 @@ def main():
     new_thread = threading.Thread(
         target = tile_server.start,
         name = 'tile_server',
-        args = ['8050']
     )
     new_thread.daemon = True
     new_thread.start()

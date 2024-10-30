@@ -12,6 +12,7 @@ import requests
 import json
 import numpy as np
 import pandas as pd
+import uuid
 
 from typing_extensions import Union
 
@@ -21,8 +22,10 @@ from io import BytesIO
 
 from fusion_tools.tileserver import DSATileServer
 
+class Handler:
+    pass
 
-class DSAHandler:
+class DSAHandler(Handler):
     """Handler for DSA (digital slide archive) instance
     """
     def __init__(self,
@@ -274,6 +277,8 @@ class DSAHandler:
                         }
 
                     ann_geojson['properties']['_id'] = a_id
+                    for f_idx, f in ann_geojson['features']:
+                        f['properties'] = f['properties'] | {'_index': f_idx, '_id': uuid.uuid4().hex[:24],'name': ann_geojson['properties']['name']}
 
                     annotations.append(ann_geojson)
             elif format=='histomics':
@@ -319,6 +324,9 @@ class DSAHandler:
                         }
                         
                     ann_geojson['properties']['_id'] = a_id
+
+                    for f_idx,f in ann_geojson['features']:
+                        f['properties'] = f['properties'] | {'_index': f_idx, '_id': uuid.uuid4().hex[:24],'name': ann_geojson['properties']['name']}
 
                     annotations.append(ann_geojson)
                 elif format=='histomics':

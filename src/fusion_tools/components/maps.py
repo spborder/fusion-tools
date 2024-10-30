@@ -14,7 +14,7 @@ from typing_extensions import Union
 import geojson
 import json
 import base64
-
+import requests
 from PIL import Image
 
 #os.environ['PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION'] = 'python'
@@ -27,12 +27,12 @@ import dash_leaflet.express as dlx
 from dash import dcc, callback, ctx, ALL, MATCH, exceptions, dash_table, Patch, no_update
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash_extensions.enrich import DashProxy, DashBlueprint, html, Input, Output, State
+from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, MultiplexerTransform, PrefixIdTransform
 from dash_extensions.javascript import assign, arrow_function, Namespace
 
 # fusion-tools imports
 from fusion_tools.tileserver import TileServer
-from fusion_tools.utils.shapes import find_intersecting, spatially_aggregate
+from fusion_tools.utils.shapes import find_intersecting, spatially_aggregate, convert_histomics
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 
 
@@ -51,45 +51,35 @@ class SlideMap(MapComponent):
     :param MapComponent: General class for components added to SlideMap
     :type MapComponent: None
     """
-    def __init__(self,
-                 tile_server: TileServer,
-                 annotations: Union[dict,list,None]
-                ):
+    def __init__(self):
         """Constructor method
-
-        :param tile_server: Whichever TileServer is currently being hosted. For remote DSA sources, this is a DSATileServer while for local images this would be LocalTileServer
-        :type tile_server: TileServer
-        :param annotations: Initial GeoJSON formatted annotations added to the map
-        :type annotations: Union[dict,list,None]
         """
-        
-        self.tiles_url = tile_server.tiles_url
-        self.image_metadata = tile_server.tiles_metadata
-        
-        self.x_scale, self.y_scale = self.get_scale_factors()
-        self.annotations = annotations
-        
-        self.assets_folder = os.getcwd()+'/.fusion_assets/'
         # Add Namespace functions here:
+        self.assets_folder = os.getcwd()+'/.fusion_assets/'
         self.get_namespace()
 
-        self.initialize_map()
-
-    def initialize_map(self):
-
-        annotations, annotation_components, image_overlays = self.process_annotations()
-
         self.title = 'Slide Map'
-        self.blueprint = DashBlueprint()        
-
-        frame_layers = []
-
-        self.blueprint.layout = self.gen_layout(annotations, annotation_components, image_overlays, frame_layers)
+        self.blueprint = DashBlueprint(
+            transforms = [
+                PrefixIdTransform(prefix=f'{np.random.randint(0,1000)}'),
+                MultiplexerTransform()
+            ]
+        )        
 
         # Add callback functions here
         self.get_callbacks()
 
-    def get_scale_factors(self):
+    def __str__(self):
+        return 'Slide Map'
+
+    def initialize_map(self):
+        
+        # Have to also make sure to initialize the scale factors for a given tileserver
+        annotations, annotation_components, image_overlays = self.process_annotations()
+        frame_layers = []
+        return annotations, annotation_components, image_overlays, frame_layers
+
+    def get_scale_factors(self, image_metadata: dict):
         """Function used to initialize scaling factors applied to GeoJSON annotations to project annotations into the SlideMap CRS (coordinate reference system)
 
         :return: x and y (horizontal and vertical) scale factors applied to each coordinate in incoming annotations
@@ -97,12 +87,12 @@ class SlideMap(MapComponent):
         """
 
         base_dims = [
-            self.image_metadata['sizeX']/(2**(self.image_metadata['levels']-1)),
-            self.image_metadata['sizeY']/(2**(self.image_metadata['levels']-1))
+            image_metadata['sizeX']/(2**(image_metadata['levels']-1)),
+            image_metadata['sizeY']/(2**(image_metadata['levels']-1))
         ]
 
-        x_scale = base_dims[0] / self.image_metadata['sizeX']
-        y_scale = -(base_dims[1] / self.image_metadata['sizeY'])
+        x_scale = base_dims[0] / image_metadata['sizeX']
+        y_scale = -(base_dims[1] / image_metadata['sizeY'])
 
         return x_scale, y_scale
 
@@ -227,7 +217,6 @@ class SlideMap(MapComponent):
                         if not '_id' in st['properties']:
                             st['properties']['_id'] = uuid.uuid4().hex[:24]
                         
-                    
                     annotations_list.append(st)
 
                     annotation_components.append(
@@ -303,60 +292,79 @@ class SlideMap(MapComponent):
 
         return annotations_list, annotation_components, image_overlays
 
-    def gen_layout(self, annotations, annotation_components, image_overlays, frame_layers):
+    def gen_layout(self,base_index:int,session_data:dict):
         """Generating SlideMap layout
 
         :return: Div object containing interactive components for the SlideMap object.
         :rtype: dash.html.Div.Div
         """
-
+        self.base_index = base_index
         layout = html.Div([
+            dcc.Dropdown(
+                id = {'type': 'slide-select-drop','index': base_index},
+                placeholder = 'Select a slide to view',
+                options = [
+                    {'label': i['name'],'value': idx}
+                    for idx,i in enumerate(session_data)
+                ],
+                value = [],
+                multi = False,
+                style = {'marginBottom': '10px'}
+            ),
+            html.Div(
+                dcc.Store(
+                    id = 'vis-store',
+                    data = json.dumps(session_data),
+                    storage_type='memory'
+                )
+            ),
+            html.Hr(),
             dl.Map(
-                id = {'type': 'slide-map','index': 0},
+                id = {'type': 'slide-map','index': base_index},
                 crs = 'Simple',
-                center = [-self.image_metadata['tileWidth']/2,self.image_metadata['tileWidth']/2],
+                center = [-120,120],
                 zoom = 1,
                 style = {'height': '90vh','width': '100%','margin': 'auto','display': 'inline-block'},
                 children = [
                     dl.TileLayer(
-                        id = {'type': 'map-tile-layer','index': 0},
-                        url = self.tiles_url,
-                        tileSize=self.image_metadata['tileWidth'],
-                        maxNativeZoom=self.image_metadata['levels']-1,
+                        id = {'type': 'map-tile-layer','index': base_index},
+                        url = '',
+                        tileSize=240,
+                        maxNativeZoom=5,
                         minZoom = 0
                     ),
                     dl.FullScreenControl(
                         position = 'upper-left'
                     ),
                     dl.FeatureGroup(
-                        id = {'type': 'edit-feature-group','index': 0},
+                        id = {'type': 'edit-feature-group','index': base_index},
                         children = [
                             dl.EditControl(
-                                id = {'type': 'edit-control','index': 0},
+                                id = {'type': 'edit-control','index': base_index},
                                 draw = dict(polyline=False, line=False, circle = False, circlemarker=False, marker = False),
                                 position='topleft'
                             )
                         ]
                     ),
                     html.Div(
-                        id = {'type': 'map-colorbar-div','index': 0},
+                        id = {'type': 'map-colorbar-div','index': base_index},
                         children = []
                     ),
                     html.Div(
                         dcc.Store(
-                            id = {'type': 'map-annotations-store','index': 0},
-                            data = json.dumps(annotations),
+                            id = {'type': 'map-annotations-store','index': base_index},
+                            data = json.dumps({}),
                             storage_type = 'memory'
                         )
                     ),
                     dl.LayersControl(
-                        id = {'type': 'map-layers-control','index': 0},
-                        children = frame_layers + annotation_components
+                        id = {'type': 'map-layers-control','index': base_index},
+                        children = []
                     ),
                     dl.EasyButton(
                         icon = 'fa-solid fa-arrows-to-dot',
                         title = 'Re-Center Map',
-                        id = {'type': 'center-map','index': 0},
+                        id = {'type': 'center-map','index': base_index},
                         position = 'top-left',
                         eventHandlers = {
                             'click': self.js_namespace('centerMap')
@@ -365,18 +373,17 @@ class SlideMap(MapComponent):
                     dl.EasyButton(
                         icon = 'fa-solid fa-upload',
                         title = 'Upload Shapes',
-                        id = {'type': 'upload-shape','index':0},
+                        id = {'type': 'upload-shape','index': base_index},
                         position = 'top-left'
                     ),
                     html.Div(
-                        id = {'type': 'map-marker-div','index': 0},
+                        id = {'type': 'map-marker-div','index': base_index},
                         children = []
                     ),
-                    *image_overlays
                 ]
             ),
             dbc.Modal(
-                id = {'type': 'upload-shape-modal','index':0},
+                id = {'type': 'upload-shape-modal','index': base_index},
                 is_open = False,
                 children = [
                     html.Div(
@@ -385,15 +392,21 @@ class SlideMap(MapComponent):
                                 'Drag and Drop or ',
                                 html.A('Select a File')
                             ], 
-                            id = {'type': 'upload-shape-data','index':0},
+                            id = {'type': 'upload-shape-data','index': base_index},
                             style={'width': '100%','height': '60px','lineHeight': '60px','borderWidth': '1px','borderStyle': 'dashed','borderRadius': '5px','textAlign': 'center'}
                         )
                     )
                 ]
+            ),
+            dbc.Modal(
+                id = {'type': 'load-annotations-modal','index': base_index},
+                is_open = False,
+                children = []
             )
         ])
 
-        return layout
+        #return layout
+        self.blueprint.layout = layout
 
     def get_namespace(self):
         """Adding JavaScript functions to the SlideMap Namespace
@@ -562,10 +575,26 @@ class SlideMap(MapComponent):
         Adding these callbacks to the DashBlueprint() object enable embedding into other layouts.
         """
         
+        # Updating current slide and annotations
+        self.blueprint.callback(
+            [
+                Input({'type': 'slide-select-drop','index': ALL},'value')
+            ],
+            [
+                Output({'type': 'map-layers-control','index': ALL},'children'),
+                Output({'type': 'map-annotations-store','index':ALL},'data'),
+                Output({'type': 'map-tile-layer','index': ALL},'url'),
+                Output({'type':'map-tile-layer','index': ALL},'tileSize')
+            ],
+            [
+                State('vis-store','data')
+            ]
+        )(self.update_slide)
+
         # Getting popup info for clicked feature
         self.blueprint.callback(
             [
-                Input({'type':'feature-bounds','index': MATCH},'clickData')
+                Input({'type':'feature-bounds','index': ALL},'clickData')
             ],
             [
                 Output({'type': 'feature-popup','index': MATCH},'children')
@@ -594,7 +623,7 @@ class SlideMap(MapComponent):
         # Image overlay transparency adjustment
         self.blueprint.callback(
             [
-                Input({'type': 'image-overlay-transparency','index': MATCH},'value')
+                Input({'type': 'image-overlay-transparency','index': ALL},'value')
             ],
             [
                 Output({'type': 'image-overlay','index': MATCH},'opacity')
@@ -604,48 +633,48 @@ class SlideMap(MapComponent):
         # Creating a draggable marker to move an image overlay
         self.blueprint.callback(
             [
-                Input({'type':'image-overlay-position-butt','index': MATCH},'n_clicks')
+                Input({'type':'image-overlay-position-butt','index': ALL},'n_clicks')
             ],
             [
                 Output({'type': 'image-overlay-mover-layergroup','index': MATCH},'children'),
                 Output({'type': 'image-overlay-position-butt','index': MATCH},'children')
             ],
             [
-                State({'type': 'image-overlay','index': MATCH},'bounds'),
-                State({'type': 'image-overlay-position-butt','index': MATCH},'children')
+                State({'type': 'image-overlay','index': ALL},'bounds'),
+                State({'type': 'image-overlay-position-butt','index': ALL},'children')
             ]
         )(self.gen_image_mover)
 
         # Moving image overlay to location of draggable marker
         self.blueprint.callback(
             [
-                Input({'type': 'image-overlay-mover','index': MATCH},'data')
+                Input({'type': 'image-overlay-mover','index': ALL},'data')
             ],
             [
                 Output({'type': 'image-overlay','index': MATCH},'bounds')
             ],
             [
-                State({'type': 'image-overlay','index': MATCH},'bounds')
+                State({'type': 'image-overlay','index': ALL},'bounds')
             ]
         )(self.move_image_overlay)
 
         # Downloading position of image overlay
         self.blueprint.callback(
             [
-                Input({'type': 'image-overlay-save-position','index': MATCH},'n_clicks')
+                Input({'type': 'image-overlay-save-position','index': ALL},'n_clicks')
             ],
             [
-                Output({'type': 'image-overlay-save-position-download','index': MATCH},'data')
+                Output({'type': 'image-overlay-save-position-download','index': MATCH},'data',allow_duplicate=True)
             ],
             [
-                State({'type': 'image-overlay','index': MATCH},'bounds')
+                State({'type': 'image-overlay','index': ALL},'bounds')
             ]
         )(self.export_image_overlay_bounds)
 
         # Downloading manual ROI
         self.blueprint.callback(
             [
-                Input({'type': 'download-manual-roi','index': MATCH},'n_clicks')
+                Input({'type': 'download-manual-roi','index': ALL},'n_clicks')
             ],
             [
                 Output({'type': 'download-manual-roi-download','index': MATCH},'data')
@@ -661,16 +690,82 @@ class SlideMap(MapComponent):
                 Input({'type': 'upload-shape','index': ALL},'n_clicks'),
             ],
             [
-                Output({'type': 'upload-shape-modal','index': ALL},'is_open'),
+                Output({'type': 'upload-shape-modal','index': MATCH},'is_open'),
             ],
             [
                 State({'type': 'upload-shape-modal','index': ALL},'is_open')
             ]
         )(self.upload_shape)
 
+    def update_slide(self, slide_selected, vis_data):
+        
+        vis_data = json.loads(vis_data)
+
+        new_slide = vis_data[get_pattern_matching_value(slide_selected)]
+        new_url = new_slide['tiles_url']
+        new_annotations = requests.get(new_slide['annotations_url']).json()
+        new_metadata = requests.get(new_slide['metadata_url']).json()
+        new_tile_size = new_metadata['tileHeight']
+
+        #TODO: Converting annotations if they are not GeoJSON formatted
+        if type(new_annotations)==dict:
+            new_annotations = [new_annotations]
+        if any(['annotation' in i for i in new_annotations]):
+            new_annotations = convert_histomics(new_annotations)
+
+        x_scale, y_scale = self.get_scale_factors(new_metadata)
+        annotation_names = [i['properties']['name'] for i in new_annotations]
+        new_annotations = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*x_scale,c[1]*y_scale),g),i) for i in new_annotations]
+        new_layer_children = []
+
+        for st,name in zip(new_annotations,annotation_names):
+
+            new_layer_children.append(
+                dl.Overlay(
+                    dl.LayerGroup(
+                        dl.GeoJSON(
+                            data = st,
+                            id = {'type': 'feature-bounds','index': self.base_index},
+                            options = {
+                                'style': self.js_namespace("featureStyle")
+                            },
+                            filter = self.js_namespace("featureFilter"),
+                            hideout = {
+                                'overlayBounds': {},
+                                'overlayProp': {},
+                                'fillOpacity': 0.5,
+                                'lineColor': {},
+                                'filterVals': [],
+                                'colorMap': ''
+                            },
+                            hoverStyle = arrow_function(
+                                {
+                                    'weight': 5,
+                                    'color': '#9caf00',
+                                    'dashArray':''
+                                }
+                            ),
+                            zoomToBounds = False,
+                            children = [
+                                dl.Popup(
+                                    id = {'type': 'feature-popup','index': self.base_index},
+                                    autoPan = False,
+                                )
+                            ]
+                        )
+                    ),
+                    name = name, checked = True, id = {'type':'feature-overlay','index':self.base_index}
+                )
+            )
+
+
+        return [new_layer_children], [new_annotations], [new_url], [new_tile_size]
+
     def upload_shape(self, upload_clicked, is_open):
+
         upload_clicked = get_pattern_matching_value(upload_clicked)
         is_open = get_pattern_matching_value(is_open)
+
         if upload_clicked:
             return [not is_open]
 
@@ -729,7 +824,6 @@ class SlideMap(MapComponent):
             ], title = 'Properties')
         )
 
-
         # Now loading the dict properties as sub-accordions
         dict_properties = [i for i in all_properties if type(clicked['properties'][i])==dict]
         for d in dict_properties:
@@ -787,7 +881,6 @@ class SlideMap(MapComponent):
         :rtype: list
         """
 
-        #TODO: pass the color list here as well
         if any(['Manual' in i for i in names_list]):
             manual_rois = [
                 {
@@ -812,7 +905,6 @@ class SlideMap(MapComponent):
                     dl.LayerGroup(
                         dl.GeoJSON(
                             data = st,
-                            #format = 'geobuf',
                             id = {'type': 'feature-bounds','index': st_idx},
                             options = {
                                 'style': self.js_namespace("featureStyle")
@@ -867,7 +959,11 @@ class SlideMap(MapComponent):
         
         uploaded_shape = get_pattern_matching_value(uploaded_shape)
         new_geojson = get_pattern_matching_value(new_geojson)
-        current_annotations = json.loads(get_pattern_matching_value(current_annotations))
+        try:
+            current_annotations = json.loads(get_pattern_matching_value(current_annotations))
+        except TypeError:
+            raise exceptions.PreventUpdate
+        
         colormap = get_pattern_matching_value(colormap)
 
         if colormap is None:
@@ -1068,6 +1164,7 @@ class SlideMap(MapComponent):
         if button_click:
             image_overlay_index = ctx.triggered_id['index']
 
+            #TODO: add reference to tileserver metadata wherever that is stored
             scaled_position = [
                 [current_position[0][1]/self.x_scale, current_position[0][0]/self.y_scale],
                 [current_position[1][1]/self.x_scale, current_position[1][0]/self.y_scale]
@@ -1109,10 +1206,7 @@ class MultiFrameSlideMap(SlideMap):
     :param SlideMap: dl.Map() container where image tiles are displayed.
     :type SlideMap: None
     """
-    def __init__(self,
-                 tile_server: TileServer,
-                 annotations: Union[dict,list,None]
-                 ):
+    def __init__(self):
         """Constructor method
 
         :param tile_server: TileServer object in use. For remote DSA tile sources this would be DSATileServer while for local images this would be LocalTileServer
@@ -1122,7 +1216,15 @@ class MultiFrameSlideMap(SlideMap):
         """
         self.frame_layers = []
 
-        super().__init__(tile_server,annotations)
+        super().__init__()
+
+        self.title = 'Multi-Frame Slide Map'
+        #frame_layers = self.process_frames()
+
+        self.blueprint = DashBlueprint()
+        self.blueprint.layout = super().gen_layout()
+
+        super().get_callbacks()
     
     def initialize_map(self):
         
@@ -1135,7 +1237,7 @@ class MultiFrameSlideMap(SlideMap):
 
         super().get_callbacks()
 
-    def gen_layout(self, annotations, annotation_components, image_overlays, frame_layers):
+    def gen_layout(self):
         """Generating layout for MultiFrameSlideMap
 
         :return: Layout added to DashBlueprint object to be embedded in larger layout.
@@ -1145,7 +1247,7 @@ class MultiFrameSlideMap(SlideMap):
             dl.Map(
                 id = {'type': 'slide-map','index': 0},
                 crs = 'Simple',
-                center = [-self.image_metadata['tileWidth']/2,self.image_metadata['tileWidth']/2],
+                center = [-120,120],
                 zoom = 1,
                 style = {'height': '90vh','width': '100%','margin': 'auto','display': 'inline-block'},
                 children = [
@@ -1169,12 +1271,12 @@ class MultiFrameSlideMap(SlideMap):
                     html.Div(
                         dcc.Store(
                             id = {'type':'map-annotations-store','index': 0},
-                            data = json.dumps(annotations)
+                            data = json.dumps({})
                         )
                     ),
                     dl.LayersControl(
                         id = {'type': 'map-layers-control','index': 0},
-                        children = frame_layers + annotation_components
+                        children = []
                     ),
                     dl.EasyButton(
                         icon = 'fa-solid fa-arrows-to-dot',
@@ -1189,31 +1291,30 @@ class MultiFrameSlideMap(SlideMap):
                         id = {'type': 'map-marker-div','index': 0},
                         children = []
                     ),
-                    *image_overlays
                 ]
             )
         )
 
         return layout
 
-    def process_frames(self):
+    def process_frames(self,image_metadata,tiles_url):
         """Create BaseLayer and TileLayer components for each of the different frames present in a multi-frame image
         Also initializes base tile url and styled tile url
         """
 
         frame_layers = []
 
-        if 'frames' in self.image_metadata:
-            if len(self.image_metadata['frames'])>0:
+        if 'frames' in image_metadata:
+            if len(image_metadata['frames'])>0:
                 
-                if any(['Channel' in i for i in self.image_metadata['frames']]):
-                    frame_names = [i['Channel'] for i in self.image_metadata['frames']]
+                if any(['Channel' in i for i in image_metadata['frames']]):
+                    frame_names = [i['Channel'] for i in image_metadata['frames']]
                 else:
-                    frame_names = [f'Frame {i}' for i in range(len(self.image_metadata['frames']))]
+                    frame_names = [f'Frame {i}' for i in range(len(image_metadata['frames']))]
                 # This is a multi-frame image
-                if len(self.image_metadata['frames'])==3:
+                if len(image_metadata['frames'])==3:
                     # Treat this as an RGB image by default
-                    rgb_url = self.tiles_url+'/?style={"bands": [{"framedelta":0,"palette":"rgba(255,0,0,255)"},{"framedelta":1,"palette":"rgba(0,255,0,255)"},{"framedelta":2,"palette":"rgba(0,0,255,255)"}]}'
+                    rgb_url = tiles_url+'/?style={"bands": [{"framedelta":0,"palette":"rgba(255,0,0,255)"},{"framedelta":1,"palette":"rgba(0,255,0,255)"},{"framedelta":2,"palette":"rgba(0,0,255,255)"}]}'
                 else:
 
                     # Checking for "red", "green" and "blue" frame names
@@ -1228,7 +1329,7 @@ class MultiFrameSlideMap(SlideMap):
                             ]
                         }
 
-                        rgb_url = self.tiles_url+'/?style='+json.dumps(rgb_style_dict)
+                        rgb_url = tiles_url+'/?style='+json.dumps(rgb_style_dict)
                     else:
                         rgb_url = None
 
@@ -1242,9 +1343,9 @@ class MultiFrameSlideMap(SlideMap):
                         frame_layers.append(
                             dl.BaseLayer(
                                 dl.TileLayer(
-                                    url = self.tiles_url+'/?style={"bands": [{"palette":["rgba(0,0,0,0)","rgba(255,255,255,255)"],"framedelta":'+str(f_idx)+'}]}',
-                                    tileSize = self.image_metadata['tileWidth'],
-                                    maxNativeZoom=self.image_metadata['levels']-1,
+                                    url = tiles_url+'/?style={"bands": [{"palette":["rgba(0,0,0,0)","rgba(255,255,255,255)"],"framedelta":'+str(f_idx)+'}]}',
+                                    tileSize = image_metadata['tileWidth'],
+                                    maxNativeZoom=image_metadata['levels']-1,
                                     id = {'type': 'tile-layer','index': layer_indices[f_idx]}
                                 ),
                                 name = f,
@@ -1257,10 +1358,10 @@ class MultiFrameSlideMap(SlideMap):
                             dl.BaseLayer(
                                 dl.TileLayer(
                                     url = rgb_url,
-                                    tileSize = self.image_metadata['tileWidth'],
-                                    maxNativeZoom=self.image_metadata['levels']-1,
+                                    tileSize = image_metadata['tileWidth'],
+                                    maxNativeZoom=image_metadata['levels']-1,
                                     id = {'type': 'tile-layer','index': layer_indices[f_idx+1]},
-                                    bounds = [[0,0],[-self.image_metadata['tileWidth'], self.image_metadata['tileWidth']]]
+                                    bounds = [[0,0],[-image_metadata['tileWidth'], image_metadata['tileWidth']]]
                                 ),
                                 name = 'RGB Image',
                                 checked = False,
@@ -1271,11 +1372,11 @@ class MultiFrameSlideMap(SlideMap):
                 frame_layers.append(
                     dl.BaseLayer(
                         dl.TileLayer(
-                            url = self.tiles_url,
-                            tileSize = self.image_metadata['tileWidth'],
-                            maxNativeZoom=self.image_metadata['levels']-1,
+                            url = tiles_url,
+                            tileSize = image_metadata['tileWidth'],
+                            maxNativeZoom=image_metadata['levels']-1,
                             id = {'type': 'tile-layer','index': 0},
-                            bounds = [[0,0],[-self.image_metadata['tileWidth'],self.image_metadata['tileWidth']]]
+                            bounds = [[0,0],[-image_metadata['tileWidth'],image_metadata['tileWidth']]]
                         ),
                         name = 'RGB Image',
                         id = {'type': 'base-layer','index': 0}
@@ -1285,6 +1386,7 @@ class MultiFrameSlideMap(SlideMap):
             raise TypeError("Missing 'frames' key in image metadata")
         
         return frame_layers
+
 
 class SlideImageOverlay(MapComponent):
     """Image overlay on specific coordinates within a SlideMap
