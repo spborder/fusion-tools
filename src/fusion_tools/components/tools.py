@@ -33,7 +33,7 @@ from dash.dash_table.Format import Format, Scheme
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import dash_treeview_antd as dta
-from dash_extensions.enrich import DashBlueprint, html, Input, Output, State
+from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform
 from dash_extensions.javascript import Namespace, arrow_function
 
 # fusion-tools imports
@@ -55,8 +55,6 @@ class OverlayOptions(Tool):
     :type Tool: None
     """
     def __init__(self,
-                 geojson_anns: Union[list,dict],
-                 reference_object: Union[str,None] = None,
                  ignore_list: list = [],
                  property_depth: int = 4
                  ):
@@ -72,18 +70,27 @@ class OverlayOptions(Tool):
         :type property_depth: int, optional
         """
 
-        self.reference_object = reference_object
-        self.overlay_options, self.feature_names, self.overlay_info = extract_geojson_properties(geojson_anns, reference_object,ignore_list, property_depth)
+        self.ignore_list = ignore_list
+        self.property_depth = property_depth
         
+    def load(self,component_prefix:int):
+
+        self.component_prefix = component_prefix
+
         self.title = 'Overlay Options'
-        self.blueprint = DashBlueprint()
-        self.blueprint.layout = self.gen_layout()
+        self.blueprint = DashBlueprint(
+            transforms = [
+                PrefixIdTransform(prefix = f'{component_prefix}'),
+                MultiplexerTransform()
+            ]
+        )
+
         self.js_namespace = Namespace("fusionTools","default")
 
         # Add callbacks here
         self.get_callbacks()
 
-    def gen_layout(self):
+    def gen_layout(self, session_data:dict):
         """Generating OverlayOptions layout, added to DashBlueprint() object to be embedded in larger layout.
 
         :return: OverlayOptions layout
@@ -111,7 +118,6 @@ class OverlayOptions(Tool):
             'Pastel2', 'Pastel1',
         ]
 
-
         layout = html.Div([
             dbc.Card(
                 dbc.CardBody([
@@ -133,10 +139,7 @@ class OverlayOptions(Tool):
                         ),
                         dbc.Col(
                             dcc.Dropdown(
-                                options = [
-                                    {'label': i, 'value': i}
-                                    for i in self.overlay_options
-                                ],
+                                options = [],
                                 value = [],
                                 multi = False,
                                 id = {'type': 'overlay-drop','index': 0}
@@ -147,7 +150,7 @@ class OverlayOptions(Tool):
                     html.Div(
                         dcc.Store(
                             id = {'type': 'overlay-property-info','index':0},
-                            data = json.dumps(self.overlay_info),
+                            data = json.dumps({}),
                             storage_type='memory'
                         )
                     ),
@@ -220,26 +223,7 @@ class OverlayOptions(Tool):
                     dbc.Row([
                         dbc.Tabs(
                             id = {'type': 'feature-lineColor-opts','index': 0},
-                            children = [
-                                dbc.Tab(
-                                    children = [
-                                        dmc.ColorPicker(
-                                            id = {'type': 'feature-lineColor','index': f_idx},
-                                            format = 'hex',
-                                            value = '#FFFFFF',
-                                            fullWidth=True
-                                        ),
-                                        dbc.Button(
-                                            id = {'type': 'feature-lineColor-butt','index': f_idx},
-                                            children = ['Update Boundary Color'],
-                                            className = 'd-grid col-12 mx-auto',
-                                            n_clicks = 0
-                                        )
-                                    ],
-                                    label = f
-                                )
-                                for f_idx, f in enumerate(self.feature_names)
-                            ]
+                            children = []
                         )
                     ],style = {'marginBottom':'10px'}),
                     dbc.Row([
@@ -323,11 +307,25 @@ class OverlayOptions(Tool):
             )
         ],style = {'maxHeight': '100vh','overflow':'scroll'})
 
-        return layout
+        self.blueprint.layout = layout
 
     def get_callbacks(self):
         """Initializing callbacks for OverlayOptions Tool
         """
+
+        # Updating for new slide selection:
+        self.blueprint.callback(
+            [
+                Input({'type': 'map-annotations-store','index': ALL},'data')
+            ],
+            [
+                Output({'type': 'overlay-drop','index': ALL},'options'),
+                Output({'type': 'overlay-property-info','index': ALL},'data'),
+                Output({'type': 'add-filter-parent','index': ALL},'children'),
+                Output({'type': 'feature-lineColor-opts','index': ALL},'children')
+            ]
+        )(self.update_slide)
+
         # Updating overlay color, transparency, line color, and filter
         self.blueprint.callback(
             [
@@ -379,7 +377,8 @@ class OverlayOptions(Tool):
                 Input({'type': 'delete-filter','index': ALL},'n_clicks')
             ],
             [
-                State({'type': 'overlay-property-info','index': ALL},'data')
+                State({'type': 'overlay-property-info','index': ALL},'data'),
+                State({'type': 'overlay-drop','index': ALL},'options')
             ]
         )(self.add_filter)
 
@@ -436,8 +435,50 @@ class OverlayOptions(Tool):
                 State({'type': 'map-annotations-store','index': ALL},'data')
             ]
         )(self.export_layers)
-        
-    def add_filter(self, add_filter_click, delete_filter_click,overlay_info_state):
+
+    def update_slide(self, new_annotations:list):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        new_annotations = json.loads(get_pattern_matching_value(new_annotations))
+
+        overlay_options, feature_names, overlay_info = extract_geojson_properties(new_annotations, None, self.ignore_list, self.property_depth)
+
+        drop_options = [
+            {
+                'label': i,
+                'value': i
+            }
+            for i in overlay_options
+        ]
+
+        property_info = json.dumps(overlay_info)
+        filter_children = []
+        feature_lineColor_children = [
+            dbc.Tab(
+                children = [
+                    dmc.ColorPicker(
+                        id = {'type': f'{self.component_prefix}-feature-lineColor','index': f_idx},
+                        format = 'hex',
+                        value = '#FFFFFF',
+                        fullWidth=True
+                    ),
+                    dbc.Button(
+                        id = {'type': f'{self.component_prefix}-feature-lineColor-butt','index': f_idx},
+                        children = ['Update Boundary Color'],
+                        className = 'd-grid col-12 mx-auto',
+                        n_clicks = 0
+                    )
+                ],
+                label = f
+            )
+            for f_idx, f in enumerate(feature_names)
+        ]
+
+        return [drop_options], [property_info],[filter_children], [feature_lineColor_children]
+ 
+    def add_filter(self, add_filter_click, delete_filter_click,overlay_info_state,overlay_options):
         """Adding a new filter to apply to GeoJSON features
 
         :param add_filter_click: Add filter icon clicked
@@ -451,17 +492,18 @@ class OverlayOptions(Tool):
         :return: List of current filters applied to GeoJSON features
         :rtype: list
         """
+        
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
         add_filter_click = get_pattern_matching_value(add_filter_click)
+        overlay_options = get_pattern_matching_value(overlay_options)
         overlay_info_state = json.loads(get_pattern_matching_value(overlay_info_state))
-
         if len(list(overlay_info_state.keys()))==0:
             raise exceptions.PreventUpdate
 
         active_filters = Patch()
-        if ctx.triggered_id['type']=='delete-filter':
+        if 'delete-filter' in ctx.triggered_id['type']:
 
             values_to_remove = []
             for i,val in enumerate(delete_filter_click):
@@ -471,15 +513,15 @@ class OverlayOptions(Tool):
             for v in values_to_remove:
                 del active_filters[v]
 
-        elif ctx.triggered_id['type'] in ['add-filter-butt']:
+        elif 'add-filter-butt' in ctx.triggered_id['type']:
             
             # Initializing dropdown value 
-            overlayBounds = overlay_info_state[self.overlay_options[0]]
+            overlayBounds = overlay_info_state[overlay_options[0]['label']]
             if 'min' in overlayBounds:
                 # Used for numeric filtering
                 values_selector = html.Div(
                     dcc.RangeSlider(
-                        id = {'type': 'add-filter-selector','index': add_filter_click},
+                        id = {'type': f'{self.component_prefix}-add-filter-selector','index': add_filter_click},
                         min = overlayBounds['min']-0.01,
                         max = overlayBounds['max']+0.01,
                         value = [overlayBounds['min'],overlayBounds['max']],
@@ -489,19 +531,19 @@ class OverlayOptions(Tool):
                         allowCross = True,
                         disabled = False
                     ),
-                    id = {'type': 'add-filter-selector-div','index': add_filter_click},
+                    id = {'type': f'{self.component_prefix}-add-filter-selector-div','index': add_filter_click},
                     style = {'display': 'inline-block','margin': 'auto','width': '100%'}
                 )
             elif 'unique' in overlayBounds:
                 # Used for categorical filtering
                 values_selector = html.Div(
                     dcc.Dropdown(
-                        id = {'type':'add-filter-selector','index': add_filter_click},
+                        id = {'type':f'{self.component_prefix}-add-filter-selector','index': add_filter_click},
                         options = overlayBounds['unique'],
                         value = overlayBounds['unique'],
                         multi = True
                     ),
-                    id = {'type': 'add-filter-selector-div','index': add_filter_click}
+                    id = {'type': f'{self.component_prefix}-add-filter-selector-div','index': add_filter_click}
                 )
             
             def new_filter_item():
@@ -509,22 +551,22 @@ class OverlayOptions(Tool):
                     dbc.Row([
                         dbc.Col(
                             dcc.Dropdown(
-                                options = self.overlay_options,
-                                value = self.overlay_options[0],
+                                options = overlay_options,
+                                value = overlay_options[0],
                                 placeholder = 'Select property to filter structures',
-                                id = {'type': 'add-filter-drop','index': add_filter_click}
+                                id = {'type': f'{self.component_prefix}-add-filter-drop','index': add_filter_click}
                             ),
                             md = 10
                         ),
                         dbc.Col([
                             html.I(
-                                id = {'type': 'delete-filter','index': add_filter_click},
+                                id = {'type': f'{self.component_prefix}-delete-filter','index': add_filter_click},
                                 n_clicks = 0,
                                 className = 'bi bi-x-circle-fill fa-2x',
                                 style = {'color': 'rgb(255,0,0)'}
                             ),
                             dbc.Tooltip(
-                                target = {'type': 'delete-filter','index': add_filter_click},
+                                target = {'type': f'{self.component_prefix}-delete-filter','index': add_filter_click},
                                 children = 'Delete this filter'
                             )
                             ],
@@ -559,7 +601,7 @@ class OverlayOptions(Tool):
         if 'min' in overlayBounds:
             # Used for numeric filtering
             values_selector = dcc.RangeSlider(
-                id = {'type': 'add-filter-selector','index': ctx.triggered_id['index']},
+                id = {'type': f'{self.component_prefix}-add-filter-selector','index': ctx.triggered_id['index']},
                 min = overlayBounds['min']-0.01,
                 max = overlayBounds['max']+0.01,
                 value = [overlayBounds['min'],overlayBounds['max']],
@@ -573,7 +615,7 @@ class OverlayOptions(Tool):
         elif 'unique' in overlayBounds:
             # Used for categorical filtering
             values_selector = dcc.Dropdown(
-                id = {'type':'add-filter-selector','index': ctx.triggered_id['index']},
+                id = {'type':f'{self.component_prefix}-add-filter-selector','index': ctx.triggered_id['index']},
                 options = overlayBounds['unique'],
                 value = overlayBounds['unique'],
                 multi = True
@@ -649,7 +691,7 @@ class OverlayOptions(Tool):
         colormap_val = get_pattern_matching_value(colormap_val)
         overlay_info_state = json.loads(get_pattern_matching_value(overlay_info_state))
 
-        if ctx.triggered_id['type']=='overlay-drop':
+        if 'overlay-drop' in ctx.triggered_id['type']:
             use_overlay_value = overlay_value
             use_transp_value = transp_state
         else:
@@ -661,16 +703,16 @@ class OverlayOptions(Tool):
             else:
                 use_overlay_value = overlay_state
 
-        if ctx.triggered_id['type']=='overlay-trans-slider':
+        if 'overlay-trans-slider' in ctx.triggered_id['type']:
             use_transp_value = transp_value
         else:
             use_transp_value = transp_state
 
-        if ctx.triggered_id['type'] in ['add-filter-parent', 'add-filter-selector','delete-filter']:
+        if any([i in ctx.triggered_id['type'] for i in ['add-filter-parent', 'add-filter-selector','delete-filter']]):
             use_overlay_value = overlay_state
             use_transp_value = transp_state
 
-        if ctx.triggered_id['type']=='feature-lineColor-butt':
+        if 'feature-lineColor-butt' in ctx.triggered_id['type']:
             use_overlay_value = overlay_state
             use_transp_value = transp_state
 
@@ -792,7 +834,7 @@ class OverlayOptions(Tool):
                     width = colorbar_width,
                     height = 15,
                     position = 'bottomleft',
-                    id = f'colorbar{np.random.randint(0,100)}',
+                    id = f'{self.component_prefix}-colorbar{np.random.randint(0,100)}',
                     style = color_bar_style,
                     tooltip=True
                 )]
@@ -802,7 +844,7 @@ class OverlayOptions(Tool):
                     colorscale = colormap_val,
                     style = color_bar_style,
                     position = 'bottomleft',
-                    id = f'colorbar{np.random.randint(0,100)}',
+                    id = f'{self.component_prefix}-colorbar{np.random.randint(0,100)}',
                     width = colorbar_width,
                     height = 15
                 )]
@@ -852,7 +894,7 @@ class OverlayOptions(Tool):
                             dl.LayerGroup(
                                 dl.GeoJSON(
                                     data = filtered_geojson,
-                                    id = {'type': 'feature-bounds','index': len(current_overlay_names)+1},
+                                    id = {'type': f'{self.component_prefix}-feature-bounds','index': len(current_overlay_names)+1},
                                     options = {
                                         'style': self.js_namespace("featureStyle")
                                     },
@@ -875,13 +917,13 @@ class OverlayOptions(Tool):
                                     zoomToBounds=False,
                                     children = [
                                         dl.Popup(
-                                            id = {'type': 'feature-popup','index': len(current_overlay_names)+1},
+                                            id = {'type': f'{self.component_prefix}-feature-popup','index': len(current_overlay_names)+1},
                                             autoPan = False,
                                         )
                                     ]
                                 )
                             ),
-                            name = filtered_geojson['properties']['name'], checked = True, id = {'type': 'feature-overlay','index': len(current_overlay_names)}
+                            name = filtered_geojson['properties']['name'], checked = True, id = {'type': f'{self.component_prefix}-feature-overlay','index': len(current_overlay_names)}
                         )
                     )
 
@@ -897,7 +939,7 @@ class OverlayOptions(Tool):
 
     def add_structure_line_color(self, overlay_names:list):
 
-        if not any([i['value'] for i in ctx.triggered]) or overlay_names==self.feature_names:
+        if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
         line_color_tabs = Patch()
@@ -905,13 +947,13 @@ class OverlayOptions(Tool):
             dbc.Tab(
                 children = [
                     dmc.ColorPicker(
-                        id = {'type': 'feature-lineColor','index': len(overlay_names)},
+                        id = {'type': f'{self.component_prefix}-feature-lineColor','index': len(overlay_names)},
                         format = 'hex',
                         value = '#FFFFFF',
                         fullWidth=True
                     ),
                     dbc.Button(
-                        id = {'type': 'feature-lineColor-butt','index': len(overlay_names)},
+                        id = {'type': f'{self.component_prefix}-feature-lineColor-butt','index': len(overlay_names)},
                         children = ['Update Boundary Color'],
                         className = 'd-grid col-12 mx-auto',
                         n_clicks = 0

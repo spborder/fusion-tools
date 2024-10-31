@@ -57,11 +57,15 @@ class SlideMap(MapComponent):
         # Add Namespace functions here:
         self.assets_folder = os.getcwd()+'/.fusion_assets/'
         self.get_namespace()
+    
+    def load(self, component_prefix:int):
+
+        self.component_prefix = component_prefix
 
         self.title = 'Slide Map'
         self.blueprint = DashBlueprint(
             transforms = [
-                PrefixIdTransform(prefix=f'{np.random.randint(0,1000)}'),
+                PrefixIdTransform(prefix=f'{self.component_prefix}'),
                 MultiplexerTransform()
             ]
         )        
@@ -292,16 +296,16 @@ class SlideMap(MapComponent):
 
         return annotations_list, annotation_components, image_overlays
 
-    def gen_layout(self,base_index:int,session_data:dict):
+    def gen_layout(self, session_data:dict):
         """Generating SlideMap layout
 
         :return: Div object containing interactive components for the SlideMap object.
         :rtype: dash.html.Div.Div
         """
-        self.base_index = base_index
+
         layout = html.Div([
             dcc.Dropdown(
-                id = {'type': 'slide-select-drop','index': base_index},
+                id = {'type': 'slide-select-drop','index': 0},
                 placeholder = 'Select a slide to view',
                 options = [
                     {'label': i['name'],'value': idx}
@@ -311,23 +315,16 @@ class SlideMap(MapComponent):
                 multi = False,
                 style = {'marginBottom': '10px'}
             ),
-            html.Div(
-                dcc.Store(
-                    id = 'vis-store',
-                    data = json.dumps(session_data),
-                    storage_type='memory'
-                )
-            ),
             html.Hr(),
             dl.Map(
-                id = {'type': 'slide-map','index': base_index},
+                id = {'type': 'slide-map','index': 0},
                 crs = 'Simple',
                 center = [-120,120],
                 zoom = 1,
                 style = {'height': '90vh','width': '100%','margin': 'auto','display': 'inline-block'},
                 children = [
                     dl.TileLayer(
-                        id = {'type': 'map-tile-layer','index': base_index},
+                        id = {'type': 'map-tile-layer','index': 0},
                         url = '',
                         tileSize=240,
                         maxNativeZoom=5,
@@ -337,34 +334,34 @@ class SlideMap(MapComponent):
                         position = 'upper-left'
                     ),
                     dl.FeatureGroup(
-                        id = {'type': 'edit-feature-group','index': base_index},
+                        id = {'type': 'edit-feature-group','index': 0},
                         children = [
                             dl.EditControl(
-                                id = {'type': 'edit-control','index': base_index},
+                                id = {'type': 'edit-control','index': 0},
                                 draw = dict(polyline=False, line=False, circle = False, circlemarker=False, marker = False),
                                 position='topleft'
                             )
                         ]
                     ),
                     html.Div(
-                        id = {'type': 'map-colorbar-div','index': base_index},
+                        id = {'type': 'map-colorbar-div','index': 0},
                         children = []
                     ),
                     html.Div(
                         dcc.Store(
-                            id = {'type': 'map-annotations-store','index': base_index},
+                            id = {'type': 'map-annotations-store','index': 0},
                             data = json.dumps({}),
                             storage_type = 'memory'
                         )
                     ),
                     dl.LayersControl(
-                        id = {'type': 'map-layers-control','index': base_index},
+                        id = {'type': 'map-layers-control','index': 0},
                         children = []
                     ),
                     dl.EasyButton(
                         icon = 'fa-solid fa-arrows-to-dot',
                         title = 'Re-Center Map',
-                        id = {'type': 'center-map','index': base_index},
+                        id = {'type': 'center-map','index': 0},
                         position = 'top-left',
                         eventHandlers = {
                             'click': self.js_namespace('centerMap')
@@ -373,17 +370,17 @@ class SlideMap(MapComponent):
                     dl.EasyButton(
                         icon = 'fa-solid fa-upload',
                         title = 'Upload Shapes',
-                        id = {'type': 'upload-shape','index': base_index},
+                        id = {'type': 'upload-shape','index': 0},
                         position = 'top-left'
                     ),
                     html.Div(
-                        id = {'type': 'map-marker-div','index': base_index},
+                        id = {'type': 'map-marker-div','index': 0},
                         children = []
                     ),
                 ]
             ),
             dbc.Modal(
-                id = {'type': 'upload-shape-modal','index': base_index},
+                id = {'type': 'upload-shape-modal','index': 0},
                 is_open = False,
                 children = [
                     html.Div(
@@ -392,14 +389,14 @@ class SlideMap(MapComponent):
                                 'Drag and Drop or ',
                                 html.A('Select a File')
                             ], 
-                            id = {'type': 'upload-shape-data','index': base_index},
+                            id = {'type': 'upload-shape-data','index': 0},
                             style={'width': '100%','height': '60px','lineHeight': '60px','borderWidth': '1px','borderStyle': 'dashed','borderRadius': '5px','textAlign': 'center'}
                         )
                     )
                 ]
             ),
             dbc.Modal(
-                id = {'type': 'load-annotations-modal','index': base_index},
+                id = {'type': 'load-annotations-modal','index': 0},
                 is_open = False,
                 children = []
             )
@@ -581,20 +578,20 @@ class SlideMap(MapComponent):
                 Input({'type': 'slide-select-drop','index': ALL},'value')
             ],
             [
-                Output({'type': 'map-layers-control','index': ALL},'children'),
-                Output({'type': 'map-annotations-store','index':ALL},'data'),
-                Output({'type': 'map-tile-layer','index': ALL},'url'),
-                Output({'type':'map-tile-layer','index': ALL},'tileSize')
+                Output({'type': 'map-layers-control','index': MATCH},'children'),
+                Output({'type': 'map-annotations-store','index':MATCH},'data'),
+                Output({'type': 'map-tile-layer','index': MATCH},'url'),
+                Output({'type':'map-tile-layer','index': MATCH},'tileSize')
             ],
             [
-                State('vis-store','data')
+                State('anchor-vis-store','data')
             ]
         )(self.update_slide)
 
         # Getting popup info for clicked feature
         self.blueprint.callback(
             [
-                Input({'type':'feature-bounds','index': ALL},'clickData')
+                Input({'type':'feature-bounds','index': MATCH},'clickData')
             ],
             [
                 Output({'type': 'feature-popup','index': MATCH},'children')
@@ -608,12 +605,11 @@ class SlideMap(MapComponent):
                 Input({'type':'upload-shape-data','index': ALL},'contents')
             ],
             [
-                Output({'type': 'map-layers-control','index': ALL},'children'),
-                Output({'type': 'map-annotations-store','index': ALL},'data')
+                Output({'type': 'map-layers-control','index': MATCH},'children'),
+                Output({'type': 'map-annotations-store','index': MATCH},'data')
             ],
             [
                 State({'type': 'map-annotations-store','index': ALL},'data'),
-                State({'type': 'feature-overlay','index': ALL},'name'),
                 State({'type': 'base-layer','index': ALL},'children'),
                 State({'type': 'feature-lineColor','index': ALL},'value'),
                 State({'type': 'adv-overlay-colormap','index': ALL},'value'),
@@ -699,6 +695,9 @@ class SlideMap(MapComponent):
 
     def update_slide(self, slide_selected, vis_data):
         
+        if not any([i['value'] or i['value']==0 for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
         vis_data = json.loads(vis_data)
 
         new_slide = vis_data[get_pattern_matching_value(slide_selected)]
@@ -707,25 +706,25 @@ class SlideMap(MapComponent):
         new_metadata = requests.get(new_slide['metadata_url']).json()
         new_tile_size = new_metadata['tileHeight']
 
-        #TODO: Converting annotations if they are not GeoJSON formatted
         if type(new_annotations)==dict:
             new_annotations = [new_annotations]
         if any(['annotation' in i for i in new_annotations]):
             new_annotations = convert_histomics(new_annotations)
 
         x_scale, y_scale = self.get_scale_factors(new_metadata)
-        annotation_names = [i['properties']['name'] for i in new_annotations]
+        annotation_properties = [i['properties'] for i in new_annotations]
+        annotation_names = [i['name'] for i in annotation_properties]
         new_annotations = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*x_scale,c[1]*y_scale),g),i) for i in new_annotations]
         new_layer_children = []
 
-        for st,name in zip(new_annotations,annotation_names):
+        for st_idx,(st,name) in enumerate(zip(new_annotations,annotation_names)):
 
             new_layer_children.append(
                 dl.Overlay(
                     dl.LayerGroup(
                         dl.GeoJSON(
                             data = st,
-                            id = {'type': 'feature-bounds','index': self.base_index},
+                            id = {'type': f'{self.component_prefix}-feature-bounds','index': st_idx},
                             options = {
                                 'style': self.js_namespace("featureStyle")
                             },
@@ -734,9 +733,12 @@ class SlideMap(MapComponent):
                                 'overlayBounds': {},
                                 'overlayProp': {},
                                 'fillOpacity': 0.5,
-                                'lineColor': {},
+                                'lineColor': {
+                                    k: '#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255))
+                                    for k in annotation_names
+                                },
                                 'filterVals': [],
-                                'colorMap': ''
+                                'colorMap': 'blue->red'
                             },
                             hoverStyle = arrow_function(
                                 {
@@ -748,18 +750,22 @@ class SlideMap(MapComponent):
                             zoomToBounds = False,
                             children = [
                                 dl.Popup(
-                                    id = {'type': 'feature-popup','index': self.base_index},
+                                    id = {'type': f'{self.component_prefix}-feature-popup','index': st_idx},
                                     autoPan = False,
                                 )
                             ]
                         )
                     ),
-                    name = name, checked = True, id = {'type':'feature-overlay','index':self.base_index}
+                    name = name, checked = True, id = {'type':f'{self.component_prefix}-feature-overlay','index':st_idx}
                 )
             )
 
+        for n,j in zip(new_annotations,annotation_properties):
+            n['properties'] = j
 
-        return [new_layer_children], [new_annotations], [new_url], [new_tile_size]
+        new_annotations = json.dumps(new_annotations)
+
+        return new_layer_children, new_annotations, new_url, new_tile_size
 
     def upload_shape(self, upload_clicked, is_open):
 
@@ -781,6 +787,8 @@ class SlideMap(MapComponent):
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
+        
+        clicked = get_pattern_matching_value(clicked)
         
         def make_dash_table(df:pd.DataFrame):
             """
@@ -859,7 +867,6 @@ class SlideMap(MapComponent):
                 title = 'Download Shape')
             )
 
-
         popup_div = html.Div(
             dbc.Accordion(
                 children = accordion_children
@@ -899,13 +906,13 @@ class SlideMap(MapComponent):
 
         annotation_components = []
         for st,st_name,st_idx,st_color in zip(geojson_list,names_list,index_list,line_color):
-
+            
             annotation_components.append(
                 dl.Overlay(
                     dl.LayerGroup(
                         dl.GeoJSON(
                             data = st,
-                            id = {'type': 'feature-bounds','index': st_idx},
+                            id = {'type': f'{self.component_prefix}-feature-bounds','index': st_idx},
                             options = {
                                 'style': self.js_namespace("featureStyle")
                             },
@@ -928,19 +935,19 @@ class SlideMap(MapComponent):
                             zoomToBounds = False,
                             children = [
                                 dl.Popup(
-                                    id = {'type': 'feature-popup','index': st_idx},
+                                    id = {'type': f'{self.component_prefix}-feature-popup','index': st_idx},
                                     autoPan = False,
                                 )
                             ]
                         )
                     ),
-                    name = st_name, checked = True, id = {'type':'feature-overlay','index':st_idx}
+                    name = st_name, checked = True, id = {'type':f'{self.component_prefix}-feature-overlay','index':st_idx}
                 )
             )
 
         return annotation_components
 
-    def add_manual_roi(self,new_geojson:list, uploaded_shape: list, current_annotations:list,annotation_names: list, frame_layers:list, line_colors:list, colormap:list) -> list:
+    def add_manual_roi(self,new_geojson:list, uploaded_shape: list, current_annotations:list, frame_layers:list, line_colors:list, colormap:list) -> list:
         """Adding a manual region of interest (ROI) to the SlideMap using dl.EditControl() tools including polygon, rectangle, and markers.
 
         :param new_geojson: Incoming GeoJSON object that is emitted by dl.EditControl() following annotation on SlideMap
@@ -957,21 +964,22 @@ class SlideMap(MapComponent):
         :rtype: list
         """
         
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
         uploaded_shape = get_pattern_matching_value(uploaded_shape)
         new_geojson = get_pattern_matching_value(new_geojson)
-        try:
-            current_annotations = json.loads(get_pattern_matching_value(current_annotations))
-        except TypeError:
-            raise exceptions.PreventUpdate
-        
+        current_annotations = json.loads(get_pattern_matching_value(current_annotations))
+
         colormap = get_pattern_matching_value(colormap)
 
-        if colormap is None:
-            colormap = ['blue','red']
+        if colormap is None or len(colormap)==0:
+            colormap = 'blue->red'
         
         # All but the last one which holds the manual ROIs
         initial_annotations = [i for i in current_annotations if not 'Manual' in i['properties']['name']]
         # Current manual rois (used for determining if a new ROI has been created/edited)
+        annotation_names = [i['properties']['name'] for i in current_annotations]
         manual_roi_idxes = [0]+[int(i.split(' ')[-1]) for i in annotation_names if 'Manual' in i]
         manual_rois = [i for i in current_annotations if 'Manual' in i['properties']['name']]
 
@@ -981,7 +989,7 @@ class SlideMap(MapComponent):
         added_roi_names = []
         deleted_rois = []
 
-        if ctx.triggered_id['type']=='edit-control':
+        if 'edit-control' in ctx.triggered_id['type']:
             # Checking for new manual ROIs
             for f_idx, f in enumerate(new_geojson['features']):
                 # If this feature is not a match for one of the current_manual_rois (in annotation store)
@@ -997,17 +1005,24 @@ class SlideMap(MapComponent):
                         }
                     }
                     
+                    for f_idx,f in enumerate(new_roi['features']):
+                        f['properties'] = {
+                            'name': new_roi_name,
+                            '_id': uuid.uuid4().hex[:24],
+                            '_index': f_idx
+                        }
+
                     manual_roi_idxes.append(max(manual_roi_idxes)+1)
                     
                     # Aggregate if any initial annotations are present
                     if len(initial_annotations)>0:
                         # Spatial aggregation performed just between individual manual ROIs and initial annotations (no manual ROI to manual ROI aggregation)
                         new_roi = spatially_aggregate(new_roi, initial_annotations)
-
+                    
                     added_rois.append(new_roi)
                     added_roi_names.append(new_roi_name)
 
-        elif ctx.triggered_id['type']=='upload-shape-data':
+        elif 'upload-shape-data' in ctx.triggered_id['type']:
             if not uploaded_shape is None:
                 uploaded_roi = json.loads(base64.b64decode(uploaded_shape.split(',')[-1]).decode())
                 uploaded_roi = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*self.x_scale,c[1]*self.y_scale),g),uploaded_roi)
@@ -1042,29 +1057,30 @@ class SlideMap(MapComponent):
             if not m['features'][0]['geometry'] in [j['geometry'] for j  in new_geojson['features']]:
                 deleted_rois.append(m_idx)
 
+        operation = False
         if len(added_rois)>0:
-            if line_colors is None:
-                line_colors = ['#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255)) for i in added_roi_names]
+            operation = True
+            line_colors = ['#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255)) for i in added_roi_names]
 
-            new_children.extend(
-                self.make_geojson_layers(
-                    added_rois,
-                    added_roi_names,
-                    [len(initial_annotations)+max(manual_roi_idxes)],
-                    line_colors,
-                    colormap
-                )
+            new_layers = self.make_geojson_layers(
+                added_rois,added_roi_names,[len(initial_annotations)+max(manual_roi_idxes)],line_colors,colormap
             )
+            new_children.extend(new_layers)
+
             current_annotations.extend(added_rois)
         
         if len(deleted_rois)>0:
+            operation = True
             for d_idx,d in enumerate(deleted_rois):
                 del new_children[(d-d_idx)+len(frame_layers)+len(initial_annotations)]
                 del current_annotations[(d-d_idx)+len(initial_annotations)]
 
         annotations_data = json.dumps(current_annotations)
 
-        return [new_children], [annotations_data]
+        if not operation:
+            new_children = no_update
+
+        return new_children, annotations_data
 
     def update_image_overlay_transparency(self, new_opacity: float):
         """Update transparency of image overlay component

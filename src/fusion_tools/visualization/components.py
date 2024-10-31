@@ -49,7 +49,9 @@ class Visualization:
                  local_annotations: Union[list,dict,None] = None,
                  tileservers: Union[list,TileServer,None] = None,
                  components: list = [],
-                 app_options: dict = {}):
+                 app_options: dict = {},
+                 linkage: str = 'row'
+                 ):
         """Constructor method
 
         :param components: List of rows, columns, and tabs to include current visualization session
@@ -63,6 +65,13 @@ class Visualization:
         self.local_annotations = local_annotations
         self.components = components
         self.app_options = app_options
+        self.linkage = linkage
+
+        # New parameter defining how unique components can be linked
+        # row = components in the same row can communicate
+        # col = components in the same column can communicate
+        # tab = components in the same tab can communicate
+        assert self.linkage in ['row','col','tab']
 
         self.default_options = {
             'title': 'FUSION',
@@ -96,7 +105,7 @@ class Visualization:
 
         self.viewer_app = DashProxy(
             __name__,
-            requests_pathname_prefix = '/dash/',
+            requests_pathname_prefix = '/app/',
             suppress_callback_exceptions = True,
             external_stylesheets = self.app_options['external_stylesheets'],
             external_scripts = self.app_options['external_scripts'],
@@ -227,15 +236,16 @@ class Visualization:
             style={'marginBottom':'20px'}
         )
 
-        """vis_data = html.Div(
+        vis_data = html.Div(
             dcc.Store(
-                id = 'vis-store',
+                id = 'anchor-vis-store',
                 data = json.dumps(self.vis_store_content)
             )   
-        )"""
+        )
 
         layout = dmc.MantineProvider(
             children = [
+                vis_data,
                 html.Div(
                     dbc.Container(
                         id = 'vis-container',
@@ -260,15 +270,41 @@ class Visualization:
         :rtype: list
         """
 
+        n_rows = 1
+        n_cols = 1
+        n_tabs = 0
+
+        n_rows = len(self.components)
+        if any([type(i)==list for i in self.components]):
+            n_cols = max([len(i) for i in self.components if type(i)==list])
+
+            if any([any([type(j)==list for j in i]) for i in self.components if type(i)==list]):
+                n_tabs = max([max([len(i) for i in j if type(i)==list]) for j in self.components if type(j)==list])
+
+        print(f'------Creating Visualization with {n_rows} rows, {n_cols} columns, and {n_tabs} tabs--------')
+        print(f'----------------- Components in the same {self.linkage} may communicate through callbacks---------')
+        
+        component_prefix = 0
         layout_children = []
-        unique_components = []
-        for row in self.components:
+        row_components = []
+        col_components = []
+        tab_components = []
+        for row_idx,row in enumerate(self.components):
+
+            if self.linkage=='row':
+                component_prefix = row_idx
+
             row_children = []
             if type(row)==list:
-                for col in row:
+                col_components = []
+                for col_idx,col in enumerate(row):
+                    if self.linkage=='col':
+                        component_prefix = col_idx
+
                     if not type(col)==list:
-                        col.gen_layout(base_index = unique_components.count(str(col)), session_data = self.vis_store_content)
-                        unique_components.append(str(col))
+                        col.load(component_prefix = component_prefix)
+                        col.gen_layout(session_data = self.vis_store_content)
+                        col_components.append(str(col))
                         
                         row_children.append(
                             dbc.Col(
@@ -284,10 +320,16 @@ class Visualization:
                             )
                         )
                     else:
+                        tab_components = []
                         tabs_children = []
-                        for tab in col:
-                            tab.gen_layout(base_index = unique_components.count(str(tab)), session_data = self.vis_store_content)
-                            unique_components.append(str(tab))
+                        for tab_idx,tab in enumerate(col):
+                            if self.linkage=='tab': 
+                                component_prefix = tab_idx
+                            
+                            tab.load(component_prefix = component_prefix)
+                            tab.gen_layout(session_data = self.vis_store_content)
+                            tab_components.append(str(tab))
+
                             tabs_children.append(
                                 dbc.Tab(
                                     dbc.Card(
@@ -299,6 +341,7 @@ class Visualization:
                                     tab_id = tab.title.lower().replace(' ','-')
                                 )
                             )
+                        col_components.append(tab_components)
 
                         row_children.append(
                             dbc.Col(
@@ -314,9 +357,14 @@ class Visualization:
                                 width = True
                             )
                         )
+            
+                row_components.append(col_components)
             else:
-                row.gen_layout(base_index = unique_components.count(str(row)),session_data = self.vis_store_content)
-                unique_components.append(str(row))
+                
+                row.load(component_prefix = component_prefix)
+                row.gen_layout(session_data = self.vis_store_content)
+                row_components.append(str(row))
+
                 row_children.append(
                     dbc.Col(
                         dbc.Card([
@@ -335,6 +383,10 @@ class Visualization:
                 )
             )
 
+        print(row_components)
+        print(col_components)
+        print(tab_components)
+
         return layout_children
 
     def start(self):
@@ -347,24 +399,14 @@ class Visualization:
             if not self.local_tile_server is None:
                 app.include_router(self.local_tile_server.router)
             
-            app.mount(path='/dash',app=WSGIMiddleware(self.viewer_app.server))
-
+            app.mount(path='/app',app=WSGIMiddleware(self.viewer_app.server))
             uvicorn.run(app,host=self.app_options['host'],port=self.app_options['port'])
 
-            """if 'server' in self.app_options:
-                if self.app_options['server']=='default':
-                    self.viewer_app.run_server(
-                        host = self.app_options['host'],
-                        port = self.app_options['port'],
-                        debug = False
-                    )
-            else:
-                self.viewer_app.run_server(
-                    host = self.app_options['host'],
-                    port = self.app_options['port'],
-                    debug = False
-                )"""
         else:
+
+            if not self.local_tile_server is None:
+                raise NotImplementedError('Linking local tile servers with embedded Jupyter Notebook dashboards is not yet implemented.')
+            
             self.viewer_app.run(
                 jupyter_mode=self.app_options['jupyter']['jupyter_mode'] if 'jupyter_mode' in self.app_options['jupyter'] else 'inline',
                 jupyter_server_url = self.app_options['jupyter']['jupyter_server_url'] if 'jupyter_server_url' in self.app_options['jupyter'] else f'http://{self.app_options["host"]}:{self.app_options["port"]}'

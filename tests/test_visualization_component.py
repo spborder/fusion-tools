@@ -55,8 +55,12 @@ def main():
         components = [
             [
                 SlideMap(),
-                SlideMap()
+                OverlayOptions()
             ],
+            [
+                SlideMap(),
+                OverlayOptions()
+            ]
         ]
     )
 
