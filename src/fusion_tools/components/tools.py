@@ -981,33 +981,33 @@ class PropertyViewer(Tool):
     :type Tool: None
     """
     def __init__(self,
-                 geojson_list: Union[dict,list],
-                 reference_object: Union[str,None] = None,
                  ignore_list: list = [],
                  property_depth: int = 4
                  ):
         """Constructor method
 
-        :param geojson_list: Individual or list of GeoJSON formatted annotations.
-        :type geojson_list: Union[dict,list]
-        :param reference_object: Path to larger reference object containing information on GeoJSON features, defaults to None
-        :type reference_object: Union[str,None], optional
         :param ignore_list: List of properties not to make available to this component., defaults to []
         :type ignore_list: list, optional
         :param property_depth: Depth at which to search for nested properties. Properties nested further than this value will be ignored.
         :type property_depth: int, optional
         """
-        self.ignore_list = []
-        self.reference_object = reference_object
-        self.available_properties, self.feature_names, self.property_info = extract_geojson_properties(geojson_list,reference_object,ignore_list,property_depth)
-    
+        self.ignore_list = ignore_list
+        self.property_depth = property_depth   
+
+    def load(self, component_prefix: int):
+
+        self.component_prefix = component_prefix
         self.title = 'Property Viewer'
-        self.blueprint = DashBlueprint()
-        self.blueprint.layout = self.gen_layout()
+        self.blueprint = DashBlueprint(
+            transforms = [
+                PrefixIdTransform(prefix = f'{self.component_prefix}'),
+                MultiplexerTransform()
+            ]
+        )
 
         self.get_callbacks()   
 
-    def gen_layout(self):
+    def gen_layout(self, session_data:dict):
         """Generating layout for PropertyViewer Tool
 
         :return: Layout added to DashBlueprint() object to be embedded in larger layout
@@ -1044,6 +1044,20 @@ class PropertyViewer(Tool):
                     ),
                     html.Div(
                         dcc.Store(
+                            id = {'type': 'property-viewer-available-properties','index': 0},
+                            storage_type='memory',
+                            data = json.dumps({})
+                        )
+                    ),
+                    html.Div(
+                        dcc.Store(
+                            id = {'type': 'property-viewer-property-info','index': 0},
+                            storage_type = 'memory',
+                            data = json.dumps({})
+                        )
+                    ),
+                    html.Div(
+                        dcc.Store(
                             id = {'type':'property-viewer-data','index':0},
                             storage_type='memory',
                             data = json.dumps({})
@@ -1053,11 +1067,25 @@ class PropertyViewer(Tool):
             ])
         ],style = {'maxHeight': '100vh','overflow':'scroll'})
 
-        return layout
+        self.blueprint.layout = layout
 
     def get_callbacks(self):
         """Initializing callbacks for PropertyViewer Tool
         """
+
+        # Updating for a new slide:
+        self.blueprint.callback(
+            [
+                Input({'type': 'map-annotations-store','index': ALL})
+            ],
+            [
+                Output({'type': 'property-viewer-available-properties','index': ALL},'data'),
+                Output({'type': 'property-viewer-property-info','index': ALL},'data'),
+                Output({'type': 'property-viewer-parent','index':ALL},'children'),
+                Output({'type': 'property-viewer-data','index': ALL},'data')
+            ]
+        )(self.update_slide)
+
         # Updating when panning in SlideMap-like object
         self.blueprint.callback(
             [
@@ -1075,11 +1103,28 @@ class PropertyViewer(Tool):
                 State({'type': 'property-viewer-data','index': ALL},'data'),
                 State({'type': 'property-viewer-update','index': ALL},'checked'),
                 State({'type':'property-view-subtype-parent','index':ALL},'children'),
-                State({'type': 'map-annotations-store','index': ALL},'data')
+                State({'type': 'map-annotations-store','index': ALL},'data'),
+                State({'type': 'property-viewer-available-properties','index': ALL},'data')
             ]
         )(self.update_property_viewer)
 
-    def update_property_viewer(self,slide_map_bounds, view_type_value, view_subtype_value, view_butt_click, active_tab, current_property_data, update_viewer, current_subtype_children, current_geojson):
+    def update_slide(self, new_annotations: list):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        new_annotations = json.loads(get_pattern_matching_value(new_annotations))
+
+        new_available_properties, new_feature_names, new_property_info = extract_geojson_properties(new_annotations,None,self.ignore_list,self.property_depth)
+
+        new_available_properties = json.dumps(new_available_properties)
+        new_property_info = json.dumps(new_property_info)
+        new_property_viewer_children = []
+        new_property_viewer_info = json.dumps({})
+
+        return [new_available_properties], [new_property_info], [new_property_viewer_children], [new_property_viewer_info]
+
+    def update_property_viewer(self,slide_map_bounds, view_type_value, view_subtype_value, view_butt_click, active_tab, current_property_data, update_viewer, current_subtype_children, current_geojson, available_properties):
         """Updating visualization of properties within the current viewport
 
 
@@ -1122,6 +1167,7 @@ class PropertyViewer(Tool):
         current_subtype_children = get_pattern_matching_value(current_subtype_children)
 
         current_geojson = json.loads(get_pattern_matching_value(current_geojson))
+        current_available_properties = json.loads(get_pattern_matching_value(available_properties))
 
         if ctx.triggered_id['type']=='slide-map':
             # Only update the region info when this is checked
@@ -1137,14 +1183,14 @@ class PropertyViewer(Tool):
         plot_components = self.generate_plot_tabs(current_property_data, current_geojson)
 
         # Checking if a selected property has sub-properties
-        main_properties = list(set([i if not '-->' in i else i.split(' --> ')[0] for i in self.available_properties]))
+        main_properties = list(set([i if not '-->' in i else i.split(' --> ')[0] for i in current_available_properties]))
 
         if ctx.triggered_id['type'] in ['property-view-type','property-view-subtype']:
             # Making new subtype children to correspond to new property selection
             sub_dropdowns = []
             if ctx.triggered_id['type']=='property-view-type':
                 if not view_type_value is None:
-                    child_properties = [i for i in self.available_properties if i.split(' --> ')[0]==view_type_value]
+                    child_properties = [i for i in current_available_properties if i.split(' --> ')[0]==view_type_value]
                     n_levels = max(list(set([len(i.split(' --> ')) for i in child_properties])))
 
                     if n_levels>0:
@@ -1199,7 +1245,7 @@ class PropertyViewer(Tool):
 
             elif ctx.triggered_id['type']=='property-view-subtype':
                 if not view_type_value is None:
-                    child_properties = [i for i in self.available_properties if i.split(' --> ')[0]==view_type_value]
+                    child_properties = [i for i in current_available_properties if i.split(' --> ')[0]==view_type_value]
                     n_levels = max(list(set([len(i.split(' --> ')) for i in child_properties])))
 
                     view_subtype_value = [view_subtype_value[i] if i <= ctx.triggered_id['index'] else [] for i in range(len(view_subtype_value))]
@@ -1533,8 +1579,6 @@ class PropertyPlotter(Tool):
     :type Tool: None
     """
     def __init__(self,
-                 geojson_list: Union[dict,list],
-                 reference_object: Union[str,None] = None,
                  ignore_list: list = [],
                  property_depth: int = 4
                  ):
@@ -1549,35 +1593,40 @@ class PropertyPlotter(Tool):
         :param property_depth: Depth at which to search for nested properties. Properties nested further than this will be ignored.
         :type property_depth: int, optional
         """
-        self.reference_object = reference_object
         self.ignore_list = ignore_list
-        self.available_properties, self.feature_names, self.property_info = extract_geojson_properties(geojson_list,reference_object,ignore_list, property_depth)
+        self.property_depth = property_depth
 
-        self.generate_property_dict()
+    def load(self, component_prefix:int):
+
+        self.component_prefix = component_prefix
 
         self.title = 'Property Plotter'
-        self.blueprint = DashBlueprint()
-        self.blueprint.layout = self.gen_layout()
-
+        self.blueprint = DashBlueprint(
+            transforms = [
+                PrefixIdTransform(prefix = f'{self.component_prefix}'),
+                MultiplexerTransform()
+            ]
+        )        
+        
         self.get_callbacks()
 
-    def generate_property_dict(self):
+    def generate_property_dict(self, available_properties):
         """Generate nested dictionary used for populating the property dropdown menus
         
         For more information, see: https://github.com/kapot65/dash-treeview-antd
         
         """
-        self.property_dict = {}
-        self.property_keys = {}
+        property_dict = {}
+        property_keys = {}
 
-        self.property_dict = {
+        property_dict = {
             'title': 'Features',
             'key': '0',
             'children': []
         }
 
-        leaf_properties = list(set([i for i in self.available_properties if not '-->' in i]))
-        branch_properties = list(set([i for i in self.available_properties if '-->' in i and i.split(' --> ')[0] not in leaf_properties]))
+        leaf_properties = list(set([i for i in available_properties if not '-->' in i]))
+        branch_properties = list(set([i for i in available_properties if '-->' in i and i.split(' --> ')[0] not in leaf_properties]))
         trunk_properties = list(set([i.split(' --> ')[0] for i in branch_properties]))
 
         # Adding branch properties first
@@ -1601,7 +1650,7 @@ class PropertyPlotter(Tool):
                     
                     trunk_dict['children'].append(b_dict)
 
-                    self.property_keys[b_dict['key']] = b
+                    property_keys[b_dict['key']] = b
 
                     sub_count+=1
 
@@ -1617,13 +1666,30 @@ class PropertyPlotter(Tool):
 
             property_dict_children.append(l_dict)
 
-            self.property_keys[l_dict['key']] = l
+            property_keys[l_dict['key']] = l
 
-        self.property_dict['children'].extend(property_dict_children)
+        property_dict['children'].extend(property_dict_children)
+
+        return property_dict, property_keys
 
     def get_callbacks(self):
         """Initializing callbacks for PropertyPlotter Tool
         """
+        
+        # Updating for a new slide:
+        self.blueprint.callback(
+            [
+                Input({'type': 'map-annotations-store','index':ALL},'data')
+            ],
+            [
+                Output({'type': 'property-list','index': ALL},'data'),
+                Output({'type': 'label-list','index': ALL},'options'),
+                Output({'type': 'property-graph','index': ALL},'figure'),
+                Output({'type': 'property-graph-tabs-div','index': ALL},'children'),
+                Output({'type': 'property-plotter-keys','index': ALL},'data')
+            ]
+        )(self.update_slide)
+
         # Updating plot based on selected properties and labels
         self.blueprint.callback(
             [
@@ -1637,6 +1703,7 @@ class PropertyPlotter(Tool):
             [
                 State({'type': 'property-list','index': ALL},'checked'),
                 State({'type': 'label-list','index': ALL},'value'),
+                State({'type': 'property-plotter-keys','index':ALL},'data'),
                 State({'type': 'map-annotations-store','index':ALL},'data'),
                 State({'type': 'property-plotter-store','index': ALL},'data')
             ]
@@ -1653,7 +1720,8 @@ class PropertyPlotter(Tool):
                 Output({'type': 'property-plotter-store','index':ALL},'data')
             ],
             [
-                State({'type': 'property-plotter-store','index': ALL},'data')
+                State({'type': 'property-plotter-store','index': ALL},'data'),
+                State({'type':'label-list','index': ALL},'options')
             ]
         )(self.select_data_from_plot)
 
@@ -1668,7 +1736,8 @@ class PropertyPlotter(Tool):
                 Output({'type': 'property-graph-selected-div','index': ALL},'children')
             ],
             [
-                State({'type': 'property-plotter-store','index': ALL},'data')
+                State({'type': 'property-plotter-store','index': ALL},'data'),
+                State({'type': 'label-list','index':ALL},'options')
             ]
         )(self.remove_marker_label)
 
@@ -1699,7 +1768,22 @@ class PropertyPlotter(Tool):
             ]
         )(self.sub_select_data)
 
-    def gen_layout(self):
+    def update_slide(self, new_annotations:list):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        new_annotations = json.loads(get_pattern_matching_value(new_annotations))
+
+        new_available_properties, new_feature_names, new_property_info = extract_geojson_properties(new_annotations, None, self.ignore_list, self.property_depth)
+        new_property_dict, new_property_keys = self.generate_property_dict(new_available_properties)
+        new_figure = go.Figure()
+        new_graph_tabs_children = []
+        new_property_keys = json.dumps(new_property_keys)
+
+        return [new_property_dict], [new_available_properties], [new_figure], [new_graph_tabs_children], [new_property_keys]
+        
+    def gen_layout(self, session_data:dict):
         """Generating layout for PropertyPlotter Tool
 
         :return: Layout for PropertyPlotter DashBlueprint object to be embedded in larger layouts
@@ -1726,6 +1810,13 @@ class PropertyPlotter(Tool):
                             storage_type = 'memory'
                         )
                     ),
+                    html.Div(
+                        dcc.Store(
+                            id = {'type':'property-plotter-keys','index': 0},
+                            data = json.dumps({}),
+                            storage_type = 'memory'
+                        )
+                    ),
                     dbc.Row(
                         dbc.Card(
                             id = {'type': 'property-list-card','index': 0},
@@ -1740,7 +1831,7 @@ class PropertyPlotter(Tool):
                                             checked = [],
                                             selected = [],
                                             expanded = [],
-                                            data = self.property_dict
+                                            data = {}
                                         )
                                     ],
                                     style = {'maxHeight': '250px','overflow':'scroll'}
@@ -1755,7 +1846,7 @@ class PropertyPlotter(Tool):
                                 id = {'type': 'label-list','index': 0},
                                 placeholder = 'Select a label',
                                 multi = False,
-                                options = self.available_properties
+                                options = []
                             )
                         ]
                     ),
@@ -1789,9 +1880,9 @@ class PropertyPlotter(Tool):
             ])
         ],style={'maxHeight': '100vh','overflow':'scroll'})
 
-        return layout
+        self.blueprint.layout = layout
 
-    def update_property_graph(self, plot_butt_click, property_list, label_list, current_features, current_plot_data):
+    def update_property_graph(self, plot_butt_click, property_list, label_list, property_keys, current_features, current_plot_data):
         """Updating plot based on selected properties, label(s)
 
         :param plot_butt_click: Whether this callback is triggered by the plot button being clicked
@@ -1815,6 +1906,7 @@ class PropertyPlotter(Tool):
         label_names = get_pattern_matching_value(label_list)
 
         current_features = json.loads(get_pattern_matching_value(current_features))
+        property_keys = json.loads(get_pattern_matching_value(property_keys))
 
         # Don't do anything if not given properties
         if property_list is None:
@@ -1823,7 +1915,7 @@ class PropertyPlotter(Tool):
             if len(property_list)==0:
                 raise exceptions.PreventUpdate
 
-        property_names = [self.property_keys[i] for i in property_list if i in self.property_keys]
+        property_names = [property_keys[i] for i in property_list if i in property_keys]
             
         extracted_data = self.extract_data_from_features(current_features, property_names, label_names)
         current_plot_data['data'] = extracted_data
@@ -2163,7 +2255,7 @@ class PropertyPlotter(Tool):
 
         return umap_df
 
-    def gen_selected_div(self, n_markers: int):
+    def gen_selected_div(self, n_markers: int, available_properties):
         """Generate a new property-graph-selected-div after changing the number of markers
 
         :param n_markers: New number of markers
@@ -2176,14 +2268,14 @@ class PropertyPlotter(Tool):
                 html.Hr(),
                 dbc.Row([
                     dbc.Col(
-                        dbc.Label('Select property for sub-plot: ',html_for = {'type': 'selected-sub-drop','index':0}),
+                        dbc.Label('Select property for sub-plot: ',html_for = {'type': f'{self.component_prefix}-selected-sub-drop','index':0}),
                         md = 3
                     ),
                     dbc.Col(
                         dcc.Dropdown(
-                            options = self.available_properties,
+                            options = available_properties,
                             value = [],
-                            id = {'type': 'selected-sub-drop','index': 0},
+                            id = {'type': f'{self.component_prefix}-selected-sub-drop','index': 0},
                             multi = True
                         ),
                         md = 9
@@ -2194,7 +2286,7 @@ class PropertyPlotter(Tool):
                         'Update Sub-Plot',
                         className = 'd-grid col-12 mx-auto',
                         n_clicks = 0,
-                        id = {'type': 'selected-sub-butt','index': 0},
+                        id = {'type': f'{self.component_prefix}-selected-sub-butt','index': 0},
                         color = 'primary'
                     ),
                     style = {'marginBottom': '10px'}
@@ -2205,14 +2297,14 @@ class PropertyPlotter(Tool):
                         'See Selected Marker Features',
                         className = 'd-grid col-12 mx-auto',
                         n_clicks=0,
-                        id = {'type': 'selected-sub-markers','index':0},
+                        id = {'type': f'{self.component_prefix}-selected-sub-markers','index':0},
                         color = 'secondary'
                     ),
                     style = {'marginBottom': '10px'}
                 ),
                 dbc.Row(
                     html.Div(
-                        id = {'type': 'selected-sub-div','index': 0},
+                        id = {'type': f'{self.component_prefix}-selected-sub-div','index': 0},
                         children = 0
                     )
                 )
@@ -2221,7 +2313,7 @@ class PropertyPlotter(Tool):
 
         return new_selected_div
 
-    def select_data_from_plot(self, selected_data, current_plot_data):
+    def select_data_from_plot(self, selected_data, current_plot_data, available_properties):
         """Updating selected data tab based on selection in primary graph
 
 
@@ -2239,6 +2331,7 @@ class PropertyPlotter(Tool):
         
         current_plot_data = json.loads(get_pattern_matching_value(current_plot_data))
         selected_data = get_pattern_matching_value(selected_data)
+        available_properties = get_pattern_matching_value(available_properties)
 
         if selected_data is None:
             raise exceptions.PreventUpdate
@@ -2260,15 +2353,15 @@ class PropertyPlotter(Tool):
                                 'Clear Marker',
                                 color = 'danger',
                                 n_clicks = 0,
-                                id = {'type': 'selected-marker-delete','index': p_idx}
+                                id = {'type': f'{self.component_prefix}-selected-marker-delete','index': p_idx}
                             ),
-                            id = {'type': 'selected-marker-popup','index': p_idx}
+                            id = {'type': f'{self.component_prefix}-selected-marker-popup','index': p_idx}
                         ),
                         html.Div(
                             children = [
                                 json.dumps(p['customdata'][1])
                             ],
-                            id = {'type': 'selected-marker-index','index': p_idx},
+                            id = {'type': f'{self.component_prefix}-selected-marker-index','index': p_idx},
                             style = {'display': 'none'}
                         )
                     ]
@@ -2279,7 +2372,7 @@ class PropertyPlotter(Tool):
         current_plot_data = [json.dumps(current_plot_data)]
 
         # Update property_graph_selected_div
-        property_graph_selected_div = self.gen_selected_div(len(map_marker))
+        property_graph_selected_div = self.gen_selected_div(len(map_marker), available_properties)
 
         return property_graph_selected_div, [map_marker], current_plot_data
 
@@ -2310,7 +2403,7 @@ class PropertyPlotter(Tool):
                     html.H3(f'Samples labeled: {u}'),
                     html.Hr(),
                     dash_table.DataTable(
-                        id = {'type': 'property-summary-table','index': u_idx},
+                        id = {'type': f'{self.component_prefix}-property-summary-table','index': u_idx},
                         columns = [{'name': i, 'id': i, 'deletable': False, 'selectable': True} for i in summary.columns],
                         data = summary.to_dict('records'),
                         editable = False,
@@ -2345,7 +2438,7 @@ class PropertyPlotter(Tool):
                 html.H3('All Samples'),
                 html.Hr(),
                 dash_table.DataTable(
-                    id = {'type': 'property-summary-table','index': 0},
+                    id = {'type': f'{self.component_prefix}-property-summary-table','index': 0},
                     columns = [{'name': i, 'id': i, 'deletable': False, 'selectable': True} for i in summary.columns],
                     data = summary.to_dict('records'),
                     editable = False,
@@ -2372,7 +2465,7 @@ class PropertyPlotter(Tool):
             ])
 
         property_summary_tab = dbc.Tab(
-            id = {'type': 'property-summary-tab','index': 0},
+            id = {'type': f'{self.component_prefix}-property-summary-tab','index': 0},
             children = property_summary_children,
             tab_id = 'property-summary',
             label = 'Property Summary'
@@ -2404,7 +2497,7 @@ class PropertyPlotter(Tool):
                             ]),
                             html.Div(
                                 dash_table.DataTable(
-                                    id = {'type': 'property-stats-table','index': 0},
+                                    id = {'type': f'{self.component_prefix}-property-stats-table','index': 0},
                                     columns = [
                                         {'name': i, 'id': i}
                                         for i in results.columns
@@ -2442,7 +2535,7 @@ class PropertyPlotter(Tool):
                             ]),
                             html.Div(
                                 dash_table.DataTable(
-                                    id = {'type': 'property-stats-table','index':0},
+                                    id = {'type': f'{self.component_prefix}-property-stats-table','index':0},
                                     columns = [
                                         {'name': i, 'id': i}
                                         for i in results['anova'].columns
@@ -2469,7 +2562,7 @@ class PropertyPlotter(Tool):
                             ]),
                             html.Div(
                                 dash_table.DataTable(
-                                    id = {'type': 'property-stats-tukey','index': 0},
+                                    id = {'type': f'{self.component_prefix}-property-stats-tukey','index': 0},
                                     columns = [
                                         {'name': i,'id': i}
                                         for i in results['tukey'].columns
@@ -2530,7 +2623,7 @@ class PropertyPlotter(Tool):
                         ]),
                         html.Div(
                             dash_table.DataTable(
-                                id='pearson-table',
+                                id=f'{self.component_prefix}-pearson-table',
                                 columns = [{'name':i,'id':i} for i in results.columns],
                                 data = results.to_dict('records'),
                                 style_cell = {
@@ -2587,7 +2680,7 @@ class PropertyPlotter(Tool):
                         ]),
                         html.Div(
                             dash_table.DataTable(
-                                id='silhouette-table',
+                                id=f'{self.component_prefix}-silhouette-table',
                                 columns = [{'name':i,'id':i} for i in results['samples_silhouette'].columns],
                                 data = results['samples_silhouette'].to_dict('records'),
                                 style_cell = {
@@ -2634,16 +2727,16 @@ class PropertyPlotter(Tool):
             )
 
         label_stats_tab = dbc.Tab(
-            id = {'type': 'property-stats-tab','index': 0},
+            id = {'type': f'{self.component_prefix}-property-stats-tab','index': 0},
             children = label_stats_children,
             tab_id = 'property-stats',
             label = 'Property Statistics'
         )
 
         selected_data_tab = dbc.Tab(
-            id = {'type': 'property-selected-data-tab','index': 0},
+            id = {'type': f'{self.component_prefix}-property-selected-data-tab','index': 0},
             children = html.Div(
-                id = {'type': 'property-graph-selected-div','index': 0},
+                id = {'type': f'{self.component_prefix}-property-graph-selected-div','index': 0},
                 children = ['Select data points in the plot to get started!']
             ),
             tab_id = 'property-selected-data',
@@ -2651,7 +2744,7 @@ class PropertyPlotter(Tool):
         )
 
         property_plot_tabs = dbc.Tabs(
-            id = {'type': 'property-plot-tabs','index': 0},
+            id = {'type': f'{self.component_prefix}-property-plot-tabs','index': 0},
             children = [
                 property_summary_tab,
                 label_stats_tab,
@@ -2662,7 +2755,7 @@ class PropertyPlotter(Tool):
 
         return property_plot_tabs
 
-    def remove_marker_label(self, delete_click, current_plot_data):
+    def remove_marker_label(self, delete_click, current_plot_data, available_properties):
         """Remove marker from selected feature
 
         :param delete_click: Clear marker button clicked
@@ -2677,6 +2770,7 @@ class PropertyPlotter(Tool):
             raise exceptions.PreventUpdate
 
         current_plot_data = json.loads(get_pattern_matching_value(current_plot_data))
+        available_properties = get_pattern_matching_value(available_properties)
         n_marked = len(current_plot_data['selected']['points'])
 
         patched_list = Patch()
@@ -2686,7 +2780,7 @@ class PropertyPlotter(Tool):
             del current_plot_data['selected']['points'][v]
         
         current_plot_data = [json.dumps(current_plot_data)]
-        new_selected_div = self.gen_selected_div(n_marked-1)
+        new_selected_div = self.gen_selected_div(n_marked-1, available_properties)
 
         return [patched_list], current_plot_data, new_selected_div
 
@@ -2775,7 +2869,7 @@ class PropertyPlotter(Tool):
 
 
                     sub_div_content = dcc.Graph(
-                        id = {'type': 'property-sub-graph','index': 0},
+                        id = {'type': f'{self.component_prefix}-property-sub-graph','index': 0},
                         figure = sub_plot_figure
                     )
                 else:
@@ -2789,7 +2883,7 @@ class PropertyPlotter(Tool):
 
             selected_data = self.extract_data_from_features(
                 geo_list = current_features,
-                properties = self.available_properties,
+                properties = current_labels,
                 labels = current_labels,
                 filter_list = [i['customdata'][1] for i in current_selected]
             )
@@ -2806,7 +2900,7 @@ class PropertyPlotter(Tool):
                 
                 #TODO: Sorting columns using 'native' does not work for exponents. Ignores exponent part.
                 sub_div_content = dash_table.DataTable(
-                    id = {'type': 'property-sub-wilcox','index': 0},
+                    id = {'type': f'{self.component_prefix}-property-sub-wilcox','index': 0},
                     #sort_mode = 'multi',
                     #sort_action = 'native',
                     filter_action = 'native',
@@ -2895,15 +2989,15 @@ class PropertyPlotter(Tool):
                                 'Clear Marker',
                                 color = 'danger',
                                 n_clicks = 0,
-                                id = {'type': 'selected-marker-delete','index': p_idx}
+                                id = {'type': f'{self.component_prefix}-selected-marker-delete','index': p_idx}
                             ),
-                            id = {'type': 'selected-marker-popup','index': p_idx}
+                            id = {'type': f'{self.component_prefix}-selected-marker-popup','index': p_idx}
                         ),
                         html.Div(
                             children = [
                                 json.dumps(p['customdata'][1])
                             ],
-                            id = {'type': 'selected-marker-index','index': p_idx},
+                            id = {'type': f'{self.component_prefix}-selected-marker-index','index': p_idx},
                             style = {'display':'none'}
                         )
                     ]
@@ -2942,13 +3036,20 @@ class HRAViewer(Tool):
             for i in self.asct_b_release['Organ'].tolist()
         ]
 
+    def load(self, component_prefix: int):
+        
+        self.component_prefix = component_prefix
         self.title = 'HRA Viewer'
-        self.blueprint = DashBlueprint()
-        self.blueprint.layout = self.gen_layout()
+        self.blueprint = DashBlueprint(
+            transforms = [
+                PrefixIdTransform(prefix = f'{self.component_prefix}'),
+                MultiplexerTransform()
+            ]
+        )
 
         self.get_callbacks()
 
-    def gen_layout(self):
+    def gen_layout(self, session_data: dict):
         """Generate layout for HRA Viewer component
         """
 
@@ -3106,7 +3207,7 @@ class HRAViewer(Tool):
                         dbc.Col([
                             dbc.Label(
                                 html.H4('Authors:'),
-                                html_for={'type': 'hra-viewer-authors','index': 0}
+                                html_for={'type': f'{self.component_prefix}-hra-viewer-authors','index': 0}
                             )
                         ])
                     ]),
@@ -3114,7 +3215,7 @@ class HRAViewer(Tool):
                         dbc.Col([
                             html.Div(
                                 dmc.AvatarGroup(
-                                    id = {'type': 'hra-viewer-authors','index': 0},
+                                    id = {'type': f'{self.component_prefix}-hra-viewer-authors','index': 0},
                                     children = [
                                         html.A(
                                             dmc.Tooltip(
@@ -3142,7 +3243,7 @@ class HRAViewer(Tool):
                                 html.H6(
                                     'Reviewers: '
                                 ),
-                                html_for={'type': 'hra-viewer-reviewers','index': 0}
+                                html_for={'type': f'{self.component_prefix}-hra-viewer-reviewers','index': 0}
                             )
                         )
                     ]),
@@ -3150,7 +3251,7 @@ class HRAViewer(Tool):
                         dbc.Col([
                             html.Div(
                                 dmc.AvatarGroup(
-                                    id = {'type': 'hra-viewer-reviewers','index': 0},
+                                    id = {'type': f'{self.component_prefix}-hra-viewer-reviewers','index': 0},
                                     children = [
                                         html.A(
                                             dmc.Tooltip(
@@ -3204,7 +3305,7 @@ class HRAViewer(Tool):
                 
                 organ_dash_table = [
                     dash_table.DataTable(
-                        id = {'type':'hra-viewer-table','index': 0},
+                        id = {'type':f'{self.component_prefix}-hra-viewer-table','index': 0},
                         columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in organ_table.columns],
                         data = organ_table.to_dict('records'),
                         editable = False,
@@ -3256,7 +3357,7 @@ class HRAViewer(Tool):
                                 dbc.Col([
                                     dbc.Label(
                                         html.H6('Table Data Sources:'),
-                                        html_for={'type':'hra-viewer-table-sources','index':0}
+                                        html_for={'type':f'{self.component_prefix}-hra-viewer-table-sources','index':0}
                                     )
                                 ],md=12)
                             ]),
@@ -3264,7 +3365,7 @@ class HRAViewer(Tool):
                             data_doi,
                             dbc.Row([
                                 dbc.Col(
-                                    dbc.Label('Date: ',html_for = {'type': 'hra-viewer-date','index': 0}),
+                                    dbc.Label('Date: ',html_for = {'type': f'{self.component_prefix}-hra-viewer-date','index': 0}),
                                     md = 4
                                 ),
                                 dbc.Col(
@@ -3274,7 +3375,7 @@ class HRAViewer(Tool):
                             ],align='center'),
                             dbc.Row([
                                 dbc.Col(
-                                    dbc.Label('Version Number: ',html_for = {'type':'hra-viewer-version','index': 0}),
+                                    dbc.Label('Version Number: ',html_for = {'type':f'{self.component_prefix}-hra-viewer-version','index': 0}),
                                     md = 4
                                 ),
                                 dbc.Col(

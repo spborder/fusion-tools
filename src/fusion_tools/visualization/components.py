@@ -143,6 +143,7 @@ class Visualization:
                         'start_idx': s_idx,
                         'name': s.split(os.sep)[-1],
                         'tiles_url': self.local_tile_server.get_name_tiles_url(s.split(os.sep)[-1]),
+                        'regions_url': self.local_tile_server.get_name_regions_url(s.split(os.sep)[-1]),
                         'metadata_url': self.local_tile_server.get_name_metadata_url(s.split(os.sep)[-1]),
                         'annotations_url': self.local_tile_server.get_name_annotations_url(s.split(os.sep)[-1])
                     }
@@ -163,6 +164,7 @@ class Visualization:
                             'start_idx': (s_idx+t_idx+1),
                             'name': j,
                             'tiles_url': t.get_name_tiles_url(j),
+                            'regions_url': t.get_name_regions_url(j),
                             'metadata_url': t.get_name_metadata_url(j),
                             'annotations_url': t.get_name_annotations_url(j)
                         }
@@ -173,6 +175,7 @@ class Visualization:
                         'start_idx': (s_idx+t_idx+1),
                         'name': t.name,
                         'tiles_url': t.tiles_url,
+                        'regions_url': t.regions_url,
                         'metadata_url': t.metadata_url,
                         'annotations_url': t.annotations_url
                     })

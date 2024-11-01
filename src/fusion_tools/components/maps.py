@@ -76,13 +76,6 @@ class SlideMap(MapComponent):
     def __str__(self):
         return 'Slide Map'
 
-    def initialize_map(self):
-        
-        # Have to also make sure to initialize the scale factors for a given tileserver
-        annotations, annotation_components, image_overlays = self.process_annotations()
-        frame_layers = []
-        return annotations, annotation_components, image_overlays, frame_layers
-
     def get_scale_factors(self, image_metadata: dict):
         """Function used to initialize scaling factors applied to GeoJSON annotations to project annotations into the SlideMap CRS (coordinate reference system)
 
@@ -115,14 +108,14 @@ class SlideMap(MapComponent):
                                         dbc.AccordionItem(
                                             title = 'Info',
                                             children = [
-                                                html.P(f'Path: {st.image_path}'),
+                                                html.P(f'Path: {st['image_path']}'),
                                             ]
                                         ),
                                         dbc.AccordionItem(
                                             title = 'Properties',
                                             children = [
                                                 f'{k}: {v}'
-                                                for k,v in st.image_properties.items()
+                                                for k,v in st['image_properties'].items()
                                             ]
                                         ),
                                         dbc.AccordionItem(
@@ -130,11 +123,11 @@ class SlideMap(MapComponent):
                                             children = [
                                                 dbc.Label(
                                                     'Transparency Slider:',
-                                                    html_for = {'type': 'image-overlay-transparency','index': st_idx},
+                                                    html_for = {'type': f'{self.component_prefix}-image-overlay-transparency','index': st_idx},
                                                     style = {'marginBottom': '5px'}
                                                 ),
                                                 dcc.Slider(
-                                                    id = {'type': 'image-overlay-transparency','index': st_idx},
+                                                    id = {'type': f'{self.component_prefix}-image-overlay-transparency','index': st_idx},
                                                     min = 0,
                                                     max = 1.0,
                                                     step = 0.1,
@@ -154,7 +147,7 @@ class SlideMap(MapComponent):
                                                     dbc.Col(
                                                         dbc.Button(
                                                             'Move it!',
-                                                            id = {'type': 'image-overlay-position-butt','index': st_idx},
+                                                            id = {'type': f'{self.component_prefix}-image-overlay-position-butt','index': st_idx},
                                                             n_clicks = 0,
                                                             className = 'd-grid col-12 mx-auto'
                                                         )
@@ -164,13 +157,13 @@ class SlideMap(MapComponent):
                                                     dbc.Col([
                                                         dbc.Button(
                                                             'Save Position',
-                                                            id = {'type': 'image-overlay-save-position','index': st_idx},
+                                                            id = {'type': f'{self.component_prefix}-image-overlay-save-position','index': st_idx},
                                                             n_clicks = 0,
                                                             className = 'd-grid col-12 mx-auto',
                                                             color = 'secondary'
                                                         ),
                                                         dcc.Download(
-                                                            id = {'type': 'image-overlay-save-position-download','index': st_idx}
+                                                            id = {'type': f'{self.component_prefix}-image-overlay-save-position-download','index': st_idx}
                                                         )
                                                     ])
                                                 ])
@@ -183,118 +176,6 @@ class SlideMap(MapComponent):
                             )
 
         return image_overlay_popup
-
-    def process_annotations(self):
-        """Process incoming annotations and generate dl.Overlay components applied to the SlideMap
-
-        :return: List of dl.Overlay components containing dl.GeoJSON objects where "data" contains the corresponding scaled GeoJSON information 
-        :rtype: list
-        """
-
-        annotation_components = []
-        image_overlays = []
-        annotations_list = []
-        if not self.annotations is None:
-            if type(self.annotations)==dict:
-                self.annotations = [self.annotations]
-            
-            for st_idx,st in enumerate(self.annotations):
-                if type(st)==dict:
-                    # Scale annotations to fit within base tile dimensions
-                    st = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*self.x_scale,c[1]*self.y_scale), g), st)
-
-                    if 'properties' not in st:
-                        st['properties'] = {}
-                        if 'name' in st['features'][0]['properties']:
-                            st['properties']['name'] = st['features'][0]['properties']['name']
-                        else:
-                            st['properties']['name'] = f'Structure {st_idx}'
-
-                        st['properties']['_id'] = uuid.uuid4().hex[:24]
-                    else:
-                        if not 'name' in st['properties']:
-                            if 'name' in st['features'][0]['properties']:
-                                st['properties']['name'] = st['features'][0]['properties']['name']
-                            else:
-                                st['properties']['name'] = f'Structure {st_idx}'
-
-                        if not '_id' in st['properties']:
-                            st['properties']['_id'] = uuid.uuid4().hex[:24]
-                        
-                    annotations_list.append(st)
-
-                    annotation_components.append(
-                        dl.Overlay(
-                            dl.LayerGroup(
-                                dl.GeoJSON(
-                                    data = dlx.geojson_to_geobuf(st),
-                                    format = 'geobuf',
-                                    id = {'type': 'feature-bounds','index': st_idx},
-                                    options = {
-                                        'style': self.js_namespace("featureStyle")
-                                    },
-                                    filter = self.js_namespace("featureFilter"),
-                                    hideout = {
-                                        'overlayBounds': {},
-                                        'overlayProp': {},
-                                        'fillOpacity': 0.5,
-                                        'lineColor': {st['properties']['name']: '#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255))},
-                                        'filterVals': [],
-                                        'lineWidth': 5,
-                                        'colorMap': 'blue->red'
-                                    },
-                                    hoverStyle = arrow_function(
-                                        {
-                                            'weight': 5,
-                                            'color': '#9caf00',
-                                            'dashArray':''
-                                        }
-                                    ),
-                                    zoomToBounds = False,
-                                    children = [
-                                        dl.Popup(
-                                            id = {'type': 'feature-popup','index': st_idx},
-                                            autoPan = False,
-                                        )
-                                    ]
-                                )
-                            ),
-                            name = st['properties']['name'], checked = True, id = {'type':'feature-overlay','index':st_idx}
-                        )
-                    )
-
-                elif type(st)==SlideImageOverlay:
-                    
-                    scaled_image_bounds = [
-                        [st.image_bounds[1]*self.y_scale, st.image_bounds[0]*self.x_scale],
-                        [st.image_bounds[3]*self.y_scale, st.image_bounds[2]*self.x_scale]
-                    ]
-
-                    # Creating data: path for image
-                    with open(st.image_path,'rb') as f:
-                        new_image_path = f'data:image/{st.image_path.split(".")[-1]};base64,{base64.b64encode(f.read()).decode("ascii")}'
-                        f.close()
-
-                    image_overlay_popup = self.get_image_overlay_popup(st, st_idx)
-
-                    image_overlays.extend([
-                        dl.ImageOverlay(
-                            url = new_image_path,
-                            opacity = 0.5,
-                            interactive = True,
-                            bounds = scaled_image_bounds,
-                            id = {'type': 'image-overlay','index': st_idx},
-                            children = [
-                                image_overlay_popup
-                            ],
-                        ),
-                        dl.LayerGroup(
-                            id = {'type': 'image-overlay-mover-layergroup','index': st_idx},
-                            children = []
-                        )
-                    ])
-
-        return annotations_list, annotation_components, image_overlays
 
     def gen_layout(self, session_data:dict):
         """Generating SlideMap layout
@@ -402,7 +283,6 @@ class SlideMap(MapComponent):
             )
         ])
 
-        #return layout
         self.blueprint.layout = layout
 
     def get_namespace(self):
@@ -581,7 +461,8 @@ class SlideMap(MapComponent):
                 Output({'type': 'map-layers-control','index': MATCH},'children'),
                 Output({'type': 'map-annotations-store','index':MATCH},'data'),
                 Output({'type': 'map-tile-layer','index': MATCH},'url'),
-                Output({'type':'map-tile-layer','index': MATCH},'tileSize')
+                Output({'type':'map-tile-layer','index': MATCH},'tileSize'),
+                Output({'type': 'map-slide-information','index': MATCH},'data')
             ],
             [
                 State('anchor-vis-store','data')
@@ -663,7 +544,8 @@ class SlideMap(MapComponent):
                 Output({'type': 'image-overlay-save-position-download','index': MATCH},'data',allow_duplicate=True)
             ],
             [
-                State({'type': 'image-overlay','index': ALL},'bounds')
+                State({'type': 'image-overlay','index': ALL},'bounds'),
+                State({'type': 'map-slide-information','index': ALL},'data')
             ]
         )(self.export_image_overlay_bounds)
 
@@ -676,7 +558,8 @@ class SlideMap(MapComponent):
                 Output({'type': 'download-manual-roi-download','index': MATCH},'data')
             ],
             [
-                State({'type': 'edit-control','index': ALL},'geojson')
+                State({'type': 'edit-control','index': ALL},'geojson'),
+                State({'type': 'map-slide-information','index': ALL},'data')
             ]
         )(self.download_manual_roi)
 
@@ -701,6 +584,8 @@ class SlideMap(MapComponent):
         vis_data = json.loads(vis_data)
 
         new_slide = vis_data[get_pattern_matching_value(slide_selected)]
+
+        # Getting data from the tileservers:
         new_url = new_slide['tiles_url']
         new_annotations = requests.get(new_slide['annotations_url']).json()
         new_metadata = requests.get(new_slide['metadata_url']).json()
@@ -708,22 +593,35 @@ class SlideMap(MapComponent):
 
         if type(new_annotations)==dict:
             new_annotations = [new_annotations]
+
+        image_overlay_annotations = [i for i in new_annotations if 'image_path' in i]
+        geo_annotations = [i for i in new_annotations if not 'image_path' in i]
         if any(['annotation' in i for i in new_annotations]):
-            new_annotations = convert_histomics(new_annotations)
+            histomics_annotations = convert_histomics([i for i in new_annotations if 'annotation' in i])
+            g_count = 0
+            for g_idx,g in enumerate(geo_annotations):
+                if 'annotation' in g:
+                    geo_annotations[g_idx] = histomics_annotations[g_count]
+                    g_count+=1
+            
 
         x_scale, y_scale = self.get_scale_factors(new_metadata)
-        annotation_properties = [i['properties'] for i in new_annotations]
-        annotation_names = [i['name'] for i in annotation_properties]
-        new_annotations = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*x_scale,c[1]*y_scale),g),i) for i in new_annotations]
+        annotation_properties = [i['properties'] for i in geo_annotations]
+        annotation_names = [i['name'] for i in geo_annotations]
+        geo_annotations = [
+            geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*x_scale,c[1]*y_scale),g),i)
+            for i in geo_annotations
+        ]
         new_layer_children = []
 
-        for st_idx,(st,name) in enumerate(zip(new_annotations,annotation_names)):
+        for st_idx,(st,name) in enumerate(zip(geo_annotations,annotation_names)):
 
             new_layer_children.append(
                 dl.Overlay(
                     dl.LayerGroup(
                         dl.GeoJSON(
-                            data = st,
+                            data = dlx.geojson_to_geobuf(st),
+                            format = 'geobuf',
                             id = {'type': f'{self.component_prefix}-feature-bounds','index': st_idx},
                             options = {
                                 'style': self.js_namespace("featureStyle")
@@ -759,13 +657,51 @@ class SlideMap(MapComponent):
                     name = name, checked = True, id = {'type':f'{self.component_prefix}-feature-overlay','index':st_idx}
                 )
             )
+        
+
+        for img_idx, img in enumerate(image_overlay_annotations):
+            scaled_image_bounds = img['image_bounds']
+
+            # Creating data: path for image
+            with open(img['image_path'],'rb') as f:
+                new_image_path = f'data:image/{img["image_path"].split(".")[-1]};base64,{base64.b64encode(f.read()).decode("ascii")}'
+                f.close()
+
+            image_overlay_popup = self.get_image_overlay_popup(img, img_idx)
+
+            new_layer_children.extend([
+                dl.ImageOverlay(
+                    url = new_image_path,
+                    opacity = 0.5,
+                    interactive = True,
+                    bounds = scaled_image_bounds,
+                    id = {'type': f'{self.component_prefix}-image-overlay','index': img_idx},
+                    children = [
+                        image_overlay_popup
+                    ]
+                ),
+                dl.LayerGroup(
+                    id = {'type': f'{self.component_prefix}-image-overlay-mover-layergroup','index': img_idx},
+                    children = []
+                )
+            ])
+
+
+        # For MultiFrameSlideMap, add frame BaseLayers and RGB layer (if present)
+        if type(self) == MultiFrameSlideMap:
+            new_layer_children.extend(self.process_frames(new_metadata, new_url))
 
         for n,j in zip(new_annotations,annotation_properties):
             n['properties'] = j
 
-        new_annotations = json.dumps(new_annotations)
+        new_slide_info = {}
+        new_slide_info['x_scale'] = x_scale
+        new_slide_info['y_scale'] = y_scale
 
-        return new_layer_children, new_annotations, new_url, new_tile_size
+        new_annotations = json.dumps(new_annotations)
+        new_slide_info = json.dumps(new_slide_info)
+
+        return new_layer_children, new_annotations, new_url, new_tile_size, new_slide_info
 
     def upload_shape(self, upload_clicked, is_open):
 
@@ -855,12 +791,12 @@ class SlideMap(MapComponent):
                     html.Div([
                         dbc.Button(
                             'Download Shape',
-                            id = {'type': 'download-manual-roi','index': clicked_idx},
+                            id = {'type': f'{self.component_prefix}-download-manual-roi','index': clicked_idx},
                             n_clicks = 0,
                             className = 'd-grid col-12 mx-auto'
                         ),
                         dcc.Download(
-                            id = {'type': 'download-manual-roi-download','index': clicked_idx}
+                            id = {'type': f'{self.component_prefix}-download-manual-roi-download','index': clicked_idx}
                         )
                     ])
                 ],
@@ -1113,7 +1049,7 @@ class SlideMap(MapComponent):
                 
                 new_button_text = 'Lock in!'
                 mover = dl.DivMarker(
-                    id = {'type': 'image-overlay-mover','index': ctx.triggered_id['index']},
+                    id = {'type': f'{self.component_prefix}-image-overlay-mover','index': ctx.triggered_id['index']},
                     position = current_bounds[0],
                     draggable = True,
                     iconOptions = {
@@ -1165,7 +1101,7 @@ class SlideMap(MapComponent):
         else:
             raise exceptions.PreventUpdate
 
-    def export_image_overlay_bounds(self, button_click, current_position):
+    def export_image_overlay_bounds(self, button_click, current_position, slide_information):
         """Exporting position of image overlay
 
         :param button_click: Export button clicked
@@ -1180,10 +1116,11 @@ class SlideMap(MapComponent):
         if button_click:
             image_overlay_index = ctx.triggered_id['index']
 
-            #TODO: add reference to tileserver metadata wherever that is stored
+            slide_information = json.loads(get_pattern_matching_value(slide_information))
+
             scaled_position = [
-                [current_position[0][1]/self.x_scale, current_position[0][0]/self.y_scale],
-                [current_position[1][1]/self.x_scale, current_position[1][0]/self.y_scale]
+                [current_position[0][1]/slide_information['x_scale'], current_position[0][0]/slide_information['y_scale']],
+                [current_position[1][1]/slide_information['x_scale'], current_position[1][0]/slide_information['y_scale']]
             ]
             export_data = {
                 'content': json.dumps({
@@ -1197,13 +1134,15 @@ class SlideMap(MapComponent):
         else:
             raise exceptions.PreventUpdate
 
-    def download_manual_roi(self, button_click, current_manual_geojson):
+    def download_manual_roi(self, button_click, current_manual_geojson,slide_information):
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
         manual_roi_feature_index = ctx.triggered_id['index']-1
         manual_roi_geojson = get_pattern_matching_value(current_manual_geojson)['features'][manual_roi_feature_index]
+
+        slide_information = json.loads(get_pattern_matching_value(slide_information))
 
         manual_roi = {
             'type': 'FeatureCollection',
@@ -1212,9 +1151,10 @@ class SlideMap(MapComponent):
             ]
         }
 
-        scaled_manual_roi = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/self.x_scale,c[1]/self.y_scale),g),manual_roi)
+        scaled_manual_roi = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/slide_information['x_scale'],c[1]/slide_information['y_scale']),g),manual_roi)
 
         return {'content': json.dumps(scaled_manual_roi),'filename': f'Manual ROI {manual_roi_feature_index+1}.json'}
+
 
 class MultiFrameSlideMap(SlideMap):
     """MultiFrameSlideMap component, containing an image with multiple frames which are added as additional, selectable dl.TileLayer() components
@@ -1230,36 +1170,45 @@ class MultiFrameSlideMap(SlideMap):
         :param annotations: Individual or list of GeoJSON formatted annotations to add on top of the MultiFrameSlideMap
         :type annotations: Union[dict,list,None]
         """
-        self.frame_layers = []
 
         super().__init__()
 
-        self.title = 'Multi-Frame Slide Map'
-        #frame_layers = self.process_frames()
+    def load(self, component_prefix:int):
 
-        self.blueprint = DashBlueprint()
-        self.blueprint.layout = super().gen_layout()
+        self.component_prefix = component_prefix
+
+        self.title = 'Multi-Frame Slide Map'
+        self.blueprint = DashBlueprint(
+            transforms = [
+                PrefixIdTransform(prefix = f'{self.component_prefix}'),
+                MultiplexerTransform()
+            ]
+        )
 
         super().get_callbacks()
     
-    def initialize_map(self):
-        
-        annotations, annotation_components, image_overlays = super().process_annotations()
-        self.title = 'Multi-Frame Slide Map'
-        frame_layers = self.process_frames()
+    def __str__(self):
+        return 'Multi-Frame Slide Map'
 
-        self.blueprint = DashBlueprint()
-        self.blueprint.layout = super().gen_layout(annotations, annotation_components,image_overlays, frame_layers)
-
-        super().get_callbacks()
-
-    def gen_layout(self):
+    def gen_layout(self, session_data: dict):
         """Generating layout for MultiFrameSlideMap
 
         :return: Layout added to DashBlueprint object to be embedded in larger layout.
         :rtype: dash.html.Div.Div
         """
-        layout = html.Div(
+        layout = html.Div([
+            dcc.Dropdown(
+                id = {'type': 'slide-select-drop','index': 0},
+                placeholder = 'Select a slide to view',
+                options = [
+                    {
+                        'label': i['name'],
+                        'value': idx
+                    }
+                    for idx, i in enumerate(session_data)
+                ]
+            ),
+            html.Hr(),
             dl.Map(
                 id = {'type': 'slide-map','index': 0},
                 crs = 'Simple',
@@ -1308,10 +1257,31 @@ class MultiFrameSlideMap(SlideMap):
                         children = []
                     ),
                 ]
+            ),
+            dbc.Modal(
+                id = {'type': 'upload-shape-modal','index': 0},
+                is_open = False,
+                children = [
+                    html.Div(
+                        dcc.Upload(
+                            children = [
+                                'Drag and Drop or ',
+                                html.A('Select a File')
+                            ],
+                            id = {'type': 'upload-shape-data','index': 0},
+                            style={'width': '100%','height': '60px','lineHeight': '60px','borderWidth': '1px','borderStyle': 'dashed','borderRadius': '5px','textAlign': 'center'}
+                        )
+                    )
+                ]
+            ),
+            dbc.Modal(
+                id = {'type': 'load-annotations-modal','index': 0},
+                is_open = False,
+                children = []
             )
-        )
+        ])
 
-        return layout
+        self.blueprint.layout = layout
 
     def process_frames(self,image_metadata,tiles_url):
         """Create BaseLayer and TileLayer components for each of the different frames present in a multi-frame image
@@ -1440,16 +1410,16 @@ class SlideImageOverlay(MapComponent):
 
         return self.image_crs + [self.image_crs[0]+image_shape[1], self.image_crs[1]+image_shape[0]]
 
+    def __dict__(self):
+        return {'image_path': self.image_path, 'image_crs': self.image_crs, 'image_properties': self.image_properties,'image_bounds': self.image_bounds}
+
 class ChannelMixer(MapComponent):
     """ChannelMixer component that allows users to select various frames from their image to overlay at the same time with different color (styles) applied.
 
     :param MapComponent: General component class for children of SlideMap
     :type MapComponent: None
     """
-    def __init__(self,
-                 image_metadata: dict,
-                 tiles_url: str
-                 ):
+    def __init__(self):
         """Constructor method
 
         :param image_metadata: Dictionary containing "frames" data for a given image. "frames" here is a list containing channel names and indices.
@@ -1457,29 +1427,36 @@ class ChannelMixer(MapComponent):
         :param tiles_url: URL to refer to for accessing tiles (contains /{z}/{x}/{y}). Allows for "style" parameter to be passed. See large-image documentation: https://girder.github.io/large_image/getting_started.html#styles-changing-colors-scales-and-other-properties
         :type tiles_url: str
         """
-        self.image_metadata = image_metadata
-        self.tiles_url = tiles_url
-
         self.process_frames()
 
+
+    def load(self, component_prefix: int):
+
+        self.component_prefix = component_prefix
         self.title = 'Channel Mixer'
-        self.blueprint = DashBlueprint()
-        self.blueprint.layout = self.gen_layout()
+        self.blueprint = DashBlueprint(
+            transforms = [
+                PrefixIdTransform(prefix = f'{self.component_prefix}'),
+                MultiplexerTransform()
+            ]
+        )
 
         self.get_callbacks()
-    
-    def process_frames(self):
+
+    def process_frames(self, image_metadata:dict):
         """Extracting names for each frame for easy reference
         """
-        if 'frames' in self.image_metadata:
-            if len(self.image_metadata['frames'])>0:
-                self.frame_names = [i['Channel'] if 'Channel' in i else f'Frame {idx}' for idx,i in enumerate(self.image_metadata['frames'])]
+        if 'frames' in image_metadata:
+            if len(image_metadata['frames'])>0:
+                frame_names = [i['Channel'] if 'Channel' in i else f'Frame {idx}' for idx,i in enumerate(image_metadata['frames'])]
             else:
                 raise IndexError("No frames found in this image!")
         else:
             raise TypeError("Image is not multi-frame")
+        
+        return frame_names
 
-    def gen_layout(self):
+    def gen_layout(self, session_data:dict):
         """Generating layout for ChannelMixer component
 
         :return: Interactive components for ChannelMixer component
@@ -1503,12 +1480,7 @@ class ChannelMixer(MapComponent):
                     dbc.Row([
                         dcc.Dropdown(
                             id = {'type': 'channel-mixer-drop','index': 0},
-                            options = [
-                                {
-                                    'label': label, 'value': label
-                                }
-                                for idx,label in enumerate(self.frame_names)
-                            ],
+                            options = [],
                             value = [],
                             multi = True,
                             disabled = False
@@ -1534,12 +1506,27 @@ class ChannelMixer(MapComponent):
             ])
         ])
 
-        return layout
+        self.blueprint.layout = layout
 
     def get_callbacks(self):
         """Initializing callbacks and adding to DashBlueprint
         """
 
+        # Updating based on new slide selection
+        self.blueprint.callback(
+            [
+                Input({'type': 'slide-select-drop','index':ALL},'value')
+            ],
+            [
+                Output({'type': 'channel-mixer-drop','index': ALL},'options'),
+                Output({'type': 'channel-mixer-color-parent','index': ALL},'children')
+            ],
+            [
+                State('anchor-vis-store','data')
+            ]
+        )(self.update_slide)
+
+        # Creating new color selector for a selected channel
         self.blueprint.callback(
             [
                 Input({'type': 'channel-mixer-drop','index':ALL},'value')
@@ -1568,12 +1555,28 @@ class ChannelMixer(MapComponent):
             ],
             [
                 State({'type': 'channel-mixer-tab','index': ALL},'label'),
-                State({'type': 'channel-mixer-tab','index': ALL},'label_style')
+                State({'type': 'channel-mixer-tab','index': ALL},'label_style'),
+                State({'type': 'channel-mixer-drop','index': ALL},'options')
             ],
             [
                 Output({'type': 'tile-layer','index': ALL},'url')
             ]
         )(self.update_channel_mix)
+
+    def update_slide(self, selected_slide, vis_data):
+
+        if not any([i['value'] or i['value']==0 for i in ctx.triggered_id]):
+            raise exceptions.PreventUpdate
+        
+        vis_data = json.loads(vis_data)
+        new_slide = vis_data[get_pattern_matching_value(selected_slide)]
+
+        new_metadata = requests.get(new_slide['metadata_url']).json()
+
+        new_frame_list = self.process_frames(new_metadata)
+        new_color_selector_children = []
+
+        return [new_frame_list], [new_color_selector_children]
 
     def add_color_selector_tab(self, channel_mix_values: Union[list,None], current_channels:Union[list,None], current_colors: Union[list,None]):
         """Add a new color selector tab to channel-mixer-parent for selecting overlaid channel color
@@ -1647,7 +1650,7 @@ class ChannelMixer(MapComponent):
         
         return {'color': color_select}
     
-    def update_channel_mix(self, butt_click:list, current_channels:list,current_colors:list):
+    def update_channel_mix(self, butt_click:list, current_channels:list,current_colors:list, frame_names: list):
         """Updating urls of all tile layers to include selected overlay channels
 
         :param butt_click: Button clicked to update channel mix
@@ -1674,19 +1677,19 @@ class ChannelMixer(MapComponent):
             style_dict['bands'].append(
                 {
                     "palette": ["rgba(0,0,0,0)",current_colors[c]["color"]],
-                    "framedelta": self.frame_names.index(current_channels[c])
+                    "framedelta": frame_names.index(current_channels[c])
                 }
             )
 
 
         styled_urls = []
-        if all([i in self.frame_names for i in ['red','green','blue']]):
+        if all([i in frame_names for i in ['red','green','blue']]):
             # There can be an RGB image by default
             rgb_style_dict = {
                 "bands": [
                     {
                         "palette": ["rgba(0,0,0,0)",'rgba('+','.join(['255' if i==c_idx else '0' for i in range(3)]+['0'])+')'],
-                        "framedelta": self.frame_names.index(c)
+                        "framedelta": frame_names.index(c)
                     }
                     for c_idx,c in enumerate(['red','green','blue'])
                 ]
@@ -1696,12 +1699,12 @@ class ChannelMixer(MapComponent):
             rgb_style_dict = None
 
         styled_urls = []
-        for f in self.frame_names:
+        for f in frame_names:
             f_dict = {
                 "bands": [
                     {
                         "palette": ["rgba(0,0,0,0)","rgba(255,255,255,255)"],
-                        "framedelta": self.frame_names.index(f)
+                        "framedelta": frame_names.index(f)
                     }
                 ]
             }

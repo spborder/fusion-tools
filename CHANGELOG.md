@@ -4,6 +4,9 @@
 ## v2.0.0 (10//2024)
 
 ### Features
+- Built-in `LocalTileServer` starting in `Visualization` classes
+- Incorporating multiple slides and their annotations into the `SlideMap` component
+- "Linkage" added for duplicate components in the same main layout. Allows for comparison of multiple slides at the same time and integrating with other components
 - More flexibility added to `.utils.shapes.spatially_aggregate` allowing users to specify whether they want to separate out properties aggregated from different structures and whether they would like a summary for each aggregated property or just the mean. (see ./tests/test_spatial_aggregation.py)
 
 ## v1.1.0 (10/23/2024)

@@ -13,7 +13,8 @@ from typing_extensions import Union
 import numpy as np
 import uvicorn
 
-from fusion_tools.utils.shapes import load_annotations
+from fusion_tools.utils.shapes import load_annotations, convert_histomics
+from fusion_tools.components import SlideImageOverlay
 
 class TileServer:
     """Components which pull information from a slide(s)
@@ -89,11 +90,39 @@ class LocalTileServer(TileServer):
                     self.annotations.append(new_loaded_annotations)
                 else:
                     print(f'Unrecognized annotation format: {new_annotations}')
-            else:
-                self.annotations.append(new_annotations)
+
+            elif type(new_annotations)==list:
+                processed_anns = []
+                for n in new_annotations:
+                    if isinstance(n,SlideImageOverlay):
+                        processed_anns.append(dict(n))
+                    elif type(n)==dict:
+                        if 'annotation' in n:
+                            converted = convert_histomics(n)
+                            processed_anns.append(converted)
+                        else:
+                            processed_anns.append(converted)
+                    elif type(n)==str:
+                        loaded_anns = load_annotations(n)
+                        if type(loaded_anns)==list:
+                            processed_anns.extend(loaded_anns)
+                        elif type(loaded_anns)==dict:
+                            processed_anns.append(loaded_anns)
+
+                    elif type(n)==np.ndarray:
+                        print(f'Found annotations of type: {type(n)}, make sure to specify if this is an overlay image (use fusion_tools.SlideImageOverlay) or a label mask (use fusion_tools.utils.shapes.load_label_mask)')
+                        
+                    else:
+                        print(f'Unknown annotations type found: {n}')
+                    
+            elif type(new_annotations)==dict:
+                if 'annotation' in new_annotations:
+                    converted_annotations = convert_histomics(new_annotations)
+                    self.annotations.append([converted_annotations])
+                else:
+                    self.annotations.append([new_annotations])
         else:
             self.annotations.append([])
-
 
     def root(self):
         return {'message': "Oh yeah, now we're cooking"}
@@ -107,6 +136,15 @@ class LocalTileServer(TileServer):
             name_index = self.names.index(name)
 
             return f'http://{self.host}:{self.tile_server_port}/{name_index}/tiles/'+'{z}/{x}/{y}'
+        else:
+            return None
+
+    def get_name_regions_url(self,name):
+
+        if name in self.names:
+            name_index = self.names.index(name)
+
+            return f'http://{self.host}:{self.tile_server_port}/{name_index}/tiles/region'
         else:
             return None
 
