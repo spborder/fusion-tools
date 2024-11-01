@@ -31,7 +31,6 @@ from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, Mu
 from dash_extensions.javascript import assign, arrow_function, Namespace
 
 # fusion-tools imports
-from fusion_tools.tileserver import TileServer
 from fusion_tools.utils.shapes import find_intersecting, spatially_aggregate, convert_histomics
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 
@@ -108,7 +107,7 @@ class SlideMap(MapComponent):
                                         dbc.AccordionItem(
                                             title = 'Info',
                                             children = [
-                                                html.P(f'Path: {st['image_path']}'),
+                                                html.P(f'Path: {st["image_path"]}'),
                                             ]
                                         ),
                                         dbc.AccordionItem(
@@ -195,6 +194,13 @@ class SlideMap(MapComponent):
                 value = [],
                 multi = False,
                 style = {'marginBottom': '10px'}
+            ),
+            html.Div(
+                dcc.Store(
+                    id = {'type': 'map-slide-information','index': 0},
+                    storage_type='memory',
+                    data = json.dumps({})
+                )
             ),
             html.Hr(),
             dl.Map(
@@ -607,7 +613,7 @@ class SlideMap(MapComponent):
 
         x_scale, y_scale = self.get_scale_factors(new_metadata)
         annotation_properties = [i['properties'] for i in geo_annotations]
-        annotation_names = [i['name'] for i in geo_annotations]
+        annotation_names = [i['name'] for i in annotation_properties]
         geo_annotations = [
             geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*x_scale,c[1]*y_scale),g),i)
             for i in geo_annotations
@@ -691,17 +697,17 @@ class SlideMap(MapComponent):
         if type(self) == MultiFrameSlideMap:
             new_layer_children.extend(self.process_frames(new_metadata, new_url))
 
-        for n,j in zip(new_annotations,annotation_properties):
+        for n,j in zip(geo_annotations,annotation_properties):
             n['properties'] = j
 
         new_slide_info = {}
         new_slide_info['x_scale'] = x_scale
         new_slide_info['y_scale'] = y_scale
 
-        new_annotations = json.dumps(new_annotations)
+        geo_annotations = json.dumps(geo_annotations)
         new_slide_info = json.dumps(new_slide_info)
 
-        return new_layer_children, new_annotations, new_url, new_tile_size, new_slide_info
+        return new_layer_children, geo_annotations, new_url, new_tile_size, new_slide_info
 
     def upload_shape(self, upload_clicked, is_open):
 
@@ -1372,7 +1378,6 @@ class MultiFrameSlideMap(SlideMap):
             raise TypeError("Missing 'frames' key in image metadata")
         
         return frame_layers
-
 
 class SlideImageOverlay(MapComponent):
     """Image overlay on specific coordinates within a SlideMap

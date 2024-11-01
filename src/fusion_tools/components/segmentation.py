@@ -32,7 +32,6 @@ from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, Pr
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 from fusion_tools.utils.shapes import find_intersecting, extract_geojson_properties, path_to_mask, process_filters_queries
 from fusion_tools.components import Tool
-from fusion_tools.tileserver import TileServer
 
 
 class FeatureAnnotation(Tool):
@@ -317,7 +316,7 @@ class FeatureAnnotation(Tool):
             ],
             [
                 State({'type': 'map-annotations-store','index': ALL},'data'),
-                State({'type': 'vis-layout-tabs','index': ALL},'active_tab')
+                State({'type': 'anchor-vis-layout-tabs','index': ALL},'active_tab')
             ]
         )(self.update_structure_options)
 

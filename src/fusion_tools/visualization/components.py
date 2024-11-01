@@ -121,6 +121,8 @@ class Visualization:
 
         # This should be all the information necessary to reproduce the tileservers and annotations for each image
         slide_store = []
+        s_idx = 0
+        t_idx = 0
         if not self.local_slides is None:
             if self.local_annotations is None:
                 self.local_annotations = [None]*len(self.local_slides)
@@ -353,7 +355,7 @@ class Visualization:
                                     dbc.CardBody(
                                         dbc.Tabs(
                                             tabs_children,
-                                            id = {'type': 'vis-layout-tabs','index': np.random.randint(0,1000)}
+                                            id = {'type': 'anchor-vis-layout-tabs','index': np.random.randint(0,1000)}
                                         )
                                     )
                                 ]),

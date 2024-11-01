@@ -442,7 +442,6 @@ class OverlayOptions(Tool):
             raise exceptions.PreventUpdate
 
         new_annotations = json.loads(get_pattern_matching_value(new_annotations))
-
         overlay_options, feature_names, overlay_info = extract_geojson_properties(new_annotations, None, self.ignore_list, self.property_depth)
 
         drop_options = [
@@ -1076,7 +1075,7 @@ class PropertyViewer(Tool):
         # Updating for a new slide:
         self.blueprint.callback(
             [
-                Input({'type': 'map-annotations-store','index': ALL})
+                Input({'type': 'map-annotations-store','index': ALL},'data')
             ],
             [
                 Output({'type': 'property-viewer-available-properties','index': ALL},'data'),
@@ -1099,7 +1098,7 @@ class PropertyViewer(Tool):
                 Output({'type': 'property-viewer-data','index': ALL},'data')
             ],
             [
-                State({'type': 'vis-layout-tabs','index': ALL},'active_tab'),
+                State({'type': 'anchor-vis-layout-tabs','index': ALL},'active_tab'),
                 State({'type': 'property-viewer-data','index': ALL},'data'),
                 State({'type': 'property-viewer-update','index': ALL},'checked'),
                 State({'type':'property-view-subtype-parent','index':ALL},'children'),
@@ -1156,10 +1155,12 @@ class PropertyViewer(Tool):
 
         update_viewer = get_pattern_matching_value(update_viewer)
         active_tab = get_pattern_matching_value(active_tab)
-
+        print(active_tab)
         if not active_tab is None:
             if not active_tab=='property-viewer':
                 raise exceptions.PreventUpdate
+        else:
+            raise exceptions.PreventUpdate
         
         slide_map_bounds = get_pattern_matching_value(slide_map_bounds)
         view_type_value = get_pattern_matching_value(view_type_value)
@@ -1169,12 +1170,12 @@ class PropertyViewer(Tool):
         current_geojson = json.loads(get_pattern_matching_value(current_geojson))
         current_available_properties = json.loads(get_pattern_matching_value(available_properties))
 
-        if ctx.triggered_id['type']=='slide-map':
+        if 'slide-map' in ctx.triggered_id['type']:
             # Only update the region info when this is checked
             if update_viewer:
                 current_property_data['bounds'] = slide_map_bounds
 
-        elif ctx.triggered_id['type']=='property-view-type':
+        elif 'property-view-type' in ctx.triggered_id['type']:
             view_subtype_value = []
 
         current_property_data['update_view'] = update_viewer
@@ -1185,7 +1186,7 @@ class PropertyViewer(Tool):
         # Checking if a selected property has sub-properties
         main_properties = list(set([i if not '-->' in i else i.split(' --> ')[0] for i in current_available_properties]))
 
-        if ctx.triggered_id['type'] in ['property-view-type','property-view-subtype']:
+        if any([i in ctx.triggered_id['type'] for i in ['property-view-type','property-view-subtype']]):
             # Making new subtype children to correspond to new property selection
             sub_dropdowns = []
             if ctx.triggered_id['type']=='property-view-type':
@@ -1207,14 +1208,14 @@ class PropertyViewer(Tool):
                                 sub_dropdowns.append(
                                     dbc.Row([
                                         dbc.Col([
-                                            dbc.Label(f'Sub-Property: {i}: ',html_for = {'type': 'property-view-subtype','index': i-1})
+                                            dbc.Label(f'Sub-Property: {i}: ',html_for = {'type': f'{self.component_prefixf}{self.component_prefix}--property-view-subtype','index': i-1})
                                         ],md = 4),
                                         dbc.Col([
                                             dcc.Dropdown(
                                                 options = sub_drop,
                                                 value = [],
                                                 multi = False,
-                                                id = {'type': 'property-view-subtype','index': i-1},
+                                                id = {'type': f'{self.component_prefix}-property-view-subtype','index': i-1},
                                                 placeholder = f'Sub-Property: {i}',
                                                 disabled = False
                                             )
@@ -1227,14 +1228,14 @@ class PropertyViewer(Tool):
                                 sub_dropdowns.append(
                                     dbc.Row([
                                         dbc.Col([
-                                            dbc.Label(f'Sub-Property: {i}: ',html_for={'type': 'property-view-subtype','index': i-1})
+                                            dbc.Label(f'Sub-Property: {i}: ',html_for={'type': f'{self.component_prefix}-property-view-subtype','index': i-1})
                                         ],md = 4),
                                         dbc.Col([
                                             dcc.Dropdown(
                                                 options = [],
                                                 value = [],
                                                 multi = False,
-                                                id = {'type': 'property-view-subtype','index': i-1},
+                                                id = {'type': f'{self.component_prefix}-property-view-subtype','index': i-1},
                                                 placeholder = f'Sub-Property: {i}',
                                                 disabled = True
                                             )
@@ -1243,7 +1244,7 @@ class PropertyViewer(Tool):
                                 )
 
 
-            elif ctx.triggered_id['type']=='property-view-subtype':
+            elif 'property-view-subtype' in ctx.triggered_id['type']:
                 if not view_type_value is None:
                     child_properties = [i for i in current_available_properties if i.split(' --> ')[0]==view_type_value]
                     n_levels = max(list(set([len(i.split(' --> ')) for i in child_properties])))
@@ -1261,7 +1262,7 @@ class PropertyViewer(Tool):
                             sub_dropdowns.append(
                                 dbc.Row([
                                     dbc.Col([
-                                        dbc.Label(f'Sub-Property: {sub_idx+1}: ',html_for = {'type': 'property-view-subtype','index': sub_idx})
+                                        dbc.Label(f'Sub-Property: {sub_idx+1}: ',html_for = {f'{self.component_prefix}-type': 'property-view-subtype','index': sub_idx})
                                     ],md = 4),
                                     dbc.Col([
                                         dcc.Dropdown(
@@ -1269,7 +1270,7 @@ class PropertyViewer(Tool):
                                             value = view_subtype_value[sub_idx],
                                             placeholder = f'Sub-Property: {sub_idx+1}',
                                             disabled = False,
-                                            id = {'type': 'property-view-subtype','index': sub_idx}
+                                            id = {'type': f'{self.component_prefix}-property-view-subtype','index': sub_idx}
                                         )
                                     ])
                                 ])
@@ -1286,7 +1287,7 @@ class PropertyViewer(Tool):
                                 sub_dropdowns.append(
                                     dbc.Row([
                                         dbc.Col([
-                                            dbc.Label(f'Sub-Property: {sub_idx+1}: ',html_for = {'type': 'property-view-subtype','index': sub_idx})
+                                            dbc.Label(f'Sub-Property: {sub_idx+1}: ',html_for = {'type': f'{self.component_prefix}-property-view-subtype','index': sub_idx})
                                         ],md = 4),
                                         dbc.Col([
                                             dcc.Dropdown(
@@ -1294,7 +1295,7 @@ class PropertyViewer(Tool):
                                                 value = view_subtype_value[sub_idx],
                                                 placeholder = f'Sub-Property: {sub_idx+1}',
                                                 disabled = False,
-                                                id = {'type': 'property-view-subtype','index': sub_idx}
+                                                id = {'type': f'{self.component_prefix}-property-view-subtype','index': sub_idx}
                                             )
                                         ])
                                     ])
@@ -1303,7 +1304,7 @@ class PropertyViewer(Tool):
                                 sub_dropdowns.append(
                                     dbc.Row([
                                         dbc.Col([
-                                            dbc.Label(f'Sub-Property: {sub_idx+1}: ',html_for = {'type': 'property-view-subtype','index': sub_idx})
+                                            dbc.Label(f'Sub-Property: {sub_idx+1}: ',html_for = {'type': f'{self.component_prefix}-property-view-subtype','index': sub_idx})
                                         ],md = 4),
                                         dbc.Col([
                                             dcc.Dropdown(
@@ -1311,7 +1312,7 @@ class PropertyViewer(Tool):
                                                 value = [],
                                                 placeholder = f'Sub-Property: {sub_idx+1}',
                                                 disabled = True,
-                                                id = {'type': 'property-view-subtype','index': sub_idx}
+                                                id = {'type': f'{self.component_prefix}-property-view-subtype','index': sub_idx}
                                             )
                                         ])
                                     ])
@@ -1322,7 +1323,7 @@ class PropertyViewer(Tool):
         return_div = html.Div([
             dbc.Row([
                 dbc.Col(
-                    dbc.Label('Select a Property: ',html_for = {'type': 'property-view-type','index': 0}),
+                    dbc.Label('Select a Property: ',html_for = {'type': f'{self.component_prefix}-property-view-type','index': 0}),
                     md = 3
                 ),
                 dbc.Col(
@@ -1331,14 +1332,14 @@ class PropertyViewer(Tool):
                         value = view_type_value if not view_type_value is None else [],
                         placeholder = 'Property',
                         multi = False,
-                        id = {'type': 'property-view-type','index': 0}
+                        id = {'type': f'{self.component_prefix}-property-view-type','index': 0}
                     )
                 )
             ]),
             dbc.Row([
                 dbc.Col(
                     html.Div(
-                        id = {'type': 'property-view-subtype-parent','index': 0},
+                        id = {'type': f'{self.component_prefix}-property-view-subtype-parent','index': 0},
                         children = [
                             current_subtype_children
                         ]
@@ -1366,6 +1367,9 @@ class PropertyViewer(Tool):
         :rtype: dbc.Tabs
         """
 
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
         if len(current_features)==0:
             raise exceptions.PreventUpdate
 
@@ -1566,7 +1570,7 @@ class PropertyViewer(Tool):
         plot_tabs = dbc.Tabs(
             plot_tabs_children,
             active_tab = current_features[0]['properties']['_id'],
-            id = {'type': 'property-viewer-tabs','index': 0}
+            id = {'type': f'{self.component_prefix}-property-viewer-tabs','index': 0}
         )
 
         return plot_tabs

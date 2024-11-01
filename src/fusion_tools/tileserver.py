@@ -14,7 +14,7 @@ import numpy as np
 import uvicorn
 
 from fusion_tools.utils.shapes import load_annotations, convert_histomics
-from fusion_tools.components import SlideImageOverlay
+from fusion_tools.components.maps import SlideImageOverlay
 
 class TileServer:
     """Components which pull information from a slide(s)
@@ -111,7 +111,7 @@ class LocalTileServer(TileServer):
 
                     elif type(n)==np.ndarray:
                         print(f'Found annotations of type: {type(n)}, make sure to specify if this is an overlay image (use fusion_tools.SlideImageOverlay) or a label mask (use fusion_tools.utils.shapes.load_label_mask)')
-                        
+
                     else:
                         print(f'Unknown annotations type found: {n}')
                     
