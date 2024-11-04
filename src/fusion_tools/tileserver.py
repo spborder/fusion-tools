@@ -90,6 +90,7 @@ class LocalTileServer(TileServer):
                     self.annotations.append(new_loaded_annotations)
                 else:
                     print(f'Unrecognized annotation format: {new_annotations}')
+                    self.annotations.append([])
 
             elif type(new_annotations)==list:
                 processed_anns = []
@@ -111,7 +112,6 @@ class LocalTileServer(TileServer):
 
                     elif type(n)==np.ndarray:
                         print(f'Found annotations of type: {type(n)}, make sure to specify if this is an overlay image (use fusion_tools.SlideImageOverlay) or a label mask (use fusion_tools.utils.shapes.load_label_mask)')
-
                     else:
                         print(f'Unknown annotations type found: {n}')
                 

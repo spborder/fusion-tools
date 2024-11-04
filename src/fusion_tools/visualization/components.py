@@ -108,7 +108,7 @@ class Visualization:
 
         self.viewer_app = DashProxy(
             __name__,
-            requests_pathname_prefix = '/app/' if not 'jupyter' in self.app_options else None,
+            requests_pathname_prefix = '/app/' if not self.app_options['jupyter'] else None,
             suppress_callback_exceptions = True,
             external_stylesheets = self.app_options['external_stylesheets'],
             external_scripts = self.app_options['external_scripts'],
@@ -398,7 +398,7 @@ class Visualization:
         """Starting visualization session based on provided app_options
         """
         
-        if not 'jupyter' in self.app_options:
+        if not self.app_options['jupyter']:
             app = FastAPI()
 
             if not self.local_tile_server is None:
