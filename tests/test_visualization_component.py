@@ -61,7 +61,8 @@ def main():
                 SlideMap(),
                 OverlayOptions()
             ]
-        ]
+        ],
+        app_options={'port': 8050}
     )
 
     vis_sess.start()

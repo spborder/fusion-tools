@@ -595,7 +595,8 @@ class SlideMap(MapComponent):
         new_url = new_slide['tiles_url']
         new_annotations = requests.get(new_slide['annotations_url']).json()
         new_metadata = requests.get(new_slide['metadata_url']).json()
-        new_tile_size = new_metadata['tileHeight']
+        #new_tile_size = new_metadata['tileHeight']
+        new_tile_size = 240
 
         if type(new_annotations)==dict:
             new_annotations = [new_annotations]

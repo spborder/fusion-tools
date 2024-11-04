@@ -59,6 +59,9 @@ class FeatureAnnotation(Tool):
 
         if not os.path.exists(self.storage_path):
             os.makedirs(self.storage_path)
+    
+    def __str__(self):
+        return 'Feature Annotation'
 
     def load(self, component_prefix:int):
 
@@ -286,7 +289,7 @@ class FeatureAnnotation(Tool):
             ])
         ],style = {'maxHeight': '100vh','overflow': 'scroll'})
 
-        return layout
+        self.blueprint.layout = layout
 
     def get_callbacks(self):
         """Initializing callbacks and adding to DashBlueprint
@@ -906,6 +909,9 @@ class BulkLabels(Tool):
 
         self.ignore_list = ignore_list
         self.property_depth = property_depth
+
+    def __str__(self):
+        return 'Bulk Labels'
 
     def load(self, component_prefix:int):
 
