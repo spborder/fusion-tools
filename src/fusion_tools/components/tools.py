@@ -996,6 +996,7 @@ class PropertyViewer(Tool):
     def load(self, component_prefix: int):
 
         self.component_prefix = component_prefix
+
         self.title = 'Property Viewer'
         self.blueprint = DashBlueprint(
             transforms = [
@@ -1098,7 +1099,7 @@ class PropertyViewer(Tool):
                 Output({'type': 'property-viewer-data','index': ALL},'data')
             ],
             [
-                State({'type': 'anchor-vis-layout-tabs','index': ALL},'active_tab'),
+                State({'type': 'vis-layout-tabs','index': ALL},'active_tab'),
                 State({'type': 'property-viewer-data','index': ALL},'data'),
                 State({'type': 'property-viewer-update','index': ALL},'checked'),
                 State({'type':'property-view-subtype-parent','index':ALL},'children'),
@@ -1155,7 +1156,6 @@ class PropertyViewer(Tool):
 
         update_viewer = get_pattern_matching_value(update_viewer)
         active_tab = get_pattern_matching_value(active_tab)
-        print(active_tab)
         if not active_tab is None:
             if not active_tab=='property-viewer':
                 raise exceptions.PreventUpdate
@@ -1189,7 +1189,7 @@ class PropertyViewer(Tool):
         if any([i in ctx.triggered_id['type'] for i in ['property-view-type','property-view-subtype']]):
             # Making new subtype children to correspond to new property selection
             sub_dropdowns = []
-            if ctx.triggered_id['type']=='property-view-type':
+            if 'property-view-type' in ctx.triggered_id['type']:
                 if not view_type_value is None:
                     child_properties = [i for i in current_available_properties if i.split(' --> ')[0]==view_type_value]
                     n_levels = max(list(set([len(i.split(' --> ')) for i in child_properties])))
@@ -1208,7 +1208,7 @@ class PropertyViewer(Tool):
                                 sub_dropdowns.append(
                                     dbc.Row([
                                         dbc.Col([
-                                            dbc.Label(f'Sub-Property: {i}: ',html_for = {'type': f'{self.component_prefixf}{self.component_prefix}--property-view-subtype','index': i-1})
+                                            dbc.Label(f'Sub-Property: {i}: ',html_for = {'type': f'{self.component_prefix}-property-view-subtype','index': i-1})
                                         ],md = 4),
                                         dbc.Col([
                                             dcc.Dropdown(
@@ -2815,7 +2815,7 @@ class PropertyPlotter(Tool):
 
         current_features = json.loads(get_pattern_matching_value(current_features))
 
-        if ctx.triggered_id['type']=='selected-sub-butt':
+        if 'selected-sub-butt' in ctx.triggered_id['type']:
             if not sub_plot_value is None:
 
                 if type(sub_plot_value)==str:
@@ -2882,7 +2882,7 @@ class PropertyPlotter(Tool):
                         color = 'warning'
                     )
 
-        elif ctx.triggered_id['type'] == 'selected-sub-markers':
+        elif 'selected-sub-markers' in ctx.triggered_id['type']:
             current_selected = current_plot_data['selected']['points']
 
             selected_data = self.extract_data_from_features(
@@ -3095,7 +3095,7 @@ class HRAViewer(Tool):
             ])
         ],style = {'width': '100%'})
 
-        return layout
+        self.blueprint.layout = layout
 
     def get_callbacks(self):
         """Initializing callbacks and attaching to DashBlueprint

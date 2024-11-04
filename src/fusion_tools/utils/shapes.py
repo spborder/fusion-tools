@@ -281,7 +281,8 @@ def load_label_mask(label_mask: np.ndarray, name: str) -> dict:
 
     full_geo = {
         'type': 'FeatureCollection',
-        'features': []
+        'features': [],
+        'properties': {'name': name,'_id': uuid.uuid4().hex[:24]}
     }
 
     for geo, val in rasterio.features.shapes(label_mask, mask = label_mask>0):
@@ -348,7 +349,8 @@ def load_visium(visium_path:str, include_var_names:list = [], mpp:Union[float,No
         'type': 'FeatureCollection',
         'features': [],
         'properties': {
-            'name': 'Spots'
+            'name': 'Spots',
+            '_id': uuid.uuid4().hex[:24]
         }
     }
 
@@ -392,7 +394,7 @@ def convert_histomics(json_anns: Union[list,dict]):
 
         geojson_anns = {
             'type': 'FeatureCollection',
-            'properties': {'name': ann['annotation']['name']},
+            'properties': {'name': ann['annotation']['name'], '_id': uuid.uuid4().hex[:24]},
             'features': [
                 {
                     'type':'Feature',

@@ -1,7 +1,7 @@
 # Changelog
 
 <!--next-version-placeholder-->
-## v2.0.0 (10//2024)
+## v2.0.0 (11/04/2024)
 
 ### Features
 - Built-in `LocalTileServer` starting in `Visualization` classes

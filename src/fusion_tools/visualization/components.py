@@ -19,6 +19,8 @@ import threading
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.wsgi import WSGIMiddleware
+import asyncio
+import nest_asyncio
 
 class Visualization:
     """General holder class used for initialization. Components added after initialization.
@@ -79,6 +81,7 @@ class Visualization:
             'server': 'default',
             'server_options': {},
             'port': 8080,
+            'jupyter': False,
             'host': 'localhost',
             'layout_style': {},
             'external_stylesheets': [
@@ -105,7 +108,7 @@ class Visualization:
 
         self.viewer_app = DashProxy(
             __name__,
-            requests_pathname_prefix = '/app/',
+            requests_pathname_prefix = '/app/' if not 'jupyter' in self.app_options else None,
             suppress_callback_exceptions = True,
             external_stylesheets = self.app_options['external_stylesheets'],
             external_scripts = self.app_options['external_scripts'],
@@ -128,7 +131,7 @@ class Visualization:
                 self.local_annotations = [None]*len(self.local_slides)
 
             self.local_tile_server = LocalTileServer(
-                tile_server_port=self.app_options['port'],
+                tile_server_port=self.app_options['port'] if not self.app_options['jupyter'] else self.app_options['port']+10,
                 host = self.app_options['host']
             )
 
@@ -295,7 +298,7 @@ class Visualization:
         col_components = []
         tab_components = []
         for row_idx,row in enumerate(self.components):
-
+            
             if self.linkage=='row':
                 component_prefix = row_idx
 
@@ -355,7 +358,8 @@ class Visualization:
                                     dbc.CardBody(
                                         dbc.Tabs(
                                             tabs_children,
-                                            id = {'type': 'anchor-vis-layout-tabs','index': np.random.randint(0,1000)}
+                                            id = {'type': f'{component_prefix}-vis-layout-tabs','index': np.random.randint(0,1000)},
+                                            active_tab=col[0].title.lower().replace(' ','-')
                                         )
                                     )
                                 ]),
@@ -388,10 +392,6 @@ class Visualization:
                 )
             )
 
-        print(row_components)
-        print(col_components)
-        print(tab_components)
-
         return layout_children
 
     def start(self):
@@ -409,13 +409,23 @@ class Visualization:
 
         else:
 
-            if not self.local_tile_server is None:
-                raise NotImplementedError('Linking local tile servers with embedded Jupyter Notebook dashboards is not yet implemented.')
-            
-            self.viewer_app.run(
-                jupyter_mode=self.app_options['jupyter']['jupyter_mode'] if 'jupyter_mode' in self.app_options['jupyter'] else 'inline',
-                jupyter_server_url = self.app_options['jupyter']['jupyter_server_url'] if 'jupyter_server_url' in self.app_options['jupyter'] else f'http://{self.app_options["host"]}:{self.app_options["port"]}'
-            )
+            if not self.local_tile_server is None:      
+                nest_asyncio.apply()      
+                new_thread = threading.Thread(
+                    target = self.local_tile_server.start,
+                    daemon=True
+                )
+                new_thread.start()
 
+                self.viewer_app.run(
+                    host = self.app_options['host'],
+                    port = self.app_options['port']
+                )
+
+            else:
+                self.viewer_app.run(
+                    host = self.app_options['host'],
+                    port = self.app_options['port']
+                )
 
 

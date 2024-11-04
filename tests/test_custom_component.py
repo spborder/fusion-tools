@@ -11,7 +11,7 @@ import pandas as pd
 from dash import dcc, callback, ctx, ALL, MATCH, exceptions, no_update, Patch, dash_table
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash_extensions.enrich import DashBlueprint, html, Input, Output, State
+from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform
 from dash_extensions.javascript import assign
 import dash_leaflet as dl
 
@@ -58,20 +58,27 @@ class ClusterComponent:
     def __init__(self):
         """You can initialize data to the component here, or get data as the result of a callback.
         """
+        pass
+
+    def load(self, component_prefix:int):
+
+        self.component_prefix = component_prefix
         # Add a title to display on top of the component in a layout
         self.title = 'Cluster Component'
 
         # The DashBlueprint() allows for these components to be embedded in a larger layout, 
         # linking callbacks to other components that are also in the main layout.
-        self.blueprint = DashBlueprint()
-
-        # This layout only has to be for this component
-        self.blueprint.layout = self.gen_layout()
+        self.blueprint = DashBlueprint(
+            transforms=[
+                PrefixIdTransform(prefix=f'{self.component_prefix}'),
+                MultiplexerTransform()
+            ]
+        )
 
         # Adding interactivity through callbacks
         self.get_callbacks()
 
-    def gen_layout(self):
+    def gen_layout(self,session_data:dict):
         
         layout = html.Div([
             dbc.Card(
@@ -111,7 +118,7 @@ class ClusterComponent:
             )
         ])
 
-        return layout
+        self.blueprint.layout = layout
     
     def get_callbacks(self):
         """Adding callbacks to the blueprint
@@ -173,7 +180,7 @@ class ClusterComponent:
                     dbc.Row([
                         dbc.Col([
                             dash_table.DataTable(
-                                id = {'type': 'cluster-properties-table','index': g_idx},
+                                id = {'type': f'{self.component_prefix}-cluster-properties-table','index': g_idx},
                                 columns = [{'name': i,'id': i,'deletable': False} for i in intersecting_properties.columns],
                                 data = intersecting_properties.to_dict('records'),
                                 filter_action = 'native',
@@ -201,7 +208,7 @@ class ClusterComponent:
                                     f'Cluster {g["properties"]["name"]}',
                                     n_clicks = 0,
                                     className = 'd-grid col-12 mx-auto',
-                                    id = {'type': 'cluster-properties-cluster-button','index': g_idx}
+                                    id = {'type': f'{self.component_prefix}-cluster-properties-cluster-button','index': g_idx}
                                 )
                             )
                         )
@@ -223,7 +230,7 @@ class ClusterComponent:
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
-        colorscale = ['blue','red']
+        colorscale = 'blue->red'
         
         current_data = pd.DataFrame.from_records(current_data[ctx.triggered_id['index']])
         if current_data.shape[0]>10:
@@ -282,28 +289,16 @@ def main():
     base_url = 'http://ec2-3-230-122-132.compute-1.amazonaws.com:8080/api/v1'
     item_id = '64f545302d82d04be3e39eec'
 
-    # Starting visualization session
-    tile_server = DSATileServer(
-        api_url = base_url,
-        item_id = item_id
-    )
-
     # Starting the DSAHandler to grab information:
     dsa_handler = DSAHandler(
         girderApiUrl = base_url
     )
 
-    annotations = dsa_handler.get_annotations(
-        item = item_id
-    )
-    
     vis_session = Visualization(
+        tileservers=[dsa_handler.get_tile_server(item_id)],
         components = [
             [
-                SlideMap(
-                    tile_server = tile_server,
-                    annotations = annotations
-                ),
+                SlideMap(),
                 [
                     ClusterComponent()
                 ]
@@ -314,30 +309,6 @@ def main():
     vis_session.start()
 
 
-
-
-
-
 if __name__=="__main__":
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

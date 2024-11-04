@@ -9,7 +9,7 @@ fusion-tools documentation
 Documentation for fusion-tools package for generating modular dashboard visualizations for high-resolution microscopy images.
 
 .. toctree::
-   :maxdepth: 4
+   :maxdepth: 6
    :caption: Contents:
 
    modules

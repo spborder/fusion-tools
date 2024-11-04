@@ -38,4 +38,6 @@ tests/test_remote_slide_annotations.py
 tests/test_remote_tileserver.py
 tests/test_segmentation.py
 tests/test_slide_annotations.py
+tests/test_spatial_aggregation.py
 tests/test_tile_server.py
+tests/test_visualization_component.py

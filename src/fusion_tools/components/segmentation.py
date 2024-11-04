@@ -616,12 +616,12 @@ class FeatureAnnotation(Tool):
         if structure_drop_value is None or not structure_drop_value in current_structure_data:
             raise exceptions.PreventUpdate
 
-        if ctx.triggered_id['type'] in ['feature-annotation-structure-drop','feature-annotation-class-new']:
+        if any([i in ctx.triggered_id['type'] for i in ['feature-annotation-structure-drop','feature-annotation-class-new']]):
             # Getting a new structure:
             current_structure_index = current_structure_data[f'{structure_drop_value}_index']
             current_structure_region = current_structure_data[structure_drop_value][current_structure_index]
 
-        elif ctx.triggered_id['type'] == 'feature-annotation-previous':
+        elif 'feature-annotation-previous' in ctx.triggered_id['type']:
             # Going to previous structure
             current_structure_index = current_structure_data[f'{structure_drop_value}_index']
             if current_structure_index==0:
@@ -631,7 +631,7 @@ class FeatureAnnotation(Tool):
             
             current_structure_region = current_structure_data[structure_drop_value][current_structure_index]
 
-        elif ctx.triggered_id['type'] == 'feature-annotation-next':
+        elif 'feature-annotation-next' in ctx.triggered_id['type']:
             # Going to next structure
             current_structure_index = current_structure_data[f'{structure_drop_value}_index']
             if current_structure_index==len(current_structure_data[structure_drop_value])-1:
@@ -920,32 +920,18 @@ class BulkLabels(Tool):
 
         self.get_callbacks()
 
-    def get_scale_factors(self):
+    def get_scale_factors(self, image_metadata: dict):
         """Getting x and y scale factors to convert from map coordinates back to pixel coordinates
         """
 
-        if hasattr(self.tile_server,'image_metadata'):
-            base_dims = [
-                self.tile_server.image_metadata['sizeX']/(2**(self.tile_server.image_metadata['levels']-1)),
-                self.tile_server.image_metadata['sizeY']/(2**(self.tile_server.image_metadata['levels']-1))
-            ]
+        base_dims = [
+            image_metadata['sizeX']/(2**(image_metadata['levels']-1)),
+            image_metadata['sizeY']/(2**(image_metadata['levels']-1))
+        ]
+    
+        x_scale = base_dims[0] / image_metadata['sizeX']
+        y_scale = -(base_dims[1] / image_metadata['sizeY'])
         
-            x_scale = base_dims[0] / self.tile_server.image_metadata['sizeX']
-            y_scale = -(base_dims[1] / self.tile_server.image_metadata['sizeY'])
-        
-        elif hasattr(self.tile_server,'tiles_metadata'):
-            base_dims = [
-                self.tile_server.tiles_metadata['sizeX']/(2**(self.tile_server.tiles_metadata['levels']-1)),
-                self.tile_server.tiles_metadata['sizeY']/(2**(self.tile_server.tiles_metadata['levels']-1))
-            ]
-        
-            x_scale = base_dims[0] / self.tile_server.tiles_metadata['sizeX']
-            y_scale = -(base_dims[1] / self.tile_server.tiles_metadata['sizeY'])
-
-        else:
-            raise AttributeError("Missing image or tiles metadata")
-
-
         return x_scale, y_scale
 
     def gen_layout(self, session_data:dict):

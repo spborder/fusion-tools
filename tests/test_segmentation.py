@@ -127,28 +127,16 @@ def main():
 
         f.close()
 
-
-    tile_server = LocalTileServer(
-        local_image_path=slides[0]
-    )
-
-    new_thread = threading.Thread(
-        target = tile_server.start,
-        name = 'tile_server',
-    )
-    new_thread.daemon = True
-    new_thread.start()
+    local_slides = slides
+    local_annotations = [[bbox_geos,all_cells_geo]]
 
     vis = Visualization(
+        local_slides=local_slides,
+        local_annotations=local_annotations,
         components = [
-            SlideMap(
-                tile_server = tile_server,
-                annotations = [all_cells_geo,bbox_geos]
-            ),
+            SlideMap(),
             [
-                OverlayOptions(
-                    geojson_anns= [all_cells_geo,bbox_geos]
-                )
+                OverlayOptions()
             ]
         ]
     )
