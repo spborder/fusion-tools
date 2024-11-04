@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>fusion_tools.components package &mdash; fusion-tools 1.0.0 documentation</title>
+  <title>fusion_tools.components package &mdash; fusion-tools 2.0.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=19f00094" />
 
@@ -15,7 +15,7 @@
   
         <script src="_static/jquery.js?v=5d32c60e"></script>
         <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-        <script src="_static/documentation_options.js?v=8d563738"></script>
+        <script src="_static/documentation_options.js?v=51b770b3"></script>
         <script src="_static/doctools.js?v=9a2dae69"></script>
         <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/js/theme.js"></script>
@@ -100,7 +100,7 @@
 <p>Components used for high-resolution image viewing</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.ChannelMixer">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.components.maps.</span></span><span class="sig-name descname"><span class="pre">ChannelMixer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image_metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tiles_url</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.ChannelMixer" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.components.maps.</span></span><span class="sig-name descname"><span class="pre">ChannelMixer</span></span><a class="headerlink" href="#fusion_tools.components.maps.ChannelMixer" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#fusion_tools.components.maps.MapComponent" title="fusion_tools.components.maps.MapComponent"><code class="xref py py-class docutils literal notranslate"><span class="pre">MapComponent</span></code></a></p>
 <p>ChannelMixer component that allows users to select various frames from their image to overlay at the same time with different color (styles) applied.</p>
 <dl class="field-list simple">
@@ -125,7 +125,7 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.ChannelMixer.gen_layout">
-<span class="sig-name descname"><span class="pre">gen_layout</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.ChannelMixer.gen_layout" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">gen_layout</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.ChannelMixer.gen_layout" title="Link to this definition"></a></dt>
 <dd><p>Generating layout for ChannelMixer component</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -144,14 +144,19 @@
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.maps.ChannelMixer.load">
+<span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">component_prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.ChannelMixer.load" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.ChannelMixer.process_frames">
-<span class="sig-name descname"><span class="pre">process_frames</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.ChannelMixer.process_frames" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">process_frames</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image_metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.ChannelMixer.process_frames" title="Link to this definition"></a></dt>
 <dd><p>Extracting names for each frame for easy reference</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.ChannelMixer.update_channel_mix">
-<span class="sig-name descname"><span class="pre">update_channel_mix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">butt_click</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_colors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.ChannelMixer.update_channel_mix" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">update_channel_mix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">butt_click</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_channels</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_colors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.ChannelMixer.update_channel_mix" title="Link to this definition"></a></dt>
 <dd><p>Updating urls of all tile layers to include selected overlay channels</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -163,6 +168,11 @@
 </dd>
 </dl>
 </dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.maps.ChannelMixer.update_slide">
+<span class="sig-name descname"><span class="pre">update_slide</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">selected_slide</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vis_data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.ChannelMixer.update_slide" title="Link to this definition"></a></dt>
+<dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.ChannelMixer.update_tab_style">
@@ -187,7 +197,7 @@ For more information see dash-leaflet: <a class="reference external" href="https
 
 <dl class="py class">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.MultiFrameSlideMap">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.components.maps.</span></span><span class="sig-name descname"><span class="pre">MultiFrameSlideMap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tile_server</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="fusion_tools.html#fusion_tools.tileserver.TileServer" title="fusion_tools.tileserver.TileServer"><span class="pre">TileServer</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.MultiFrameSlideMap" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.components.maps.</span></span><span class="sig-name descname"><span class="pre">MultiFrameSlideMap</span></span><a class="headerlink" href="#fusion_tools.components.maps.MultiFrameSlideMap" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#fusion_tools.components.maps.SlideMap" title="fusion_tools.components.maps.SlideMap"><code class="xref py py-class docutils literal notranslate"><span class="pre">SlideMap</span></code></a></p>
 <p>MultiFrameSlideMap component, containing an image with multiple frames which are added as additional, selectable dl.TileLayer() components</p>
 <dl class="field-list simple">
@@ -197,7 +207,7 @@ For more information see dash-leaflet: <a class="reference external" href="https
 </dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.MultiFrameSlideMap.gen_layout">
-<span class="sig-name descname"><span class="pre">gen_layout</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">annotations</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotation_components</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_overlays</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_layers</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.MultiFrameSlideMap.gen_layout" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">gen_layout</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.MultiFrameSlideMap.gen_layout" title="Link to this definition"></a></dt>
 <dd><p>Generating layout for MultiFrameSlideMap</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -210,13 +220,13 @@ For more information see dash-leaflet: <a class="reference external" href="https
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="fusion_tools.components.maps.MultiFrameSlideMap.initialize_map">
-<span class="sig-name descname"><span class="pre">initialize_map</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.MultiFrameSlideMap.initialize_map" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="fusion_tools.components.maps.MultiFrameSlideMap.load">
+<span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">component_prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.MultiFrameSlideMap.load" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.MultiFrameSlideMap.process_frames">
-<span class="sig-name descname"><span class="pre">process_frames</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.MultiFrameSlideMap.process_frames" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">process_frames</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image_metadata</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tiles_url</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.MultiFrameSlideMap.process_frames" title="Link to this definition"></a></dt>
 <dd><p>Create BaseLayer and TileLayer components for each of the different frames present in a multi-frame image
 Also initializes base tile url and styled tile url</p>
 </dd></dl>
@@ -251,7 +261,7 @@ Also initializes base tile url and styled tile url</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.SlideMap">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.components.maps.</span></span><span class="sig-name descname"><span class="pre">SlideMap</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tile_server</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="fusion_tools.html#fusion_tools.tileserver.TileServer" title="fusion_tools.tileserver.TileServer"><span class="pre">TileServer</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.components.maps.</span></span><span class="sig-name descname"><span class="pre">SlideMap</span></span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#fusion_tools.components.maps.MapComponent" title="fusion_tools.components.maps.MapComponent"><code class="xref py py-class docutils literal notranslate"><span class="pre">MapComponent</span></code></a></p>
 <p>This is a general high-resolution tiled image component.</p>
 <dl class="field-list simple">
@@ -261,7 +271,7 @@ Also initializes base tile url and styled tile url</p>
 </dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.SlideMap.add_manual_roi">
-<span class="sig-name descname"><span class="pre">add_manual_roi</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_geojson</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">uploaded_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_annotations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotation_names</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_layers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">line_colors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">colormap</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.add_manual_roi" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">add_manual_roi</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_geojson</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">uploaded_shape</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_annotations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_layers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">line_colors</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">colormap</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.add_manual_roi" title="Link to this definition"></a></dt>
 <dd><p>Adding a manual region of interest (ROI) to the SlideMap using dl.EditControl() tools including polygon, rectangle, and markers.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -289,12 +299,12 @@ Also initializes base tile url and styled tile url</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.SlideMap.download_manual_roi">
-<span class="sig-name descname"><span class="pre">download_manual_roi</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">button_click</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_manual_geojson</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.download_manual_roi" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">download_manual_roi</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">button_click</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_manual_geojson</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">slide_information</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.download_manual_roi" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.SlideMap.export_image_overlay_bounds">
-<span class="sig-name descname"><span class="pre">export_image_overlay_bounds</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">button_click</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_position</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.export_image_overlay_bounds" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">export_image_overlay_bounds</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">button_click</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_position</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">slide_information</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.export_image_overlay_bounds" title="Link to this definition"></a></dt>
 <dd><p>Exporting position of image overlay</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -341,7 +351,7 @@ Also initializes base tile url and styled tile url</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.SlideMap.gen_layout">
-<span class="sig-name descname"><span class="pre">gen_layout</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">annotations</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">annotation_components</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">image_overlays</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame_layers</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.gen_layout" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">gen_layout</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.gen_layout" title="Link to this definition"></a></dt>
 <dd><p>Generating SlideMap layout</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -408,7 +418,7 @@ and
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.SlideMap.get_scale_factors">
-<span class="sig-name descname"><span class="pre">get_scale_factors</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.get_scale_factors" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">get_scale_factors</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">image_metadata</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.get_scale_factors" title="Link to this definition"></a></dt>
 <dd><p>Function used to initialize scaling factors applied to GeoJSON annotations to project annotations into the SlideMap CRS (coordinate reference system)</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -421,8 +431,8 @@ and
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="fusion_tools.components.maps.SlideMap.initialize_map">
-<span class="sig-name descname"><span class="pre">initialize_map</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.initialize_map" title="Link to this definition"></a></dt>
+<dt class="sig sig-object py" id="fusion_tools.components.maps.SlideMap.load">
+<span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">component_prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.load" title="Link to this definition"></a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
@@ -470,20 +480,6 @@ and
 </dd></dl>
 
 <dl class="py method">
-<dt class="sig sig-object py" id="fusion_tools.components.maps.SlideMap.process_annotations">
-<span class="sig-name descname"><span class="pre">process_annotations</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.process_annotations" title="Link to this definition"></a></dt>
-<dd><p>Process incoming annotations and generate dl.Overlay components applied to the SlideMap</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p>List of dl.Overlay components containing dl.GeoJSON objects where “data” contains the corresponding scaled GeoJSON information</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p>list</p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.SlideMap.update_image_overlay_transparency">
 <span class="sig-name descname"><span class="pre">update_image_overlay_transparency</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_opacity</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">float</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.update_image_overlay_transparency" title="Link to this definition"></a></dt>
 <dd><p>Update transparency of image overlay component</p>
@@ -499,6 +495,11 @@ and
 </dd>
 </dl>
 </dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.maps.SlideMap.update_slide">
+<span class="sig-name descname"><span class="pre">update_slide</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">slide_selected</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vis_data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.maps.SlideMap.update_slide" title="Link to this definition"></a></dt>
+<dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.maps.SlideMap.upload_shape">
@@ -524,7 +525,7 @@ and
 </dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.HRAViewer.gen_layout">
-<span class="sig-name descname"><span class="pre">gen_layout</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.HRAViewer.gen_layout" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">gen_layout</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.HRAViewer.gen_layout" title="Link to this definition"></a></dt>
 <dd><p>Generate layout for HRA Viewer component</p>
 </dd></dl>
 
@@ -546,6 +547,11 @@ and
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.tools.HRAViewer.load">
+<span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">component_prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.HRAViewer.load" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.HRAViewer.update_hra_viewer">
 <span class="sig-name descname"><span class="pre">update_hra_viewer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">viewer_drop_value</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.HRAViewer.update_hra_viewer" title="Link to this definition"></a></dt>
 <dd><p>Updating the HRAViewer component based on selected view</p>
@@ -560,7 +566,7 @@ and
 
 <dl class="py class">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.OverlayOptions">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.components.tools.</span></span><span class="sig-name descname"><span class="pre">OverlayOptions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">geojson_anns</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reference_object</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ignore_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">property_depth</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.OverlayOptions" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.components.tools.</span></span><span class="sig-name descname"><span class="pre">OverlayOptions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ignore_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">property_depth</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.OverlayOptions" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#fusion_tools.components.tools.Tool" title="fusion_tools.components.tools.Tool"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tool</span></code></a></p>
 <p>OverlayOptions Tool which enables editing overlay visualization properties including line color, fill color, and filters.</p>
 <dl class="field-list simple">
@@ -570,7 +576,7 @@ and
 </dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.OverlayOptions.add_filter">
-<span class="sig-name descname"><span class="pre">add_filter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">add_filter_click</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">delete_filter_click</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overlay_info_state</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.OverlayOptions.add_filter" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">add_filter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">add_filter_click</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">delete_filter_click</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overlay_info_state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">overlay_options</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.OverlayOptions.add_filter" title="Link to this definition"></a></dt>
 <dd><p>Adding a new filter to apply to GeoJSON features</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -634,7 +640,7 @@ and
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.OverlayOptions.gen_layout">
-<span class="sig-name descname"><span class="pre">gen_layout</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.OverlayOptions.gen_layout" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">gen_layout</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.OverlayOptions.gen_layout" title="Link to this definition"></a></dt>
 <dd><p>Generating OverlayOptions layout, added to DashBlueprint() object to be embedded in larger layout.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -651,6 +657,11 @@ and
 <span class="sig-name descname"><span class="pre">get_callbacks</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.OverlayOptions.get_callbacks" title="Link to this definition"></a></dt>
 <dd><p>Initializing callbacks for OverlayOptions Tool</p>
 </dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.tools.OverlayOptions.load">
+<span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">component_prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.OverlayOptions.load" title="Link to this definition"></a></dt>
+<dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.OverlayOptions.parse_added_filters">
@@ -723,11 +734,16 @@ and
 </dl>
 </dd></dl>
 
+<dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.tools.OverlayOptions.update_slide">
+<span class="sig-name descname"><span class="pre">update_slide</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_annotations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.OverlayOptions.update_slide" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
 </dd></dl>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyPlotter">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.components.tools.</span></span><span class="sig-name descname"><span class="pre">PropertyPlotter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">geojson_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reference_object</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ignore_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">property_depth</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.components.tools.</span></span><span class="sig-name descname"><span class="pre">PropertyPlotter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ignore_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">property_depth</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#fusion_tools.components.tools.Tool" title="fusion_tools.components.tools.Tool"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tool</span></code></a></p>
 <p>PropertyPlotter Tool which enables more detailed selection of properties across the entire tissue.
 Allows for generation of violin plots, scatter plots, and UMAP plots.</p>
@@ -782,7 +798,7 @@ Allows for generation of violin plots, scatter plots, and UMAP plots.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyPlotter.gen_layout">
-<span class="sig-name descname"><span class="pre">gen_layout</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter.gen_layout" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">gen_layout</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter.gen_layout" title="Link to this definition"></a></dt>
 <dd><p>Generating layout for PropertyPlotter Tool</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -818,7 +834,7 @@ Allows for generation of violin plots, scatter plots, and UMAP plots.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyPlotter.gen_selected_div">
-<span class="sig-name descname"><span class="pre">gen_selected_div</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_markers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter.gen_selected_div" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">gen_selected_div</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_markers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">available_properties</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter.gen_selected_div" title="Link to this definition"></a></dt>
 <dd><p>Generate a new property-graph-selected-div after changing the number of markers</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -871,7 +887,7 @@ Allows for generation of violin plots, scatter plots, and UMAP plots.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyPlotter.generate_property_dict">
-<span class="sig-name descname"><span class="pre">generate_property_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter.generate_property_dict" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">generate_property_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">available_properties</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter.generate_property_dict" title="Link to this definition"></a></dt>
 <dd><p>Generate nested dictionary used for populating the property dropdown menus</p>
 <p>For more information, see: <a class="reference external" href="https://github.com/kapot65/dash-treeview-antd">https://github.com/kapot65/dash-treeview-antd</a></p>
 </dd></dl>
@@ -881,6 +897,11 @@ Allows for generation of violin plots, scatter plots, and UMAP plots.</p>
 <span class="sig-name descname"><span class="pre">get_callbacks</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter.get_callbacks" title="Link to this definition"></a></dt>
 <dd><p>Initializing callbacks for PropertyPlotter Tool</p>
 </dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyPlotter.load">
+<span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">component_prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter.load" title="Link to this definition"></a></dt>
+<dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyPlotter.make_property_plot_tabs">
@@ -906,7 +927,7 @@ Allows for generation of violin plots, scatter plots, and UMAP plots.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyPlotter.remove_marker_label">
-<span class="sig-name descname"><span class="pre">remove_marker_label</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">delete_click</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_plot_data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter.remove_marker_label" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">remove_marker_label</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">delete_click</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_plot_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">available_properties</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter.remove_marker_label" title="Link to this definition"></a></dt>
 <dd><p>Remove marker from selected feature</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -926,7 +947,7 @@ Allows for generation of violin plots, scatter plots, and UMAP plots.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyPlotter.select_data_from_plot">
-<span class="sig-name descname"><span class="pre">select_data_from_plot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">selected_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_plot_data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter.select_data_from_plot" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">select_data_from_plot</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">selected_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_plot_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">available_properties</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter.select_data_from_plot" title="Link to this definition"></a></dt>
 <dd><p>Updating selected data tab based on selection in primary graph</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -973,7 +994,7 @@ Allows for generation of violin plots, scatter plots, and UMAP plots.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyPlotter.update_property_graph">
-<span class="sig-name descname"><span class="pre">update_property_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">plot_butt_click</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">property_list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label_list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_features</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_plot_data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter.update_property_graph" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">update_property_graph</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">plot_butt_click</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">property_list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">label_list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">property_keys</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_features</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_plot_data</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter.update_property_graph" title="Link to this definition"></a></dt>
 <dd><p>Updating plot based on selected properties, label(s)</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -999,6 +1020,11 @@ Allows for generation of violin plots, scatter plots, and UMAP plots.</p>
 </dd>
 </dl>
 </dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyPlotter.update_slide">
+<span class="sig-name descname"><span class="pre">update_slide</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_annotations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyPlotter.update_slide" title="Link to this definition"></a></dt>
+<dd></dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyPlotter.update_sub_div">
@@ -1027,7 +1053,7 @@ Allows for generation of violin plots, scatter plots, and UMAP plots.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyViewer">
-<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.components.tools.</span></span><span class="sig-name descname"><span class="pre">PropertyViewer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">geojson_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reference_object</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ignore_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">property_depth</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyViewer" title="Link to this definition"></a></dt>
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">fusion_tools.components.tools.</span></span><span class="sig-name descname"><span class="pre">PropertyViewer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ignore_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">property_depth</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">4</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyViewer" title="Link to this definition"></a></dt>
 <dd><p>Bases: <a class="reference internal" href="#fusion_tools.components.tools.Tool" title="fusion_tools.components.tools.Tool"><code class="xref py py-class docutils literal notranslate"><span class="pre">Tool</span></code></a></p>
 <p>PropertyViewer Tool which allows users to view distribution of properties across the current viewport of the SlideMap</p>
 <dl class="field-list simple">
@@ -1037,7 +1063,7 @@ Allows for generation of violin plots, scatter plots, and UMAP plots.</p>
 </dl>
 <dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyViewer.gen_layout">
-<span class="sig-name descname"><span class="pre">gen_layout</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyViewer.gen_layout" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">gen_layout</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">session_data</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyViewer.gen_layout" title="Link to this definition"></a></dt>
 <dd><p>Generating layout for PropertyViewer Tool</p>
 <dl class="field-list simple">
 <dt class="field-odd">Returns<span class="colon">:</span></dt>
@@ -1076,8 +1102,13 @@ Allows for generation of violin plots, scatter plots, and UMAP plots.</p>
 </dd></dl>
 
 <dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyViewer.load">
+<span class="sig-name descname"><span class="pre">load</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">component_prefix</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">int</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyViewer.load" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
 <dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyViewer.update_property_viewer">
-<span class="sig-name descname"><span class="pre">update_property_viewer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">slide_map_bounds</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">view_type_value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">view_subtype_value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">view_butt_click</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">active_tab</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_property_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">update_viewer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_subtype_children</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_geojson</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyViewer.update_property_viewer" title="Link to this definition"></a></dt>
+<span class="sig-name descname"><span class="pre">update_property_viewer</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">slide_map_bounds</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">view_type_value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">view_subtype_value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">view_butt_click</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">active_tab</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_property_data</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">update_viewer</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_subtype_children</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">current_geojson</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">available_properties</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyViewer.update_property_viewer" title="Link to this definition"></a></dt>
 <dd><p>Updating visualization of properties within the current viewport</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -1104,6 +1135,11 @@ Allows for generation of violin plots, scatter plots, and UMAP plots.</p>
 </dd>
 </dl>
 </dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="fusion_tools.components.tools.PropertyViewer.update_slide">
+<span class="sig-name descname"><span class="pre">update_slide</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">new_annotations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.components.tools.PropertyViewer.update_slide" title="Link to this definition"></a></dt>
+<dd></dd></dl>
 
 </dd></dl>
 

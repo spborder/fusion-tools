@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>fusion_tools.utils package &mdash; fusion-tools 1.0.0 documentation</title>
+  <title>fusion_tools.utils package &mdash; fusion-tools 2.0.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=19f00094" />
 
@@ -15,7 +15,7 @@
   
         <script src="_static/jquery.js?v=5d32c60e"></script>
         <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-        <script src="_static/documentation_options.js?v=8d563738"></script>
+        <script src="_static/documentation_options.js?v=51b770b3"></script>
         <script src="_static/doctools.js?v=9a2dae69"></script>
         <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/js/theme.js"></script>
@@ -121,6 +121,11 @@
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="fusion_tools.utils.shapes.convert_histomics">
+<span class="sig-prename descclassname"><span class="pre">fusion_tools.utils.shapes.</span></span><span class="sig-name descname"><span class="pre">convert_histomics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">json_anns</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">dict</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.utils.shapes.convert_histomics" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="fusion_tools.utils.shapes.export_annotations">
 <span class="sig-prename descclassname"><span class="pre">fusion_tools.utils.shapes.</span></span><span class="sig-name descname"><span class="pre">export_annotations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ann_geojson</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">format</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">save_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ann_options</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">{}</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.utils.shapes.export_annotations" title="Link to this definition"></a></dt>
 <dd><p>Exporting GeoJSON annotations to a desired format</p>
@@ -212,6 +217,11 @@
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="fusion_tools.utils.shapes.load_annotations">
+<span class="sig-prename descclassname"><span class="pre">fusion_tools.utils.shapes.</span></span><span class="sig-name descname"><span class="pre">load_annotations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">file_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">None</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">dict</span></span></span><a class="headerlink" href="#fusion_tools.utils.shapes.load_annotations" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="fusion_tools.utils.shapes.load_aperio">
 <span class="sig-prename descclassname"><span class="pre">fusion_tools.utils.shapes.</span></span><span class="sig-name descname"><span class="pre">load_aperio</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">xml_path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">str</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">list</span></span></span><a class="headerlink" href="#fusion_tools.utils.shapes.load_aperio" title="Link to this definition"></a></dt>
 <dd><p>Loading Aperio formatted annotations</p>
@@ -297,6 +307,11 @@ listed in var_names and also the barcodes associated with each spot.</p>
 </dd></dl>
 
 <dl class="py function">
+<dt class="sig sig-object py" id="fusion_tools.utils.shapes.merge_dict">
+<span class="sig-prename descclassname"><span class="pre">fusion_tools.utils.shapes.</span></span><span class="sig-name descname"><span class="pre">merge_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">a</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">b</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.utils.shapes.merge_dict" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
 <dt class="sig sig-object py" id="fusion_tools.utils.shapes.path_to_indices">
 <span class="sig-prename descclassname"><span class="pre">fusion_tools.utils.shapes.</span></span><span class="sig-name descname"><span class="pre">path_to_indices</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.utils.shapes.path_to_indices" title="Link to this definition"></a></dt>
 <dd><p>From SVG path to numpy array of coordinates, each row being a (row, col) point</p>
@@ -333,17 +348,17 @@ are True, and the other pixels are False.</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="fusion_tools.utils.shapes.spatially_aggregate">
-<span class="sig-prename descclassname"><span class="pre">fusion_tools.utils.shapes.</span></span><span class="sig-name descname"><span class="pre">spatially_aggregate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">agg_geo</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">base_geos</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.utils.shapes.spatially_aggregate" title="Link to this definition"></a></dt>
+<span class="sig-prename descclassname"><span class="pre">fusion_tools.utils.shapes.</span></span><span class="sig-name descname"><span class="pre">spatially_aggregate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">child_geo</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">dict</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parent_geos</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">separate</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">summarize</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">bool</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ignore_list</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">list</span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">[]</span></span></em><span class="sig-paren">)</span><a class="headerlink" href="#fusion_tools.utils.shapes.spatially_aggregate" title="Link to this definition"></a></dt>
 <dd><p>Aggregate intersecting feature properties to a provided GeoJSON</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>agg_geo</strong> (<em>dict</em>) – GeoJSON object that is receiving aggregated properties</p></li>
-<li><p><strong>base_geos</strong> (<em>list</em>) – List of GeoJSON objects which are intersecting with agg_geo</p></li>
+<li><p><strong>child_geo</strong> (<em>dict</em>) – GeoJSON object that is receiving aggregated properties</p></li>
+<li><p><strong>parent_geos</strong> (<em>list</em>) – List of GeoJSON objects which are intersecting with child_geo</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p>Updated agg_geo object with new properties from intersecting base_geos</p>
+<dd class="field-even"><p>Updated child_geo object with new properties from intersecting parent_geos</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>dict</p>
