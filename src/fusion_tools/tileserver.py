@@ -114,6 +114,8 @@ class LocalTileServer(TileServer):
 
                     else:
                         print(f'Unknown annotations type found: {n}')
+                
+                self.annotations.append(processed_anns)
                     
             elif type(new_annotations)==dict:
                 if 'annotation' in new_annotations:
