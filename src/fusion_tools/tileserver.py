@@ -101,7 +101,7 @@ class LocalTileServer(TileServer):
                             converted = convert_histomics(n)
                             processed_anns.append(converted)
                         else:
-                            processed_anns.append(converted)
+                            processed_anns.append(n)
                     elif type(n)==str:
                         loaded_anns = load_annotations(n)
                         if type(loaded_anns)==list:
