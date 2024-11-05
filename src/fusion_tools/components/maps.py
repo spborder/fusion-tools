@@ -388,7 +388,6 @@ class SlideMap(MapComponent):
 
                 return style;
                 }
-
                 """,
             name = 'featureStyle'
         )
@@ -437,7 +436,6 @@ class SlideMap(MapComponent):
                     return returnFeature;
                 }              
                 return returnFeature;
-                
                 }
                 """,
             name = 'featureFilter'
@@ -551,7 +549,7 @@ class SlideMap(MapComponent):
                 Input({'type': 'image-overlay-save-position','index': ALL},'n_clicks')
             ],
             [
-                Output({'type': 'image-overlay-save-position-download','index': MATCH},'data',allow_duplicate=True)
+                Output({'type': 'image-overlay-save-position-download','index': MATCH},'data')
             ],
             [
                 State({'type': 'image-overlay','index': ALL},'bounds'),
@@ -668,10 +666,15 @@ class SlideMap(MapComponent):
                 )
             )
         
-
         for img_idx, img in enumerate(image_overlay_annotations):
-            scaled_image_bounds = img['image_bounds']
 
+            # miny, minx, maxy, maxx (a.k.a. minlat, minlng, maxlat, maxlng)
+            scaled_image_bounds = [
+                [img['image_bounds'][1]*y_scale,
+                 img['image_bounds'][0]*x_scale],
+                [img['image_bounds'][3]*y_scale,
+                 img['image_bounds'][2]*x_scale]
+            ]
             # Creating data: path for image
             with open(img['image_path'],'rb') as f:
                 new_image_path = f'data:image/{img["image_path"].split(".")[-1]};base64,{base64.b64encode(f.read()).decode("ascii")}'
@@ -696,7 +699,6 @@ class SlideMap(MapComponent):
                 )
             ])
 
-
         # For MultiFrameSlideMap, add frame BaseLayers and RGB layer (if present)
         if type(self) == MultiFrameSlideMap:
             new_layer_children.extend(self.process_frames(new_metadata, new_url))
@@ -716,6 +718,7 @@ class SlideMap(MapComponent):
         new_slide_info = {}
         new_slide_info['x_scale'] = x_scale
         new_slide_info['y_scale'] = y_scale
+        new_slide_info['image_overlays'] = image_overlay_annotations
 
         geo_annotations = json.dumps(geo_annotations)
         new_slide_info = json.dumps(new_slide_info)
@@ -1063,9 +1066,11 @@ class SlideMap(MapComponent):
         :return: New text for the position button and mover Marker
         :rtype: tuple
         """
+        button_click = get_pattern_matching_value(button_click)
+        current_bounds = get_pattern_matching_value(current_bounds)
         if button_click:
+            button_text = get_pattern_matching_value(button_text)
             if button_text=='Move it!':
-                
                 new_button_text = 'Lock in!'
                 mover = dl.DivMarker(
                     id = {'type': f'{self.component_prefix}-image-overlay-mover','index': ctx.triggered_id['index']},
@@ -1104,7 +1109,8 @@ class SlideMap(MapComponent):
         :return: New bounds for image overlay component
         :rtype: list
         """
-
+        new_position = get_pattern_matching_value(new_position)
+        old_bounds = get_pattern_matching_value(old_bounds)
         if not new_position is None:
             old_size = [
                 old_bounds[1][0] - old_bounds[0][0],
@@ -1131,8 +1137,9 @@ class SlideMap(MapComponent):
         :return: JSON file containing original image path and current position on the slide 
         :rtype: dict
         """
-
+        button_click = get_pattern_matching_value(button_click)
         if button_click:
+            current_position = get_pattern_matching_value(current_position)
             image_overlay_index = ctx.triggered_id['index']
 
             slide_information = json.loads(get_pattern_matching_value(slide_information))
@@ -1143,7 +1150,7 @@ class SlideMap(MapComponent):
             ]
             export_data = {
                 'content': json.dumps({
-                    'imagePath': self.annotations[image_overlay_index].image_path,
+                    'imagePath': slide_information['image_overlays'][image_overlay_index]['image_path'],
                     'imageBounds': scaled_position
                 }),
                 'filename': "fusion_image_overlay_position.json"
@@ -1428,7 +1435,7 @@ class SlideImageOverlay(MapComponent):
 
         return self.image_crs + [self.image_crs[0]+image_shape[1], self.image_crs[1]+image_shape[0]]
 
-    def __dict__(self):
+    def to_dict(self):
         return {'image_path': self.image_path, 'image_crs': self.image_crs, 'image_properties': self.image_properties,'image_bounds': self.image_bounds}
 
 class ChannelMixer(MapComponent):

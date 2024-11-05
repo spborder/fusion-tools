@@ -29,7 +29,7 @@ def main():
             ]
         ],
         app_options = {
-            'port': '8060'
+            'port': 8060
         }
     )
 
