@@ -78,17 +78,20 @@ class FeatureAnnotation(Tool):
         # Add callbacks here
         self.get_callbacks()
 
-    def get_scale_factors(self, image_metadata:dict):
-        """Getting x and y scale factors to convert from map coordinates back to pixel coordinates
+    def get_scale_factors(self, image_metadata: dict):
+        """Function used to initialize scaling factors applied to GeoJSON annotations to project annotations into the SlideMap CRS (coordinate reference system)
+
+        :return: x and y (horizontal and vertical) scale factors applied to each coordinate in incoming annotations
+        :rtype: float
         """
 
         base_dims = [
             image_metadata['sizeX']/(2**(image_metadata['levels']-1)),
             image_metadata['sizeY']/(2**(image_metadata['levels']-1))
         ]
-    
-        x_scale = base_dims[0] / image_metadata['sizeX']
-        y_scale = -(base_dims[1] / image_metadata['sizeY'])
+
+        x_scale = (base_dims[0]*(240/image_metadata['tileHeight'])) / image_metadata['sizeX']
+        y_scale = -((base_dims[1]*(240/image_metadata['tileHeight'])) / image_metadata['sizeY'])
 
         return x_scale, y_scale
 
@@ -927,17 +930,20 @@ class BulkLabels(Tool):
         self.get_callbacks()
 
     def get_scale_factors(self, image_metadata: dict):
-        """Getting x and y scale factors to convert from map coordinates back to pixel coordinates
+        """Function used to initialize scaling factors applied to GeoJSON annotations to project annotations into the SlideMap CRS (coordinate reference system)
+
+        :return: x and y (horizontal and vertical) scale factors applied to each coordinate in incoming annotations
+        :rtype: float
         """
 
         base_dims = [
             image_metadata['sizeX']/(2**(image_metadata['levels']-1)),
             image_metadata['sizeY']/(2**(image_metadata['levels']-1))
         ]
-    
-        x_scale = base_dims[0] / image_metadata['sizeX']
-        y_scale = -(base_dims[1] / image_metadata['sizeY'])
-        
+
+        x_scale = (base_dims[0]*(240/image_metadata['tileHeight'])) / image_metadata['sizeX']
+        y_scale = -((base_dims[1]*(240/image_metadata['tileHeight'])) / image_metadata['sizeY'])
+
         return x_scale, y_scale
 
     def gen_layout(self, session_data:dict):

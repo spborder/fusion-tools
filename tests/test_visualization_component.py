@@ -31,10 +31,12 @@ def main():
     local_slide_list = [
         'C:\\Users\\samuelborder\\Desktop\\HIVE_Stuff\\FUSION\\Test Upload\\XY01_IU-21-015F_001.svs',
         'C:\\Users\\samuelborder\\Desktop\\HIVE_Stuff\\FUSION\\Test Upload\\XY01_IU-21-015F.svs',
+        'C:\\Users\\samuelborder\\Desktop\\HIVE_Stuff\\FUSION\\Test Upload\\new Visium\\V12U21-010_XY02_21-0069.tif',
     ]
     local_annotations_list = [
         'C:\\Users\\samuelborder\\Desktop\\HIVE_Stuff\\FUSION\\Test Upload\\XY01_IU-21-015F_001.xml',
         None,
+        'C:\\Users\\samuelborder\\Desktop\\HIVE_Stuff\\FUSION\\Test Upload\\new Visium\\V12U21-010_XY02_21-0069.h5ad',
     ]
 
     dsa_handler = DSAHandler(

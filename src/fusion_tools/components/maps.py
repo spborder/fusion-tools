@@ -87,8 +87,8 @@ class SlideMap(MapComponent):
             image_metadata['sizeY']/(2**(image_metadata['levels']-1))
         ]
 
-        x_scale = base_dims[0] / image_metadata['sizeX']
-        y_scale = -(base_dims[1] / image_metadata['sizeY'])
+        x_scale = (base_dims[0]*(240/image_metadata['tileHeight'])) / image_metadata['sizeX']
+        y_scale = -((base_dims[1]*(240/image_metadata['tileHeight'])) / image_metadata['sizeY'])
 
         return x_scale, y_scale
 
@@ -210,12 +210,17 @@ class SlideMap(MapComponent):
                 zoom = 1,
                 style = {'height': '90vh','width': '100%','margin': 'auto','display': 'inline-block'},
                 children = [
-                    dl.TileLayer(
-                        id = {'type': 'map-tile-layer','index': 0},
-                        url = '',
-                        tileSize=240,
-                        maxNativeZoom=5,
-                        minZoom = 0
+                    html.Div(
+                        id = {'type': 'map-tile-layer-holder','index': 0},
+                        children = [
+                            dl.TileLayer(
+                                id = {'type': 'map-tile-layer','index': 0},
+                                url = '',
+                                tileSize=240,
+                                maxNativeZoom=5,
+                                minZoom = 0
+                            )
+                        ]
                     ),
                     dl.FullScreenControl(
                         position = 'upper-left'
@@ -466,8 +471,7 @@ class SlideMap(MapComponent):
             [
                 Output({'type': 'map-layers-control','index': MATCH},'children'),
                 Output({'type': 'map-annotations-store','index':MATCH},'data'),
-                Output({'type': 'map-tile-layer','index': MATCH},'url'),
-                Output({'type':'map-tile-layer','index': MATCH},'tileSize'),
+                Output({'type': 'map-tile-layer-holder','index': MATCH},'children'),
                 Output({'type': 'map-slide-information','index': MATCH},'data')
             ],
             [
@@ -595,8 +599,7 @@ class SlideMap(MapComponent):
         new_url = new_slide['tiles_url']
         new_annotations = requests.get(new_slide['annotations_url']).json()
         new_metadata = requests.get(new_slide['metadata_url']).json()
-        #new_tile_size = new_metadata['tileHeight']
-        new_tile_size = 240
+        new_tile_size = new_metadata['tileHeight']
 
         if type(new_annotations)==dict:
             new_annotations = [new_annotations]
@@ -697,6 +700,15 @@ class SlideMap(MapComponent):
         # For MultiFrameSlideMap, add frame BaseLayers and RGB layer (if present)
         if type(self) == MultiFrameSlideMap:
             new_layer_children.extend(self.process_frames(new_metadata, new_url))
+            new_tile_layer = []
+        else:
+            new_tile_layer = dl.TileLayer(
+                id = {'type': f'{self.component_prefix}-map-tile-layer','index': 0},
+                url = new_url,
+                tileSize = new_tile_size,
+                maxNativeZoom=new_metadata['levels']-1,
+                minZoom = -1
+            )
 
         for n,j in zip(geo_annotations,annotation_properties):
             n['properties'] = j
@@ -708,7 +720,7 @@ class SlideMap(MapComponent):
         geo_annotations = json.dumps(geo_annotations)
         new_slide_info = json.dumps(new_slide_info)
 
-        return new_layer_children, geo_annotations, new_url, new_tile_size, new_slide_info
+        return new_layer_children, geo_annotations, new_tile_layer, new_slide_info
 
     def upload_shape(self, upload_clicked, is_open):
 
