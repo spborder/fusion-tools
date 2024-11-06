@@ -1614,67 +1614,70 @@ class PropertyPlotter(Tool):
         
         self.get_callbacks()
 
-    def generate_property_dict(self, available_properties):
-        """Generate nested dictionary used for populating the property dropdown menus
-        
-        For more information, see: https://github.com/kapot65/dash-treeview-antd
-        
-        """
-        property_dict = {}
-        property_keys = {}
-
-        property_dict = {
-            'title': 'Features',
+    def generate_property_dict(self, available_properties, title: str = 'Features'):
+        all_properties = {
+            'title': title,
             'key': '0',
             'children': []
         }
 
-        leaf_properties = list(set([i for i in available_properties if not '-->' in i]))
-        branch_properties = list(set([i for i in available_properties if '-->' in i and i.split(' --> ')[0] not in leaf_properties]))
-        trunk_properties = list(set([i.split(' --> ')[0] for i in branch_properties]))
-
-        # Adding branch properties first
-        property_dict_children = []
-        t_idx = 0
-        for t_idx,t in enumerate(trunk_properties):
-            trunk_dict = {
-                'title': t,
-                'key': f'0-{t_idx}',
-                'children': []
-            }
-
-            sub_count = 0
-            for b_idx, b in enumerate(branch_properties):
-                if t in b:
-
-                    b_dict = {
-                        'title': b.split(' --> ')[1],
-                        'key': f'0-{t_idx}-{sub_count}'
+        def add_prop_level(level_children, prop, index_list):
+            new_keys = {}
+            if len(level_children)==0:
+                if not prop[0] in self.ignore_list:
+                    new_key = f'{"-".join(index_list)}-0'
+                    p_dict = {
+                        'title': prop[0],
+                        'key': new_key,
+                        'children': []
                     }
-                    
-                    trunk_dict['children'].append(b_dict)
+                    l_dict = p_dict['children']
+                    new_keys[new_key] = prop[0]
+                    for p_idx,p in enumerate(prop[1:]):
+                        if not p in self.ignore_list:
+                            new_key = f'{"-".join(index_list+["0"]*(p_idx+2))}'
+                            l_dict.append({
+                                'title': p,
+                                'key': new_key,
+                                'children': []
+                            })
+                            l_dict = l_dict[0]['children']
+                            new_keys[new_key] = ' --> '.join(prop[:p_idx+2])
 
-                    property_keys[b_dict['key']] = b
+                    level_children.append(p_dict)
+            else:
+                for p_idx,p in enumerate(prop):
+                    if not p in self.ignore_list:
+                        if any([p==i['title'] for i in level_children]):
+                            title_idx = [i['title'] for i in level_children].index(p)
+                            level_children = level_children[title_idx]['children']
+                            index_list.append(str(title_idx))
+                        else:
+                            new_key = f'{"-".join(index_list)}-{len(level_children)}'
+                            level_children.append({
+                                'title': p,
+                                'key': new_key,
+                                'children': []
+                            })
+                            level_children = level_children[-1]['children']
+                            index_list.append("0")
+                            new_keys[new_key] = ' --> '.join(prop[:p_idx+1])
+            
+            return new_keys
+        
+        list_levels = [i.split(' --> ') if '-->' in i else [i] for i in available_properties]
+        unique_levels = list(set([len(i) for i in list_levels]))
+        sorted_level_idxes = np.argsort(unique_levels)[::-1]
+        property_keys = {}
+        for s in sorted_level_idxes:
+            depth_count = unique_levels[s]
+            props_with_level = [i for i in list_levels if len(i)==depth_count]
+            for p in props_with_level:
+                feature_children = all_properties['children']
+                property_keys = property_keys | add_prop_level(feature_children,p,['0'])
+        
+        return all_properties, property_keys
 
-                    sub_count+=1
-
-            property_dict_children.append(trunk_dict)
-
-        # Now adding leaf properties
-        for l_idx, l in enumerate(leaf_properties):
-            l_dict = {
-                'title': l,
-                'key': f'0-{t_idx+l_idx+1}',
-                'children': []
-            }
-
-            property_dict_children.append(l_dict)
-
-            property_keys[l_dict['key']] = l
-
-        property_dict['children'].extend(property_dict_children)
-
-        return property_dict, property_keys
 
     def get_callbacks(self):
         """Initializing callbacks for PropertyPlotter Tool
