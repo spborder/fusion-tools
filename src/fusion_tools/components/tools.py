@@ -1678,7 +1678,6 @@ class PropertyPlotter(Tool):
         
         return all_properties, property_keys
 
-
     def get_callbacks(self):
         """Initializing callbacks for PropertyPlotter Tool
         """

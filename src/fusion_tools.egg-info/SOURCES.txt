@@ -28,6 +28,7 @@ tests/test_dataset_classes.py
 tests/test_extract_nested_prop.py
 tests/test_feature_annotation.py
 tests/test_feature_extraction.py
+tests/test_generate_property_dict.py
 tests/test_hra_viewer.py
 tests/test_image_overlay.py
 tests/test_model_train.py
