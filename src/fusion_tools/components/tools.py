@@ -1349,7 +1349,7 @@ class PropertyViewer(Tool):
             html.Hr(),
             dbc.Row([
                 plot_components
-            ],style = {'maxHeight': '100vh'})
+            ],style = {'maxHeight': '100vh','width': '100%'})
         ])
 
         updated_view_data = json.dumps(current_property_data)
@@ -1632,7 +1632,8 @@ class PropertyPlotter(Tool):
                         'children': []
                     }
                     l_dict = p_dict['children']
-                    new_keys[new_key] = prop[0]
+                    if len(prop)==1:
+                        new_keys[new_key] = prop[0]
                     for p_idx,p in enumerate(prop[1:]):
                         if not p in self.ignore_list:
                             new_key = f'{"-".join(index_list+["0"]*(p_idx+2))}'
@@ -1642,6 +1643,7 @@ class PropertyPlotter(Tool):
                                 'children': []
                             })
                             l_dict = l_dict[0]['children']
+
                             new_keys[new_key] = ' --> '.join(prop[:p_idx+2])
 
                     level_children.append(p_dict)
@@ -1654,14 +1656,16 @@ class PropertyPlotter(Tool):
                             index_list.append(str(title_idx))
                         else:
                             new_key = f'{"-".join(index_list)}-{len(level_children)}'
+                            other_children = len(level_children)
                             level_children.append({
                                 'title': p,
                                 'key': new_key,
                                 'children': []
                             })
                             level_children = level_children[-1]['children']
-                            index_list.append("0")
-                            new_keys[new_key] = ' --> '.join(prop[:p_idx+1])
+                            index_list.append(str(other_children))
+                            if p_idx==len(prop)-1:
+                                new_keys[new_key] = ' --> '.join(prop[:p_idx+1])
             
             return new_keys
         
@@ -1675,7 +1679,8 @@ class PropertyPlotter(Tool):
             for p in props_with_level:
                 feature_children = all_properties['children']
                 property_keys = property_keys | add_prop_level(feature_children,p,['0'])
-        
+
+
         return all_properties, property_keys
 
     def get_callbacks(self):
@@ -1872,7 +1877,8 @@ class PropertyPlotter(Tool):
                                     id = {'type': 'property-graph','index': 0},
                                     figure = go.Figure()
                                 )
-                            )
+                            ),
+                            style = {'width': '100%'}
                         )
                     ]),
                     html.Hr(),
@@ -1994,8 +2000,9 @@ class PropertyPlotter(Tool):
                 split_p = p.split(' --> ')
                 f_props = feature['properties'].copy()
                 for sp in split_p:
-                    if sp in f_props:
-                        f_props = f_props[sp]
+                    if not f_props is None or type(f_props)==float:
+                        if sp in f_props:
+                            f_props = f_props[sp]
 
                 if not type(f_props)==dict:
                     try:

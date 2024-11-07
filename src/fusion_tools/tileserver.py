@@ -79,7 +79,25 @@ class LocalTileServer(TileServer):
 
         self.local_image_paths.append(new_image_path)
         self.names.append(new_image_path.split(os.sep)[-1])
-        new_tile_source = large_image.open(new_image_path,encoding="PNG")
+        new_tile_source = large_image.open(new_image_path)
+        new_metadata = new_tile_source.getMetadata()
+
+        # Treating 3-frame images as RGB by default
+        if 'frames' in new_metadata:
+            if len(new_metadata['frames'])==3:
+                new_tile_source = large_image.open(
+                    new_image_path,
+                    style = {
+                        "bands": [
+                            {
+                                "framedelta": c_idx,
+                                "palette": ["rgba(0,0,0,0)","rgba("+",".join(["255" if i==c_idx else "0" for i in range(3)]+["255"])+")"]
+                            }
+                            for c_idx in range(3)
+                        ]
+                    }
+                )
+
         self.tile_sources.append(new_tile_source)
         self.tiles_metadatas.append(new_tile_source.getMetadata())
 
@@ -140,7 +158,17 @@ class LocalTileServer(TileServer):
         if name in self.names:
             name_index = self.names.index(name)
 
-            return f'http://{self.host}:{self.tile_server_port}/{name_index}/tiles/'+'{z}/{x}/{y}'
+            name_meta = self.tiles_metadatas[name_index]
+            if 'frames' in name_meta:
+                if len(name_meta['frames'])==3:
+                    tiles_url = f'http://{self.host}:{self.tile_server_port}/{name_index}/tiles/'+'{z}/{x}/{y}'
+                    #tiles_url += '/?style={"bands": [{"framedelta":0,"palette":"rgba(255,0,0,255)"},{"framedelta":1,"palette":"rgba(0,255,0,255)"},{"framedelta":2,"palette":"rgba(0,0,255,255)"}]}'
+                else:
+                    tiles_url = f'http://{self.host}:{self.tile_server_port}/{name_index}/tiles/'+'{z}/{x}/{y}'
+            else:
+                tiles_url = f'http://{self.host}:{self.tile_server_port}/{name_index}/tiles/'+'{z}/{x}/{y}'
+
+            return tiles_url
         else:
             return None
 
@@ -171,7 +199,7 @@ class LocalTileServer(TileServer):
         else:
             return None
 
-    def get_tile(self,image:int,z:int, x:int, y:int, style = {}):
+    def get_tile(self,image:int,z:int, x:int, y:int, style:str = ''):
         """Tiles endpoint, returns an image tyle based on provided coordinates
 
         :param z: Zoom level for tile
@@ -185,12 +213,14 @@ class LocalTileServer(TileServer):
         :return: Image tile containing bytes encoded pixel information
         :rtype: Response
         """
+        
         if image<len(self.tile_sources) and image>=0:
             try:
                 raw_tile = self.tile_sources[image].getTile(
                             x = x,
                             y = y,
-                            z = z
+                            z = z,
+                            style = json.loads(style) if not style=='' else None
                         )
                 
             except large_image.exceptions.TileSourceXYZRangeError:
@@ -218,7 +248,7 @@ class LocalTileServer(TileServer):
         else:
             return Response(content = 'invalid image index',media_type='application/json')
     
-    def get_region(self, image:int, top: int, left: int, bottom:int, right:int):
+    def get_region(self, image:int, top: int, left: int, bottom:int, right:int,style:str = ''):
         """
         Grabbing a specific region in the image based on bounding box coordinates
         """
@@ -234,7 +264,8 @@ class LocalTileServer(TileServer):
                     'top': top,
                     'right': right,
                     'bottom': bottom
-                }
+                },
+                style = json.loads(style)
             )
 
             return Response(content = image_region, media_type = 'image/png')

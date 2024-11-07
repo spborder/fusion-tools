@@ -700,15 +700,20 @@ class SlideMap(MapComponent):
             ])
 
         # For MultiFrameSlideMap, add frame BaseLayers and RGB layer (if present)
-        if type(self) == MultiFrameSlideMap:
+        if isinstance(self,MultiFrameSlideMap):
             new_layer_children.extend(self.process_frames(new_metadata, new_url))
-            new_tile_layer = []
+            new_tile_layer = dl.TileLayer(
+                id = {'type': f'{self.component_prefix}-map-tile-layer','index': 0},
+                url = '',                tileSize=new_tile_size,
+                maxNativeZoom=new_metadata['levels']-2,
+                minZoom = -1
+            )
         else:
             new_tile_layer = dl.TileLayer(
                 id = {'type': f'{self.component_prefix}-map-tile-layer','index': 0},
                 url = new_url,
                 tileSize = new_tile_size,
-                maxNativeZoom=new_metadata['levels']-1,
+                maxNativeZoom=new_metadata['levels']-2,
                 minZoom = -1
             )
 
@@ -719,6 +724,7 @@ class SlideMap(MapComponent):
         new_slide_info['x_scale'] = x_scale
         new_slide_info['y_scale'] = y_scale
         new_slide_info['image_overlays'] = image_overlay_annotations
+        new_slide_info['tiles_url'] = new_url
 
         geo_annotations = json.dumps(geo_annotations)
         new_slide_info = json.dumps(new_slide_info)
@@ -1234,6 +1240,13 @@ class MultiFrameSlideMap(SlideMap):
                     for idx, i in enumerate(session_data)
                 ]
             ),
+            html.Div(
+                dcc.Store(
+                    id = {'type': 'map-slide-information','index': 0},
+                    storage_type='memory',
+                    data = json.dumps({})
+                )
+            ),
             html.Hr(),
             dl.Map(
                 id = {'type': 'slide-map','index': 0},
@@ -1242,6 +1255,10 @@ class MultiFrameSlideMap(SlideMap):
                 zoom = 1,
                 style = {'height': '90vh','width': '100%','margin': 'auto','display': 'inline-block'},
                 children = [
+                    html.Div(
+                        id = {'type': 'map-tile-layer-holder','index': 0},
+                        children = []
+                    ),
                     dl.FullScreenControl(
                         position = 'upper-left'
                     ),
@@ -1323,12 +1340,14 @@ class MultiFrameSlideMap(SlideMap):
                     frame_names = [i['Channel'] for i in image_metadata['frames']]
                 else:
                     frame_names = [f'Frame {i}' for i in range(len(image_metadata['frames']))]
+
+                print(frame_names)
+                print(len(image_metadata['frames']))
                 # This is a multi-frame image
                 if len(image_metadata['frames'])==3:
                     # Treat this as an RGB image by default
-                    rgb_url = tiles_url+'/?style={"bands": [{"framedelta":0,"palette":"rgba(255,0,0,255)"},{"framedelta":1,"palette":"rgba(0,255,0,255)"},{"framedelta":2,"palette":"rgba(0,0,255,255)"}]}'
+                    rgb_url = tiles_url+'/?style={"bands": [{"framedelta":0,"palette":"rgba(255,0,0,0)"},{"framedelta":1,"palette":"rgba(0,255,0,0)"},{"framedelta":2,"palette":"rgba(0,0,255,0)"}]}'
                 else:
-
                     # Checking for "red", "green" and "blue" frame names
                     if all([i in frame_names for i in ['red','green','blue']]):
                         rgb_style_dict = {
@@ -1345,53 +1364,56 @@ class MultiFrameSlideMap(SlideMap):
                     else:
                         rgb_url = None
 
-                    # Pre-determining indices:
-                    if not rgb_url is None:
-                        layer_indices = list(range(0,len(frame_names)+1))
-                    else:
-                        layer_indices = list(range(0,len(frame_names)))
-                    
-                    for f_idx,f in enumerate(frame_names):
-                        frame_layers.append(
-                            dl.BaseLayer(
-                                dl.TileLayer(
-                                    url = tiles_url+'/?style={"bands": [{"palette":["rgba(0,0,0,0)","rgba(255,255,255,255)"],"framedelta":'+str(f_idx)+'}]}',
-                                    tileSize = image_metadata['tileWidth'],
-                                    maxNativeZoom=image_metadata['levels']-1,
-                                    id = {'type': 'tile-layer','index': layer_indices[f_idx]}
-                                ),
-                                name = f,
-                                checked = f==frame_names[0],
-                                id = {'type': 'base-layer','index': layer_indices[f_idx]}
-                            )
+                # Pre-determining indices:
+                if not rgb_url is None:
+                    layer_indices = list(range(0,len(frame_names)+1))
+                else:
+                    layer_indices = list(range(0,len(frame_names)))
+                
+                for f_idx,f in enumerate(frame_names):
+                    frame_layers.append(
+                        dl.BaseLayer(
+                            dl.TileLayer(
+                                url = tiles_url+'/?style={"bands": [{"palette":["rgba(0,0,0,0)","rgba(255,255,255,255)"],"framedelta":'+str(f_idx)+'}]}',
+                                tileSize = image_metadata['tileHeight'],
+                                maxNativeZoom=image_metadata['levels']-2,
+                                minZoom = -1,
+                                id = {'type': f'{self.component_prefix}-tile-layer','index': layer_indices[f_idx]}
+                            ),
+                            name = f,
+                            checked = f==frame_names[0],
+                            id = {'type': f'{self.component_prefix}-base-layer','index': layer_indices[f_idx]}
                         )
-                    if rgb_url:
-                        frame_layers.append(
-                            dl.BaseLayer(
-                                dl.TileLayer(
-                                    url = rgb_url,
-                                    tileSize = image_metadata['tileWidth'],
-                                    maxNativeZoom=image_metadata['levels']-1,
-                                    id = {'type': 'tile-layer','index': layer_indices[f_idx+1]},
-                                    bounds = [[0,0],[-image_metadata['tileWidth'], image_metadata['tileWidth']]]
-                                ),
-                                name = 'RGB Image',
-                                checked = False,
-                                id = {'type': 'base-layer','index': layer_indices[f_idx+1]}
-                            )
+                    )
+                if rgb_url:
+                    frame_layers.append(
+                        dl.BaseLayer(
+                            dl.TileLayer(
+                                url = rgb_url,
+                                tileSize = image_metadata['tileHeight'],
+                                maxNativeZoom=image_metadata['levels']-2,
+                                minZoom = -1,
+                                id = {'type': f'{self.component_prefix}-tile-layer','index': layer_indices[f_idx+1]},
+                                #bounds = [[0,0],[-image_metadata['tileWidth'], image_metadata['tileWidth']]]
+                            ),
+                            name = 'RGB Image',
+                            checked = False,
+                            id = {'type': f'{self.component_prefix}-base-layer','index': layer_indices[f_idx+1]}
                         )
+                    )
             else:
                 frame_layers.append(
                     dl.BaseLayer(
                         dl.TileLayer(
                             url = tiles_url,
-                            tileSize = image_metadata['tileWidth'],
-                            maxNativeZoom=image_metadata['levels']-1,
-                            id = {'type': 'tile-layer','index': 0},
-                            bounds = [[0,0],[-image_metadata['tileWidth'],image_metadata['tileWidth']]]
+                            tileSize = image_metadata['tileHeight'],
+                            maxNativeZoom=image_metadata['levels']-2,
+                            minZoom = -1,
+                            id = {'type': f'{self.component_prefix}-tile-layer','index': 0},
+                            #bounds = [[0,0],[-image_metadata['tileWidth'],image_metadata['tileWidth']]]
                         ),
                         name = 'RGB Image',
-                        id = {'type': 'base-layer','index': 0}
+                        id = {'type': f'{self.component_prefix}-base-layer','index': 0}
                     )
                 )
         else:
@@ -1452,8 +1474,6 @@ class ChannelMixer(MapComponent):
         :param tiles_url: URL to refer to for accessing tiles (contains /{z}/{x}/{y}). Allows for "style" parameter to be passed. See large-image documentation: https://girder.github.io/large_image/getting_started.html#styles-changing-colors-scales-and-other-properties
         :type tiles_url: str
         """
-        self.process_frames()
-
 
     def load(self, component_prefix: int):
 
@@ -1581,7 +1601,8 @@ class ChannelMixer(MapComponent):
             [
                 State({'type': 'channel-mixer-tab','index': ALL},'label'),
                 State({'type': 'channel-mixer-tab','index': ALL},'label_style'),
-                State({'type': 'channel-mixer-drop','index': ALL},'options')
+                State({'type': 'channel-mixer-drop','index': ALL},'options'),
+                State({'type': 'map-slide-information','index': ALL},'data')
             ],
             [
                 Output({'type': 'tile-layer','index': ALL},'url')
@@ -1590,7 +1611,7 @@ class ChannelMixer(MapComponent):
 
     def update_slide(self, selected_slide, vis_data):
 
-        if not any([i['value'] or i['value']==0 for i in ctx.triggered_id]):
+        if not any([i['value'] or i['value']==0 for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
         vis_data = json.loads(vis_data)
@@ -1615,6 +1636,8 @@ class ChannelMixer(MapComponent):
         """
 
         channel_mix_values = get_pattern_matching_value(channel_mix_values)
+        if channel_mix_values is None:
+            raise exceptions.PreventUpdate
         
         if current_channels is None:
             current_channels = []
@@ -1623,14 +1646,14 @@ class ChannelMixer(MapComponent):
         for c_idx, c in enumerate(channel_mix_values):
             if not c in current_channels:
                 channel_tab = dbc.Tab(
-                    id = {'type': 'channel-mixer-tab','index': c_idx},
+                    id = {'type': f'{self.component_prefix}-channel-mixer-tab','index': c_idx},
                     tab_id = c.lower().replace(' ','-'),
                     label = c,
                     activeTabClassName='fw-bold fst-italic',
                     label_style = {'color': 'rgb(0,0,0,255)'},
                     children = [
                         dmc.ColorPicker(
-                            id = {'type': 'channel-mixer-color','index': c_idx},
+                            id = {'type': f'{self.component_prefix}-channel-mixer-color','index': c_idx},
                             format = 'rgba',
                             value = 'rgba(255,255,255,255)',
                             fullWidth=True
@@ -1639,14 +1662,14 @@ class ChannelMixer(MapComponent):
                 )
             else:
                 channel_tab = dbc.Tab(
-                    id = {'type': 'channel-mixer-tab','index': c_idx},
+                    id = {'type': f'{self.component_prefix}-channel-mixer-tab','index': c_idx},
                     tab_id = c.lower().replace(' ','-'),
                     label = c,
                     activeTabClassName='fw-bold fst-italic',
                     label_style = current_colors[c_idx],
                     children = [
                         dmc.ColorPicker(
-                            id = {'type': 'channel-mixer-color','index': c_idx},
+                            id = {'type': f'{self.component_prefix}-channel-mixer-color','index': c_idx},
                             format='rgba',
                             value = current_colors[c_idx]['color'],
                             fullWidth = True
@@ -1657,7 +1680,7 @@ class ChannelMixer(MapComponent):
             channel_mix_tabs.append(channel_tab)
 
         channel_tabs = dbc.Tabs(
-            id = {'type': 'channel-mixer-tabs','index': 0},
+            id = {'type': f'{self.component_prefix}-channel-mixer-tabs','index': 0},
             children = channel_mix_tabs,
             active_tab = c.lower().replace(' ','-')
         )
@@ -1673,9 +1696,10 @@ class ChannelMixer(MapComponent):
         if not ctx.triggered:
             raise exceptions.PreventUpdate
         
+        color_select = get_pattern_matching_value(color_select)
         return {'color': color_select}
     
-    def update_channel_mix(self, butt_click:list, current_channels:list,current_colors:list, frame_names: list):
+    def update_channel_mix(self, butt_click:list, current_channels:list,current_colors:list, frame_names: list, slide_info:list):
         """Updating urls of all tile layers to include selected overlay channels
 
         :param butt_click: Button clicked to update channel mix
@@ -1688,6 +1712,10 @@ class ChannelMixer(MapComponent):
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
+        
+        slide_info = json.loads(get_pattern_matching_value(slide_info))
+        frame_names = get_pattern_matching_value(frame_names)
+        #current_channels = get_pattern_matching_value(current_channels)
         
         style_dict = {"bands": []}
         for c in range(len(current_channels)):
@@ -1705,7 +1733,6 @@ class ChannelMixer(MapComponent):
                     "framedelta": frame_names.index(current_channels[c])
                 }
             )
-
 
         styled_urls = []
         if all([i in frame_names for i in ['red','green','blue']]):
@@ -1725,8 +1752,7 @@ class ChannelMixer(MapComponent):
 
         styled_urls = []
         for f in frame_names:
-            f_dict = {
-                "bands": [
+            f_dict = {"bands": [
                     {
                         "palette": ["rgba(0,0,0,0)","rgba(255,255,255,255)"],
                         "framedelta": frame_names.index(f)
@@ -1734,11 +1760,11 @@ class ChannelMixer(MapComponent):
                 ]
             }
             styled_urls.append(
-                self.tiles_url+'/?style='+json.dumps({"bands":f_dict["bands"]+style_dict["bands"]})
+                slide_info['tiles_url']+'/?style='+json.dumps({"bands":f_dict["bands"]+style_dict["bands"]})
             )
         if not rgb_style_dict is None:
             styled_urls.append(
-                self.tiles_url+'/?style='+json.dumps({"bands":rgb_style_dict["bands"]+style_dict["bands"]})
+                slide_info['tiles_url']+'/?style='+json.dumps({"bands":rgb_style_dict["bands"]+style_dict["bands"]})
             )
 
         return styled_urls

@@ -27,15 +27,16 @@ def main():
 
     # Main thing is that there should be a way to establish that one set of annotations belongs to one slide
 
+    base_dir = 'C:\\Users\\samuelborder\\Desktop\\HIVE_Stuff\\FUSION\\Test Upload\\'
     local_slide_list = [
-        'C:\\Users\\samuelborder\\Desktop\\HIVE_Stuff\\FUSION\\Test Upload\\XY01_IU-21-015F_001.svs',
-        'C:\\Users\\samuelborder\\Desktop\\HIVE_Stuff\\FUSION\\Test Upload\\XY01_IU-21-015F.svs',
-        'C:\\Users\\samuelborder\\Desktop\\HIVE_Stuff\\FUSION\\Test Upload\\new Visium\\V12U21-010_XY02_21-0069.tif',
+        base_dir+'XY01_IU-21-015F_001.svs',
+        base_dir+'XY01_IU-21-015F.svs',
+        base_dir+'new Visium\\V12U21-010_XY02_21-0069.tif',
     ]
     local_annotations_list = [
-        'C:\\Users\\samuelborder\\Desktop\\HIVE_Stuff\\FUSION\\Test Upload\\XY01_IU-21-015F_001.xml',
+        base_dir+'XY01_IU-21-015F_001.xml',
         None,
-        'C:\\Users\\samuelborder\\Desktop\\HIVE_Stuff\\FUSION\\Test Upload\\new Visium\\V12U21-010_XY02_21-0069.h5ad',
+        base_dir+'new Visium\\V12U21-010_XY02_21-0069.h5ad',
     ]
 
     dsa_handler = DSAHandler(
@@ -53,18 +54,17 @@ def main():
         local_slides = local_slide_list,
         local_annotations = local_annotations_list,
         tileservers = dsa_tileservers,
+        linkage = 'col',
         components = [
             [
-                SlideMap(),
                 [
+                    SlideMap(),
                     OverlayOptions(ignore_list = ['_id','_index','barcode']),
                     PropertyViewer(ignore_list = ['_id','_index','barcode']),
                     PropertyPlotter(ignore_list = ['_id','_index','barcode'])
-                ]
-            ],
-            [
-                SlideMap(),
+                ],            
                 [
+                    SlideMap(),
                     OverlayOptions(ignore_list = ['_id','_index','barcode']),
                     PropertyViewer(ignore_list = ['_id','_index','barcode']),
                     PropertyPlotter(ignore_list = ['_id','_index','barcode'])

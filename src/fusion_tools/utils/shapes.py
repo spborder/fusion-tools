@@ -295,7 +295,7 @@ def load_label_mask(label_mask: np.ndarray, name: str) -> dict:
 
     return full_geo
 
-def load_visium(visium_path:str, include_var_names:list = [], mpp:Union[float,None]=None):
+def load_visium(visium_path:str, include_var_names:list = [], include_obs: list = [], mpp:Union[float,None]=None):
     """Loading 10x Visium Spot annotations from an h5ad file. Adds any of the variables
     listed in var_names and also the barcodes associated with each spot.
 
@@ -358,6 +358,11 @@ def load_visium(visium_path:str, include_var_names:list = [], mpp:Union[float,No
         include_vars = [i for i in include_var_names if i in anndata_object.var_names]
     else:
         include_vars = []
+
+    if len(include_obs)>0:
+        include_obs = [i for i in include_obs if i in anndata_object.obs_keys()]
+    else:
+        include_obs = []
     
 
     barcodes = list(spot_coords.index)
@@ -367,6 +372,13 @@ def load_visium(visium_path:str, include_var_names:list = [], mpp:Union[float,No
         additional_props = {}
         for i in include_vars:
             additional_props[i] = anndata_object.X[idx,list(anndata_object.var_names).index(i)]
+        
+        for j in include_obs:
+            add_prop = anndata_object.obs[j].iloc[idx]
+            if not type(add_prop)==str:
+                additional_props[j] = float(add_prop)
+            else:
+                additional_props[j] = add_prop
 
         spot_feature = {
             'type': 'Feature',
@@ -376,6 +388,8 @@ def load_visium(visium_path:str, include_var_names:list = [], mpp:Union[float,No
             },
             'properties': {
                 'name': 'Spots',
+                '_id': uuid.uuid4().hex[:24],
+                '_index': idx,
                 'barcode': barcodes[idx]
             } | additional_props
         }
