@@ -12,15 +12,7 @@ from fusion_tools.components import SlideMap, SlideImageOverlay
 
 def main():
 
-    # Starting local tile server
-    tile_server = LocalTileServer(
-        local_image_path = 'C:\\Users\\samuelborder\\Downloads\\10H_LargeGlobalFlatfield.tifStitchedO.svs',
-        tile_server_port='8080',
-        host = 'localhost'
-    )
-    new_thread = threading.Thread(target = tile_server.start, name = 'local_tile_server', args = [])
-    new_thread.daemon = True
-    new_thread.start()
+    slide_list = ['C:\\Users\\samuelborder\\Downloads\\10H_LargeGlobalFlatfield.tifStitchedO.svs']
 
     annotations = [
         SlideImageOverlay(
@@ -29,16 +21,15 @@ def main():
     ]
     
     vis_session = Visualization(
+        local_slides = slide_list,
+        local_annotations=annotations,
         components = [
             [
-                SlideMap(
-                    tile_server = tile_server,
-                    annotations = annotations
-                )
+                SlideMap()
             ]
         ],
         app_options = {
-            'port': '8060'
+            'port': 8060
         }
     )
 
@@ -47,16 +38,4 @@ def main():
 
 if __name__=='__main__':
     main()
-
-
-
-
-
-
-
-
-
-
-
-
 

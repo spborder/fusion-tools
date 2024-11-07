@@ -26,26 +26,18 @@ def main():
     base_url = 'http://ec2-3-230-122-132.compute-1.amazonaws.com:8080/api/v1'
     item_id = '66a161a33ea2cd3894c85de3'
 
-    # Starting visualization session
-    tile_server = DSATileServer(
-        api_url = base_url,
-        item_id = item_id
+    dsa_handler = DSAHandler(
+        girderApiUrl=base_url
     )
 
-    annotations = load_histomics('C:\\Users\\samuelborder\\Desktop\\HIVE_Stuff\\FUSION\\Test Upload\\Xenium_Data\\Cells.json')
 
     vis_session = Visualization(
+        tileservers = [dsa_handler.get_tile_server(item_id)],
         components = [
             [
-                SlideMap(
-                    tile_server = tile_server,
-                    annotations = annotations
-                ),
+                SlideMap(),
                 [
-                    OverlayOptions(
-                        geojson_anns=annotations,
-                        ignore_list = ['Cell Id']
-                    ),
+                    OverlayOptions(),
                 ]
             ]
         ]

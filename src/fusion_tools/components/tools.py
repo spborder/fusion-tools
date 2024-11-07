@@ -33,7 +33,7 @@ from dash.dash_table.Format import Format, Scheme
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import dash_treeview_antd as dta
-from dash_extensions.enrich import DashBlueprint, html, Input, Output, State
+from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform
 from dash_extensions.javascript import Namespace, arrow_function
 
 # fusion-tools imports
@@ -55,8 +55,6 @@ class OverlayOptions(Tool):
     :type Tool: None
     """
     def __init__(self,
-                 geojson_anns: Union[list,dict],
-                 reference_object: Union[str,None] = None,
                  ignore_list: list = [],
                  property_depth: int = 4
                  ):
@@ -72,18 +70,27 @@ class OverlayOptions(Tool):
         :type property_depth: int, optional
         """
 
-        self.reference_object = reference_object
-        self.overlay_options, self.feature_names, self.overlay_info = extract_geojson_properties(geojson_anns, reference_object,ignore_list, property_depth)
+        self.ignore_list = ignore_list
+        self.property_depth = property_depth
         
+    def load(self,component_prefix:int):
+
+        self.component_prefix = component_prefix
+
         self.title = 'Overlay Options'
-        self.blueprint = DashBlueprint()
-        self.blueprint.layout = self.gen_layout()
+        self.blueprint = DashBlueprint(
+            transforms = [
+                PrefixIdTransform(prefix = f'{component_prefix}'),
+                MultiplexerTransform()
+            ]
+        )
+
         self.js_namespace = Namespace("fusionTools","default")
 
         # Add callbacks here
         self.get_callbacks()
 
-    def gen_layout(self):
+    def gen_layout(self, session_data:dict):
         """Generating OverlayOptions layout, added to DashBlueprint() object to be embedded in larger layout.
 
         :return: OverlayOptions layout
@@ -111,7 +118,6 @@ class OverlayOptions(Tool):
             'Pastel2', 'Pastel1',
         ]
 
-
         layout = html.Div([
             dbc.Card(
                 dbc.CardBody([
@@ -133,10 +139,7 @@ class OverlayOptions(Tool):
                         ),
                         dbc.Col(
                             dcc.Dropdown(
-                                options = [
-                                    {'label': i, 'value': i}
-                                    for i in self.overlay_options
-                                ],
+                                options = [],
                                 value = [],
                                 multi = False,
                                 id = {'type': 'overlay-drop','index': 0}
@@ -147,7 +150,7 @@ class OverlayOptions(Tool):
                     html.Div(
                         dcc.Store(
                             id = {'type': 'overlay-property-info','index':0},
-                            data = json.dumps(self.overlay_info),
+                            data = json.dumps({}),
                             storage_type='memory'
                         )
                     ),
@@ -220,26 +223,7 @@ class OverlayOptions(Tool):
                     dbc.Row([
                         dbc.Tabs(
                             id = {'type': 'feature-lineColor-opts','index': 0},
-                            children = [
-                                dbc.Tab(
-                                    children = [
-                                        dmc.ColorPicker(
-                                            id = {'type': 'feature-lineColor','index': f_idx},
-                                            format = 'hex',
-                                            value = '#FFFFFF',
-                                            fullWidth=True
-                                        ),
-                                        dbc.Button(
-                                            id = {'type': 'feature-lineColor-butt','index': f_idx},
-                                            children = ['Update Boundary Color'],
-                                            className = 'd-grid col-12 mx-auto',
-                                            n_clicks = 0
-                                        )
-                                    ],
-                                    label = f
-                                )
-                                for f_idx, f in enumerate(self.feature_names)
-                            ]
+                            children = []
                         )
                     ],style = {'marginBottom':'10px'}),
                     dbc.Row([
@@ -323,11 +307,25 @@ class OverlayOptions(Tool):
             )
         ],style = {'maxHeight': '100vh','overflow':'scroll'})
 
-        return layout
+        self.blueprint.layout = layout
 
     def get_callbacks(self):
         """Initializing callbacks for OverlayOptions Tool
         """
+
+        # Updating for new slide selection:
+        self.blueprint.callback(
+            [
+                Input({'type': 'map-annotations-store','index': ALL},'data')
+            ],
+            [
+                Output({'type': 'overlay-drop','index': ALL},'options'),
+                Output({'type': 'overlay-property-info','index': ALL},'data'),
+                Output({'type': 'add-filter-parent','index': ALL},'children'),
+                Output({'type': 'feature-lineColor-opts','index': ALL},'children')
+            ]
+        )(self.update_slide)
+
         # Updating overlay color, transparency, line color, and filter
         self.blueprint.callback(
             [
@@ -379,7 +377,8 @@ class OverlayOptions(Tool):
                 Input({'type': 'delete-filter','index': ALL},'n_clicks')
             ],
             [
-                State({'type': 'overlay-property-info','index': ALL},'data')
+                State({'type': 'overlay-property-info','index': ALL},'data'),
+                State({'type': 'overlay-drop','index': ALL},'options')
             ]
         )(self.add_filter)
 
@@ -436,8 +435,49 @@ class OverlayOptions(Tool):
                 State({'type': 'map-annotations-store','index': ALL},'data')
             ]
         )(self.export_layers)
-        
-    def add_filter(self, add_filter_click, delete_filter_click,overlay_info_state):
+
+    def update_slide(self, new_annotations:list):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        new_annotations = json.loads(get_pattern_matching_value(new_annotations))
+        overlay_options, feature_names, overlay_info = extract_geojson_properties(new_annotations, None, self.ignore_list, self.property_depth)
+
+        drop_options = [
+            {
+                'label': i,
+                'value': i
+            }
+            for i in overlay_options
+        ]
+
+        property_info = json.dumps(overlay_info)
+        filter_children = []
+        feature_lineColor_children = [
+            dbc.Tab(
+                children = [
+                    dmc.ColorPicker(
+                        id = {'type': f'{self.component_prefix}-feature-lineColor','index': f_idx},
+                        format = 'hex',
+                        value = '#FFFFFF',
+                        fullWidth=True
+                    ),
+                    dbc.Button(
+                        id = {'type': f'{self.component_prefix}-feature-lineColor-butt','index': f_idx},
+                        children = ['Update Boundary Color'],
+                        className = 'd-grid col-12 mx-auto',
+                        n_clicks = 0
+                    )
+                ],
+                label = f
+            )
+            for f_idx, f in enumerate(feature_names)
+        ]
+
+        return [drop_options], [property_info],[filter_children], [feature_lineColor_children]
+ 
+    def add_filter(self, add_filter_click, delete_filter_click,overlay_info_state,overlay_options):
         """Adding a new filter to apply to GeoJSON features
 
         :param add_filter_click: Add filter icon clicked
@@ -451,17 +491,18 @@ class OverlayOptions(Tool):
         :return: List of current filters applied to GeoJSON features
         :rtype: list
         """
+        
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
         add_filter_click = get_pattern_matching_value(add_filter_click)
+        overlay_options = get_pattern_matching_value(overlay_options)
         overlay_info_state = json.loads(get_pattern_matching_value(overlay_info_state))
-
         if len(list(overlay_info_state.keys()))==0:
             raise exceptions.PreventUpdate
 
         active_filters = Patch()
-        if ctx.triggered_id['type']=='delete-filter':
+        if 'delete-filter' in ctx.triggered_id['type']:
 
             values_to_remove = []
             for i,val in enumerate(delete_filter_click):
@@ -471,15 +512,15 @@ class OverlayOptions(Tool):
             for v in values_to_remove:
                 del active_filters[v]
 
-        elif ctx.triggered_id['type'] in ['add-filter-butt']:
+        elif 'add-filter-butt' in ctx.triggered_id['type']:
             
             # Initializing dropdown value 
-            overlayBounds = overlay_info_state[self.overlay_options[0]]
+            overlayBounds = overlay_info_state[overlay_options[0]['label']]
             if 'min' in overlayBounds:
                 # Used for numeric filtering
                 values_selector = html.Div(
                     dcc.RangeSlider(
-                        id = {'type': 'add-filter-selector','index': add_filter_click},
+                        id = {'type': f'{self.component_prefix}-add-filter-selector','index': add_filter_click},
                         min = overlayBounds['min']-0.01,
                         max = overlayBounds['max']+0.01,
                         value = [overlayBounds['min'],overlayBounds['max']],
@@ -489,19 +530,19 @@ class OverlayOptions(Tool):
                         allowCross = True,
                         disabled = False
                     ),
-                    id = {'type': 'add-filter-selector-div','index': add_filter_click},
+                    id = {'type': f'{self.component_prefix}-add-filter-selector-div','index': add_filter_click},
                     style = {'display': 'inline-block','margin': 'auto','width': '100%'}
                 )
             elif 'unique' in overlayBounds:
                 # Used for categorical filtering
                 values_selector = html.Div(
                     dcc.Dropdown(
-                        id = {'type':'add-filter-selector','index': add_filter_click},
+                        id = {'type':f'{self.component_prefix}-add-filter-selector','index': add_filter_click},
                         options = overlayBounds['unique'],
                         value = overlayBounds['unique'],
                         multi = True
                     ),
-                    id = {'type': 'add-filter-selector-div','index': add_filter_click}
+                    id = {'type': f'{self.component_prefix}-add-filter-selector-div','index': add_filter_click}
                 )
             
             def new_filter_item():
@@ -509,22 +550,22 @@ class OverlayOptions(Tool):
                     dbc.Row([
                         dbc.Col(
                             dcc.Dropdown(
-                                options = self.overlay_options,
-                                value = self.overlay_options[0],
+                                options = overlay_options,
+                                value = overlay_options[0],
                                 placeholder = 'Select property to filter structures',
-                                id = {'type': 'add-filter-drop','index': add_filter_click}
+                                id = {'type': f'{self.component_prefix}-add-filter-drop','index': add_filter_click}
                             ),
                             md = 10
                         ),
                         dbc.Col([
                             html.I(
-                                id = {'type': 'delete-filter','index': add_filter_click},
+                                id = {'type': f'{self.component_prefix}-delete-filter','index': add_filter_click},
                                 n_clicks = 0,
                                 className = 'bi bi-x-circle-fill fa-2x',
                                 style = {'color': 'rgb(255,0,0)'}
                             ),
                             dbc.Tooltip(
-                                target = {'type': 'delete-filter','index': add_filter_click},
+                                target = {'type': f'{self.component_prefix}-delete-filter','index': add_filter_click},
                                 children = 'Delete this filter'
                             )
                             ],
@@ -559,7 +600,7 @@ class OverlayOptions(Tool):
         if 'min' in overlayBounds:
             # Used for numeric filtering
             values_selector = dcc.RangeSlider(
-                id = {'type': 'add-filter-selector','index': ctx.triggered_id['index']},
+                id = {'type': f'{self.component_prefix}-add-filter-selector','index': ctx.triggered_id['index']},
                 min = overlayBounds['min']-0.01,
                 max = overlayBounds['max']+0.01,
                 value = [overlayBounds['min'],overlayBounds['max']],
@@ -573,7 +614,7 @@ class OverlayOptions(Tool):
         elif 'unique' in overlayBounds:
             # Used for categorical filtering
             values_selector = dcc.Dropdown(
-                id = {'type':'add-filter-selector','index': ctx.triggered_id['index']},
+                id = {'type':f'{self.component_prefix}-add-filter-selector','index': ctx.triggered_id['index']},
                 options = overlayBounds['unique'],
                 value = overlayBounds['unique'],
                 multi = True
@@ -649,7 +690,7 @@ class OverlayOptions(Tool):
         colormap_val = get_pattern_matching_value(colormap_val)
         overlay_info_state = json.loads(get_pattern_matching_value(overlay_info_state))
 
-        if ctx.triggered_id['type']=='overlay-drop':
+        if 'overlay-drop' in ctx.triggered_id['type']:
             use_overlay_value = overlay_value
             use_transp_value = transp_state
         else:
@@ -661,16 +702,16 @@ class OverlayOptions(Tool):
             else:
                 use_overlay_value = overlay_state
 
-        if ctx.triggered_id['type']=='overlay-trans-slider':
+        if 'overlay-trans-slider' in ctx.triggered_id['type']:
             use_transp_value = transp_value
         else:
             use_transp_value = transp_state
 
-        if ctx.triggered_id['type'] in ['add-filter-parent', 'add-filter-selector','delete-filter']:
+        if any([i in ctx.triggered_id['type'] for i in ['add-filter-parent', 'add-filter-selector','delete-filter']]):
             use_overlay_value = overlay_state
             use_transp_value = transp_state
 
-        if ctx.triggered_id['type']=='feature-lineColor-butt':
+        if 'feature-lineColor-butt' in ctx.triggered_id['type']:
             use_overlay_value = overlay_state
             use_transp_value = transp_state
 
@@ -792,7 +833,7 @@ class OverlayOptions(Tool):
                     width = colorbar_width,
                     height = 15,
                     position = 'bottomleft',
-                    id = f'colorbar{np.random.randint(0,100)}',
+                    id = f'{self.component_prefix}-colorbar{np.random.randint(0,100)}',
                     style = color_bar_style,
                     tooltip=True
                 )]
@@ -802,7 +843,7 @@ class OverlayOptions(Tool):
                     colorscale = colormap_val,
                     style = color_bar_style,
                     position = 'bottomleft',
-                    id = f'colorbar{np.random.randint(0,100)}',
+                    id = f'{self.component_prefix}-colorbar{np.random.randint(0,100)}',
                     width = colorbar_width,
                     height = 15
                 )]
@@ -852,7 +893,7 @@ class OverlayOptions(Tool):
                             dl.LayerGroup(
                                 dl.GeoJSON(
                                     data = filtered_geojson,
-                                    id = {'type': 'feature-bounds','index': len(current_overlay_names)+1},
+                                    id = {'type': f'{self.component_prefix}-feature-bounds','index': len(current_overlay_names)+1},
                                     options = {
                                         'style': self.js_namespace("featureStyle")
                                     },
@@ -875,13 +916,13 @@ class OverlayOptions(Tool):
                                     zoomToBounds=False,
                                     children = [
                                         dl.Popup(
-                                            id = {'type': 'feature-popup','index': len(current_overlay_names)+1},
+                                            id = {'type': f'{self.component_prefix}-feature-popup','index': len(current_overlay_names)+1},
                                             autoPan = False,
                                         )
                                     ]
                                 )
                             ),
-                            name = filtered_geojson['properties']['name'], checked = True, id = {'type': 'feature-overlay','index': len(current_overlay_names)}
+                            name = filtered_geojson['properties']['name'], checked = True, id = {'type': f'{self.component_prefix}-feature-overlay','index': len(current_overlay_names)}
                         )
                     )
 
@@ -897,7 +938,7 @@ class OverlayOptions(Tool):
 
     def add_structure_line_color(self, overlay_names:list):
 
-        if not any([i['value'] for i in ctx.triggered]) or overlay_names==self.feature_names:
+        if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
         line_color_tabs = Patch()
@@ -905,13 +946,13 @@ class OverlayOptions(Tool):
             dbc.Tab(
                 children = [
                     dmc.ColorPicker(
-                        id = {'type': 'feature-lineColor','index': len(overlay_names)},
+                        id = {'type': f'{self.component_prefix}-feature-lineColor','index': len(overlay_names)},
                         format = 'hex',
                         value = '#FFFFFF',
                         fullWidth=True
                     ),
                     dbc.Button(
-                        id = {'type': 'feature-lineColor-butt','index': len(overlay_names)},
+                        id = {'type': f'{self.component_prefix}-feature-lineColor-butt','index': len(overlay_names)},
                         children = ['Update Boundary Color'],
                         className = 'd-grid col-12 mx-auto',
                         n_clicks = 0
@@ -939,33 +980,34 @@ class PropertyViewer(Tool):
     :type Tool: None
     """
     def __init__(self,
-                 geojson_list: Union[dict,list],
-                 reference_object: Union[str,None] = None,
                  ignore_list: list = [],
                  property_depth: int = 4
                  ):
         """Constructor method
 
-        :param geojson_list: Individual or list of GeoJSON formatted annotations.
-        :type geojson_list: Union[dict,list]
-        :param reference_object: Path to larger reference object containing information on GeoJSON features, defaults to None
-        :type reference_object: Union[str,None], optional
         :param ignore_list: List of properties not to make available to this component., defaults to []
         :type ignore_list: list, optional
         :param property_depth: Depth at which to search for nested properties. Properties nested further than this value will be ignored.
         :type property_depth: int, optional
         """
-        self.ignore_list = []
-        self.reference_object = reference_object
-        self.available_properties, self.feature_names, self.property_info = extract_geojson_properties(geojson_list,reference_object,ignore_list,property_depth)
-    
+        self.ignore_list = ignore_list
+        self.property_depth = property_depth   
+
+    def load(self, component_prefix: int):
+
+        self.component_prefix = component_prefix
+
         self.title = 'Property Viewer'
-        self.blueprint = DashBlueprint()
-        self.blueprint.layout = self.gen_layout()
+        self.blueprint = DashBlueprint(
+            transforms = [
+                PrefixIdTransform(prefix = f'{self.component_prefix}'),
+                MultiplexerTransform()
+            ]
+        )
 
         self.get_callbacks()   
 
-    def gen_layout(self):
+    def gen_layout(self, session_data:dict):
         """Generating layout for PropertyViewer Tool
 
         :return: Layout added to DashBlueprint() object to be embedded in larger layout
@@ -1002,6 +1044,20 @@ class PropertyViewer(Tool):
                     ),
                     html.Div(
                         dcc.Store(
+                            id = {'type': 'property-viewer-available-properties','index': 0},
+                            storage_type='memory',
+                            data = json.dumps({})
+                        )
+                    ),
+                    html.Div(
+                        dcc.Store(
+                            id = {'type': 'property-viewer-property-info','index': 0},
+                            storage_type = 'memory',
+                            data = json.dumps({})
+                        )
+                    ),
+                    html.Div(
+                        dcc.Store(
                             id = {'type':'property-viewer-data','index':0},
                             storage_type='memory',
                             data = json.dumps({})
@@ -1011,11 +1067,25 @@ class PropertyViewer(Tool):
             ])
         ],style = {'maxHeight': '100vh','overflow':'scroll'})
 
-        return layout
+        self.blueprint.layout = layout
 
     def get_callbacks(self):
         """Initializing callbacks for PropertyViewer Tool
         """
+
+        # Updating for a new slide:
+        self.blueprint.callback(
+            [
+                Input({'type': 'map-annotations-store','index': ALL},'data')
+            ],
+            [
+                Output({'type': 'property-viewer-available-properties','index': ALL},'data'),
+                Output({'type': 'property-viewer-property-info','index': ALL},'data'),
+                Output({'type': 'property-viewer-parent','index':ALL},'children'),
+                Output({'type': 'property-viewer-data','index': ALL},'data')
+            ]
+        )(self.update_slide)
+
         # Updating when panning in SlideMap-like object
         self.blueprint.callback(
             [
@@ -1033,11 +1103,28 @@ class PropertyViewer(Tool):
                 State({'type': 'property-viewer-data','index': ALL},'data'),
                 State({'type': 'property-viewer-update','index': ALL},'checked'),
                 State({'type':'property-view-subtype-parent','index':ALL},'children'),
-                State({'type': 'map-annotations-store','index': ALL},'data')
+                State({'type': 'map-annotations-store','index': ALL},'data'),
+                State({'type': 'property-viewer-available-properties','index': ALL},'data')
             ]
         )(self.update_property_viewer)
 
-    def update_property_viewer(self,slide_map_bounds, view_type_value, view_subtype_value, view_butt_click, active_tab, current_property_data, update_viewer, current_subtype_children, current_geojson):
+    def update_slide(self, new_annotations: list):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        new_annotations = json.loads(get_pattern_matching_value(new_annotations))
+
+        new_available_properties, new_feature_names, new_property_info = extract_geojson_properties(new_annotations,None,self.ignore_list,self.property_depth)
+
+        new_available_properties = json.dumps(new_available_properties)
+        new_property_info = json.dumps(new_property_info)
+        new_property_viewer_children = []
+        new_property_viewer_info = json.dumps({})
+
+        return [new_available_properties], [new_property_info], [new_property_viewer_children], [new_property_viewer_info]
+
+    def update_property_viewer(self,slide_map_bounds, view_type_value, view_subtype_value, view_butt_click, active_tab, current_property_data, update_viewer, current_subtype_children, current_geojson, available_properties):
         """Updating visualization of properties within the current viewport
 
 
@@ -1069,10 +1156,11 @@ class PropertyViewer(Tool):
 
         update_viewer = get_pattern_matching_value(update_viewer)
         active_tab = get_pattern_matching_value(active_tab)
-
         if not active_tab is None:
             if not active_tab=='property-viewer':
                 raise exceptions.PreventUpdate
+        else:
+            raise exceptions.PreventUpdate
         
         slide_map_bounds = get_pattern_matching_value(slide_map_bounds)
         view_type_value = get_pattern_matching_value(view_type_value)
@@ -1080,13 +1168,14 @@ class PropertyViewer(Tool):
         current_subtype_children = get_pattern_matching_value(current_subtype_children)
 
         current_geojson = json.loads(get_pattern_matching_value(current_geojson))
+        current_available_properties = json.loads(get_pattern_matching_value(available_properties))
 
-        if ctx.triggered_id['type']=='slide-map':
+        if 'slide-map' in ctx.triggered_id['type']:
             # Only update the region info when this is checked
             if update_viewer:
                 current_property_data['bounds'] = slide_map_bounds
 
-        elif ctx.triggered_id['type']=='property-view-type':
+        elif 'property-view-type' in ctx.triggered_id['type']:
             view_subtype_value = []
 
         current_property_data['update_view'] = update_viewer
@@ -1095,14 +1184,14 @@ class PropertyViewer(Tool):
         plot_components = self.generate_plot_tabs(current_property_data, current_geojson)
 
         # Checking if a selected property has sub-properties
-        main_properties = list(set([i if not '-->' in i else i.split(' --> ')[0] for i in self.available_properties]))
+        main_properties = list(set([i if not '-->' in i else i.split(' --> ')[0] for i in current_available_properties]))
 
-        if ctx.triggered_id['type'] in ['property-view-type','property-view-subtype']:
+        if any([i in ctx.triggered_id['type'] for i in ['property-view-type','property-view-subtype']]):
             # Making new subtype children to correspond to new property selection
             sub_dropdowns = []
-            if ctx.triggered_id['type']=='property-view-type':
+            if 'property-view-type' in ctx.triggered_id['type']:
                 if not view_type_value is None:
-                    child_properties = [i for i in self.available_properties if i.split(' --> ')[0]==view_type_value]
+                    child_properties = [i for i in current_available_properties if i.split(' --> ')[0]==view_type_value]
                     n_levels = max(list(set([len(i.split(' --> ')) for i in child_properties])))
 
                     if n_levels>0:
@@ -1119,14 +1208,14 @@ class PropertyViewer(Tool):
                                 sub_dropdowns.append(
                                     dbc.Row([
                                         dbc.Col([
-                                            dbc.Label(f'Sub-Property: {i}: ',html_for = {'type': 'property-view-subtype','index': i-1})
+                                            dbc.Label(f'Sub-Property: {i}: ',html_for = {'type': f'{self.component_prefix}-property-view-subtype','index': i-1})
                                         ],md = 4),
                                         dbc.Col([
                                             dcc.Dropdown(
                                                 options = sub_drop,
                                                 value = [],
                                                 multi = False,
-                                                id = {'type': 'property-view-subtype','index': i-1},
+                                                id = {'type': f'{self.component_prefix}-property-view-subtype','index': i-1},
                                                 placeholder = f'Sub-Property: {i}',
                                                 disabled = False
                                             )
@@ -1139,14 +1228,14 @@ class PropertyViewer(Tool):
                                 sub_dropdowns.append(
                                     dbc.Row([
                                         dbc.Col([
-                                            dbc.Label(f'Sub-Property: {i}: ',html_for={'type': 'property-view-subtype','index': i-1})
+                                            dbc.Label(f'Sub-Property: {i}: ',html_for={'type': f'{self.component_prefix}-property-view-subtype','index': i-1})
                                         ],md = 4),
                                         dbc.Col([
                                             dcc.Dropdown(
                                                 options = [],
                                                 value = [],
                                                 multi = False,
-                                                id = {'type': 'property-view-subtype','index': i-1},
+                                                id = {'type': f'{self.component_prefix}-property-view-subtype','index': i-1},
                                                 placeholder = f'Sub-Property: {i}',
                                                 disabled = True
                                             )
@@ -1155,9 +1244,9 @@ class PropertyViewer(Tool):
                                 )
 
 
-            elif ctx.triggered_id['type']=='property-view-subtype':
+            elif 'property-view-subtype' in ctx.triggered_id['type']:
                 if not view_type_value is None:
-                    child_properties = [i for i in self.available_properties if i.split(' --> ')[0]==view_type_value]
+                    child_properties = [i for i in current_available_properties if i.split(' --> ')[0]==view_type_value]
                     n_levels = max(list(set([len(i.split(' --> ')) for i in child_properties])))
 
                     view_subtype_value = [view_subtype_value[i] if i <= ctx.triggered_id['index'] else [] for i in range(len(view_subtype_value))]
@@ -1173,7 +1262,7 @@ class PropertyViewer(Tool):
                             sub_dropdowns.append(
                                 dbc.Row([
                                     dbc.Col([
-                                        dbc.Label(f'Sub-Property: {sub_idx+1}: ',html_for = {'type': 'property-view-subtype','index': sub_idx})
+                                        dbc.Label(f'Sub-Property: {sub_idx+1}: ',html_for = {f'{self.component_prefix}-type': 'property-view-subtype','index': sub_idx})
                                     ],md = 4),
                                     dbc.Col([
                                         dcc.Dropdown(
@@ -1181,7 +1270,7 @@ class PropertyViewer(Tool):
                                             value = view_subtype_value[sub_idx],
                                             placeholder = f'Sub-Property: {sub_idx+1}',
                                             disabled = False,
-                                            id = {'type': 'property-view-subtype','index': sub_idx}
+                                            id = {'type': f'{self.component_prefix}-property-view-subtype','index': sub_idx}
                                         )
                                     ])
                                 ])
@@ -1198,7 +1287,7 @@ class PropertyViewer(Tool):
                                 sub_dropdowns.append(
                                     dbc.Row([
                                         dbc.Col([
-                                            dbc.Label(f'Sub-Property: {sub_idx+1}: ',html_for = {'type': 'property-view-subtype','index': sub_idx})
+                                            dbc.Label(f'Sub-Property: {sub_idx+1}: ',html_for = {'type': f'{self.component_prefix}-property-view-subtype','index': sub_idx})
                                         ],md = 4),
                                         dbc.Col([
                                             dcc.Dropdown(
@@ -1206,7 +1295,7 @@ class PropertyViewer(Tool):
                                                 value = view_subtype_value[sub_idx],
                                                 placeholder = f'Sub-Property: {sub_idx+1}',
                                                 disabled = False,
-                                                id = {'type': 'property-view-subtype','index': sub_idx}
+                                                id = {'type': f'{self.component_prefix}-property-view-subtype','index': sub_idx}
                                             )
                                         ])
                                     ])
@@ -1215,7 +1304,7 @@ class PropertyViewer(Tool):
                                 sub_dropdowns.append(
                                     dbc.Row([
                                         dbc.Col([
-                                            dbc.Label(f'Sub-Property: {sub_idx+1}: ',html_for = {'type': 'property-view-subtype','index': sub_idx})
+                                            dbc.Label(f'Sub-Property: {sub_idx+1}: ',html_for = {'type': f'{self.component_prefix}-property-view-subtype','index': sub_idx})
                                         ],md = 4),
                                         dbc.Col([
                                             dcc.Dropdown(
@@ -1223,7 +1312,7 @@ class PropertyViewer(Tool):
                                                 value = [],
                                                 placeholder = f'Sub-Property: {sub_idx+1}',
                                                 disabled = True,
-                                                id = {'type': 'property-view-subtype','index': sub_idx}
+                                                id = {'type': f'{self.component_prefix}-property-view-subtype','index': sub_idx}
                                             )
                                         ])
                                     ])
@@ -1234,7 +1323,7 @@ class PropertyViewer(Tool):
         return_div = html.Div([
             dbc.Row([
                 dbc.Col(
-                    dbc.Label('Select a Property: ',html_for = {'type': 'property-view-type','index': 0}),
+                    dbc.Label('Select a Property: ',html_for = {'type': f'{self.component_prefix}-property-view-type','index': 0}),
                     md = 3
                 ),
                 dbc.Col(
@@ -1243,14 +1332,14 @@ class PropertyViewer(Tool):
                         value = view_type_value if not view_type_value is None else [],
                         placeholder = 'Property',
                         multi = False,
-                        id = {'type': 'property-view-type','index': 0}
+                        id = {'type': f'{self.component_prefix}-property-view-type','index': 0}
                     )
                 )
             ]),
             dbc.Row([
                 dbc.Col(
                     html.Div(
-                        id = {'type': 'property-view-subtype-parent','index': 0},
+                        id = {'type': f'{self.component_prefix}-property-view-subtype-parent','index': 0},
                         children = [
                             current_subtype_children
                         ]
@@ -1260,7 +1349,7 @@ class PropertyViewer(Tool):
             html.Hr(),
             dbc.Row([
                 plot_components
-            ],style = {'maxHeight': '100vh'})
+            ],style = {'maxHeight': '100vh','width': '100%'})
         ])
 
         updated_view_data = json.dumps(current_property_data)
@@ -1278,6 +1367,9 @@ class PropertyViewer(Tool):
         :rtype: dbc.Tabs
         """
 
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
         if len(current_features)==0:
             raise exceptions.PreventUpdate
 
@@ -1478,7 +1570,7 @@ class PropertyViewer(Tool):
         plot_tabs = dbc.Tabs(
             plot_tabs_children,
             active_tab = current_features[0]['properties']['_id'],
-            id = {'type': 'property-viewer-tabs','index': 0}
+            id = {'type': f'{self.component_prefix}-property-viewer-tabs','index': 0}
         )
 
         return plot_tabs
@@ -1491,8 +1583,6 @@ class PropertyPlotter(Tool):
     :type Tool: None
     """
     def __init__(self,
-                 geojson_list: Union[dict,list],
-                 reference_object: Union[str,None] = None,
                  ignore_list: list = [],
                  property_depth: int = 4
                  ):
@@ -1507,81 +1597,110 @@ class PropertyPlotter(Tool):
         :param property_depth: Depth at which to search for nested properties. Properties nested further than this will be ignored.
         :type property_depth: int, optional
         """
-        self.reference_object = reference_object
         self.ignore_list = ignore_list
-        self.available_properties, self.feature_names, self.property_info = extract_geojson_properties(geojson_list,reference_object,ignore_list, property_depth)
+        self.property_depth = property_depth
 
-        self.generate_property_dict()
+    def load(self, component_prefix:int):
+
+        self.component_prefix = component_prefix
 
         self.title = 'Property Plotter'
-        self.blueprint = DashBlueprint()
-        self.blueprint.layout = self.gen_layout()
-
+        self.blueprint = DashBlueprint(
+            transforms = [
+                PrefixIdTransform(prefix = f'{self.component_prefix}'),
+                MultiplexerTransform()
+            ]
+        )        
+        
         self.get_callbacks()
 
-    def generate_property_dict(self):
-        """Generate nested dictionary used for populating the property dropdown menus
-        
-        For more information, see: https://github.com/kapot65/dash-treeview-antd
-        
-        """
-        self.property_dict = {}
-        self.property_keys = {}
-
-        self.property_dict = {
-            'title': 'Features',
+    def generate_property_dict(self, available_properties, title: str = 'Features'):
+        all_properties = {
+            'title': title,
             'key': '0',
             'children': []
         }
 
-        leaf_properties = list(set([i for i in self.available_properties if not '-->' in i]))
-        branch_properties = list(set([i for i in self.available_properties if '-->' in i and i.split(' --> ')[0] not in leaf_properties]))
-        trunk_properties = list(set([i.split(' --> ')[0] for i in branch_properties]))
-
-        # Adding branch properties first
-        property_dict_children = []
-        t_idx = 0
-        for t_idx,t in enumerate(trunk_properties):
-            trunk_dict = {
-                'title': t,
-                'key': f'0-{t_idx}',
-                'children': []
-            }
-
-            sub_count = 0
-            for b_idx, b in enumerate(branch_properties):
-                if t in b:
-
-                    b_dict = {
-                        'title': b.split(' --> ')[1],
-                        'key': f'0-{t_idx}-{sub_count}'
+        def add_prop_level(level_children, prop, index_list):
+            new_keys = {}
+            if len(level_children)==0:
+                if not prop[0] in self.ignore_list:
+                    new_key = f'{"-".join(index_list)}-0'
+                    p_dict = {
+                        'title': prop[0],
+                        'key': new_key,
+                        'children': []
                     }
-                    
-                    trunk_dict['children'].append(b_dict)
+                    l_dict = p_dict['children']
+                    if len(prop)==1:
+                        new_keys[new_key] = prop[0]
+                    for p_idx,p in enumerate(prop[1:]):
+                        if not p in self.ignore_list:
+                            new_key = f'{"-".join(index_list+["0"]*(p_idx+2))}'
+                            l_dict.append({
+                                'title': p,
+                                'key': new_key,
+                                'children': []
+                            })
+                            l_dict = l_dict[0]['children']
 
-                    self.property_keys[b_dict['key']] = b
+                            new_keys[new_key] = ' --> '.join(prop[:p_idx+2])
 
-                    sub_count+=1
+                    level_children.append(p_dict)
+            else:
+                for p_idx,p in enumerate(prop):
+                    if not p in self.ignore_list:
+                        if any([p==i['title'] for i in level_children]):
+                            title_idx = [i['title'] for i in level_children].index(p)
+                            level_children = level_children[title_idx]['children']
+                            index_list.append(str(title_idx))
+                        else:
+                            new_key = f'{"-".join(index_list)}-{len(level_children)}'
+                            other_children = len(level_children)
+                            level_children.append({
+                                'title': p,
+                                'key': new_key,
+                                'children': []
+                            })
+                            level_children = level_children[-1]['children']
+                            index_list.append(str(other_children))
+                            if p_idx==len(prop)-1:
+                                new_keys[new_key] = ' --> '.join(prop[:p_idx+1])
+            
+            return new_keys
+        
+        list_levels = [i.split(' --> ') if '-->' in i else [i] for i in available_properties]
+        unique_levels = list(set([len(i) for i in list_levels]))
+        sorted_level_idxes = np.argsort(unique_levels)[::-1]
+        property_keys = {}
+        for s in sorted_level_idxes:
+            depth_count = unique_levels[s]
+            props_with_level = [i for i in list_levels if len(i)==depth_count]
+            for p in props_with_level:
+                feature_children = all_properties['children']
+                property_keys = property_keys | add_prop_level(feature_children,p,['0'])
 
-            property_dict_children.append(trunk_dict)
 
-        # Now adding leaf properties
-        for l_idx, l in enumerate(leaf_properties):
-            l_dict = {
-                'title': l,
-                'key': f'0-{t_idx+l_idx+1}',
-                'children': []
-            }
-
-            property_dict_children.append(l_dict)
-
-            self.property_keys[l_dict['key']] = l
-
-        self.property_dict['children'].extend(property_dict_children)
+        return all_properties, property_keys
 
     def get_callbacks(self):
         """Initializing callbacks for PropertyPlotter Tool
         """
+        
+        # Updating for a new slide:
+        self.blueprint.callback(
+            [
+                Input({'type': 'map-annotations-store','index':ALL},'data')
+            ],
+            [
+                Output({'type': 'property-list','index': ALL},'data'),
+                Output({'type': 'label-list','index': ALL},'options'),
+                Output({'type': 'property-graph','index': ALL},'figure'),
+                Output({'type': 'property-graph-tabs-div','index': ALL},'children'),
+                Output({'type': 'property-plotter-keys','index': ALL},'data')
+            ]
+        )(self.update_slide)
+
         # Updating plot based on selected properties and labels
         self.blueprint.callback(
             [
@@ -1595,6 +1714,7 @@ class PropertyPlotter(Tool):
             [
                 State({'type': 'property-list','index': ALL},'checked'),
                 State({'type': 'label-list','index': ALL},'value'),
+                State({'type': 'property-plotter-keys','index':ALL},'data'),
                 State({'type': 'map-annotations-store','index':ALL},'data'),
                 State({'type': 'property-plotter-store','index': ALL},'data')
             ]
@@ -1611,7 +1731,8 @@ class PropertyPlotter(Tool):
                 Output({'type': 'property-plotter-store','index':ALL},'data')
             ],
             [
-                State({'type': 'property-plotter-store','index': ALL},'data')
+                State({'type': 'property-plotter-store','index': ALL},'data'),
+                State({'type':'label-list','index': ALL},'options')
             ]
         )(self.select_data_from_plot)
 
@@ -1626,7 +1747,8 @@ class PropertyPlotter(Tool):
                 Output({'type': 'property-graph-selected-div','index': ALL},'children')
             ],
             [
-                State({'type': 'property-plotter-store','index': ALL},'data')
+                State({'type': 'property-plotter-store','index': ALL},'data'),
+                State({'type': 'label-list','index':ALL},'options')
             ]
         )(self.remove_marker_label)
 
@@ -1657,7 +1779,22 @@ class PropertyPlotter(Tool):
             ]
         )(self.sub_select_data)
 
-    def gen_layout(self):
+    def update_slide(self, new_annotations:list):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        new_annotations = json.loads(get_pattern_matching_value(new_annotations))
+
+        new_available_properties, new_feature_names, new_property_info = extract_geojson_properties(new_annotations, None, self.ignore_list, self.property_depth)
+        new_property_dict, new_property_keys = self.generate_property_dict(new_available_properties)
+        new_figure = go.Figure()
+        new_graph_tabs_children = []
+        new_property_keys = json.dumps(new_property_keys)
+
+        return [new_property_dict], [new_available_properties], [new_figure], [new_graph_tabs_children], [new_property_keys]
+        
+    def gen_layout(self, session_data:dict):
         """Generating layout for PropertyPlotter Tool
 
         :return: Layout for PropertyPlotter DashBlueprint object to be embedded in larger layouts
@@ -1684,6 +1821,13 @@ class PropertyPlotter(Tool):
                             storage_type = 'memory'
                         )
                     ),
+                    html.Div(
+                        dcc.Store(
+                            id = {'type':'property-plotter-keys','index': 0},
+                            data = json.dumps({}),
+                            storage_type = 'memory'
+                        )
+                    ),
                     dbc.Row(
                         dbc.Card(
                             id = {'type': 'property-list-card','index': 0},
@@ -1698,7 +1842,7 @@ class PropertyPlotter(Tool):
                                             checked = [],
                                             selected = [],
                                             expanded = [],
-                                            data = self.property_dict
+                                            data = {}
                                         )
                                     ],
                                     style = {'maxHeight': '250px','overflow':'scroll'}
@@ -1713,7 +1857,7 @@ class PropertyPlotter(Tool):
                                 id = {'type': 'label-list','index': 0},
                                 placeholder = 'Select a label',
                                 multi = False,
-                                options = self.available_properties
+                                options = []
                             )
                         ]
                     ),
@@ -1733,7 +1877,8 @@ class PropertyPlotter(Tool):
                                     id = {'type': 'property-graph','index': 0},
                                     figure = go.Figure()
                                 )
-                            )
+                            ),
+                            style = {'width': '100%'}
                         )
                     ]),
                     html.Hr(),
@@ -1747,9 +1892,9 @@ class PropertyPlotter(Tool):
             ])
         ],style={'maxHeight': '100vh','overflow':'scroll'})
 
-        return layout
+        self.blueprint.layout = layout
 
-    def update_property_graph(self, plot_butt_click, property_list, label_list, current_features, current_plot_data):
+    def update_property_graph(self, plot_butt_click, property_list, label_list, property_keys, current_features, current_plot_data):
         """Updating plot based on selected properties, label(s)
 
         :param plot_butt_click: Whether this callback is triggered by the plot button being clicked
@@ -1771,8 +1916,9 @@ class PropertyPlotter(Tool):
 
         property_list = get_pattern_matching_value(property_list)
         label_names = get_pattern_matching_value(label_list)
-
+        
         current_features = json.loads(get_pattern_matching_value(current_features))
+        property_keys = json.loads(get_pattern_matching_value(property_keys))
 
         # Don't do anything if not given properties
         if property_list is None:
@@ -1781,7 +1927,7 @@ class PropertyPlotter(Tool):
             if len(property_list)==0:
                 raise exceptions.PreventUpdate
 
-        property_names = [self.property_keys[i] for i in property_list if i in self.property_keys]
+        property_names = [property_keys[i] for i in property_list if i in property_keys]
             
         extracted_data = self.extract_data_from_features(current_features, property_names, label_names)
         current_plot_data['data'] = extracted_data
@@ -1799,7 +1945,6 @@ class PropertyPlotter(Tool):
 
         elif len(property_names)>1:
             # Multi-feature visualization
-
             if len(property_names)>2:
                 umap_cols = self.gen_umap_cols(
                     data_df = data_df,
@@ -1854,10 +1999,15 @@ class PropertyPlotter(Tool):
                 split_p = p.split(' --> ')
                 f_props = feature['properties'].copy()
                 for sp in split_p:
-                    if sp in f_props:
-                        f_props = f_props[sp]
+                    if not f_props is None and not type(f_props)==float:
+                        if sp in f_props:
+                            f_props = f_props[sp]
+                        else:
+                            f_props = None
+                    else:
+                        f_props = None
 
-                if not type(f_props)==dict:
+                if not type(f_props)==dict and not f_props is None:
                     try:
                         f_dict[p] = float(f_props)
                     except ValueError:
@@ -2121,7 +2271,7 @@ class PropertyPlotter(Tool):
 
         return umap_df
 
-    def gen_selected_div(self, n_markers: int):
+    def gen_selected_div(self, n_markers: int, available_properties):
         """Generate a new property-graph-selected-div after changing the number of markers
 
         :param n_markers: New number of markers
@@ -2134,14 +2284,14 @@ class PropertyPlotter(Tool):
                 html.Hr(),
                 dbc.Row([
                     dbc.Col(
-                        dbc.Label('Select property for sub-plot: ',html_for = {'type': 'selected-sub-drop','index':0}),
+                        dbc.Label('Select property for sub-plot: ',html_for = {'type': f'{self.component_prefix}-selected-sub-drop','index':0}),
                         md = 3
                     ),
                     dbc.Col(
                         dcc.Dropdown(
-                            options = self.available_properties,
+                            options = available_properties,
                             value = [],
-                            id = {'type': 'selected-sub-drop','index': 0},
+                            id = {'type': f'{self.component_prefix}-selected-sub-drop','index': 0},
                             multi = True
                         ),
                         md = 9
@@ -2152,7 +2302,7 @@ class PropertyPlotter(Tool):
                         'Update Sub-Plot',
                         className = 'd-grid col-12 mx-auto',
                         n_clicks = 0,
-                        id = {'type': 'selected-sub-butt','index': 0},
+                        id = {'type': f'{self.component_prefix}-selected-sub-butt','index': 0},
                         color = 'primary'
                     ),
                     style = {'marginBottom': '10px'}
@@ -2163,14 +2313,14 @@ class PropertyPlotter(Tool):
                         'See Selected Marker Features',
                         className = 'd-grid col-12 mx-auto',
                         n_clicks=0,
-                        id = {'type': 'selected-sub-markers','index':0},
+                        id = {'type': f'{self.component_prefix}-selected-sub-markers','index':0},
                         color = 'secondary'
                     ),
                     style = {'marginBottom': '10px'}
                 ),
                 dbc.Row(
                     html.Div(
-                        id = {'type': 'selected-sub-div','index': 0},
+                        id = {'type': f'{self.component_prefix}-selected-sub-div','index': 0},
                         children = 0
                     )
                 )
@@ -2179,7 +2329,7 @@ class PropertyPlotter(Tool):
 
         return new_selected_div
 
-    def select_data_from_plot(self, selected_data, current_plot_data):
+    def select_data_from_plot(self, selected_data, current_plot_data, available_properties):
         """Updating selected data tab based on selection in primary graph
 
 
@@ -2197,6 +2347,7 @@ class PropertyPlotter(Tool):
         
         current_plot_data = json.loads(get_pattern_matching_value(current_plot_data))
         selected_data = get_pattern_matching_value(selected_data)
+        available_properties = get_pattern_matching_value(available_properties)
 
         if selected_data is None:
             raise exceptions.PreventUpdate
@@ -2218,15 +2369,15 @@ class PropertyPlotter(Tool):
                                 'Clear Marker',
                                 color = 'danger',
                                 n_clicks = 0,
-                                id = {'type': 'selected-marker-delete','index': p_idx}
+                                id = {'type': f'{self.component_prefix}-selected-marker-delete','index': p_idx}
                             ),
-                            id = {'type': 'selected-marker-popup','index': p_idx}
+                            id = {'type': f'{self.component_prefix}-selected-marker-popup','index': p_idx}
                         ),
                         html.Div(
                             children = [
                                 json.dumps(p['customdata'][1])
                             ],
-                            id = {'type': 'selected-marker-index','index': p_idx},
+                            id = {'type': f'{self.component_prefix}-selected-marker-index','index': p_idx},
                             style = {'display': 'none'}
                         )
                     ]
@@ -2237,7 +2388,7 @@ class PropertyPlotter(Tool):
         current_plot_data = [json.dumps(current_plot_data)]
 
         # Update property_graph_selected_div
-        property_graph_selected_div = self.gen_selected_div(len(map_marker))
+        property_graph_selected_div = self.gen_selected_div(len(map_marker), available_properties)
 
         return property_graph_selected_div, [map_marker], current_plot_data
 
@@ -2268,7 +2419,7 @@ class PropertyPlotter(Tool):
                     html.H3(f'Samples labeled: {u}'),
                     html.Hr(),
                     dash_table.DataTable(
-                        id = {'type': 'property-summary-table','index': u_idx},
+                        id = {'type': f'{self.component_prefix}-property-summary-table','index': u_idx},
                         columns = [{'name': i, 'id': i, 'deletable': False, 'selectable': True} for i in summary.columns],
                         data = summary.to_dict('records'),
                         editable = False,
@@ -2303,7 +2454,7 @@ class PropertyPlotter(Tool):
                 html.H3('All Samples'),
                 html.Hr(),
                 dash_table.DataTable(
-                    id = {'type': 'property-summary-table','index': 0},
+                    id = {'type': f'{self.component_prefix}-property-summary-table','index': 0},
                     columns = [{'name': i, 'id': i, 'deletable': False, 'selectable': True} for i in summary.columns],
                     data = summary.to_dict('records'),
                     editable = False,
@@ -2330,7 +2481,7 @@ class PropertyPlotter(Tool):
             ])
 
         property_summary_tab = dbc.Tab(
-            id = {'type': 'property-summary-tab','index': 0},
+            id = {'type': f'{self.component_prefix}-property-summary-tab','index': 0},
             children = property_summary_children,
             tab_id = 'property-summary',
             label = 'Property Summary'
@@ -2338,270 +2489,279 @@ class PropertyPlotter(Tool):
 
         # Property statistics
         label_stats_children = []
-        if not label_col is None:
-            unique_labels = data_df[label_col].unique().tolist()
-            if len(unique_labels)>1:
-                p_value, results = get_label_statistics(
-                    data_df = data_df.loc[:,[i for i in data_df if not i in customdata_cols]],
-                    label_col=label_col
-                )
-
-                if len(property_cols)==1:
-                    if len(unique_labels)==2:
-                        if p_value<0.05:
-                            significance = dbc.Alert('Statistically significant (p<0.05)',color='success')
-                        else:
-                            significance = dbc.Alert('Not statistically significant (p>=0.05)',color='warning')
-                        
-                        label_stats_children.extend([
-                            significance,
-                            html.Hr(),
-                            html.Div([
-                                html.A('Statistical Test: t-Test',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html',target='_blank'),
-                                html.P('Tests null hypothesis that two independent samples have identical mean values. Assumes equal variance within groups.')
-                            ]),
-                            html.Div(
-                                dash_table.DataTable(
-                                    id = {'type': 'property-stats-table','index': 0},
-                                    columns = [
-                                        {'name': i, 'id': i}
-                                        for i in results.columns
-                                    ],
-                                    data = results.to_dict('records'),
-                                    style_cell = {
-                                        'overflow': 'hidden',
-                                        'textOverflow': 'ellipsis',
-                                        'maxWidth': 0
-                                    },
-                                    tooltip_data = [
-                                        {
-                                            column: {'value': str(value), 'type': 'markdown'}
-                                            for column, value in row.items()
-                                        } for row in results.to_dict('records')
-                                    ],
-                                    tooltip_duration = None
-                                )
-                            )
-                        ])
-                
-                    elif len(unique_labels)>2:
-
-                        if p_value<0.05:
-                            significance = dbc.Alert('Statistically significant! (p<0.05)',color='success')
-                        else:
-                            significance = dbc.Alert('Not statistically significant (p>=0.05)',color='warning')
-                        
-                        label_stats_children.extend([
-                            significance,
-                            html.Hr(),
-                            html.Div([
-                                html.A('Statistical Test: One-Way ANOVA',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.f_oneway.html',target='_blank'),
-                                html.P('Tests null hypothesis that two or more groups have the same population mean. Assumes independent samples from normal, homoscedastic (equal standard deviation) populations')
-                            ]),
-                            html.Div(
-                                dash_table.DataTable(
-                                    id = {'type': 'property-stats-table','index':0},
-                                    columns = [
-                                        {'name': i, 'id': i}
-                                        for i in results['anova'].columns
-                                    ],
-                                    data = results['anova'].to_dict('records'),
-                                    style_cell = {
-                                        'overflow': 'hidden',
-                                        'textOverflow': 'ellipsis',
-                                        'maxWidth': 0
-                                    },
-                                    tooltip_data = [
-                                        {
-                                            column: {'value': str(value),'type': 'markdown'}
-                                            for column, value in row.items()
-                                        } for row in results['anova'].to_dict('records')
-                                    ],
-                                    tooltip_duration = None
-                                )
-                            ),
-                            html.Hr(),
-                            html.Div([
-                                html.A("Statistical Test: Tukey's HSD",href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.tukey_hsd.html',target='_blank'),
-                                html.P('Post hoc test for pairwise comparison of means from different groups. Assumes independent samples from normal, equal (finite) variance populations')
-                            ]),
-                            html.Div(
-                                dash_table.DataTable(
-                                    id = {'type': 'property-stats-tukey','index': 0},
-                                    columns = [
-                                        {'name': i,'id': i}
-                                        for i in results['tukey'].columns
-                                    ],
-                                    data = results['tukey'].to_dict('records'),
-                                    style_cell = {
-                                        'overflow': 'hidden',
-                                        'textOverflow': 'ellipsis',
-                                        'maxWidth': 0
-                                    },
-                                    tooltip_data = [
-                                        {
-                                            column: {'value': str(value), 'type': 'markdown'}
-                                            for column, value in row.items()
-                                        } for row in results['tukey'].to_dict('records')
-                                    ],
-                                    tooltip_duration = None,
-                                    style_data_conditional = [
-                                        {
-                                            'if': {
-                                                'column_id': 'Comparison'
-                                            },
-                                            'width': '35%'
-                                        },
-                                        {
-                                            'if': {
-                                                'filter_query': '{p-value} <0.05',
-                                                'column_id': 'p-value'
-                                            },
-                                            'backgroundColor': 'green',
-                                            'color': 'white'
-                                        },
-                                        {
-                                            'if': {
-                                                'filter_query': '{p-value} >=0.05',
-                                                'column_id': 'p-value'
-                                            },
-                                            'backgroundColor': 'tomato',
-                                            'color': 'white'
-                                        }
-                                    ]
-                                )
-                            )
-                        ])
-
-                elif len(property_cols)==2:
-                    if any([i<0.05 for i in p_value]):
-                        significance = dbc.Alert('Statistical significance found!',color='success')
-                    else:
-                        significance = dbc.Alert('No statistical significance',color='warning')
-                    
-                    label_stats_children.extend([
-                        significance,
-                        html.Hr(),
-                        html.Div([
-                            html.A('Statistical Test: Pearson Correlation Coefficient (r)',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.mstats.pearsonr.html',target='_blank'),
-                            html.P('Measures the linear relationship between two datasets. Assumes normally distributed data.')
-                        ]),
-                        html.Div(
-                            dash_table.DataTable(
-                                id='pearson-table',
-                                columns = [{'name':i,'id':i} for i in results.columns],
-                                data = results.to_dict('records'),
-                                style_cell = {
-                                    'overflow':'hidden',
-                                    'textOverflow':'ellipsis',
-                                    'maxWidth':0
-                                },
-                                tooltip_data = [
-                                    {
-                                        column: {'value':str(value),'type':'markdown'}
-                                        for column,value in row.items()
-                                    } for row in results.to_dict('records')
-                                ],
-                                tooltip_duration = None,
-                                style_data_conditional = [
-                                    {
-                                        'if': {
-                                            'filter_query': '{p-value} <0.05',
-                                            'column_id':'p-value',
-                                        },
-                                        'backgroundColor':'green',
-                                        'color':'white'
-                                    },
-                                    {
-                                        'if':{
-                                            'filter_query': '{p-value} >= 0.05',
-                                            'column_id':'p-value'
-                                        },
-                                        'backgroundColor':'tomato',
-                                        'color':'white'
-                                    }
-                                ]
-                            )
+        if data_df.shape[0]>1:
+            if not label_col is None:
+                unique_labels = data_df[label_col].unique().tolist()
+                if len(unique_labels)>1:
+                    if any([i>1 for i in list(data_df[label_col].value_counts().to_dict().values())]):
+                        p_value, results = get_label_statistics(
+                            data_df = data_df.loc[:,[i for i in data_df if not i in customdata_cols]],
+                            label_col=label_col
                         )
-                    ])
 
-                elif len(property_cols)>2:
-                    
-                    overall_silhouette = results['overall_silhouette']
-                    if overall_silhouette>=-1 and overall_silhouette<=-0.5:
-                        silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color='danger')
-                    elif overall_silhouette>-0.5 and overall_silhouette<=0.5:
-                        silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color = 'primary')
-                    elif overall_silhouette>0.5 and overall_silhouette<=1:
-                        silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color = 'success')
+                        if len(property_cols)==1:
+                            if len(unique_labels)==2:
+                                if p_value<0.05:
+                                    significance = dbc.Alert('Statistically significant (p<0.05)',color='success')
+                                else:
+                                    significance = dbc.Alert('Not statistically significant (p>=0.05)',color='warning')
+                                
+                                label_stats_children.extend([
+                                    significance,
+                                    html.Hr(),
+                                    html.Div([
+                                        html.A('Statistical Test: t-Test',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html',target='_blank'),
+                                        html.P('Tests null hypothesis that two independent samples have identical mean values. Assumes equal variance within groups.')
+                                    ]),
+                                    html.Div(
+                                        dash_table.DataTable(
+                                            id = {'type': f'{self.component_prefix}-property-stats-table','index': 0},
+                                            columns = [
+                                                {'name': i, 'id': i}
+                                                for i in results.columns
+                                            ],
+                                            data = results.to_dict('records'),
+                                            style_cell = {
+                                                'overflow': 'hidden',
+                                                'textOverflow': 'ellipsis',
+                                                'maxWidth': 0
+                                            },
+                                            tooltip_data = [
+                                                {
+                                                    column: {'value': str(value), 'type': 'markdown'}
+                                                    for column, value in row.items()
+                                                } for row in results.to_dict('records')
+                                            ],
+                                            tooltip_duration = None
+                                        )
+                                    )
+                                ])
+                        
+                            elif len(unique_labels)>2:
+
+                                if p_value<0.05:
+                                    significance = dbc.Alert('Statistically significant! (p<0.05)',color='success')
+                                else:
+                                    significance = dbc.Alert('Not statistically significant (p>=0.05)',color='warning')
+                                
+                                label_stats_children.extend([
+                                    significance,
+                                    html.Hr(),
+                                    html.Div([
+                                        html.A('Statistical Test: One-Way ANOVA',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.f_oneway.html',target='_blank'),
+                                        html.P('Tests null hypothesis that two or more groups have the same population mean. Assumes independent samples from normal, homoscedastic (equal standard deviation) populations')
+                                    ]),
+                                    html.Div(
+                                        dash_table.DataTable(
+                                            id = {'type': f'{self.component_prefix}-property-stats-table','index':0},
+                                            columns = [
+                                                {'name': i, 'id': i}
+                                                for i in results['anova'].columns
+                                            ],
+                                            data = results['anova'].to_dict('records'),
+                                            style_cell = {
+                                                'overflow': 'hidden',
+                                                'textOverflow': 'ellipsis',
+                                                'maxWidth': 0
+                                            },
+                                            tooltip_data = [
+                                                {
+                                                    column: {'value': str(value),'type': 'markdown'}
+                                                    for column, value in row.items()
+                                                } for row in results['anova'].to_dict('records')
+                                            ],
+                                            tooltip_duration = None
+                                        )
+                                    ),
+                                    html.Hr(),
+                                    html.Div([
+                                        html.A("Statistical Test: Tukey's HSD",href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.tukey_hsd.html',target='_blank'),
+                                        html.P('Post hoc test for pairwise comparison of means from different groups. Assumes independent samples from normal, equal (finite) variance populations')
+                                    ]),
+                                    html.Div(
+                                        dash_table.DataTable(
+                                            id = {'type': f'{self.component_prefix}-property-stats-tukey','index': 0},
+                                            columns = [
+                                                {'name': i,'id': i}
+                                                for i in results['tukey'].columns
+                                            ],
+                                            data = results['tukey'].to_dict('records'),
+                                            style_cell = {
+                                                'overflow': 'hidden',
+                                                'textOverflow': 'ellipsis',
+                                                'maxWidth': 0
+                                            },
+                                            tooltip_data = [
+                                                {
+                                                    column: {'value': str(value), 'type': 'markdown'}
+                                                    for column, value in row.items()
+                                                } for row in results['tukey'].to_dict('records')
+                                            ],
+                                            tooltip_duration = None,
+                                            style_data_conditional = [
+                                                {
+                                                    'if': {
+                                                        'column_id': 'Comparison'
+                                                    },
+                                                    'width': '35%'
+                                                },
+                                                {
+                                                    'if': {
+                                                        'filter_query': '{p-value} <0.05',
+                                                        'column_id': 'p-value'
+                                                    },
+                                                    'backgroundColor': 'green',
+                                                    'color': 'white'
+                                                },
+                                                {
+                                                    'if': {
+                                                        'filter_query': '{p-value} >=0.05',
+                                                        'column_id': 'p-value'
+                                                    },
+                                                    'backgroundColor': 'tomato',
+                                                    'color': 'white'
+                                                }
+                                            ]
+                                        )
+                                    )
+                                ])
+
+                        elif len(property_cols)==2:
+                            if any([i<0.05 for i in p_value]):
+                                significance = dbc.Alert('Statistical significance found!',color='success')
+                            else:
+                                significance = dbc.Alert('No statistical significance',color='warning')
+                            
+                            label_stats_children.extend([
+                                significance,
+                                html.Hr(),
+                                html.Div([
+                                    html.A('Statistical Test: Pearson Correlation Coefficient (r)',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.mstats.pearsonr.html',target='_blank'),
+                                    html.P('Measures the linear relationship between two datasets. Assumes normally distributed data.')
+                                ]),
+                                html.Div(
+                                    dash_table.DataTable(
+                                        id=f'{self.component_prefix}-pearson-table',
+                                        columns = [{'name':i,'id':i} for i in results.columns],
+                                        data = results.to_dict('records'),
+                                        style_cell = {
+                                            'overflow':'hidden',
+                                            'textOverflow':'ellipsis',
+                                            'maxWidth':0
+                                        },
+                                        tooltip_data = [
+                                            {
+                                                column: {'value':str(value),'type':'markdown'}
+                                                for column,value in row.items()
+                                            } for row in results.to_dict('records')
+                                        ],
+                                        tooltip_duration = None,
+                                        style_data_conditional = [
+                                            {
+                                                'if': {
+                                                    'filter_query': '{p-value} <0.05',
+                                                    'column_id':'p-value',
+                                                },
+                                                'backgroundColor':'green',
+                                                'color':'white'
+                                            },
+                                            {
+                                                'if':{
+                                                    'filter_query': '{p-value} >= 0.05',
+                                                    'column_id':'p-value'
+                                                },
+                                                'backgroundColor':'tomato',
+                                                'color':'white'
+                                            }
+                                        ]
+                                    )
+                                )
+                            ])
+
+                        elif len(property_cols)>2:
+                            
+                            overall_silhouette = results['overall_silhouette']
+                            if overall_silhouette>=-1 and overall_silhouette<=-0.5:
+                                silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color='danger')
+                            elif overall_silhouette>-0.5 and overall_silhouette<=0.5:
+                                silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color = 'primary')
+                            elif overall_silhouette>0.5 and overall_silhouette<=1:
+                                silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color = 'success')
+                            else:
+                                silhouette_alert = dbc.Alert(f'Weird value: {overall_silhouette}')
+
+                            label_stats_children.extend([
+                                silhouette_alert,
+                                html.Div([
+                                    html.A('Clustering Metric: Silhouette Coefficient',href='https://scikit-learn.org/stable/modules/generated/sklearn.metrics.silhouette_score.html#sklearn.metrics.silhouette_score',target='_blank'),
+                                    html.P('Quantifies density of distribution for each sample. Values closer to 1 indicate high class clustering. Values closer to 0 indicate mixed clustering between classes. Values closer to -1 indicate highly dispersed distribution for a class.')
+                                ]),
+                                html.Div(
+                                    dash_table.DataTable(
+                                        id=f'{self.component_prefix}-silhouette-table',
+                                        columns = [{'name':i,'id':i} for i in results['samples_silhouette'].columns],
+                                        data = results['samples_silhouette'].to_dict('records'),
+                                        style_cell = {
+                                            'overflow':'hidden',
+                                            'textOverflow':'ellipsis',
+                                            'maxWidth':0
+                                        },
+                                        tooltip_data = [
+                                            {
+                                                column: {'value':str(value),'type':'markdown'}
+                                                for column,value in row.items()
+                                            } for row in results['samples_silhouette'].to_dict('records')
+                                        ],
+                                        tooltip_duration = None,
+                                        style_data_conditional = [
+                                            {
+                                                'if': {
+                                                    'filter_query': '{Silhouette Score}>0',
+                                                    'column_id':'Silhouette Score',
+                                                },
+                                                'backgroundColor':'green',
+                                                'color':'white'
+                                            },
+                                            {
+                                                'if':{
+                                                    'filter_query': '{Silhouette Score}<0',
+                                                    'column_id':'Silhouette Score'
+                                                },
+                                                'backgroundColor':'tomato',
+                                                'color':'white'
+                                            }
+                                        ]
+                                    )
+                                )
+                            ])
                     else:
-                        silhouette_alert = dbc.Alert(f'Weird value: {overall_silhouette}')
-
-                    label_stats_children.extend([
-                        silhouette_alert,
-                        html.Div([
-                            html.A('Clustering Metric: Silhouette Coefficient',href='https://scikit-learn.org/stable/modules/generated/sklearn.metrics.silhouette_score.html#sklearn.metrics.silhouette_score',target='_blank'),
-                            html.P('Quantifies density of distribution for each sample. Values closer to 1 indicate high class clustering. Values closer to 0 indicate mixed clustering between classes. Values closer to -1 indicate highly dispersed distribution for a class.')
-                        ]),
-                        html.Div(
-                            dash_table.DataTable(
-                                id='silhouette-table',
-                                columns = [{'name':i,'id':i} for i in results['samples_silhouette'].columns],
-                                data = results['samples_silhouette'].to_dict('records'),
-                                style_cell = {
-                                    'overflow':'hidden',
-                                    'textOverflow':'ellipsis',
-                                    'maxWidth':0
-                                },
-                                tooltip_data = [
-                                    {
-                                        column: {'value':str(value),'type':'markdown'}
-                                        for column,value in row.items()
-                                    } for row in results['samples_silhouette'].to_dict('records')
-                                ],
-                                tooltip_duration = None,
-                                style_data_conditional = [
-                                    {
-                                        'if': {
-                                            'filter_query': '{Silhouette Score}>0',
-                                            'column_id':'Silhouette Score',
-                                        },
-                                        'backgroundColor':'green',
-                                        'color':'white'
-                                    },
-                                    {
-                                        'if':{
-                                            'filter_query': '{Silhouette Score}<0',
-                                            'column_id':'Silhouette Score'
-                                        },
-                                        'backgroundColor':'tomato',
-                                        'color':'white'
-                                    }
-                                ]
-                            )
+                        label_stats_children.append(
+                            dbc.Alert(f'Only one of each label type present!',color='warning')
                         )
-                    ])
-
+                else:
+                    label_stats_children.append(
+                        dbc.Alert(f'Only one label present! ({unique_labels[0]})',color='warning')
+                    )
             else:
                 label_stats_children.append(
-                    dbc.Alert(f'Only one label present! ({unique_labels[0]})',color='warning')
+                    dbc.Alert('No labels assigned to the plot!',color='warning')
                 )
         else:
             label_stats_children.append(
-                dbc.Alert('No labels assigned to the plot!',color='warning')
+                dbc.Alert('Only one sample present!',color='warning')
             )
 
         label_stats_tab = dbc.Tab(
-            id = {'type': 'property-stats-tab','index': 0},
+            id = {'type': f'{self.component_prefix}-property-stats-tab','index': 0},
             children = label_stats_children,
             tab_id = 'property-stats',
             label = 'Property Statistics'
         )
 
         selected_data_tab = dbc.Tab(
-            id = {'type': 'property-selected-data-tab','index': 0},
+            id = {'type': f'{self.component_prefix}-property-selected-data-tab','index': 0},
             children = html.Div(
-                id = {'type': 'property-graph-selected-div','index': 0},
+                id = {'type': f'{self.component_prefix}-property-graph-selected-div','index': 0},
                 children = ['Select data points in the plot to get started!']
             ),
             tab_id = 'property-selected-data',
@@ -2609,7 +2769,7 @@ class PropertyPlotter(Tool):
         )
 
         property_plot_tabs = dbc.Tabs(
-            id = {'type': 'property-plot-tabs','index': 0},
+            id = {'type': f'{self.component_prefix}-property-plot-tabs','index': 0},
             children = [
                 property_summary_tab,
                 label_stats_tab,
@@ -2620,7 +2780,7 @@ class PropertyPlotter(Tool):
 
         return property_plot_tabs
 
-    def remove_marker_label(self, delete_click, current_plot_data):
+    def remove_marker_label(self, delete_click, current_plot_data, available_properties):
         """Remove marker from selected feature
 
         :param delete_click: Clear marker button clicked
@@ -2635,6 +2795,7 @@ class PropertyPlotter(Tool):
             raise exceptions.PreventUpdate
 
         current_plot_data = json.loads(get_pattern_matching_value(current_plot_data))
+        available_properties = get_pattern_matching_value(available_properties)
         n_marked = len(current_plot_data['selected']['points'])
 
         patched_list = Patch()
@@ -2644,7 +2805,7 @@ class PropertyPlotter(Tool):
             del current_plot_data['selected']['points'][v]
         
         current_plot_data = [json.dumps(current_plot_data)]
-        new_selected_div = self.gen_selected_div(n_marked-1)
+        new_selected_div = self.gen_selected_div(n_marked-1, available_properties)
 
         return [patched_list], current_plot_data, new_selected_div
 
@@ -2675,7 +2836,7 @@ class PropertyPlotter(Tool):
 
         current_features = json.loads(get_pattern_matching_value(current_features))
 
-        if ctx.triggered_id['type']=='selected-sub-butt':
+        if 'selected-sub-butt' in ctx.triggered_id['type']:
             if not sub_plot_value is None:
 
                 if type(sub_plot_value)==str:
@@ -2733,7 +2894,7 @@ class PropertyPlotter(Tool):
 
 
                     sub_div_content = dcc.Graph(
-                        id = {'type': 'property-sub-graph','index': 0},
+                        id = {'type': f'{self.component_prefix}-property-sub-graph','index': 0},
                         figure = sub_plot_figure
                     )
                 else:
@@ -2742,12 +2903,12 @@ class PropertyPlotter(Tool):
                         color = 'warning'
                     )
 
-        elif ctx.triggered_id['type'] == 'selected-sub-markers':
+        elif 'selected-sub-markers' in ctx.triggered_id['type']:
             current_selected = current_plot_data['selected']['points']
 
             selected_data = self.extract_data_from_features(
                 geo_list = current_features,
-                properties = self.available_properties,
+                properties = current_labels,
                 labels = current_labels,
                 filter_list = [i['customdata'][1] for i in current_selected]
             )
@@ -2764,7 +2925,7 @@ class PropertyPlotter(Tool):
                 
                 #TODO: Sorting columns using 'native' does not work for exponents. Ignores exponent part.
                 sub_div_content = dash_table.DataTable(
-                    id = {'type': 'property-sub-wilcox','index': 0},
+                    id = {'type': f'{self.component_prefix}-property-sub-wilcox','index': 0},
                     #sort_mode = 'multi',
                     #sort_action = 'native',
                     filter_action = 'native',
@@ -2853,15 +3014,15 @@ class PropertyPlotter(Tool):
                                 'Clear Marker',
                                 color = 'danger',
                                 n_clicks = 0,
-                                id = {'type': 'selected-marker-delete','index': p_idx}
+                                id = {'type': f'{self.component_prefix}-selected-marker-delete','index': p_idx}
                             ),
-                            id = {'type': 'selected-marker-popup','index': p_idx}
+                            id = {'type': f'{self.component_prefix}-selected-marker-popup','index': p_idx}
                         ),
                         html.Div(
                             children = [
                                 json.dumps(p['customdata'][1])
                             ],
-                            id = {'type': 'selected-marker-index','index': p_idx},
+                            id = {'type': f'{self.component_prefix}-selected-marker-index','index': p_idx},
                             style = {'display':'none'}
                         )
                     ]
@@ -2900,13 +3061,20 @@ class HRAViewer(Tool):
             for i in self.asct_b_release['Organ'].tolist()
         ]
 
+    def load(self, component_prefix: int):
+        
+        self.component_prefix = component_prefix
         self.title = 'HRA Viewer'
-        self.blueprint = DashBlueprint()
-        self.blueprint.layout = self.gen_layout()
+        self.blueprint = DashBlueprint(
+            transforms = [
+                PrefixIdTransform(prefix = f'{self.component_prefix}'),
+                MultiplexerTransform()
+            ]
+        )
 
         self.get_callbacks()
 
-    def gen_layout(self):
+    def gen_layout(self, session_data: dict):
         """Generate layout for HRA Viewer component
         """
 
@@ -2948,7 +3116,7 @@ class HRAViewer(Tool):
             ])
         ],style = {'width': '100%'})
 
-        return layout
+        self.blueprint.layout = layout
 
     def get_callbacks(self):
         """Initializing callbacks and attaching to DashBlueprint
@@ -3064,7 +3232,7 @@ class HRAViewer(Tool):
                         dbc.Col([
                             dbc.Label(
                                 html.H4('Authors:'),
-                                html_for={'type': 'hra-viewer-authors','index': 0}
+                                html_for={'type': f'{self.component_prefix}-hra-viewer-authors','index': 0}
                             )
                         ])
                     ]),
@@ -3072,7 +3240,7 @@ class HRAViewer(Tool):
                         dbc.Col([
                             html.Div(
                                 dmc.AvatarGroup(
-                                    id = {'type': 'hra-viewer-authors','index': 0},
+                                    id = {'type': f'{self.component_prefix}-hra-viewer-authors','index': 0},
                                     children = [
                                         html.A(
                                             dmc.Tooltip(
@@ -3100,7 +3268,7 @@ class HRAViewer(Tool):
                                 html.H6(
                                     'Reviewers: '
                                 ),
-                                html_for={'type': 'hra-viewer-reviewers','index': 0}
+                                html_for={'type': f'{self.component_prefix}-hra-viewer-reviewers','index': 0}
                             )
                         )
                     ]),
@@ -3108,7 +3276,7 @@ class HRAViewer(Tool):
                         dbc.Col([
                             html.Div(
                                 dmc.AvatarGroup(
-                                    id = {'type': 'hra-viewer-reviewers','index': 0},
+                                    id = {'type': f'{self.component_prefix}-hra-viewer-reviewers','index': 0},
                                     children = [
                                         html.A(
                                             dmc.Tooltip(
@@ -3162,7 +3330,7 @@ class HRAViewer(Tool):
                 
                 organ_dash_table = [
                     dash_table.DataTable(
-                        id = {'type':'hra-viewer-table','index': 0},
+                        id = {'type':f'{self.component_prefix}-hra-viewer-table','index': 0},
                         columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in organ_table.columns],
                         data = organ_table.to_dict('records'),
                         editable = False,
@@ -3214,7 +3382,7 @@ class HRAViewer(Tool):
                                 dbc.Col([
                                     dbc.Label(
                                         html.H6('Table Data Sources:'),
-                                        html_for={'type':'hra-viewer-table-sources','index':0}
+                                        html_for={'type':f'{self.component_prefix}-hra-viewer-table-sources','index':0}
                                     )
                                 ],md=12)
                             ]),
@@ -3222,7 +3390,7 @@ class HRAViewer(Tool):
                             data_doi,
                             dbc.Row([
                                 dbc.Col(
-                                    dbc.Label('Date: ',html_for = {'type': 'hra-viewer-date','index': 0}),
+                                    dbc.Label('Date: ',html_for = {'type': f'{self.component_prefix}-hra-viewer-date','index': 0}),
                                     md = 4
                                 ),
                                 dbc.Col(
@@ -3232,7 +3400,7 @@ class HRAViewer(Tool):
                             ],align='center'),
                             dbc.Row([
                                 dbc.Col(
-                                    dbc.Label('Version Number: ',html_for = {'type':'hra-viewer-version','index': 0}),
+                                    dbc.Label('Version Number: ',html_for = {'type':f'{self.component_prefix}-hra-viewer-version','index': 0}),
                                     md = 4
                                 ),
                                 dbc.Col(

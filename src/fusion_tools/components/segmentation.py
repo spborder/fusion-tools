@@ -26,13 +26,12 @@ import dash_leaflet as dl
 from dash import dcc, callback, ctx, ALL, MATCH, exceptions, Patch, no_update, dash_table
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash_extensions.enrich import DashBlueprint, html, Input, Output, State
+from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform
 
 # fusion-tools imports
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 from fusion_tools.utils.shapes import find_intersecting, extract_geojson_properties, path_to_mask, process_filters_queries
 from fusion_tools.components import Tool
-from fusion_tools.tileserver import TileServer
 
 
 class FeatureAnnotation(Tool):
@@ -43,7 +42,6 @@ class FeatureAnnotation(Tool):
     """
     def __init__(self,
                  storage_path: str,
-                 tile_server: TileServer,
                  labels_format: str = 'json',
                  annotations_format: str = 'one-hot'):
         """Constructor method
@@ -53,7 +51,6 @@ class FeatureAnnotation(Tool):
         """
 
         self.storage_path = storage_path
-        self.tile_server = tile_server
         self.labels_format = labels_format
         self.annotations_format = annotations_format
 
@@ -62,45 +59,43 @@ class FeatureAnnotation(Tool):
 
         if not os.path.exists(self.storage_path):
             os.makedirs(self.storage_path)
+    
+    def __str__(self):
+        return 'Feature Annotation'
 
-        self.x_scale, self.y_scale = self.get_scale_factors()
+    def load(self, component_prefix:int):
+
+        self.component_prefix = component_prefix
 
         self.title = 'Feature Annotation'
-        self.blueprint = DashBlueprint()
-        self.blueprint.layout = self.gen_layout()
+        self.blueprint = DashBlueprint(
+            transforms=[
+                PrefixIdTransform(prefix = f'{self.component_prefix}'),
+                MultiplexerTransform()
+            ]
+        )
 
         # Add callbacks here
         self.get_callbacks()
 
-    def get_scale_factors(self):
-        """Getting x and y scale factors to convert from map coordinates back to pixel coordinates
+    def get_scale_factors(self, image_metadata: dict):
+        """Function used to initialize scaling factors applied to GeoJSON annotations to project annotations into the SlideMap CRS (coordinate reference system)
+
+        :return: x and y (horizontal and vertical) scale factors applied to each coordinate in incoming annotations
+        :rtype: float
         """
 
-        if hasattr(self.tile_server,'image_metadata'):
-            base_dims = [
-                self.tile_server.image_metadata['sizeX']/(2**(self.tile_server.image_metadata['levels']-1)),
-                self.tile_server.image_metadata['sizeY']/(2**(self.tile_server.image_metadata['levels']-1))
-            ]
-        
-            x_scale = base_dims[0] / self.tile_server.image_metadata['sizeX']
-            y_scale = -(base_dims[1] / self.tile_server.image_metadata['sizeY'])
-        
-        elif hasattr(self.tile_server,'tiles_metadata'):
-            base_dims = [
-                self.tile_server.tiles_metadata['sizeX']/(2**(self.tile_server.tiles_metadata['levels']-1)),
-                self.tile_server.tiles_metadata['sizeY']/(2**(self.tile_server.tiles_metadata['levels']-1))
-            ]
-        
-            x_scale = base_dims[0] / self.tile_server.tiles_metadata['sizeX']
-            y_scale = -(base_dims[1] / self.tile_server.tiles_metadata['sizeY'])
+        base_dims = [
+            image_metadata['sizeX']/(2**(image_metadata['levels']-1)),
+            image_metadata['sizeY']/(2**(image_metadata['levels']-1))
+        ]
 
-        else:
-            raise AttributeError("Missing image or tiles metadata")
-
+        x_scale = (base_dims[0]*(240/image_metadata['tileHeight'])) / image_metadata['sizeX']
+        y_scale = -((base_dims[1]*(240/image_metadata['tileHeight'])) / image_metadata['sizeY'])
 
         return x_scale, y_scale
 
-    def gen_layout(self):
+    def gen_layout(self, session_data:dict):
         """Generating layout for component
         """
 
@@ -135,6 +130,11 @@ class FeatureAnnotation(Tool):
                         dcc.Store(
                             id = {'type': 'feature-annotation-current-structures','index': 0},
                             storage_type='memory',
+                            data = json.dumps({})
+                        ),
+                        dcc.Store(
+                            id = {'type': 'feature-annotation-slide-information','index': 0},
+                            storage_type = 'memory',
                             data = json.dumps({})
                         )
                     ],style = {'marginBottom': '10px'}),
@@ -292,11 +292,24 @@ class FeatureAnnotation(Tool):
             ])
         ],style = {'maxHeight': '100vh','overflow': 'scroll'})
 
-        return layout
+        self.blueprint.layout = layout
 
     def get_callbacks(self):
         """Initializing callbacks and adding to DashBlueprint
         """
+
+        # Updating with new slide
+        self.blueprint.callback(
+            [
+                Input({'type': 'slide-select-drop','index':ALL},'value')
+            ],
+            [
+                Output({'type': 'feature-annotation-slide-information','index':ALL},'data')
+            ],
+            [
+                State('anchor-vis-store','data')
+            ]
+        )(self.update_slide)
 
         # Updating which structures are available in the dropdown menu
         self.blueprint.callback(
@@ -309,7 +322,7 @@ class FeatureAnnotation(Tool):
             ],
             [
                 State({'type': 'map-annotations-store','index': ALL},'data'),
-                State({'type': 'vis-layout-tabs','index': ALL},'active_tab')
+                State({'type': 'anchor-vis-layout-tabs','index': ALL},'active_tab')
             ]
         )(self.update_structure_options)
 
@@ -328,7 +341,8 @@ class FeatureAnnotation(Tool):
             ],
             [
                 State({'type': 'feature-annotation-current-structures','index': ALL},'data'),
-                State({'type': 'feature-annotation-class-drop','index':ALL},'value')
+                State({'type': 'feature-annotation-class-drop','index':ALL},'value'),
+                State({'type':'feature-annotation-slide-information','index':ALL},'data')
             ]
         )(self.update_structure)
 
@@ -368,7 +382,8 @@ class FeatureAnnotation(Tool):
                 State({'type': 'feature-annotation-label-drop','index': ALL},'value'),
                 State({'type': 'feature-annotation-label-text','index': ALL},'value'),
                 State({'type': 'feature-annotation-current-structures','index': ALL},'data'),
-                State({'type': 'feature-annotation-structure-drop','index': ALL},'value')
+                State({'type': 'feature-annotation-structure-drop','index': ALL},'value'),
+                State({'type': 'feature-annotation-slide-information','index': ALL},'data')
             ]
         )(self.add_new_class_label)
 
@@ -388,7 +403,23 @@ class FeatureAnnotation(Tool):
             ]
         )(self.save_annotation)
 
-    def save_label(self, label_name, label_text, image_bbox):
+    def update_slide(self, slide_selection,vis_data):
+
+        if not any([i['value'] or i['value']==0 for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        vis_data = json.loads(vis_data)
+        slide_data = vis_data[get_pattern_matching_value(slide_selection)]
+        new_slide_data = {}
+        new_slide_data['regions_url'] = slide_data['regions_url']
+        new_metadata = requests.get(slide_data['metadata_url']).json()
+        new_slide_data['x_scale'], new_slide_data['y_scale'] = self.get_scale_factors(new_metadata)
+
+        new_slide_data = json.dumps(new_slide_data)
+
+        return [new_slide_data]
+
+    def save_label(self, label_name, label_text, image_bbox, slide_information):
         """Save new label to current save folder.
 
         :param label_name: Name of label type adding label_text to (e.g. "color")
@@ -399,10 +430,10 @@ class FeatureAnnotation(Tool):
 
         # Converting image bbox to slide pixel coordinates:
         image_bbox = [
-            int(image_bbox[0]/self.x_scale),
-            int(image_bbox[3]/self.y_scale),
-            int(image_bbox[2]/self.x_scale),
-            int(image_bbox[1]/self.y_scale)
+            int(image_bbox[0]/slide_information['x_scale']),
+            int(image_bbox[3]/slide_information['y_scale']),
+            int(image_bbox[2]/slide_information['x_scale']),
+            int(image_bbox[1]/slide_information['y_scale'])
         ]
 
         if self.labels_format == 'json': 
@@ -428,7 +459,6 @@ class FeatureAnnotation(Tool):
                     ]
                 }
 
-            print(current_labels)
             with open(f'{self.storage_path}/labels.{self.labels_format}','w') as f:
                 json.dump(current_labels,f)
                 f.close()
@@ -450,7 +480,7 @@ class FeatureAnnotation(Tool):
 
             pd.DataFrame.from_records(current_labels).to_csv(f'{self.storage_path}/labels.{self.labels_format}')
 
-    def save_mask(self, annotations, class_options, image_bbox):
+    def save_mask(self, annotations, class_options, image_bbox, slide_information):
         """Saving annotation mask with annotated classes using pre-specified format
 
         :param annotations: List of SVG paths from the current figure
@@ -462,10 +492,10 @@ class FeatureAnnotation(Tool):
         """
 
         image_bbox = [
-            int(image_bbox[0] / self.x_scale),
-            int(image_bbox[3] / self.y_scale),
-            int(image_bbox[2] / self.x_scale),
-            int(image_bbox[1] / self.y_scale)
+            int(image_bbox[0] / slide_information['x_scale']),
+            int(image_bbox[3] / slide_information['y_scale']),
+            int(image_bbox[2] / slide_information['x_scale']),
+            int(image_bbox[1] / slide_information['y_scale'])
         ]
 
         height = int(image_bbox[3]-image_bbox[1])
@@ -506,7 +536,7 @@ class FeatureAnnotation(Tool):
                 formatted_mask+=combined_mask[:,:,c_idx]
 
         # Pulling image region from slide:
-        slide_image_region = self.get_structure_region(image_bbox, False)
+        slide_image_region = self.get_structure_region(image_bbox, False, slide_information)
         # Saving annotation mask:
         save_path = f'{self.storage_path}/Annotations/'
         if not os.path.exists(save_path):
@@ -564,7 +594,7 @@ class FeatureAnnotation(Tool):
 
         return [structure_options], [new_structure_bboxes]
 
-    def update_structure(self, structure_drop_value, prev_click, next_click, current_structure_data, current_class_value):
+    def update_structure(self, structure_drop_value, prev_click, next_click, current_structure_data, current_class_value, slide_information):
         """Updating the current structure figure based on selections
 
         :param structure_drop_value: Structure name selected from the structure dropdown menu
@@ -587,16 +617,17 @@ class FeatureAnnotation(Tool):
         structure_drop_value = get_pattern_matching_value(structure_drop_value)
         current_structure_data = json.loads(get_pattern_matching_value(current_structure_data))
         current_class_value = get_pattern_matching_value(current_class_value)
+        slide_information = json.loads(get_pattern_matching_value(slide_information))
 
         if structure_drop_value is None or not structure_drop_value in current_structure_data:
             raise exceptions.PreventUpdate
 
-        if ctx.triggered_id['type'] in ['feature-annotation-structure-drop','feature-annotation-class-new']:
+        if any([i in ctx.triggered_id['type'] for i in ['feature-annotation-structure-drop','feature-annotation-class-new']]):
             # Getting a new structure:
             current_structure_index = current_structure_data[f'{structure_drop_value}_index']
             current_structure_region = current_structure_data[structure_drop_value][current_structure_index]
 
-        elif ctx.triggered_id['type'] == 'feature-annotation-previous':
+        elif 'feature-annotation-previous' in ctx.triggered_id['type']:
             # Going to previous structure
             current_structure_index = current_structure_data[f'{structure_drop_value}_index']
             if current_structure_index==0:
@@ -606,7 +637,7 @@ class FeatureAnnotation(Tool):
             
             current_structure_region = current_structure_data[structure_drop_value][current_structure_index]
 
-        elif ctx.triggered_id['type'] == 'feature-annotation-next':
+        elif 'feature-annotation-next' in ctx.triggered_id['type']:
             # Going to next structure
             current_structure_index = current_structure_data[f'{structure_drop_value}_index']
             if current_structure_index==len(current_structure_data[structure_drop_value])-1:
@@ -630,7 +661,7 @@ class FeatureAnnotation(Tool):
         new_label_text = []
 
         # Pulling out the desired region:
-        image_region = self.get_structure_region(current_structure_region)
+        image_region = self.get_structure_region(current_structure_region, slide_information)
         image_figure = go.Figure(px.imshow(np.array(image_region)))
         image_figure.update_layout(
             {
@@ -647,7 +678,7 @@ class FeatureAnnotation(Tool):
 
         return [image_figure], ['Save'], [json.dumps(current_structure_data)], [new_label_text]
 
-    def get_structure_region(self, structure_bbox:list, scale:bool = True):
+    def get_structure_region(self, structure_bbox:list, slide_information: dict, scale:bool = True):
         """Using the tile server "regions_url" property to pull out a specific region of tissue
 
         :param structure_bbox: List of minx, miny, maxx, maxy coordinates
@@ -659,10 +690,10 @@ class FeatureAnnotation(Tool):
         # Converting structure bbox from map coordinates to slide-pixel coordinates
         if scale:
             slide_coordinates = [
-                int(structure_bbox[0]/self.x_scale), 
-                int(structure_bbox[3]/self.y_scale), 
-                int(structure_bbox[2]/self.x_scale), 
-                int(structure_bbox[1]/self.y_scale)
+                int(structure_bbox[0]/slide_information['x_scale']), 
+                int(structure_bbox[3]/slide_information['y_scale']), 
+                int(structure_bbox[2]/slide_information['x_scale']), 
+                int(structure_bbox[1]/slide_information['y_scale'])
             ]
         else:
             slide_coordinates = structure_bbox
@@ -671,14 +702,14 @@ class FeatureAnnotation(Tool):
         image_region = Image.open(
             BytesIO(
                 requests.get(
-                    self.tile_server.regions_url+f'?left={slide_coordinates[0]}&top={slide_coordinates[1]}&right={slide_coordinates[2]}&bottom={slide_coordinates[3]}'
+                    slide_information['regions_url']+f'?left={slide_coordinates[0]}&top={slide_coordinates[1]}&right={slide_coordinates[2]}&bottom={slide_coordinates[3]}'
                 ).content
             )
         )
 
         return image_region
     
-    def add_new_class_label(self, add_class, add_label, new_class, new_label, label_text, current_structure_data, current_structure):
+    def add_new_class_label(self, add_class, add_label, new_class, new_label, label_text, current_structure_data, current_structure, slide_information):
         """Adding a new class or label to the current structure
 
         :param add_class: Add class clicked
@@ -698,17 +729,19 @@ class FeatureAnnotation(Tool):
         :return: Returning updated figure with new line color, fill color and saving the new label to the save directory
         :rtype: list
         """
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
         new_class = get_pattern_matching_value(new_class)
         new_label = get_pattern_matching_value(new_label)
         label_text = get_pattern_matching_value(label_text)
         current_structure_data = json.loads(get_pattern_matching_value(current_structure_data))
         current_structure = get_pattern_matching_value(current_structure)
-
-        if not any([i['value'] for i in ctx.triggered]):
-            raise exceptions.PreventUpdate
+        slide_information = json.loads(get_pattern_matching_value(slide_information))
 
         # Updating the figure "newshape.line.color" and "newshape.fillcolor" properties
-        if ctx.triggered_id['type']=='feature-annotation-class-new':
+        if 'feature-annotation-class-new' in ctx.triggered_id['type']:
             if not new_class is None:
                 figure_update = Patch()
                 figure_update['layout']['newshape']['line']['color'] = new_class
@@ -717,14 +750,14 @@ class FeatureAnnotation(Tool):
                 raise exceptions.PreventUpdate
         
         # Adding a label to 
-        elif ctx.triggered_id['type'] == 'feature-annotation-label-submit':
+        elif 'feature-annotation-label-submit' in ctx.triggered_id['type']:
             figure_update = no_update
 
             image_bbox = current_structure_data[current_structure][current_structure_data[f'{current_structure}_index']]
 
             if not new_label is None:
                 # Saving label to running file
-                self.save_label(new_label, label_text, image_bbox)
+                self.save_label(new_label, label_text, image_bbox, slide_information)
             else:
                 raise exceptions.PreventUpdate
         
@@ -758,7 +791,7 @@ class FeatureAnnotation(Tool):
         current_class_options = get_pattern_matching_value(current_class_options)
         current_label_options = get_pattern_matching_value(current_label_options)
 
-        if ctx.triggered_id['type'] == 'feature-annotation-add-class':
+        if 'feature-annotation-add-class' in ctx.triggered_id['type']:
 
             if add_class_value == 'Class':
                 # Getting the class name input and color picker:
@@ -766,13 +799,13 @@ class FeatureAnnotation(Tool):
                     dcc.Input(
                         type = 'text',
                         maxLength = 1000,
-                        id = {'type': 'feature-annotation-add-class-name','index': 0},
+                        id = {'type': f'{self.component_prefix}-feature-annotation-add-class-name','index': 0},
                         placeholder = 'New Class Name',
                         style = {'width': '100%'}
                     ),
                     html.Div(
                         dmc.ColorInput(
-                            id = {'type':'feature-annotation-add-class-color','index':0},
+                            id = {'type':f'{self.component_prefix}-feature-annotation-add-class-color','index':0},
                             label = 'Color',
                             format = 'rgb',
                             value = f'rgb({np.random.randint(0,255)},{np.random.randint(0,255)},{np.random.randint(0,255)})'
@@ -788,7 +821,7 @@ class FeatureAnnotation(Tool):
                         type = 'text',
                         maxLength = 1000,
                         placeholder = 'New Label Name',
-                        id = {'type': 'feature-annotation-add-label-name','index': 0}
+                        id = {'type': f'{self.component_prefix}-feature-annotation-add-label-name','index': 0}
                     )
                 ],style = {'width': '100%'})
 
@@ -799,7 +832,7 @@ class FeatureAnnotation(Tool):
 
             add_class_drop_value = add_class_value
 
-        elif ctx.triggered_id['type'] == 'feature-annotation-add-submit':
+        elif 'feature-annotation-add-submit' in ctx.triggered_id['type']:
 
             if add_class_value == 'Class':
                 if not add_class_color is None and not add_class_name is None:
@@ -831,7 +864,7 @@ class FeatureAnnotation(Tool):
 
         return [add_class_drop_value], [options_div], [add_submit_disabled], [new_class_options], [new_label_options]
 
-    def save_annotation(self, save_click, current_annotations, current_classes, current_structure_data, current_structure):
+    def save_annotation(self, save_click, current_annotations, current_classes, current_structure_data, current_structure, slide_information):
         """Saving the current annotation in image format
 
         :param save_click: Save button is clicked
@@ -840,13 +873,15 @@ class FeatureAnnotation(Tool):
         :type current_annotations: list
         """
 
+
+        if not any([i['value'] for i in ctx.triggered]) or current_classes is None:
+            raise exceptions.PreventUpdate
+
         current_annotations = get_pattern_matching_value(current_annotations)
         current_classes = get_pattern_matching_value(current_classes)
         current_structure_data = json.loads(get_pattern_matching_value(current_structure_data))
         current_structure = get_pattern_matching_value(current_structure)
-
-        if not any([i['value'] for i in ctx.triggered]) or current_classes is None:
-            raise exceptions.PreventUpdate
+        slide_information = json.loads(get_pattern_matching_value(slide_information))
 
         annotations = []
         if not current_annotations is None:
@@ -859,7 +894,7 @@ class FeatureAnnotation(Tool):
         image_bbox = current_structure_data[current_structure][current_structure_data[f'{current_structure}_index']]
 
         # Saving annotation to storage_path
-        self.save_mask(annotations, current_classes, image_bbox)
+        self.save_mask(annotations, current_classes, image_bbox, slide_information)
 
         return ['Saved!']
 
@@ -870,55 +905,48 @@ class BulkLabels(Tool):
     :type Tool: None
     """
     def __init__(self,
-                 geojson_anns: Union[list,dict],
-                 tile_server: TileServer,
-                 reference_object: Union[str,None] = None,
                  ignore_list: list = [],
                  property_depth: int = 4):
         """Constructor method
         """
 
-        self.tile_server = tile_server
-        self.reference_object = reference_object
-        self.property_options, self.feature_names, self.property_info = extract_geojson_properties(geojson_anns, self.reference_object, ignore_list, property_depth)
+        self.ignore_list = ignore_list
+        self.property_depth = property_depth
 
-        self.x_scale, self.y_scale = self.get_scale_factors()
+    def __str__(self):
+        return 'Bulk Labels'
 
+    def load(self, component_prefix:int):
+
+        self.component_prefix = component_prefix
         self.title = 'Bulk Labels'
-        self.blueprint = DashBlueprint()
-        self.blueprint.layout = self.gen_layout()
+        self.blueprint = DashBlueprint(
+            transforms=[
+                PrefixIdTransform(prefix=f'{self.component_prefix}'),
+                MultiplexerTransform()
+            ]
+        )
 
         self.get_callbacks()
 
-    def get_scale_factors(self):
-        """Getting x and y scale factors to convert from map coordinates back to pixel coordinates
+    def get_scale_factors(self, image_metadata: dict):
+        """Function used to initialize scaling factors applied to GeoJSON annotations to project annotations into the SlideMap CRS (coordinate reference system)
+
+        :return: x and y (horizontal and vertical) scale factors applied to each coordinate in incoming annotations
+        :rtype: float
         """
 
-        if hasattr(self.tile_server,'image_metadata'):
-            base_dims = [
-                self.tile_server.image_metadata['sizeX']/(2**(self.tile_server.image_metadata['levels']-1)),
-                self.tile_server.image_metadata['sizeY']/(2**(self.tile_server.image_metadata['levels']-1))
-            ]
-        
-            x_scale = base_dims[0] / self.tile_server.image_metadata['sizeX']
-            y_scale = -(base_dims[1] / self.tile_server.image_metadata['sizeY'])
-        
-        elif hasattr(self.tile_server,'tiles_metadata'):
-            base_dims = [
-                self.tile_server.tiles_metadata['sizeX']/(2**(self.tile_server.tiles_metadata['levels']-1)),
-                self.tile_server.tiles_metadata['sizeY']/(2**(self.tile_server.tiles_metadata['levels']-1))
-            ]
-        
-            x_scale = base_dims[0] / self.tile_server.tiles_metadata['sizeX']
-            y_scale = -(base_dims[1] / self.tile_server.tiles_metadata['sizeY'])
+        base_dims = [
+            image_metadata['sizeX']/(2**(image_metadata['levels']-1)),
+            image_metadata['sizeY']/(2**(image_metadata['levels']-1))
+        ]
 
-        else:
-            raise AttributeError("Missing image or tiles metadata")
-
+        x_scale = (base_dims[0]*(240/image_metadata['tileHeight'])) / image_metadata['sizeX']
+        y_scale = -((base_dims[1]*(240/image_metadata['tileHeight'])) / image_metadata['sizeY'])
 
         return x_scale, y_scale
 
-    def gen_layout(self):
+    def gen_layout(self, session_data:dict):
         """Generating layout for BulkLabels component
 
         :return: BulkLabels layout
@@ -933,6 +961,13 @@ class BulkLabels(Tool):
                     html.Hr(),
                     dbc.Row(
                         'Apply labels to structures based on several different inclusion and exclusion criteria.'
+                    ),
+                    html.Div(
+                        dcc.Store(
+                            id = {'type': 'bulk-annotation-property-info','index': 0},
+                            storage_type='memory',
+                            data = json.dumps({})
+                        )
                     ),
                     html.Hr(),
                     dbc.Row([
@@ -960,7 +995,7 @@ class BulkLabels(Tool):
                         ],md = 3),
                         dbc.Col([
                             dcc.Dropdown(
-                                options = self.feature_names,
+                                options = [],
                                 value = [],
                                 multi = True,
                                 placeholder = 'Include Structures',
@@ -1000,7 +1035,7 @@ class BulkLabels(Tool):
                     dcc.Store(
                         id = {'type': 'bulk-labels-property-info','index': 0},
                         storage_type='memory',
-                        data = json.dumps(self.property_info)
+                        data = json.dumps({})
                     ),
                     dcc.Store(
                         id = {'type': 'bulk-labels-labels-store','index': 0},
@@ -1166,12 +1201,22 @@ class BulkLabels(Tool):
             ])
         ],style = {'maxHeight': '100vh','overflow': 'scroll'})
 
-        return layout
-    
+        self.blueprint.layout = layout
+
     def get_callbacks(self):
         """Adding callbacks to DashBlueprint object
         """
         
+        # Updating for new slide
+        self.blueprint.callback(
+            [
+                Input({'type': 'map-annotations-store','index': ALL},'data')
+            ],
+            [
+                Output({'type': 'bulk-labels-property-info','index': ALL},'data')
+            ]
+        )(self.update_slide)
+
         # Adding spatial relationships 
         self.blueprint.callback(
             [
@@ -1328,6 +1373,24 @@ class BulkLabels(Tool):
             ]
         )(self.update_method_explanation)
 
+    def update_slide(self, new_annotations: list):
+
+        if not any([i['value'] or i['value']==0 for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        new_annotations = json.loads(get_pattern_matching_value(new_annotations))
+
+        new_properties, new_feature_names, new_property_info = extract_geojson_properties(new_annotations, None, self.ignore_list, self.property_depth)
+        
+        new_property_info = {
+            'names': new_properties,
+            'property_info': new_property_info
+        }
+
+        new_property_info = json.dumps(new_property_info)
+
+        return [new_property_info]
+
     def update_method_explanation(self, method):
         """Updating explanation given for the selected label method
 
@@ -1399,7 +1462,7 @@ class BulkLabels(Tool):
                         step = 1,
                         min = 0,
                         style = {'width': '100%'},
-                        id = {'type': 'bulk-labels-spatial-query-nearest','index':ctx.triggered_id['index']}
+                        id = {'type': f'{self.component_prefix}-bulk-labels-spatial-query-nearest','index':ctx.triggered_id['index']}
                     ), 
                     dcc.Markdown(
                         query_types[query_type]
@@ -1429,7 +1492,7 @@ class BulkLabels(Tool):
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
 
-        if ctx.triggered_id['type']=='bulk-labels-spatial-query-icon':
+        if 'bulk-labels-spatial-query-icon' in ctx.triggered_id['type']:
 
             def new_query_div():
                 return html.Div([
@@ -1447,7 +1510,7 @@ class BulkLabels(Tool):
                                 ],
                                 value = [],
                                 multi= False,
-                                id = {'type': 'bulk-labels-spatial-query-drop','index': add_click}
+                                id = {'type': f'{self.component_prefix}-bulk-labels-spatial-query-drop','index': add_click}
                             )
                         ],md = 5),
                         dbc.Col([
@@ -1456,13 +1519,13 @@ class BulkLabels(Tool):
                                 value = [],
                                 multi = False,
                                 placeholder = 'Select structure',
-                                id = {'type': 'bulk-labels-spatial-query-structures','index':add_click}
+                                id = {'type': f'{self.component_prefix}-bulk-labels-spatial-query-structures','index':add_click}
                             )
                         ],md=5),
                         dbc.Col([
                             html.A(
                                 html.I(
-                                    id = {'type': 'bulk-labels-remove-spatial-query-icon','index': add_click},
+                                    id = {'type': f'{self.component_prefix}-bulk-labels-remove-spatial-query-icon','index': add_click},
                                     n_clicks = 0,
                                     className = 'bi bi-x-circle-fill fa-2x',
                                     style = {'color': 'rgb(255,0,0)'}
@@ -1471,14 +1534,14 @@ class BulkLabels(Tool):
                         ], md = 2)
                     ]),
                     html.Div(
-                        id = {'type': 'bulk-labels-spatial-query-definition','index': add_click},
+                        id = {'type': f'{self.component_prefix}-bulk-labels-spatial-query-definition','index': add_click},
                         children = []
                     )
                 ])
 
             queries_div.append(new_query_div())
 
-        elif ctx.triggered_id['type']=='bulk-labels-remove-spatial-query-icon':
+        elif 'bulk-labels-remove-spatial-query-icon' in ctx.triggered_id['type']:
 
             values_to_remove = []
             for i, val in enumerate(remove_click):
@@ -1603,17 +1666,17 @@ class BulkLabels(Tool):
                                 'Clear Marker',
                                 color = 'danger',
                                 n_clicks = 0,
-                                id = {'type': 'label-marker-delete','index': f_idx}
+                                id = {'type': f'{self.component_prefix}-label-marker-delete','index': f_idx}
                             ),
-                            id = {'type':'label-marker-popup','index': f_idx}
+                            id = {'type':f'{self.component_prefix}-label-marker-popup','index': f_idx}
                         ),
                         html.Div(
-                            id = {'type': 'label-marker-data','index': f_idx},
+                            id = {'type': f'{self.component_prefix}-label-marker-data','index': f_idx},
                             children = json.dumps(f_data),
                             style = {'display': 'none'}
                         )
                     ],
-                    id = {'type': 'label-marker','index': f_idx}
+                    id = {'type': f'{self.component_prefix}-label-marker','index': f_idx}
                 )
                 for f_idx, (f,f_data) in enumerate(zip(filtered_geojson['features'],filtered_ref_list))
             ]
@@ -1636,7 +1699,7 @@ class BulkLabels(Tool):
 
         return [new_structures_div], [new_markers_div], [new_labels_source], [labels_type_disabled], [labels_text_disabled], [labels_rationale_disabled], [labels_apply_button_disabled], [labels_download_button_disabled]
 
-    def update_label_properties(self, add_click:list, remove_click:list):
+    def update_label_properties(self, add_click:list, remove_click:list, property_info:list):
         """Adding/removing property filter dropdown
 
         :param add_click: Add property filter clicked
@@ -1652,25 +1715,26 @@ class BulkLabels(Tool):
         
         properties_div = Patch()
         add_click = get_pattern_matching_value(add_click)
+        property_info = json.loads(get_pattern_matching_value(property_info))
 
-        if ctx.triggered_id['type']=='bulk-labels-add-property-icon':
+        if 'bulk-labels-add-property-icon' in ctx.triggered_id['type']:
 
             def new_property_div():
                 return html.Div([
                     dbc.Row([
                         dbc.Col([
                             dcc.Dropdown(
-                                options = self.property_options,
+                                options = list(property_info.keys()),
                                 value = [],
                                 multi = False,
                                 placeholder = 'Select property',
-                                id = {'type': 'bulk-labels-filter-property-drop','index':add_click}
+                                id = {'type': f'{self.component_prefix}-bulk-labels-filter-property-drop','index':add_click}
                             )
                         ],md=10),
                         dbc.Col([
                             html.A(
                                 html.I(
-                                    id = {'type': 'bulk-labels-remove-property-icon','index': add_click},
+                                    id = {'type': f'{self.component_prefix}-bulk-labels-remove-property-icon','index': add_click},
                                     n_clicks = 0,
                                     className = 'bi bi-x-circle-fill fa-2x',
                                     style = {'color': 'rgb(255,0,0)'}
@@ -1679,14 +1743,14 @@ class BulkLabels(Tool):
                         ], md = 2)
                     ]),
                     html.Div(
-                        id = {'type': 'bulk-labels-property-selector-div','index': add_click},
+                        id = {'type': f'{self.component_prefix}-bulk-labels-property-selector-div','index': add_click},
                         children = []
                     )
                 ])
 
             properties_div.append(new_property_div())
 
-        elif ctx.triggered_id['type']=='bulk-labels-remove-property-icon':
+        elif 'bulk-labels-remove-property-icon' in ctx.triggered_id['type']:
 
             values_to_remove = []
             for i, val in enumerate(remove_click):
@@ -1714,14 +1778,13 @@ class BulkLabels(Tool):
             raise exceptions.PreventUpdate
         
         property_info = json.loads(get_pattern_matching_value(property_info))
-
         property_values = property_info[property_value]
 
         if 'min' in property_values:
             # Used for numeric type filters
             values_selector = html.Div(
                 dcc.RangeSlider(
-                    id = {'type':'bulk-labels-filter-selector','index': ctx.triggered_id['index']},
+                    id = {'type':f'{self.component_prefix}-bulk-labels-filter-selector','index': ctx.triggered_id['index']},
                     min = property_values['min'] - 0.01,
                     max = property_values['max'] + 0.01,
                     value = [property_values['min'], property_values['max']],
@@ -1740,7 +1803,7 @@ class BulkLabels(Tool):
         elif 'unique' in property_values:
             values_selector = html.Div(
                 dcc.Dropdown(
-                    id = {'type': 'bulk-labels-filter-selector','index': ctx.triggered_id['index']},
+                    id = {'type': f'{self.component_prefix}-bulk-labels-filter-selector','index': ctx.triggered_id['index']},
                     options = property_values['unique'],
                     value = property_values['unique'],
                     multi = True

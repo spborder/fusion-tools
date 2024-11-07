@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>src &mdash; fusion-tools 1.0.0 documentation</title>
+  <title>src &mdash; fusion-tools 2.0.0 documentation</title>
       <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=80d5e7a1" />
       <link rel="stylesheet" type="text/css" href="_static/css/theme.css?v=19f00094" />
 
@@ -15,7 +15,7 @@
   
         <script src="_static/jquery.js?v=5d32c60e"></script>
         <script src="_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
-        <script src="_static/documentation_options.js?v=8d563738"></script>
+        <script src="_static/documentation_options.js?v=51b770b3"></script>
         <script src="_static/doctools.js?v=9a2dae69"></script>
         <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/js/theme.js"></script>
@@ -89,20 +89,23 @@
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.ChannelMixer.add_color_selector_tab"><code class="docutils literal notranslate"><span class="pre">ChannelMixer.add_color_selector_tab()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.ChannelMixer.gen_layout"><code class="docutils literal notranslate"><span class="pre">ChannelMixer.gen_layout()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.ChannelMixer.get_callbacks"><code class="docutils literal notranslate"><span class="pre">ChannelMixer.get_callbacks()</span></code></a></li>
+<li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.ChannelMixer.load"><code class="docutils literal notranslate"><span class="pre">ChannelMixer.load()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.ChannelMixer.process_frames"><code class="docutils literal notranslate"><span class="pre">ChannelMixer.process_frames()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.ChannelMixer.update_channel_mix"><code class="docutils literal notranslate"><span class="pre">ChannelMixer.update_channel_mix()</span></code></a></li>
+<li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.ChannelMixer.update_slide"><code class="docutils literal notranslate"><span class="pre">ChannelMixer.update_slide()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.ChannelMixer.update_tab_style"><code class="docutils literal notranslate"><span class="pre">ChannelMixer.update_tab_style()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.MapComponent"><code class="docutils literal notranslate"><span class="pre">MapComponent</span></code></a></li>
 <li class="toctree-l5"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.MultiFrameSlideMap"><code class="docutils literal notranslate"><span class="pre">MultiFrameSlideMap</span></code></a><ul>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.MultiFrameSlideMap.gen_layout"><code class="docutils literal notranslate"><span class="pre">MultiFrameSlideMap.gen_layout()</span></code></a></li>
-<li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.MultiFrameSlideMap.initialize_map"><code class="docutils literal notranslate"><span class="pre">MultiFrameSlideMap.initialize_map()</span></code></a></li>
+<li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.MultiFrameSlideMap.load"><code class="docutils literal notranslate"><span class="pre">MultiFrameSlideMap.load()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.MultiFrameSlideMap.process_frames"><code class="docutils literal notranslate"><span class="pre">MultiFrameSlideMap.process_frames()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.SlideImageOverlay"><code class="docutils literal notranslate"><span class="pre">SlideImageOverlay</span></code></a><ul>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.SlideImageOverlay.get_image_bounds"><code class="docutils literal notranslate"><span class="pre">SlideImageOverlay.get_image_bounds()</span></code></a></li>
+<li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.SlideImageOverlay.to_dict"><code class="docutils literal notranslate"><span class="pre">SlideImageOverlay.to_dict()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.SlideMap"><code class="docutils literal notranslate"><span class="pre">SlideMap</span></code></a><ul>
@@ -116,11 +119,11 @@
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.SlideMap.get_image_overlay_popup"><code class="docutils literal notranslate"><span class="pre">SlideMap.get_image_overlay_popup()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.SlideMap.get_namespace"><code class="docutils literal notranslate"><span class="pre">SlideMap.get_namespace()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.SlideMap.get_scale_factors"><code class="docutils literal notranslate"><span class="pre">SlideMap.get_scale_factors()</span></code></a></li>
-<li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.SlideMap.initialize_map"><code class="docutils literal notranslate"><span class="pre">SlideMap.initialize_map()</span></code></a></li>
+<li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.SlideMap.load"><code class="docutils literal notranslate"><span class="pre">SlideMap.load()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.SlideMap.make_geojson_layers"><code class="docutils literal notranslate"><span class="pre">SlideMap.make_geojson_layers()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.SlideMap.move_image_overlay"><code class="docutils literal notranslate"><span class="pre">SlideMap.move_image_overlay()</span></code></a></li>
-<li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.SlideMap.process_annotations"><code class="docutils literal notranslate"><span class="pre">SlideMap.process_annotations()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.SlideMap.update_image_overlay_transparency"><code class="docutils literal notranslate"><span class="pre">SlideMap.update_image_overlay_transparency()</span></code></a></li>
+<li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.SlideMap.update_slide"><code class="docutils literal notranslate"><span class="pre">SlideMap.update_slide()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.maps.SlideMap.upload_shape"><code class="docutils literal notranslate"><span class="pre">SlideMap.upload_shape()</span></code></a></li>
 </ul>
 </li>
@@ -131,6 +134,7 @@
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.HRAViewer.gen_layout"><code class="docutils literal notranslate"><span class="pre">HRAViewer.gen_layout()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.HRAViewer.get_callbacks"><code class="docutils literal notranslate"><span class="pre">HRAViewer.get_callbacks()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.HRAViewer.get_organ_table"><code class="docutils literal notranslate"><span class="pre">HRAViewer.get_organ_table()</span></code></a></li>
+<li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.HRAViewer.load"><code class="docutils literal notranslate"><span class="pre">HRAViewer.load()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.HRAViewer.update_hra_viewer"><code class="docutils literal notranslate"><span class="pre">HRAViewer.update_hra_viewer()</span></code></a></li>
 </ul>
 </li>
@@ -142,9 +146,11 @@
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.OverlayOptions.export_layers"><code class="docutils literal notranslate"><span class="pre">OverlayOptions.export_layers()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.OverlayOptions.gen_layout"><code class="docutils literal notranslate"><span class="pre">OverlayOptions.gen_layout()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.OverlayOptions.get_callbacks"><code class="docutils literal notranslate"><span class="pre">OverlayOptions.get_callbacks()</span></code></a></li>
+<li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.OverlayOptions.load"><code class="docutils literal notranslate"><span class="pre">OverlayOptions.load()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.OverlayOptions.parse_added_filters"><code class="docutils literal notranslate"><span class="pre">OverlayOptions.parse_added_filters()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.OverlayOptions.update_filter_selector"><code class="docutils literal notranslate"><span class="pre">OverlayOptions.update_filter_selector()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.OverlayOptions.update_overlays"><code class="docutils literal notranslate"><span class="pre">OverlayOptions.update_overlays()</span></code></a></li>
+<li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.OverlayOptions.update_slide"><code class="docutils literal notranslate"><span class="pre">OverlayOptions.update_slide()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.PropertyPlotter"><code class="docutils literal notranslate"><span class="pre">PropertyPlotter</span></code></a><ul>
@@ -157,11 +163,13 @@
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.PropertyPlotter.gen_violin_plot"><code class="docutils literal notranslate"><span class="pre">PropertyPlotter.gen_violin_plot()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.PropertyPlotter.generate_property_dict"><code class="docutils literal notranslate"><span class="pre">PropertyPlotter.generate_property_dict()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.PropertyPlotter.get_callbacks"><code class="docutils literal notranslate"><span class="pre">PropertyPlotter.get_callbacks()</span></code></a></li>
+<li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.PropertyPlotter.load"><code class="docutils literal notranslate"><span class="pre">PropertyPlotter.load()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.PropertyPlotter.make_property_plot_tabs"><code class="docutils literal notranslate"><span class="pre">PropertyPlotter.make_property_plot_tabs()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.PropertyPlotter.remove_marker_label"><code class="docutils literal notranslate"><span class="pre">PropertyPlotter.remove_marker_label()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.PropertyPlotter.select_data_from_plot"><code class="docutils literal notranslate"><span class="pre">PropertyPlotter.select_data_from_plot()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.PropertyPlotter.sub_select_data"><code class="docutils literal notranslate"><span class="pre">PropertyPlotter.sub_select_data()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.PropertyPlotter.update_property_graph"><code class="docutils literal notranslate"><span class="pre">PropertyPlotter.update_property_graph()</span></code></a></li>
+<li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.PropertyPlotter.update_slide"><code class="docutils literal notranslate"><span class="pre">PropertyPlotter.update_slide()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.PropertyPlotter.update_sub_div"><code class="docutils literal notranslate"><span class="pre">PropertyPlotter.update_sub_div()</span></code></a></li>
 </ul>
 </li>
@@ -169,7 +177,9 @@
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.PropertyViewer.gen_layout"><code class="docutils literal notranslate"><span class="pre">PropertyViewer.gen_layout()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.PropertyViewer.generate_plot_tabs"><code class="docutils literal notranslate"><span class="pre">PropertyViewer.generate_plot_tabs()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.PropertyViewer.get_callbacks"><code class="docutils literal notranslate"><span class="pre">PropertyViewer.get_callbacks()</span></code></a></li>
+<li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.PropertyViewer.load"><code class="docutils literal notranslate"><span class="pre">PropertyViewer.load()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.PropertyViewer.update_property_viewer"><code class="docutils literal notranslate"><span class="pre">PropertyViewer.update_property_viewer()</span></code></a></li>
+<li class="toctree-l6"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.PropertyViewer.update_slide"><code class="docutils literal notranslate"><span class="pre">PropertyViewer.update_slide()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="fusion_tools.components.html#fusion_tools.components.tools.Tool"><code class="docutils literal notranslate"><span class="pre">Tool</span></code></a></li>
@@ -182,17 +192,20 @@
 <li class="toctree-l4"><a class="reference internal" href="fusion_tools.utils.html#submodules">Submodules</a></li>
 <li class="toctree-l4"><a class="reference internal" href="fusion_tools.utils.html#module-fusion_tools.utils.shapes">fusion_tools.utils.shapes module</a><ul>
 <li class="toctree-l5"><a class="reference internal" href="fusion_tools.utils.html#fusion_tools.utils.shapes.align_object_props"><code class="docutils literal notranslate"><span class="pre">align_object_props()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="fusion_tools.utils.html#fusion_tools.utils.shapes.convert_histomics"><code class="docutils literal notranslate"><span class="pre">convert_histomics()</span></code></a></li>
 <li class="toctree-l5"><a class="reference internal" href="fusion_tools.utils.html#fusion_tools.utils.shapes.export_annotations"><code class="docutils literal notranslate"><span class="pre">export_annotations()</span></code></a></li>
 <li class="toctree-l5"><a class="reference internal" href="fusion_tools.utils.html#fusion_tools.utils.shapes.extract_geojson_properties"><code class="docutils literal notranslate"><span class="pre">extract_geojson_properties()</span></code></a></li>
 <li class="toctree-l5"><a class="reference internal" href="fusion_tools.utils.html#fusion_tools.utils.shapes.extract_nested_prop"><code class="docutils literal notranslate"><span class="pre">extract_nested_prop()</span></code></a></li>
 <li class="toctree-l5"><a class="reference internal" href="fusion_tools.utils.html#fusion_tools.utils.shapes.find_intersecting"><code class="docutils literal notranslate"><span class="pre">find_intersecting()</span></code></a></li>
 <li class="toctree-l5"><a class="reference internal" href="fusion_tools.utils.html#fusion_tools.utils.shapes.find_nested_levels"><code class="docutils literal notranslate"><span class="pre">find_nested_levels()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="fusion_tools.utils.html#fusion_tools.utils.shapes.load_annotations"><code class="docutils literal notranslate"><span class="pre">load_annotations()</span></code></a></li>
 <li class="toctree-l5"><a class="reference internal" href="fusion_tools.utils.html#fusion_tools.utils.shapes.load_aperio"><code class="docutils literal notranslate"><span class="pre">load_aperio()</span></code></a></li>
 <li class="toctree-l5"><a class="reference internal" href="fusion_tools.utils.html#fusion_tools.utils.shapes.load_geojson"><code class="docutils literal notranslate"><span class="pre">load_geojson()</span></code></a></li>
 <li class="toctree-l5"><a class="reference internal" href="fusion_tools.utils.html#fusion_tools.utils.shapes.load_histomics"><code class="docutils literal notranslate"><span class="pre">load_histomics()</span></code></a></li>
 <li class="toctree-l5"><a class="reference internal" href="fusion_tools.utils.html#fusion_tools.utils.shapes.load_label_mask"><code class="docutils literal notranslate"><span class="pre">load_label_mask()</span></code></a></li>
 <li class="toctree-l5"><a class="reference internal" href="fusion_tools.utils.html#fusion_tools.utils.shapes.load_polygon_csv"><code class="docutils literal notranslate"><span class="pre">load_polygon_csv()</span></code></a></li>
 <li class="toctree-l5"><a class="reference internal" href="fusion_tools.utils.html#fusion_tools.utils.shapes.load_visium"><code class="docutils literal notranslate"><span class="pre">load_visium()</span></code></a></li>
+<li class="toctree-l5"><a class="reference internal" href="fusion_tools.utils.html#fusion_tools.utils.shapes.merge_dict"><code class="docutils literal notranslate"><span class="pre">merge_dict()</span></code></a></li>
 <li class="toctree-l5"><a class="reference internal" href="fusion_tools.utils.html#fusion_tools.utils.shapes.path_to_indices"><code class="docutils literal notranslate"><span class="pre">path_to_indices()</span></code></a></li>
 <li class="toctree-l5"><a class="reference internal" href="fusion_tools.utils.html#fusion_tools.utils.shapes.path_to_mask"><code class="docutils literal notranslate"><span class="pre">path_to_mask()</span></code></a></li>
 <li class="toctree-l5"><a class="reference internal" href="fusion_tools.utils.html#fusion_tools.utils.shapes.process_filters_queries"><code class="docutils literal notranslate"><span class="pre">process_filters_queries()</span></code></a></li>
@@ -208,6 +221,7 @@
 <li class="toctree-l5"><a class="reference internal" href="fusion_tools.visualization.html#fusion_tools.visualization.components.Visualization"><code class="docutils literal notranslate"><span class="pre">Visualization</span></code></a><ul>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.visualization.html#fusion_tools.visualization.components.Visualization.gen_layout"><code class="docutils literal notranslate"><span class="pre">Visualization.gen_layout()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.visualization.html#fusion_tools.visualization.components.Visualization.get_layout_children"><code class="docutils literal notranslate"><span class="pre">Visualization.get_layout_children()</span></code></a></li>
+<li class="toctree-l6"><a class="reference internal" href="fusion_tools.visualization.html#fusion_tools.visualization.components.Visualization.initialize_stores"><code class="docutils literal notranslate"><span class="pre">Visualization.initialize_stores()</span></code></a></li>
 <li class="toctree-l6"><a class="reference internal" href="fusion_tools.visualization.html#fusion_tools.visualization.components.Visualization.start"><code class="docutils literal notranslate"><span class="pre">Visualization.start()</span></code></a></li>
 </ul>
 </li>
@@ -234,15 +248,24 @@
 <li class="toctree-l4"><a class="reference internal" href="fusion_tools.html#fusion_tools.handler.DSAHandler.query_annotation_count"><code class="docutils literal notranslate"><span class="pre">DSAHandler.query_annotation_count()</span></code></a></li>
 </ul>
 </li>
+<li class="toctree-l3"><a class="reference internal" href="fusion_tools.html#fusion_tools.handler.Handler"><code class="docutils literal notranslate"><span class="pre">Handler</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="fusion_tools.html#module-fusion_tools.tileserver">fusion_tools.tileserver module</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="fusion_tools.html#fusion_tools.tileserver.CustomTileServer"><code class="docutils literal notranslate"><span class="pre">CustomTileServer</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="fusion_tools.html#fusion_tools.tileserver.DSATileServer"><code class="docutils literal notranslate"><span class="pre">DSATileServer</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="fusion_tools.html#fusion_tools.tileserver.LocalTileServer"><code class="docutils literal notranslate"><span class="pre">LocalTileServer</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="fusion_tools.html#fusion_tools.tileserver.LocalTileServer.add_new_image"><code class="docutils literal notranslate"><span class="pre">LocalTileServer.add_new_image()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusion_tools.html#fusion_tools.tileserver.LocalTileServer.get_annotations"><code class="docutils literal notranslate"><span class="pre">LocalTileServer.get_annotations()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="fusion_tools.html#fusion_tools.tileserver.LocalTileServer.get_metadata"><code class="docutils literal notranslate"><span class="pre">LocalTileServer.get_metadata()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusion_tools.html#fusion_tools.tileserver.LocalTileServer.get_name_annotations_url"><code class="docutils literal notranslate"><span class="pre">LocalTileServer.get_name_annotations_url()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusion_tools.html#fusion_tools.tileserver.LocalTileServer.get_name_metadata_url"><code class="docutils literal notranslate"><span class="pre">LocalTileServer.get_name_metadata_url()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusion_tools.html#fusion_tools.tileserver.LocalTileServer.get_name_regions_url"><code class="docutils literal notranslate"><span class="pre">LocalTileServer.get_name_regions_url()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusion_tools.html#fusion_tools.tileserver.LocalTileServer.get_name_tiles_url"><code class="docutils literal notranslate"><span class="pre">LocalTileServer.get_name_tiles_url()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusion_tools.html#fusion_tools.tileserver.LocalTileServer.get_names"><code class="docutils literal notranslate"><span class="pre">LocalTileServer.get_names()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="fusion_tools.html#fusion_tools.tileserver.LocalTileServer.get_region"><code class="docutils literal notranslate"><span class="pre">LocalTileServer.get_region()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="fusion_tools.html#fusion_tools.tileserver.LocalTileServer.get_tile"><code class="docutils literal notranslate"><span class="pre">LocalTileServer.get_tile()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="fusion_tools.html#fusion_tools.tileserver.LocalTileServer.load_annotations"><code class="docutils literal notranslate"><span class="pre">LocalTileServer.load_annotations()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="fusion_tools.html#fusion_tools.tileserver.LocalTileServer.root"><code class="docutils literal notranslate"><span class="pre">LocalTileServer.root()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="fusion_tools.html#fusion_tools.tileserver.LocalTileServer.start"><code class="docutils literal notranslate"><span class="pre">LocalTileServer.start()</span></code></a></li>
 </ul>

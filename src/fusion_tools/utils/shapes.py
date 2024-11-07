@@ -8,6 +8,7 @@ import sys
 import json
 import geojson
 import lxml.etree as ET
+from copy import deepcopy
 
 import numpy as np
 
@@ -25,6 +26,31 @@ import uuid
 
 from typing_extensions import Union
 
+def load_annotations(file_path: str, name:Union[str,None]=None,**kwargs) -> dict:
+    assert os.path.exists(file_path)
+
+    file_extension = file_path.split(os.sep)[-1].split('.')[-1]
+    try:
+        if file_extension=='xml':
+            annotations = load_aperio(file_path)
+        elif file_extension=='json':
+            try:
+                annotations = load_geojson(file_path,name)
+            except:
+                annotations = load_histomics(file_path)
+        elif file_extension=='csv':
+            annotations = load_polygon_csv(file_path,name,**kwargs)
+        elif file_extension in ['tif','png','jpg','tiff']:
+            annotations = load_label_mask(file_path,name)
+        elif file_extension in ['h5ad']:
+            annotations = load_visium(file_path,**kwargs)
+        else:
+            annotations = None
+
+    except:
+        annotations = None
+
+    return annotations
 
 def load_geojson(geojson_path: str, name:Union[str,None]=None) -> dict:
     """Load GeoJSON annotations from file path. Optionally add names for GeoJSON FeatureCollections
@@ -72,31 +98,7 @@ def load_histomics(json_path: str) -> list:
     
     #TODO: update for non-polyline annotations
 
-    if type(json_anns)==dict:
-        json_anns = [json_anns]
-
-    geojson_list = []
-    for ann in json_anns:
-
-        geojson_anns = {
-            'type': 'FeatureCollection',
-            'properties': {'name': ann['annotation']['name']},
-            'features': [
-                {
-                    'type':'Feature',
-                    'geometry': {
-                        'type': 'Polygon',
-                        'coordinates': [
-                            el['points']
-                        ]
-                    },
-                    'properties': el['user'] | {'name': f'{ann["annotation"]["name"]}', '_id': uuid.uuid4().hex[:24],'_index': el_idx} if 'user' in el else {'name': f'{ann["annotation"]["name"]}_{el_idx}', '_id': ann['annotation']['_id'], '_index': el_idx}
-                }
-                for el_idx,el in enumerate(ann['annotation']['elements'])
-            ]
-        }
-
-        geojson_list.append(geojson_anns)
+    geojson_list = convert_histomics(json_anns)
 
     return geojson_list
 
@@ -279,7 +281,8 @@ def load_label_mask(label_mask: np.ndarray, name: str) -> dict:
 
     full_geo = {
         'type': 'FeatureCollection',
-        'features': []
+        'features': [],
+        'properties': {'name': name,'_id': uuid.uuid4().hex[:24]}
     }
 
     for geo, val in rasterio.features.shapes(label_mask, mask = label_mask>0):
@@ -292,7 +295,7 @@ def load_label_mask(label_mask: np.ndarray, name: str) -> dict:
 
     return full_geo
 
-def load_visium(visium_path:str, include_var_names:list = [], mpp:Union[float,None]=None):
+def load_visium(visium_path:str, include_var_names:list = [], include_obs: list = [], mpp:Union[float,None]=None):
     """Loading 10x Visium Spot annotations from an h5ad file. Adds any of the variables
     listed in var_names and also the barcodes associated with each spot.
 
@@ -346,7 +349,8 @@ def load_visium(visium_path:str, include_var_names:list = [], mpp:Union[float,No
         'type': 'FeatureCollection',
         'features': [],
         'properties': {
-            'name': 'Spots'
+            'name': 'Spots',
+            '_id': uuid.uuid4().hex[:24]
         }
     }
 
@@ -354,6 +358,11 @@ def load_visium(visium_path:str, include_var_names:list = [], mpp:Union[float,No
         include_vars = [i for i in include_var_names if i in anndata_object.var_names]
     else:
         include_vars = []
+
+    if len(include_obs)>0:
+        include_obs = [i for i in include_obs if i in anndata_object.obs_keys()]
+    else:
+        include_obs = []
     
 
     barcodes = list(spot_coords.index)
@@ -363,6 +372,13 @@ def load_visium(visium_path:str, include_var_names:list = [], mpp:Union[float,No
         additional_props = {}
         for i in include_vars:
             additional_props[i] = anndata_object.X[idx,list(anndata_object.var_names).index(i)]
+        
+        for j in include_obs:
+            add_prop = anndata_object.obs[j].iloc[idx]
+            if not type(add_prop)==str:
+                additional_props[j] = float(add_prop)
+            else:
+                additional_props[j] = add_prop
 
         spot_feature = {
             'type': 'Feature',
@@ -372,6 +388,8 @@ def load_visium(visium_path:str, include_var_names:list = [], mpp:Union[float,No
             },
             'properties': {
                 'name': 'Spots',
+                '_id': uuid.uuid4().hex[:24],
+                '_index': idx,
                 'barcode': barcodes[idx]
             } | additional_props
         }
@@ -379,6 +397,36 @@ def load_visium(visium_path:str, include_var_names:list = [], mpp:Union[float,No
         spot_annotations['features'].append(spot_feature)
 
     return spot_annotations
+
+def convert_histomics(json_anns: Union[list,dict]):
+    
+    if type(json_anns)==dict:
+        json_anns = [json_anns]
+
+    geojson_list = []
+    for ann in json_anns:
+
+        geojson_anns = {
+            'type': 'FeatureCollection',
+            'properties': {'name': ann['annotation']['name'], '_id': uuid.uuid4().hex[:24]},
+            'features': [
+                {
+                    'type':'Feature',
+                    'geometry': {
+                        'type': 'Polygon',
+                        'coordinates': [
+                            el['points']
+                        ]
+                    },
+                    'properties': el['user'] | {'name': f'{ann["annotation"]["name"]}', '_id': uuid.uuid4().hex[:24],'_index': el_idx} if 'user' in el else {'name': f'{ann["annotation"]["name"]}_{el_idx}', '_id': ann['annotation']['_id'], '_index': el_idx}
+                }
+                for el_idx,el in enumerate(ann['annotation']['elements'])
+            ]
+        }
+
+        geojson_list.append(geojson_anns)
+
+    return geojson_list
 
 def align_object_props(
         geo_ann: dict, 
@@ -610,98 +658,164 @@ def find_intersecting(geo_source:Union[dict,str], geo_query:Polygon, return_prop
     elif return_shapes:
         return geo_intersect_geojson
 
-def spatially_aggregate(agg_geo:dict, base_geos: list):
+def spatially_aggregate(child_geo:dict, parent_geos: list, separate: bool = True, summarize: bool = True, ignore_list: list = []):
     """Aggregate intersecting feature properties to a provided GeoJSON 
 
-    :param agg_geo: GeoJSON object that is receiving aggregated properties
-    :type agg_geo: dict
-    :param base_geos: List of GeoJSON objects which are intersecting with agg_geo
-    :type base_geos: list
-    :return: Updated agg_geo object with new properties from intersecting base_geos
+    :param child_geo: GeoJSON object that is receiving aggregated properties
+    :type child_geo: dict
+    :param parent_geos: List of GeoJSON objects which are intersecting with child_geo
+    :type parent_geos: list
+    :return: Updated child_geo object with new properties from intersecting parent_geos
     :rtype: dict
     """
+    agg_geo = deepcopy(child_geo)
+    base_gdf = [gpd.GeoDataFrame.from_features(i['features']) for i in parent_geos]
+    base_names = [i['properties']['name'] for i in parent_geos]
+    for a in agg_geo['features']:
+        a_shape = shape(a['geometry'])
+        agg_props = {}
+        for b_idx,b in enumerate(base_gdf):
+            b_intersect = b.sindex.query(a_shape,predicate='overlaps')
+            if len(b_intersect)>0:
+                agg_props[base_names[b_idx]] = []
+                for c in b_intersect:
+                    c_dict = b.iloc[c,:].to_dict()
+                    c_dict = {
+                        i:j
+                        for i,j in c_dict.items()
+                        if not i in ['geometry']+ignore_list
+                    }
+                    proc_c = {}
+                    for key,val in c_dict.items():
+                        if type(val)==dict:
+                            nested_levels = find_nested_levels({key: val})
+                            nested_props = extract_nested_prop(main_prop_dict = {key: val}, depth=nested_levels, path=(), values_list = [])
+                            for n in nested_props:
+                                proc_c = proc_c | n
+                        elif type(val) in [int,float,str]:
+                            proc_c = proc_c | {key:val}
+                    
+                    agg_props[base_names[b_idx]].append(proc_c)
 
-    for b in base_geos:
-        if type(b)==dict:
-            b_name = b['properties']['name']
-            for f in agg_geo['features']:
-                if f['geometry']['type']=='Polygon':
-                    f_shape = shape(f['geometry'])
-                    intersecting_shapes, intersecting_props = find_intersecting(b,f_shape)
+        if separate:
+            for name in list(agg_props.keys()):
+                a['properties'][name] = {}
+                name_df = pd.DataFrame.from_records(agg_props[name])
+                numeric_df = name_df.select_dtypes(exclude='object')
+                if summarize:
+                    mean_props = numeric_df.mean(axis=0).to_dict()
+                    median_props = numeric_df.median(axis=0).to_dict()
+                    max_props = numeric_df.max(axis=0).to_dict()
+                    min_props = numeric_df.min(axis=0).to_dict()
+                    sum_props = numeric_df.sum(axis=0).to_dict()
 
-                    f['properties']['name'] = agg_geo['properties']['name']
-
-                    if len(intersecting_shapes['features'])>0:
+                    props = numeric_df.columns.tolist()
+                    for p in props:
+                        nested_mean = mean_props[p]
+                        nested_median = median_props[p]
+                        nested_max = max_props[p]
+                        nested_min = min_props[p]
+                        nested_sum = sum_props[p]
                         
-                        f['properties'][b_name] = {}
+                        nested_dict = {
+                            'Mean': nested_mean,
+                            'Median': nested_median,
+                            'Max': nested_max,
+                            'Min': nested_min,
+                            'Sum': nested_sum
+                        }
 
-                        intersecting_areas = [
-                            shape(i['geometry']).intersection(f_shape).area
-                            for i in intersecting_shapes['features']
-                        ]
+                        sub_keys = reversed(p.split(' --> '))
+                        for p_idx,part in enumerate(sub_keys):
+                            nested_dict = {part: nested_dict}
 
-                        f['properties'][b_name]['count'] = float(len(intersecting_shapes['features']))
-                        f['properties'][b_name]['area'] = float(sum(intersecting_areas))
+                        a['properties'][name] = merge_dict(a['properties'][name], nested_dict)
 
-                        intersecting_props_cols = intersecting_props.columns.tolist()
-                        numeric_props = intersecting_props.select_dtypes(exclude='object')
-                        if not numeric_props.empty:
-                            for c in numeric_props.columns.tolist():
-                                c_max = numeric_props[c].max()
-                                c_min = numeric_props[c].min()
-                                c_mean = numeric_props[c].mean()
-                                c_sum = numeric_props[c].sum()
+                        """if not part in a['properties'][name]:
+                            a['properties'][name][part] = nested_dict[part]
+                        else:
+                            a['properties'][name][part] = a['properties'][name][part] | nested_dict[part]
+                        """
+                else:
+                    mean_props = numeric_df.mean(axis=0).to_dict()
+                    props = numeric_df.columns.tolist()
+                    for p in props:
+                        mean_dict = mean_props[p]
+                        for part in reversed(p.split(' --> ')):
+                            mean_dict = {part: mean_dict}
 
-                                f['properties'][b_name][f'{c} Max'] = float(c_max)
-                                f['properties'][b_name][f'{c} Min'] = float(c_min)
-                                f['properties'][b_name][f'{c} Mean'] = float(c_mean)
-                                f['properties'][b_name][f'{c} Sum'] = float(c_sum)
-                        
-                        object_props = intersecting_props.iloc[:,[i for i in range(len(intersecting_props_cols)) if not intersecting_props_cols[i] in numeric_props]]
-                        if not object_props.empty:
-                            for c in object_props.columns.tolist():
-                                col_type = list(set([type(i) for i in object_props[c].tolist()]))
-                                if len(col_type)==1:
-                                    if col_type[0]==str:
-                                        c_counts = object_props[c].value_counts().to_dict()
-                                        for i,j in c_counts.items():
-                                            f['properties'][b_name][i] = float(j)
-                                    elif col_type[0]==dict:
-                                        nested_prop_list = []
-                                        for i in object_props[c].tolist():
-                                            nested_levels = find_nested_levels({c:i})
-                                            nested_props = extract_nested_prop({c: i}, nested_levels, (), [])
-                                            nested_prop_list.append({i:j for k in nested_props for i,j in k.items()})
-                                        
-                                        nested_prop_df = pd.DataFrame.from_records(nested_prop_list)
+                        a['properties'][name] = merge_dict(a['properties'][name],mean_dict)
 
-                                        nested_mean_props = nested_prop_df.mean(axis=0).astype(float).to_dict()
-                                        nested_max_props = nested_prop_df.max(axis=0).astype(float).to_dict()
-                                        nested_min_props = nested_prop_df.min(axis=0).astype(float).to_dict()
-                                        nested_sum_props = nested_prop_df.sum(axis=0).astype(float).to_dict()
+                        """
+                        if not part in a['properties'][name]:
+                            a['properties'][name][part] = mean_dict[part]
+                        else:
+                            a['properties'][name][part] = a['properties'][name][part] | mean_dict[part]
+                        """
 
-                                        nested_columns = nested_prop_df.columns.tolist()
-                                        for n_c in nested_columns:
-                                            n_c_parts = n_c.split(' --> ')
+                # Adding the non-numeric properties
+                non_numeric_df = name_df.select_dtypes(include='object')
+                for non in non_numeric_df:
+                    counts_dict = non_numeric_df[non].value_counts().to_dict()
+                    a['properties'][name] = merge_dict(a['properties'][name], {non:{'Count': counts_dict}})
 
-                                            n_c_mean_dict = nested_mean_props[n_c]
-                                            n_c_max_dict = nested_max_props[n_c]
-                                            n_c_min_dict = nested_min_props[n_c]
-                                            n_c_sum_dict = nested_sum_props[n_c]
+        else:
+            merged_df = pd.concat([pd.DataFrame.from_records(agg_props[i]) for i in agg_props],axis=0,ignore_index=True)
+            numeric_df = merged_df.select_dtypes(exclude='object')
 
-                                            n_c_dict = {
-                                                'Mean': n_c_mean_dict,
-                                                'Max': n_c_max_dict,
-                                                'Min': n_c_min_dict,
-                                                'Sum': n_c_sum_dict
-                                            }
-                                            for part in reversed(n_c_parts):
-                                                n_c_dict = {part: n_c_dict}
+            if summarize:
+                mean_props = numeric_df.mean(axis=0).to_dict()
+                median_props = numeric_df.median(axis=0).to_dict()
+                max_props = numeric_df.max(axis=0).to_dict()
+                min_props = numeric_df.min(axis=0).to_dict()
+                sum_props = numeric_df.sum(axis=0).to_dict()
 
-                                            if not part in f['properties'][b_name]:
-                                                f['properties'][b_name][part] = n_c_dict[part]
-                                            else:
-                                                f['properties'][b_name][part] = f['properties'][b_name][part] | n_c_dict[part]
+                props = numeric_df.columns.tolist()
+                for p in props:
+                    nested_mean = mean_props[p]
+                    nested_median = median_props[p]
+                    nested_max = max_props[p]
+                    nested_min = min_props[p]
+                    nested_sum = sum_props[p]
+
+                    nested_dict = {
+                        'Mean': nested_mean,
+                        'Median': nested_median,
+                        'Max': nested_max,
+                        'Min': nested_min,
+                        'Sum': nested_sum
+                    }
+
+                    sub_keys = reversed(p.split(' --> '))
+                    for part in sub_keys:
+                        nested_dict = {part: nested_dict}
+                    
+                    a['properties'] = merge_dict(a['properties'],nested_dict)
+
+                    """
+                    if not part in a['properties']:
+                        a['properties'][part] = nested_dict[part]
+                    else:
+                        a['properties'][part] = a['properties'][part] | nested_dict[part]
+                    """
+
+            else:
+                mean_props = numeric_df.mean(axis=0).to_dict()
+                props = numeric_df.columns.tolist()
+                for p in props:
+                    mean_dict = mean_props[p]
+                    for part in reversed(p.split(' --> ')):
+                        mean_dict = {part: mean_dict}
+
+                    a['properties'] = merge_dict(a['properties'],mean_dict)
+
+            # Adding the non-numeric properties
+            non_numeric_df = merged_df.select_dtypes(include='object')
+            for non in non_numeric_df:
+                counts_dict = non_numeric_df[non].value_counts().to_dict()
+                
+                # This one has to change the name because string properties in base can't be merged as dicts
+                a['properties'] = merge_dict(a['properties'],{f'{non}_Aggregated':{'Count': counts_dict}})
 
     return agg_geo
 
@@ -745,6 +859,19 @@ def extract_nested_prop(main_prop_dict: dict, depth: int, path: tuple = (), valu
                         }) 
 
     return values_list
+
+def merge_dict(a:dict, b:dict, path = []):
+
+    # https://stackoverflow.com/questions/7204805/deep-merge-dictionaries-of-dictionaries-in-python
+    for key in b:
+        if key in a:
+            if isinstance(a[key],dict) and isinstance(b[key],dict):
+                merge_dict(a[key],b[key],path+[str(key)])
+            elif a[key] != b[key]:
+                raise Exception(f'Conflict at {".".join(path+[str(key)])}')
+        else:
+            a[key] = b[key]
+    return a
 
 def extract_geojson_properties(geo_list: list, reference_object: Union[str,None] = None, ignore_list: Union[list,None]=None, nested_depth:int = 4) -> list:
     """Extract property names and info for provided list of GeoJSON structures.

@@ -23,38 +23,24 @@ def main():
     base_url = 'http://ec2-3-230-122-132.compute-1.amazonaws.com:8080/api/v1'
     item_id = '64f545302d82d04be3e39eec'
 
-    # Starting visualization session
-    tile_server = DSATileServer(
-        api_url = base_url,
-        item_id = item_id
-    )
-
     # Starting the DSAHandler to grab information:
     dsa_handler = DSAHandler(
         girderApiUrl = base_url
     )
 
-    annotations = dsa_handler.get_annotations(
-        item = item_id
-    )
+    dsa_tileserver = [
+        dsa_handler.get_tile_server(item_id)
+    ]
     
     vis_session = Visualization(
+        tileservers = dsa_tileserver,
         components = [
             [
-                SlideMap(
-                    tile_server = tile_server,
-                    annotations = annotations
-                ),
+                SlideMap(),
                 [
-                    OverlayOptions(
-                        geojson_anns=annotations
-                    ),
-                    PropertyViewer(
-                        geojson_list=annotations
-                    ),
-                    PropertyPlotter(
-                        geojson_list=annotations
-                    ),
+                    OverlayOptions(),
+                    PropertyViewer(),
+                    PropertyPlotter(),
                     HRAViewer()
                 ]
             ]

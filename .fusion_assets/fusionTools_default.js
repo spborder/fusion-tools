@@ -80,7 +80,6 @@ window.fusionTools = Object.assign({}, window.fusionTools, {
                 return style;
             }
 
-
             ,
         featureFilter: function(feature, context) {
                 const {
@@ -132,7 +131,6 @@ window.fusionTools = Object.assign({}, window.fusionTools, {
                     return returnFeature;
                 }
                 return returnFeature;
-
             }
 
             ,
