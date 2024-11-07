@@ -1,6 +1,16 @@
 # Changelog
 
 <!--next-version-placeholder-->
+## v2.1.0 (11/07/2024)
+
+### Features
+- Added support for multi-frame RGB images (.ome.tif) (rendering as RGB channels by default)
+- Adding support for arbitrary levels of nesting in `PropertyPlotter`
+
+### Fix
+- Bug fixes for v2.0 layout in components
+
+
 ## v2.0.0 (11/04/2024)
 
 ### Features

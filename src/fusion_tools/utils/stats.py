@@ -20,6 +20,9 @@ def get_label_statistics(data_df:pd.DataFrame, label_col:str):
     """
 
     unique_labels = data_df[label_col].unique().tolist()
+    unique_labels_count = data_df[label_col].value_counts().to_dict()
+
+    unique_labels = [u for u,count in unique_labels_count.items() if count>1]
 
     if data_df.shape[1]==2:
         # This means there is one property and the label column

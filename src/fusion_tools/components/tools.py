@@ -1916,7 +1916,7 @@ class PropertyPlotter(Tool):
 
         property_list = get_pattern_matching_value(property_list)
         label_names = get_pattern_matching_value(label_list)
-
+        
         current_features = json.loads(get_pattern_matching_value(current_features))
         property_keys = json.loads(get_pattern_matching_value(property_keys))
 
@@ -1945,7 +1945,6 @@ class PropertyPlotter(Tool):
 
         elif len(property_names)>1:
             # Multi-feature visualization
-
             if len(property_names)>2:
                 umap_cols = self.gen_umap_cols(
                     data_df = data_df,
@@ -2000,11 +1999,15 @@ class PropertyPlotter(Tool):
                 split_p = p.split(' --> ')
                 f_props = feature['properties'].copy()
                 for sp in split_p:
-                    if not f_props is None or type(f_props)==float:
+                    if not f_props is None and not type(f_props)==float:
                         if sp in f_props:
                             f_props = f_props[sp]
+                        else:
+                            f_props = None
+                    else:
+                        f_props = None
 
-                if not type(f_props)==dict:
+                if not type(f_props)==dict and not f_props is None:
                     try:
                         f_dict[p] = float(f_props)
                     except ValueError:
@@ -2486,257 +2489,266 @@ class PropertyPlotter(Tool):
 
         # Property statistics
         label_stats_children = []
-        if not label_col is None:
-            unique_labels = data_df[label_col].unique().tolist()
-            if len(unique_labels)>1:
-                p_value, results = get_label_statistics(
-                    data_df = data_df.loc[:,[i for i in data_df if not i in customdata_cols]],
-                    label_col=label_col
-                )
-
-                if len(property_cols)==1:
-                    if len(unique_labels)==2:
-                        if p_value<0.05:
-                            significance = dbc.Alert('Statistically significant (p<0.05)',color='success')
-                        else:
-                            significance = dbc.Alert('Not statistically significant (p>=0.05)',color='warning')
-                        
-                        label_stats_children.extend([
-                            significance,
-                            html.Hr(),
-                            html.Div([
-                                html.A('Statistical Test: t-Test',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html',target='_blank'),
-                                html.P('Tests null hypothesis that two independent samples have identical mean values. Assumes equal variance within groups.')
-                            ]),
-                            html.Div(
-                                dash_table.DataTable(
-                                    id = {'type': f'{self.component_prefix}-property-stats-table','index': 0},
-                                    columns = [
-                                        {'name': i, 'id': i}
-                                        for i in results.columns
-                                    ],
-                                    data = results.to_dict('records'),
-                                    style_cell = {
-                                        'overflow': 'hidden',
-                                        'textOverflow': 'ellipsis',
-                                        'maxWidth': 0
-                                    },
-                                    tooltip_data = [
-                                        {
-                                            column: {'value': str(value), 'type': 'markdown'}
-                                            for column, value in row.items()
-                                        } for row in results.to_dict('records')
-                                    ],
-                                    tooltip_duration = None
-                                )
-                            )
-                        ])
-                
-                    elif len(unique_labels)>2:
-
-                        if p_value<0.05:
-                            significance = dbc.Alert('Statistically significant! (p<0.05)',color='success')
-                        else:
-                            significance = dbc.Alert('Not statistically significant (p>=0.05)',color='warning')
-                        
-                        label_stats_children.extend([
-                            significance,
-                            html.Hr(),
-                            html.Div([
-                                html.A('Statistical Test: One-Way ANOVA',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.f_oneway.html',target='_blank'),
-                                html.P('Tests null hypothesis that two or more groups have the same population mean. Assumes independent samples from normal, homoscedastic (equal standard deviation) populations')
-                            ]),
-                            html.Div(
-                                dash_table.DataTable(
-                                    id = {'type': f'{self.component_prefix}-property-stats-table','index':0},
-                                    columns = [
-                                        {'name': i, 'id': i}
-                                        for i in results['anova'].columns
-                                    ],
-                                    data = results['anova'].to_dict('records'),
-                                    style_cell = {
-                                        'overflow': 'hidden',
-                                        'textOverflow': 'ellipsis',
-                                        'maxWidth': 0
-                                    },
-                                    tooltip_data = [
-                                        {
-                                            column: {'value': str(value),'type': 'markdown'}
-                                            for column, value in row.items()
-                                        } for row in results['anova'].to_dict('records')
-                                    ],
-                                    tooltip_duration = None
-                                )
-                            ),
-                            html.Hr(),
-                            html.Div([
-                                html.A("Statistical Test: Tukey's HSD",href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.tukey_hsd.html',target='_blank'),
-                                html.P('Post hoc test for pairwise comparison of means from different groups. Assumes independent samples from normal, equal (finite) variance populations')
-                            ]),
-                            html.Div(
-                                dash_table.DataTable(
-                                    id = {'type': f'{self.component_prefix}-property-stats-tukey','index': 0},
-                                    columns = [
-                                        {'name': i,'id': i}
-                                        for i in results['tukey'].columns
-                                    ],
-                                    data = results['tukey'].to_dict('records'),
-                                    style_cell = {
-                                        'overflow': 'hidden',
-                                        'textOverflow': 'ellipsis',
-                                        'maxWidth': 0
-                                    },
-                                    tooltip_data = [
-                                        {
-                                            column: {'value': str(value), 'type': 'markdown'}
-                                            for column, value in row.items()
-                                        } for row in results['tukey'].to_dict('records')
-                                    ],
-                                    tooltip_duration = None,
-                                    style_data_conditional = [
-                                        {
-                                            'if': {
-                                                'column_id': 'Comparison'
-                                            },
-                                            'width': '35%'
-                                        },
-                                        {
-                                            'if': {
-                                                'filter_query': '{p-value} <0.05',
-                                                'column_id': 'p-value'
-                                            },
-                                            'backgroundColor': 'green',
-                                            'color': 'white'
-                                        },
-                                        {
-                                            'if': {
-                                                'filter_query': '{p-value} >=0.05',
-                                                'column_id': 'p-value'
-                                            },
-                                            'backgroundColor': 'tomato',
-                                            'color': 'white'
-                                        }
-                                    ]
-                                )
-                            )
-                        ])
-
-                elif len(property_cols)==2:
-                    if any([i<0.05 for i in p_value]):
-                        significance = dbc.Alert('Statistical significance found!',color='success')
-                    else:
-                        significance = dbc.Alert('No statistical significance',color='warning')
-                    
-                    label_stats_children.extend([
-                        significance,
-                        html.Hr(),
-                        html.Div([
-                            html.A('Statistical Test: Pearson Correlation Coefficient (r)',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.mstats.pearsonr.html',target='_blank'),
-                            html.P('Measures the linear relationship between two datasets. Assumes normally distributed data.')
-                        ]),
-                        html.Div(
-                            dash_table.DataTable(
-                                id=f'{self.component_prefix}-pearson-table',
-                                columns = [{'name':i,'id':i} for i in results.columns],
-                                data = results.to_dict('records'),
-                                style_cell = {
-                                    'overflow':'hidden',
-                                    'textOverflow':'ellipsis',
-                                    'maxWidth':0
-                                },
-                                tooltip_data = [
-                                    {
-                                        column: {'value':str(value),'type':'markdown'}
-                                        for column,value in row.items()
-                                    } for row in results.to_dict('records')
-                                ],
-                                tooltip_duration = None,
-                                style_data_conditional = [
-                                    {
-                                        'if': {
-                                            'filter_query': '{p-value} <0.05',
-                                            'column_id':'p-value',
-                                        },
-                                        'backgroundColor':'green',
-                                        'color':'white'
-                                    },
-                                    {
-                                        'if':{
-                                            'filter_query': '{p-value} >= 0.05',
-                                            'column_id':'p-value'
-                                        },
-                                        'backgroundColor':'tomato',
-                                        'color':'white'
-                                    }
-                                ]
-                            )
+        if data_df.shape[0]>1:
+            if not label_col is None:
+                unique_labels = data_df[label_col].unique().tolist()
+                if len(unique_labels)>1:
+                    if any([i>1 for i in list(data_df[label_col].value_counts().to_dict().values())]):
+                        p_value, results = get_label_statistics(
+                            data_df = data_df.loc[:,[i for i in data_df if not i in customdata_cols]],
+                            label_col=label_col
                         )
-                    ])
 
-                elif len(property_cols)>2:
-                    
-                    overall_silhouette = results['overall_silhouette']
-                    if overall_silhouette>=-1 and overall_silhouette<=-0.5:
-                        silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color='danger')
-                    elif overall_silhouette>-0.5 and overall_silhouette<=0.5:
-                        silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color = 'primary')
-                    elif overall_silhouette>0.5 and overall_silhouette<=1:
-                        silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color = 'success')
+                        if len(property_cols)==1:
+                            if len(unique_labels)==2:
+                                if p_value<0.05:
+                                    significance = dbc.Alert('Statistically significant (p<0.05)',color='success')
+                                else:
+                                    significance = dbc.Alert('Not statistically significant (p>=0.05)',color='warning')
+                                
+                                label_stats_children.extend([
+                                    significance,
+                                    html.Hr(),
+                                    html.Div([
+                                        html.A('Statistical Test: t-Test',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html',target='_blank'),
+                                        html.P('Tests null hypothesis that two independent samples have identical mean values. Assumes equal variance within groups.')
+                                    ]),
+                                    html.Div(
+                                        dash_table.DataTable(
+                                            id = {'type': f'{self.component_prefix}-property-stats-table','index': 0},
+                                            columns = [
+                                                {'name': i, 'id': i}
+                                                for i in results.columns
+                                            ],
+                                            data = results.to_dict('records'),
+                                            style_cell = {
+                                                'overflow': 'hidden',
+                                                'textOverflow': 'ellipsis',
+                                                'maxWidth': 0
+                                            },
+                                            tooltip_data = [
+                                                {
+                                                    column: {'value': str(value), 'type': 'markdown'}
+                                                    for column, value in row.items()
+                                                } for row in results.to_dict('records')
+                                            ],
+                                            tooltip_duration = None
+                                        )
+                                    )
+                                ])
+                        
+                            elif len(unique_labels)>2:
+
+                                if p_value<0.05:
+                                    significance = dbc.Alert('Statistically significant! (p<0.05)',color='success')
+                                else:
+                                    significance = dbc.Alert('Not statistically significant (p>=0.05)',color='warning')
+                                
+                                label_stats_children.extend([
+                                    significance,
+                                    html.Hr(),
+                                    html.Div([
+                                        html.A('Statistical Test: One-Way ANOVA',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.f_oneway.html',target='_blank'),
+                                        html.P('Tests null hypothesis that two or more groups have the same population mean. Assumes independent samples from normal, homoscedastic (equal standard deviation) populations')
+                                    ]),
+                                    html.Div(
+                                        dash_table.DataTable(
+                                            id = {'type': f'{self.component_prefix}-property-stats-table','index':0},
+                                            columns = [
+                                                {'name': i, 'id': i}
+                                                for i in results['anova'].columns
+                                            ],
+                                            data = results['anova'].to_dict('records'),
+                                            style_cell = {
+                                                'overflow': 'hidden',
+                                                'textOverflow': 'ellipsis',
+                                                'maxWidth': 0
+                                            },
+                                            tooltip_data = [
+                                                {
+                                                    column: {'value': str(value),'type': 'markdown'}
+                                                    for column, value in row.items()
+                                                } for row in results['anova'].to_dict('records')
+                                            ],
+                                            tooltip_duration = None
+                                        )
+                                    ),
+                                    html.Hr(),
+                                    html.Div([
+                                        html.A("Statistical Test: Tukey's HSD",href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.tukey_hsd.html',target='_blank'),
+                                        html.P('Post hoc test for pairwise comparison of means from different groups. Assumes independent samples from normal, equal (finite) variance populations')
+                                    ]),
+                                    html.Div(
+                                        dash_table.DataTable(
+                                            id = {'type': f'{self.component_prefix}-property-stats-tukey','index': 0},
+                                            columns = [
+                                                {'name': i,'id': i}
+                                                for i in results['tukey'].columns
+                                            ],
+                                            data = results['tukey'].to_dict('records'),
+                                            style_cell = {
+                                                'overflow': 'hidden',
+                                                'textOverflow': 'ellipsis',
+                                                'maxWidth': 0
+                                            },
+                                            tooltip_data = [
+                                                {
+                                                    column: {'value': str(value), 'type': 'markdown'}
+                                                    for column, value in row.items()
+                                                } for row in results['tukey'].to_dict('records')
+                                            ],
+                                            tooltip_duration = None,
+                                            style_data_conditional = [
+                                                {
+                                                    'if': {
+                                                        'column_id': 'Comparison'
+                                                    },
+                                                    'width': '35%'
+                                                },
+                                                {
+                                                    'if': {
+                                                        'filter_query': '{p-value} <0.05',
+                                                        'column_id': 'p-value'
+                                                    },
+                                                    'backgroundColor': 'green',
+                                                    'color': 'white'
+                                                },
+                                                {
+                                                    'if': {
+                                                        'filter_query': '{p-value} >=0.05',
+                                                        'column_id': 'p-value'
+                                                    },
+                                                    'backgroundColor': 'tomato',
+                                                    'color': 'white'
+                                                }
+                                            ]
+                                        )
+                                    )
+                                ])
+
+                        elif len(property_cols)==2:
+                            if any([i<0.05 for i in p_value]):
+                                significance = dbc.Alert('Statistical significance found!',color='success')
+                            else:
+                                significance = dbc.Alert('No statistical significance',color='warning')
+                            
+                            label_stats_children.extend([
+                                significance,
+                                html.Hr(),
+                                html.Div([
+                                    html.A('Statistical Test: Pearson Correlation Coefficient (r)',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.mstats.pearsonr.html',target='_blank'),
+                                    html.P('Measures the linear relationship between two datasets. Assumes normally distributed data.')
+                                ]),
+                                html.Div(
+                                    dash_table.DataTable(
+                                        id=f'{self.component_prefix}-pearson-table',
+                                        columns = [{'name':i,'id':i} for i in results.columns],
+                                        data = results.to_dict('records'),
+                                        style_cell = {
+                                            'overflow':'hidden',
+                                            'textOverflow':'ellipsis',
+                                            'maxWidth':0
+                                        },
+                                        tooltip_data = [
+                                            {
+                                                column: {'value':str(value),'type':'markdown'}
+                                                for column,value in row.items()
+                                            } for row in results.to_dict('records')
+                                        ],
+                                        tooltip_duration = None,
+                                        style_data_conditional = [
+                                            {
+                                                'if': {
+                                                    'filter_query': '{p-value} <0.05',
+                                                    'column_id':'p-value',
+                                                },
+                                                'backgroundColor':'green',
+                                                'color':'white'
+                                            },
+                                            {
+                                                'if':{
+                                                    'filter_query': '{p-value} >= 0.05',
+                                                    'column_id':'p-value'
+                                                },
+                                                'backgroundColor':'tomato',
+                                                'color':'white'
+                                            }
+                                        ]
+                                    )
+                                )
+                            ])
+
+                        elif len(property_cols)>2:
+                            
+                            overall_silhouette = results['overall_silhouette']
+                            if overall_silhouette>=-1 and overall_silhouette<=-0.5:
+                                silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color='danger')
+                            elif overall_silhouette>-0.5 and overall_silhouette<=0.5:
+                                silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color = 'primary')
+                            elif overall_silhouette>0.5 and overall_silhouette<=1:
+                                silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color = 'success')
+                            else:
+                                silhouette_alert = dbc.Alert(f'Weird value: {overall_silhouette}')
+
+                            label_stats_children.extend([
+                                silhouette_alert,
+                                html.Div([
+                                    html.A('Clustering Metric: Silhouette Coefficient',href='https://scikit-learn.org/stable/modules/generated/sklearn.metrics.silhouette_score.html#sklearn.metrics.silhouette_score',target='_blank'),
+                                    html.P('Quantifies density of distribution for each sample. Values closer to 1 indicate high class clustering. Values closer to 0 indicate mixed clustering between classes. Values closer to -1 indicate highly dispersed distribution for a class.')
+                                ]),
+                                html.Div(
+                                    dash_table.DataTable(
+                                        id=f'{self.component_prefix}-silhouette-table',
+                                        columns = [{'name':i,'id':i} for i in results['samples_silhouette'].columns],
+                                        data = results['samples_silhouette'].to_dict('records'),
+                                        style_cell = {
+                                            'overflow':'hidden',
+                                            'textOverflow':'ellipsis',
+                                            'maxWidth':0
+                                        },
+                                        tooltip_data = [
+                                            {
+                                                column: {'value':str(value),'type':'markdown'}
+                                                for column,value in row.items()
+                                            } for row in results['samples_silhouette'].to_dict('records')
+                                        ],
+                                        tooltip_duration = None,
+                                        style_data_conditional = [
+                                            {
+                                                'if': {
+                                                    'filter_query': '{Silhouette Score}>0',
+                                                    'column_id':'Silhouette Score',
+                                                },
+                                                'backgroundColor':'green',
+                                                'color':'white'
+                                            },
+                                            {
+                                                'if':{
+                                                    'filter_query': '{Silhouette Score}<0',
+                                                    'column_id':'Silhouette Score'
+                                                },
+                                                'backgroundColor':'tomato',
+                                                'color':'white'
+                                            }
+                                        ]
+                                    )
+                                )
+                            ])
                     else:
-                        silhouette_alert = dbc.Alert(f'Weird value: {overall_silhouette}')
-
-                    label_stats_children.extend([
-                        silhouette_alert,
-                        html.Div([
-                            html.A('Clustering Metric: Silhouette Coefficient',href='https://scikit-learn.org/stable/modules/generated/sklearn.metrics.silhouette_score.html#sklearn.metrics.silhouette_score',target='_blank'),
-                            html.P('Quantifies density of distribution for each sample. Values closer to 1 indicate high class clustering. Values closer to 0 indicate mixed clustering between classes. Values closer to -1 indicate highly dispersed distribution for a class.')
-                        ]),
-                        html.Div(
-                            dash_table.DataTable(
-                                id=f'{self.component_prefix}-silhouette-table',
-                                columns = [{'name':i,'id':i} for i in results['samples_silhouette'].columns],
-                                data = results['samples_silhouette'].to_dict('records'),
-                                style_cell = {
-                                    'overflow':'hidden',
-                                    'textOverflow':'ellipsis',
-                                    'maxWidth':0
-                                },
-                                tooltip_data = [
-                                    {
-                                        column: {'value':str(value),'type':'markdown'}
-                                        for column,value in row.items()
-                                    } for row in results['samples_silhouette'].to_dict('records')
-                                ],
-                                tooltip_duration = None,
-                                style_data_conditional = [
-                                    {
-                                        'if': {
-                                            'filter_query': '{Silhouette Score}>0',
-                                            'column_id':'Silhouette Score',
-                                        },
-                                        'backgroundColor':'green',
-                                        'color':'white'
-                                    },
-                                    {
-                                        'if':{
-                                            'filter_query': '{Silhouette Score}<0',
-                                            'column_id':'Silhouette Score'
-                                        },
-                                        'backgroundColor':'tomato',
-                                        'color':'white'
-                                    }
-                                ]
-                            )
+                        label_stats_children.append(
+                            dbc.Alert(f'Only one of each label type present!',color='warning')
                         )
-                    ])
-
+                else:
+                    label_stats_children.append(
+                        dbc.Alert(f'Only one label present! ({unique_labels[0]})',color='warning')
+                    )
             else:
                 label_stats_children.append(
-                    dbc.Alert(f'Only one label present! ({unique_labels[0]})',color='warning')
+                    dbc.Alert('No labels assigned to the plot!',color='warning')
                 )
         else:
             label_stats_children.append(
-                dbc.Alert('No labels assigned to the plot!',color='warning')
+                dbc.Alert('Only one sample present!',color='warning')
             )
 
         label_stats_tab = dbc.Tab(
