@@ -103,7 +103,7 @@ def selective_aggregation(child_geo:dict, parent_geo:dict, include_keys: dict = 
     :return: Child structure with selectively aggregated properties from the parent structure.
     :rtype: dict
     """
-    
+
     mod_parent = deepcopy(parent_geo)
     for f_idx,f in enumerate(parent_geo['features']):
         for k,v in include_keys.items():
@@ -127,7 +127,6 @@ def selective_aggregation(child_geo:dict, parent_geo:dict, include_keys: dict = 
     aggregated_child = spatially_aggregate(child_geo,[mod_parent],separate = False, summarize = False)
     
     return aggregated_child
-
 
 def group_subtypes(geo_props: dict, name: str, key: dict, keep_zeros: bool = True, normalize: bool = True)->dict:
     """Grouping together properties into an lower-level descriptor
