@@ -90,8 +90,12 @@ class FeatureAnnotation(Tool):
             image_metadata['sizeY']/(2**(image_metadata['levels']-1))
         ]
 
-        x_scale = (base_dims[0]*(240/image_metadata['tileHeight'])) / image_metadata['sizeX']
-        y_scale = -((base_dims[1]*(240/image_metadata['tileHeight'])) / image_metadata['sizeY'])
+        #x_scale = (base_dims[0]*(240/image_metadata['tileHeight'])) / image_metadata['sizeX']
+        #y_scale = -((base_dims[1]*(240/image_metadata['tileHeight'])) / image_metadata['sizeY'])
+
+        x_scale = base_dims[0] / image_metadata['sizeX']
+        y_scale = -(base_dims[1]) / image_metadata['sizeY']
+
 
         return x_scale, y_scale
 
@@ -941,8 +945,12 @@ class BulkLabels(Tool):
             image_metadata['sizeY']/(2**(image_metadata['levels']-1))
         ]
 
-        x_scale = (base_dims[0]*(240/image_metadata['tileHeight'])) / image_metadata['sizeX']
-        y_scale = -((base_dims[1]*(240/image_metadata['tileHeight'])) / image_metadata['sizeY'])
+        #x_scale = (base_dims[0]*(240/image_metadata['tileHeight'])) / image_metadata['sizeX']
+        #y_scale = -((base_dims[1]*(240/image_metadata['tileHeight'])) / image_metadata['sizeY'])
+
+        x_scale = base_dims[0] / image_metadata['sizeX']
+        y_scale = -(base_dims[1]) / image_metadata['sizeY']
+
 
         return x_scale, y_scale
 

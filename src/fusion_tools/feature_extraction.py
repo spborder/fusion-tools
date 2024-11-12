@@ -397,6 +397,3 @@ def threshold_channels(input_image:np.ndarray,threshold_method: Union[str,None] 
     return threshed_image
 
 
-
-
-

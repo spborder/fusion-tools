@@ -87,8 +87,11 @@ class SlideMap(MapComponent):
             image_metadata['sizeY']/(2**(image_metadata['levels']-1))
         ]
 
-        x_scale = (base_dims[0]*(240/image_metadata['tileHeight'])) / image_metadata['sizeX']
-        y_scale = -((base_dims[1]*(240/image_metadata['tileHeight'])) / image_metadata['sizeY'])
+        #x_scale = (base_dims[0]*(240/image_metadata['tileHeight'])) / image_metadata['sizeX']
+        #y_scale = -((base_dims[1]*(240/image_metadata['tileHeight'])) / image_metadata['sizeY'])
+
+        x_scale = base_dims[0] / image_metadata['sizeX']
+        y_scale = -((base_dims[1]) / image_metadata['sizeY'])
 
         return x_scale, y_scale
 
@@ -207,7 +210,8 @@ class SlideMap(MapComponent):
                 id = {'type': 'slide-map','index': 0},
                 crs = 'Simple',
                 center = [-120,120],
-                zoom = 1,
+                zoom = 0,
+                zoomDelta = 0.25,
                 style = {'height': '90vh','width': '100%','margin': 'auto','display': 'inline-block'},
                 children = [
                     html.Div(
@@ -703,18 +707,19 @@ class SlideMap(MapComponent):
         if isinstance(self,MultiFrameSlideMap):
             new_layer_children.extend(self.process_frames(new_metadata, new_url))
             new_tile_layer = dl.TileLayer(
-                id = {'type': f'{self.component_prefix}-map-tile-layer','index': 0},
-                url = '',                tileSize=new_tile_size,
+                id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
+                url = '',                
+                tileSize=new_tile_size,
                 maxNativeZoom=new_metadata['levels']-2,
-                minZoom = -1
+                minZoom = 0
             )
         else:
             new_tile_layer = dl.TileLayer(
-                id = {'type': f'{self.component_prefix}-map-tile-layer','index': 0},
+                id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
                 url = new_url,
                 tileSize = new_tile_size,
                 maxNativeZoom=new_metadata['levels']-2,
-                minZoom = -1
+                minZoom = 0
             )
 
         for n,j in zip(geo_annotations,annotation_properties):

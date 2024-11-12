@@ -14,7 +14,6 @@ import numpy as np
 import uvicorn
 
 from fusion_tools.utils.shapes import load_annotations, convert_histomics
-from fusion_tools.components.maps import SlideImageOverlay
 
 class TileServer:
     """Components which pull information from a slide(s)
@@ -110,13 +109,13 @@ class LocalTileServer(TileServer):
                     print(f'Unrecognized annotation format: {new_annotations}')
                     self.annotations.append([])
 
-            elif isinstance(new_annotations,SlideImageOverlay):
+            elif hasattr(new_annotations,"to_dict"):
                 self.annotations.append([new_annotations.to_dict()])
 
             elif type(new_annotations)==list:
                 processed_anns = []
                 for n in new_annotations:
-                    if isinstance(n,SlideImageOverlay):
+                    if hasattr(n,"to_dict"):
                         processed_anns.append(n.to_dict())
                     elif type(n)==dict:
                         if 'annotation' in n:
