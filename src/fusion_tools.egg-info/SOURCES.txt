@@ -17,6 +17,7 @@ src/fusion_tools/components/maps.py
 src/fusion_tools/components/segmentation.py
 src/fusion_tools/components/tools.py
 src/fusion_tools/utils/__init__.py
+src/fusion_tools/utils/omics.py
 src/fusion_tools/utils/shapes.py
 src/fusion_tools/utils/stats.py
 src/fusion_tools/visualization/__init__.py
@@ -29,6 +30,7 @@ tests/test_extract_nested_prop.py
 tests/test_feature_annotation.py
 tests/test_feature_extraction.py
 tests/test_generate_property_dict.py
+tests/test_get_gene_info.py
 tests/test_hra_viewer.py
 tests/test_image_overlay.py
 tests/test_model_train.py

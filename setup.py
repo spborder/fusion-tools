@@ -26,7 +26,7 @@ setuptools.setup(
         "requests",
         "uuid>=1.30",
         "scikit-image",
-        "umap-learn>=0.5.6"
+        "umap-learn>=0.5.6",
         "statsmodels>=0.14.2",
         "typing-extensions>=4.8.0"
     ],

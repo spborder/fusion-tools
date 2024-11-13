@@ -18,7 +18,6 @@ One such example would be the `Visualization` and `SlideMap` class:
 
 ```python
 from fusion_tools import Visualization
-from fusion_tools.tileserver import LocalTileServer
 from fusion_tools.components import SlideMap
 
 vis_session = Visualization(
@@ -83,7 +82,6 @@ You can also access remote tile servers (either through `DSATileServer` or `Cust
 ```python
 
 from fusion_tools import Visualization, DSAHandler
-from fusion_tools.tileserver import DSATileServer
 from fusion_tools.components import SlideMap
 
 # Grabbing first item from demo DSA instance
@@ -128,7 +126,6 @@ You can also use some of `segmentation` components for adding labels and annotat
 ```python
 
 from fusion_tools import Visualization, DSAHandler
-from fusion_tools.tileserver import DSATileServer
 from fusion_tools.components import SlideMap, FeatureAnnotation, BulkLabels
 
 # Grabbing first item from demo DSA instance

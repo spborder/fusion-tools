@@ -31,8 +31,8 @@ def get_gene_info(id:Union[str,list],species: str = 'human', fields:list = ['HGN
     # There are actually too many possible fields to mention here
     #acceptable_fields = ['HGNC','alias','summary','go','pubmed']
     #assert all([i in acceptable_fields for i in fields])
-
     if isinstance(id,str):
+        id = id.split('.')[0]
         request_response = requests.get(f'{INFO_URL}gene/{id}?fields={",".join(fields)}&species={species}&dotfield=false&size={size}')
         if request_response.ok:
             return request_response.json()
@@ -42,7 +42,7 @@ def get_gene_info(id:Union[str,list],species: str = 'human', fields:list = ['HGN
     elif isinstance(id,list):
         return_list = []
         for i in id:
-            request_response = requests.get(f'{INFO_URL}gene/{i}?fields={",".join(fields)}&species={species}&dotfield=false&size={size}')
+            request_response = requests.get(f'{INFO_URL}gene/{i.split(".")[0]}?fields={",".join(fields)}&species={species}&dotfield=false&size={size}')
             if request_response.ok:
                 return_list.append(request_response.json())
         
@@ -80,7 +80,6 @@ def get_cell(id:str):
     )
 
     if request_response.ok:
-        print(request_response.content)
         return pd.DataFrame(request_response.content)
     else:
         return None
