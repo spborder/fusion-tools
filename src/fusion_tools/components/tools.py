@@ -981,7 +981,7 @@ class PropertyViewer(Tool):
     """
     def __init__(self,
                  ignore_list: list = [],
-                 property_depth: int = 4
+                 property_depth: int = 6
                  ):
         """Constructor method
 
@@ -1584,7 +1584,7 @@ class PropertyPlotter(Tool):
     """
     def __init__(self,
                  ignore_list: list = [],
-                 property_depth: int = 4
+                 property_depth: int = 6
                  ):
         """Constructor method
 
@@ -2139,7 +2139,7 @@ class PropertyPlotter(Tool):
                 text = '<br>'.join(
                     textwrap.wrap(
                         f'{property_column}',
-                        width=15
+                        width=80
                     )
                 ),
                 font = dict(size = 10)
@@ -2148,7 +2148,7 @@ class PropertyPlotter(Tool):
                 text = '<br>'.join(
                     textwrap.wrap(
                         label_col,
-                        width=15
+                        width=80
                     )
                 ) if not label_col is None else 'Group',
                 font = dict(size = 10)
@@ -2184,7 +2184,7 @@ class PropertyPlotter(Tool):
                     title = '<br>'.join(
                         textwrap.wrap(
                             f'Scatter plot of {plot_cols[0]} and {plot_cols[1]} labeled by {label_col}',
-                            width = 30
+                            width = 60
                             )
                         )
                 )
@@ -2233,7 +2233,7 @@ class PropertyPlotter(Tool):
                     title = '<br>'.join(
                         textwrap.wrap(
                             f'Scatter plot of {plot_cols[0]} and {plot_cols[1]}',
-                            width = 30
+                            width = 60
                             )
                         )
                 )

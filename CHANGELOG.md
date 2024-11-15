@@ -1,6 +1,8 @@
 # Changelog
 
 <!--next-version-placeholder-->
+
+
 ## v2.1.0 (11/07/2024)
 
 ### Features

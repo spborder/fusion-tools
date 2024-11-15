@@ -42,6 +42,9 @@ class ParallelFeatureExtractor:
                  image_source: Union[str, TileServer] = None,
                  feature_list: list = [],
                  preprocess: Union[Callable,None] = None,
+                 sub_mask: Union[Callable,None] = None,
+                 mask_names: Union[list,None] = None,
+                 channel_names: Union[list,None] = None,
                  n_jobs: None = None,
                  verbose: bool = False):
         """Constructor method
@@ -69,6 +72,9 @@ class ParallelFeatureExtractor:
 
         self.feature_list = feature_list
         self.preprocess = preprocess
+        self.sub_mask = sub_mask
+        self.mask_names = mask_names
+        self.channel_names = channel_names
         self.n_jobs = n_jobs
         self.verbose = verbose
 
@@ -85,6 +91,38 @@ class ParallelFeatureExtractor:
                 a[key] = b[key]
         return a
     
+    def update_dict_keys(self,input_dict:dict):
+        
+        convert_key = {}
+        if not self.mask_names is None:
+            convert_key = {f'Mask {float(idx+1)}': i for idx,i in enumerate(self.mask_names)}
+        if not self.channel_names is None:
+            convert_key = convert_key | {f'Channel {idx}': i for idx,i in enumerate(self.channel_names)}
+
+        def convert_dict_key(pre_convert):
+            if pre_convert in convert_key:
+                return convert_key[pre_convert]
+            else:
+                return pre_convert
+            
+        def change_keys(obj, convert):
+            """
+            Recursively goes through the dictionary obj and replaces keys with the convert function.
+            """
+            if isinstance(obj, (str, int, float)):
+                return obj
+            if isinstance(obj, dict):
+                new = obj.__class__()
+                for k, v in obj.items():
+                    new[convert(k)] = change_keys(v, convert)
+            elif isinstance(obj, (list, set, tuple)):
+                new = obj.__class__(change_keys(v, convert) for v in obj)
+            else:
+                return obj
+            return new
+        
+        return change_keys(input_dict,convert_dict_key)
+ 
     def get_bbox(self, coords:list)->list:
 
         coords_array = np.squeeze(np.array(coords))
@@ -156,7 +194,11 @@ class ParallelFeatureExtractor:
         width = int(bbox[2] - bbox[0])
 
         # polygon2mask expects y,x coordinates, scaled to within shape bounding box
-        scaled_coords = np.flip(np.squeeze(coords_array)-np.array([bbox[0], bbox[1], 0]),axis=1)
+        if np.shape(coords_array)[-1]==3:
+            scaled_coords = np.flip(np.squeeze(coords_array)-np.array([bbox[0], bbox[1], 0]),axis=1)
+        elif np.shape(coords_array)[-1]==2:
+            scaled_coords = np.flip(np.squeeze(coords_array)-np.array([bbox[0], bbox[1]]),axis=1)
+
         if np.shape(scaled_coords)[-1]==3:
             scaled_coords = scaled_coords[:,1:]
 
@@ -180,18 +222,26 @@ class ParallelFeatureExtractor:
 
         # Making mask of just the original shape's pixels within the image_region bounding box
         mask = self.make_mask(coords)
+        if not self.sub_mask is None:
+            mask = self.sub_mask(image_region,mask)
 
         bbox = self.get_bbox(coords)
 
         return_dict = {
-            'min_x': bbox[0],
-            'min_y': bbox[1],
-            'max_x': bbox[2],
-            'max_y': bbox[3]
+            "bbox": {
+                'min_x': bbox[0],
+                'min_y': bbox[1],
+                'max_x': bbox[2],
+                'max_y': bbox[3]
+            }
         }
         for f in self.feature_list:
             # Each feature extraction function should accept three inputs, whether they are used or not
-            return_dict = self.merge_dict(return_dict,f(image_region, mask, coords))
+            new_features = f(image_region, mask, coords)
+            if not self.mask_names is None or not self.channel_names is None:
+                new_features = self.update_dict_keys(new_features)
+
+            return_dict = self.merge_dict(return_dict,new_features)
             
         return return_dict
 
@@ -258,11 +308,11 @@ def color_features(image:np.ndarray, mask: np.ndarray, coords:list)->dict:
         mask_regions = (mask==m)
         masked_channels = image[mask_regions>0]
 
-        mean_vals = np.nanmean(masked_channels,axis=0).tolist()
-        median_vals = np.nanmedian(masked_channels,axis=0).tolist()
-        max_vals = np.nanmedian(masked_channels,axis=0).tolist()
-        std_vals = np.nanstd(masked_channels,axis=0).tolist()
-        
+        mean_vals = np.nanmean(masked_channels,axis=0).astype(float).tolist()
+        median_vals = np.nanmedian(masked_channels,axis=0).astype(float).tolist()
+        max_vals = np.nanmedian(masked_channels,axis=0).astype(float).tolist()
+        std_vals = np.nanstd(masked_channels,axis=0).astype(float).tolist()
+
         feature_values[f'Mask {m}'] = {}
         for c_idx,(m1,m2,m3,s) in enumerate(zip(mean_vals, median_vals, max_vals, std_vals)):
             
@@ -300,7 +350,7 @@ def texture_features(image:np.ndarray, mask:np.ndarray, coords: list)->dict:
             for t in texture_features:
                 t_value = graycoprops(texture_matrix,t.lower())[0][0]
                 
-                feature_values[f'Mask {m}'][f'Channel {c}'][t] = t_value
+                feature_values[f'Mask {m}'][f'Channel {c}'][t] = float(t_value)
 
     return feature_values
 
@@ -333,10 +383,10 @@ def morphological_features(image:np.ndarray,mask:np.ndarray,coords:list)->dict:
         feature_values[f'Mask {m}'] = {'Count': props.shape[0]}
         for p in props.columns.tolist():
             feature_values[f'Mask {m}'][p] = {
-                'Mean': props[p].mean(),
-                'Median': props[p].median(),
-                'Max': props[p].max(),
-                'Min': props[p].min()
+                'Mean': float(props[p].mean()),
+                'Median': float(props[p].median()),
+                'Max': float(props[p].max()),
+                'Min': float(props[p].min())
             }
 
     return feature_values
@@ -363,11 +413,11 @@ def relative_distance(input_shapes:dict, other_shapes:Union[dict,list])->list:
             all_dist.extend(other_fc.distance(shape(f['geometry'])))
 
         distance_stats.append({
-            'Min': np.min(all_dist),
-            'Max': np.max(all_dist),
-            'Mean': np.mean(all_dist),
-            'Median': np.median(all_dist),
-            'Std': np.std(all_dist)
+            'Min': float(np.min(all_dist)),
+            'Max': float(np.max(all_dist)),
+            'Mean': float(np.mean(all_dist)),
+            'Median': float(np.median(all_dist)),
+            'Std': float(np.std(all_dist))
         })
 
     return distance_stats

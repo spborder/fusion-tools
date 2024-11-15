@@ -314,7 +314,7 @@ class SlideMap(MapComponent):
         
         """
         self.js_namespace = Namespace(
-            "fusionTools","default"
+            "fusionTools","slideMap"
         )
 
         self.js_namespace.add(
@@ -356,11 +356,14 @@ class SlideMap(MapComponent):
                         var overlaySubProps = overlayProp.name.split(" --> ");
                         var prop_dict = feature.properties;
                         for (let i = 0; i < overlaySubProps.length; i++) {
-                            if (overlaySubProps[i] in prop_dict) {
-                                var prop_dict = prop_dict[overlaySubProps[i]];
-                                var overlayVal = prop_dict;
-                            } else {
-                                var overlayVal = Number.Nan;
+                            if (prop_dict==prop_dict && prop_dict!=null && typeof prop_dict === 'object') {
+                                if (overlaySubProps[i] in prop_dict) {
+                                    var prop_dict = prop_dict[overlaySubProps[i]];
+                                    var overlayVal = prop_dict;
+                                } else {
+                                    prop_dict = Number.Nan;
+                                    var overlayVal = Number.Nan;
+                                }
                             }
                         }
                     } else {
@@ -410,16 +413,19 @@ class SlideMap(MapComponent):
                             var filterSubProps = filter.name.split(" --> ");
                             var prop_dict = feature.properties;
                             for (let j = 0; j < filterSubProps.length; j++) {
-                                if (filterSubProps[j] in prop_dict) {
-                                    var prop_dict = prop_dict[filterSubProps[j]];
-                                    var testVal = prop_dict;
-                                } else {
-                                    returnFeature = returnFeature & false;
+                                if (prop_dict==prop_dict && prop_dict!=null && typeof prop_dict==='object') {
+                                    if (filterSubProps[j] in prop_dict) {
+                                        var prop_dict = prop_dict[filterSubProps[j]];
+                                        var testVal = prop_dict;
+                                    } else {
+                                        prop_dict = Number.Nan;
+                                        returnFeature = returnFeature & false;
+                                    }
                                 }
                             }
                         }
                             
-                        if (filter.range) {
+                        if (filter.range && returnFeature) {
                             if (typeof filter.range[0]==='number') {
                                 if (testVal < filter.range[0]) {
                                     returnFeature = returnFeature & false;
@@ -1346,8 +1352,6 @@ class MultiFrameSlideMap(SlideMap):
                 else:
                     frame_names = [f'Frame {i}' for i in range(len(image_metadata['frames']))]
 
-                print(frame_names)
-                print(len(image_metadata['frames']))
                 # This is a multi-frame image
                 if len(image_metadata['frames'])==3:
                     # Treat this as an RGB image by default

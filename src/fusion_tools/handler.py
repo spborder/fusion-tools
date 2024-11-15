@@ -277,7 +277,7 @@ class DSAHandler(Handler):
                         }
 
                     ann_geojson['properties']['_id'] = a_id
-                    for f_idx, f in ann_geojson['features']:
+                    for f_idx, f in enumerate(ann_geojson['features']):
                         f['properties'] = f['properties'] | {'_index': f_idx, '_id': uuid.uuid4().hex[:24],'name': ann_geojson['properties']['name']}
 
                     annotations.append(ann_geojson)

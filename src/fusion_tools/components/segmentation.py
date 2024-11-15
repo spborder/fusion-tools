@@ -23,10 +23,11 @@ from skimage.measure import label
 import dash
 dash._dash_renderer._set_react_version('18.2.0')
 import dash_leaflet as dl
-from dash import dcc, callback, ctx, ALL, MATCH, exceptions, Patch, no_update, dash_table
+from dash import dcc, callback, ctx, ALL, MATCH, exceptions, Patch, no_update, dash_table, ClientsideFunction
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform
+from dash_extensions.javascript import Namespace
 
 # fusion-tools imports
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
@@ -917,6 +918,9 @@ class BulkLabels(Tool):
         self.ignore_list = ignore_list
         self.property_depth = property_depth
 
+        self.assets_folder = os.getcwd()+'/.fusion_assets/'
+        self.get_namespace()
+
     def __str__(self):
         return 'Bulk Labels'
 
@@ -953,6 +957,112 @@ class BulkLabels(Tool):
 
 
         return x_scale, y_scale
+
+    def get_namespace(self):
+        """Adding JavaScript functions to the BulkLabels Namespace
+        """
+        self.js_namespace = Namespace(
+            "fusionTools","bulkLabels"
+        )
+
+        self.js_namespace.add(
+            name = "propertyFilter",
+            src = """
+                function(butt_click, structure_names, filter_json, map_annotations, slide_information) {
+                    var returnFeature = true;
+                    // Defining function to extract property value
+                    function checkFilter(feature, filterItem) {
+                        if (filterItem.name) {
+                            var filterSubProps = filterItem.name.split(" --> ");
+                            var prop_dict = feature.properties;
+                            for (let i=0; i<filterSubProps.length; i++) {
+                                if (filterSubProps[j] in prop_dict) {
+                                    var prop_dict = prop_dict[filterSubProps[j]];
+                                    var testVal = prop_dict;
+                                } else {
+                                    var testVal = false;
+                                }
+                            }
+                            
+                            if (filterItem.range & testVal) {
+                                if (typeof filterItem.range[0]==='number') {
+                                    if (testVal < filterItem.range[0]) {
+                                        returnFeature = returnFeature & false;
+                                    }
+                                    if (testVal > filterItem.range[1]) {
+                                        returnFeature = returnFeature & false;
+                                    }
+                                } else {
+                                    if (filterItem.range.includes(testVal)) {
+                                        returnFeature = returnFeature & true;
+                                    } else {
+                                        returnFeature = returnFeature & false;
+                                    }
+                                }
+                            } else {
+                                returnFeature = returnFeature & false;
+                            }
+                        } 
+
+                        return returnFeature;
+                    }
+
+                    // Reading in filters dictionary
+                    const filters = JSON.parse(filter_json);
+                    console.log(filters);
+
+                    // Reading in annotations
+                    const annotations = JSON.parse(map_annotations);
+                    var namesList = [];
+                    for (let i = 0; i<annotations.length; i++) {
+                        namesList.push(annotations[i]["properties"]["name"]);
+                    }
+                    console.log(namesList);
+
+                    // Getting desired annotation for left joins
+                    var baseAnnotations = {
+                        "type": "FeatureCollection",
+                        "features": []
+                    };
+
+                    for (let i = 0; i<structure_names.length; i++) {
+                        baseAnnotations["features"].push(annotations[namesList.indexOf(structure_names[i])]);
+                    }
+
+                    // Performing filtration
+                    for (let j = 0; j < filters.length; j++) {
+                        // Checking if this is a spatial query
+                        if ("structure" in filters[j]) {
+                            var sqAnnotation = annotations[namesList.indexOf(filters[j]["structure"])];
+                            baseAnnotations.splice(i,1,sjoin(baseAnnotations[i],sqAnnotation, { how: "inner", op: filters[j]["type"] }));
+                        } else {
+                            for (let k = 0; k < baseAnnotations['features'].length; k++) {
+                                var check = checkFilter(baseAnnotations["features"], filters[j]);
+                                if (!check) {
+                                    baseAnnotations['features'].splice(k,1);
+                                }
+                            }
+                        }
+                    }
+                    console.log(baseAnnotations['features'].length);
+                    
+                    // Creating L.Marker() objects
+                    var marker_list = [];
+                    for (let j = 0; j < baseAnnotations['features'].length; j++) {
+                        var centroid = turf.centroid(turf.polygon(baseAnnotations['features'][j]['geometry']));
+
+                        marker_list.push(
+                            L.Marker(
+                                centroid
+                            ).bindPopup()
+                        );
+
+                    }   
+                }
+            """
+        )
+
+
 
     def gen_layout(self, session_data:dict):
         """Generating layout for BulkLabels component
@@ -1256,11 +1366,38 @@ class BulkLabels(Tool):
             ],
             [
                 State({'type': 'bulk-labels-include-structures','index': ALL},'value'),
-                State({'type': 'bulk-labels-add-property-div','index': ALL},'children'),
-                State({'type':'bulk-labels-spatial-query-div','index': ALL},'children'),
-                State({'type': 'map-annotations-store','index': ALL},'data')
+                State({'type': 'bulk-labels-filter-data','index': ALL},'data'),
+                State({'type': 'map-annotations-store','index': ALL},'data'),
+                State({'type': 'map-slide-information','index': ALL},'data')
             ]
         )(self.update_label_structures)
+
+        self.blueprint.clientside_callback(
+            ClientsideFunction(
+                namespace = 'fusionTools',
+                function_name = ''
+            ),
+            [
+                Input({'type': 'bulk-labels-update-structures','index': ALL},'n_clicks')
+            ],
+            [
+                Output({'type': 'bulk-labels-current-structures','index': ALL},'children'),
+                Output({'type': 'map-marker-div','index': ALL},'children'),
+                Output({'type': 'bulk-labels-label-source','index': ALL},'children'),
+                Output({'type': 'bulk-labels-label-type','index': ALL},'disabled'),
+                Output({'type': 'bulk-labels-label-text','index': ALL},'disabled'),
+                Output({'type': 'bulk-labels-label-rationale','index': ALL},'disabled'),
+                Output({'type': 'bulk-labels-apply-labels','index': ALL},'disabled'),
+                Output({'type': 'bulk-labels-download-labels','index': ALL},'disabled')
+            ],
+            [
+                State({'type': 'bulk-labels-include-structures','index': ALL},'value'),
+                State({'type': 'bulk-labels-add-property-div','index': ALL},'children'),
+                State({'type':'bulk-labels-spatial-query-div','index': ALL},'children'),
+                State({'type': 'map-annotations-store','index': ALL},'data'),
+                State({'type': 'map-slide-information','index': ALL},'data')
+            ]
+        )
 
         # Adding new property
         self.blueprint.callback(
@@ -1270,6 +1407,9 @@ class BulkLabels(Tool):
             ],
             [
                 Output({'type': 'bulk-labels-add-property-div','index': ALL},'children')
+            ],
+            [
+                State({'type': 'bulk-labels-property-info','index': ALL},'data')
             ]
         )(self.update_label_properties)
 
@@ -1313,7 +1453,8 @@ class BulkLabels(Tool):
                 State({'type': 'bulk-labels-label-rationale','index': ALL},'value'),
                 State({'type': 'bulk-labels-label-source','index': ALL},'children'),
                 State({'type': 'bulk-labels-label-method','index': ALL},'value'),
-                State({'type': 'map-annotations-store','index': ALL},'data')
+                State({'type': 'map-annotations-store','index': ALL},'data'),
+                State({'type':'map-slide-information','index':ALL},'data')
             ]
         )(self.apply_labels)
 
@@ -1589,7 +1730,7 @@ class BulkLabels(Tool):
 
         return processed_filters
 
-    def parse_spatial_divs(self, spatial_query_parent: list)->list:
+    def parse_spatial_divs(self, spatial_query_parent: list, slide_information:dict)->list:
         """Parsing through parent div containing all spatial queries and returning them in list form
 
         :param spatial_query_parent: Div containing spatial query child divs
@@ -1598,6 +1739,7 @@ class BulkLabels(Tool):
         :rtype: list
         """
         processed_queries = []
+        x_scale = slide_information['x_scale']
         if not spatial_query_parent is None:
             for div in spatial_query_parent:
                 div_children = div['props']['children'][0]['props']['children']
@@ -1619,12 +1761,12 @@ class BulkLabels(Tool):
                             processed_queries.append({
                                 'type': query_type,
                                 'structure': query_structure,
-                                'distance': query_distance*self.x_scale
+                                'distance': query_distance*x_scale
                             })
 
         return processed_queries
 
-    def update_label_structures(self, update_structures_click:list, include_structures:list, filter_properties:list, spatial_queries:list, current_features:list):
+    def update_label_structures(self, update_structures_click:list, include_structures:list, filter_properties:list, spatial_queries:list, current_features:list, slide_information:list):
         """Go through current structures and return all those that pass spatial and property filters.
 
         :param update_structures_click: Button clicked
@@ -1647,11 +1789,13 @@ class BulkLabels(Tool):
         include_structures = get_pattern_matching_value(include_structures)
         current_features = json.loads(get_pattern_matching_value(current_features))
 
+        slide_information = json.loads(get_pattern_matching_value(slide_information))
+
         include_properties = get_pattern_matching_value(filter_properties)
         spatial_queries = get_pattern_matching_value(spatial_queries)
 
         processed_filters = self.parse_filter_divs(include_properties)
-        processed_spatial_queries = self.parse_spatial_divs(spatial_queries)
+        processed_spatial_queries = self.parse_spatial_divs(spatial_queries, slide_information)
 
         filtered_geojson, filtered_ref_list = process_filters_queries(processed_filters, processed_spatial_queries, include_structures, current_features)
 
@@ -1723,7 +1867,7 @@ class BulkLabels(Tool):
         
         properties_div = Patch()
         add_click = get_pattern_matching_value(add_click)
-        property_info = json.loads(get_pattern_matching_value(property_info))
+        property_info = json.loads(get_pattern_matching_value(property_info))['property_info']
 
         if 'bulk-labels-add-property-icon' in ctx.triggered_id['type']:
 
@@ -1785,7 +1929,7 @@ class BulkLabels(Tool):
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
-        property_info = json.loads(get_pattern_matching_value(property_info))
+        property_info = json.loads(get_pattern_matching_value(property_info))['property_info']
         property_values = property_info[property_value]
 
         if 'min' in property_values:
@@ -1820,7 +1964,7 @@ class BulkLabels(Tool):
 
         return values_selector
 
-    def parse_marker_div(self, parent_marker_div):
+    def parse_marker_div(self, parent_marker_div,slide_information):
         """Parse div containing markers, extracting position and data from each
 
         :param parent_marker_div: Div containing all current Markers
@@ -1836,7 +1980,7 @@ class BulkLabels(Tool):
             data = json.loads(p['props']['children'][-1]['props']['children'])
             
             marker_coords.append(
-                [coords[1]/self.x_scale,coords[0]/self.y_scale]
+                [coords[1]/slide_information['x_scale'],coords[0]/slide_information['y_scale']]
             )
             marker_data.append(data)
             
@@ -1911,7 +2055,7 @@ class BulkLabels(Tool):
 
         return current_labels
 
-    def apply_labels(self, button_click, current_markers, current_data, label_type, label_text, label_rationale, label_source, label_method, current_annotations):
+    def apply_labels(self, button_click, current_markers, current_data, label_type, label_text, label_rationale, label_source, label_method, current_annotations,slide_information):
         """Applying current label to marked structures
 
         :param button_click: Button clicked
@@ -1951,8 +2095,9 @@ class BulkLabels(Tool):
         current_data = json.loads(get_pattern_matching_value(current_data))
         current_annotations = json.loads(get_pattern_matching_value(current_annotations))
         current_markers = get_pattern_matching_value(current_markers)
+        slide_information = json.loads(get_pattern_matching_value(slide_information))
 
-        marker_positions, marker_data = self.parse_marker_div(current_markers)
+        marker_positions, marker_data = self.parse_marker_div(current_markers,slide_information)
         labeled_items = self.search_labels(marker_positions, current_data, label_type, label_text, label_method)
 
         #TODO: Applying property to structures
@@ -2088,9 +2233,10 @@ class BulkLabels(Tool):
         n_marked = len(get_pattern_matching_value(current_markers))
 
         patched_list = Patch()
-        values_to_remove = np.where(clear_click)[0].tolist()
-        for v in values_to_remove:
-            del patched_list[v]
+        for v_idx,v in enumerate(clear_click):
+            if v:
+                del patched_list[v_idx]
+                break
         
         new_structures_div = [
             dbc.Alert(

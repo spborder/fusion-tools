@@ -66,18 +66,31 @@ def load_geojson(geojson_path: str, name:Union[str,None]=None) -> dict:
 
     with open(geojson_path,'r') as f:
         geojson_anns = json.load(f)
-
         f.close()
 
-    if not 'properties' in geojson_anns:
-        geojson_anns['properties'] = {}
+    if type(geojson_anns)==list:
+        for g in geojson_anns:
+            if not 'properties' in g:
+                g['properties'] = {}
+            else:
+                if 'name' in g['properties'] and name is None:
+                    name = g['properties']['name']
 
-    geo_id = uuid.uuid4().hex[:24] if not '_id' in geojson_anns['properties'] else geojson_anns['properties']['_id']
-    geojson_anns['properties'] = geojson_anns['properties'] | {'name': name if not name is None else geo_id, '_id': geo_id}
+            geo_id = uuid.uuid4().hex[:24] if not '_id' in g['properties'] else g['properties']['_id']
+            g['properties'] = g['properties'] | {'name': name if not name is None else geo_id, '_id': geo_id}
 
-    
-    for f_idx, f in enumerate(geojson_anns['features']):
-        f['properties'] = f['properties'] | {'name': name if not name is None else geo_id, '_id': uuid.uuid4().hex[:24], '_index': f_idx}
+            for f_idx, f in enumerate(g['features']):
+                f['properties'] = f['properties'] | {'name': name if not name is None else geo_id, '_id': uuid.uuid4().hex[:24], '_index': f_idx}
+
+    elif type(geojson_anns)==dict:
+        if not 'properties' in geojson_anns:
+            geojson_anns['properties'] = {}
+
+        geo_id = uuid.uuid4().hex[:24] if not '_id' in g['properties'] else geojson_anns['properties']['_id']
+        geojson_anns['properties'] = geojson_anns['properties'] | {'name': name if not name is None else geo_id, '_id': geo_id}
+
+        for f_idx, f in enumerate(geojson_anns['features']):
+            f['properties'] = f['properties'] | {'name': name if not name is None else geo_id, '_id': uuid.uuid4().hex[:24], '_index': f_idx}
 
     return geojson_anns
 
@@ -1000,8 +1013,6 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
         structure_filtered = [gpd.GeoDataFrame.from_features(i['features']) for i in all_geo_list]
         name_order = [i['properties']['name'] for i in all_geo_list]
 
-    #all_names = [i['properties']['name'] for i in all_geo_list]
-
     # Now going through spatial queries
     filter_reference_list = {
         n: {}
@@ -1032,6 +1043,8 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                     )
 
                 intermediate_gdf = intermediate_gdf.drop([i for i in ['index_left','index_right'] if i in intermediate_gdf], axis = 1)
+                intermediate_gdf = intermediate_gdf.drop([i for i in intermediate_gdf if '_right' in i],axis=1)
+                intermediate_gdf.columns = [i.replace('_left','') if '_left' in i else i for i in intermediate_gdf ]
 
             remainder_structures.append(intermediate_gdf)
     else:
@@ -1044,21 +1057,11 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
     }
     for g,name in zip(remainder_structures,name_order):
         g_json = g.to_geo_dict(show_bbox=True)
-        #feature_geos = [i['geometry'] for i in g_json['features']]
-
-
         filter_reference_list[name] = {
             i+len(combined_geojson['features']):j['properties']['_index']
             for i,j in enumerate(g_json['features'])
         }
         combined_geojson['features'].extend(g_json['features'])
-        """
-        if len(g_json['features'])>0:
-            for idx, i in enumerate(all_geo_list[all_names.index(name)]['features']):
-                if i['geometry'] in feature_geos:
-                    filter_reference_list[name][len(combined_geojson['features'])] = idx
-                    combined_geojson['features'].append(g_json['features'][feature_geos.index(i['geometry'])])
-        """
 
     # Going through property filters:
     if len(filter_list)>0:
