@@ -1261,7 +1261,6 @@ class SlideMap(MapComponent):
 
         return {'content': json.dumps(scaled_manual_roi),'filename': f'Manual ROI {manual_roi_feature_index+1}.json'}
 
-
 class MultiFrameSlideMap(SlideMap):
     """MultiFrameSlideMap component, containing an image with multiple frames which are added as additional, selectable dl.TileLayer() components
 
