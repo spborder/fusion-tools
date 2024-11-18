@@ -55,7 +55,7 @@ class OverlayOptions(Tool):
     :type Tool: None
     """
     def __init__(self,
-                 ignore_list: list = [],
+                 ignore_list: list = ["_id", "_index"],
                  property_depth: int = 4
                  ):
         """Constructor method
@@ -85,7 +85,7 @@ class OverlayOptions(Tool):
             ]
         )
 
-        self.js_namespace = Namespace("fusionTools","default")
+        self.js_namespace = Namespace("fusionTools","slideMap")
 
         # Add callbacks here
         self.get_callbacks()
@@ -281,6 +281,36 @@ class OverlayOptions(Tool):
                                     ]
                                 ),
                                 dbc.AccordionItem(
+                                    title = dcc.Markdown('*Manual ROI Options*'),
+                                    children = [
+                                        dbc.Card([
+                                            dbc.CardBody([
+                                                # Whether to separate structures or not
+                                                # Whether to summarize or not
+                                                dmc.Switch(
+                                                    size = 'lg',
+                                                    radius = 'lg',
+                                                    label = 'Separate Intersecting Structures',
+                                                    onLabel="ON",
+                                                    offLabel="OFF",
+                                                    description = "Separates aggregated properties by which structure they are derived from",
+                                                    id = {'type': 'manual-roi-separate-switch','index':0}
+                                                ),
+                                                html.Hr(),
+                                                dmc.Switch(
+                                                    size = 'lg',
+                                                    radius = 'lg',
+                                                    label = "Summarize Aggregated Properties",
+                                                    onLabel = "ON",
+                                                    offLabel = "OFF",
+                                                    description = "Whether to report summaries of aggregated properties or just the MEAN",
+                                                    id = {'type': 'manual-roi-summarize-switch','index': 0}
+                                                )
+                                            ])
+                                        ])
+                                    ]
+                                ),
+                                dbc.AccordionItem(
                                     title = dcc.Markdown('*Export Layers*'),
                                     children = [
                                         dbc.Card([
@@ -460,7 +490,7 @@ class OverlayOptions(Tool):
                     dmc.ColorPicker(
                         id = {'type': f'{self.component_prefix}-feature-lineColor','index': f_idx},
                         format = 'hex',
-                        value = '#FFFFFF',
+                        value = '#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255)),
                         fullWidth=True
                     ),
                     dbc.Button(

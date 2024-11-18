@@ -100,128 +100,128 @@ from fusion_tools.feature_extraction import (
     texture_features, morphological_features
 )
 
+if False:
+    # define sub-compartment segmentation function
+    def stain_mask(image,mask):
 
-# define sub-compartment segmentation function
-def stain_mask(image,mask):
+        seg_params = [
+            {
+                'name': 'Nuclei',
+                'threshold': 150,
+                'min_size': 40
+            },
+            {
+                'name': 'Eosinophilic',
+                'threshold': 30,
+                'min_size': 20
+            },
+            {
+                'name': 'Luminal Space',
+                'threshold': 0,
+                'min_size': 0
+            }
+        ]
 
-    seg_params = [
-        {
-            'name': 'Nuclei',
-            'threshold': 150,
-            'min_size': 40
-        },
-        {
-            'name': 'Eosinophilic',
-            'threshold': 30,
-            'min_size': 20
-        },
-        {
-            'name': 'Luminal Space',
-            'threshold': 0,
-            'min_size': 0
-        }
-    ]
+        image_shape = np.shape(image)
 
-    image_shape = np.shape(image)
+        sub_comp_image = np.zeros((image_shape[0],image_shape[1],3))
+        remainder_mask = np.ones((image_shape[0],image_shape[1]))
 
-    sub_comp_image = np.zeros((image_shape[0],image_shape[1],3))
-    remainder_mask = np.ones((image_shape[0],image_shape[1]))
+        hsv_image = np.uint8(255*rgb2hsv(image))
+        hsv_image = hsv_image[:,:,1]
 
-    hsv_image = np.uint8(255*rgb2hsv(image))
-    hsv_image = hsv_image[:,:,1]
+        for idx,param in enumerate(seg_params):
 
-    for idx,param in enumerate(seg_params):
+            # Check for if the current sub-compartment is nuclei
+            if param['name'].lower()=='nuclei':
+                # Using the inverse of the value channel for nuclei
+                h_image = 255-np.uint8(255*rgb2hsv(image)[:,:,2])
+                h_image = np.uint8(255*exposure.equalize_hist(h_image))
 
-        # Check for if the current sub-compartment is nuclei
-        if param['name'].lower()=='nuclei':
-            # Using the inverse of the value channel for nuclei
-            h_image = 255-np.uint8(255*rgb2hsv(image)[:,:,2])
-            h_image = np.uint8(255*exposure.equalize_hist(h_image))
+                remaining_pixels = np.multiply(h_image,remainder_mask)
+                masked_remaining_pixels = np.multiply(remaining_pixels,mask)
+                #masked_remaining_pixels = remaining_pixels
 
-            remaining_pixels = np.multiply(h_image,remainder_mask)
-            masked_remaining_pixels = np.multiply(remaining_pixels,mask)
-            #masked_remaining_pixels = remaining_pixels
+                # Applying manual threshold
+                masked_remaining_pixels[masked_remaining_pixels<=param['threshold']] = 0
+                masked_remaining_pixels[masked_remaining_pixels>0] = 1
 
-            # Applying manual threshold
-            masked_remaining_pixels[masked_remaining_pixels<=param['threshold']] = 0
-            masked_remaining_pixels[masked_remaining_pixels>0] = 1
+                # Area threshold for holes is controllable for this
+                sub_mask = remove_small_holes(masked_remaining_pixels>0,area_threshold=10)
+                sub_mask = sub_mask>0
+                # Watershed implementation from: https://scikit-image.org/docs/stable/auto_examples/segmentation/plot_watershed.html
+                distance = ndi.distance_transform_edt(sub_mask)
+                labeled_mask, _ = ndi.label(sub_mask)
+                coords = peak_local_max(distance,footprint=np.ones((3,3)),labels = labeled_mask)
+                watershed_mask = np.zeros(distance.shape,dtype=bool)
+                watershed_mask[tuple(coords.T)] = True
+                markers, _ = ndi.label(watershed_mask)
+                sub_mask = watershed(-distance,markers,mask=sub_mask)
+                sub_mask = sub_mask>0
 
-            # Area threshold for holes is controllable for this
-            sub_mask = remove_small_holes(masked_remaining_pixels>0,area_threshold=10)
-            sub_mask = sub_mask>0
-            # Watershed implementation from: https://scikit-image.org/docs/stable/auto_examples/segmentation/plot_watershed.html
-            distance = ndi.distance_transform_edt(sub_mask)
-            labeled_mask, _ = ndi.label(sub_mask)
-            coords = peak_local_max(distance,footprint=np.ones((3,3)),labels = labeled_mask)
-            watershed_mask = np.zeros(distance.shape,dtype=bool)
-            watershed_mask[tuple(coords.T)] = True
-            markers, _ = ndi.label(watershed_mask)
-            sub_mask = watershed(-distance,markers,mask=sub_mask)
-            sub_mask = sub_mask>0
+                # Filtering out small objects again
+                sub_mask = remove_small_objects(sub_mask,param['min_size'])
 
-            # Filtering out small objects again
-            sub_mask = remove_small_objects(sub_mask,param['min_size'])
+            else:
 
-        else:
+                remaining_pixels = np.multiply(hsv_image,remainder_mask)
+                masked_remaining_pixels = np.multiply(remaining_pixels,mask)
+                #masked_remaining_pixels = remaining_pixels
 
-            remaining_pixels = np.multiply(hsv_image,remainder_mask)
-            masked_remaining_pixels = np.multiply(remaining_pixels,mask)
-            #masked_remaining_pixels = remaining_pixels
+                # Applying manual threshold
+                masked_remaining_pixels[masked_remaining_pixels<=param['threshold']] = 0
+                masked_remaining_pixels[masked_remaining_pixels>0] = 1
 
-            # Applying manual threshold
-            masked_remaining_pixels[masked_remaining_pixels<=param['threshold']] = 0
-            masked_remaining_pixels[masked_remaining_pixels>0] = 1
+                # Filtering by minimum size
+                small_object_filtered = (1/255)*np.uint8(remove_small_objects(masked_remaining_pixels>0,param['min_size']))
 
-            # Filtering by minimum size
-            small_object_filtered = (1/255)*np.uint8(remove_small_objects(masked_remaining_pixels>0,param['min_size']))
+                sub_mask = small_object_filtered
 
-            sub_mask = small_object_filtered
+            sub_comp_image[sub_mask>0,idx] = 1
+            remainder_mask -= sub_mask>0
 
-        sub_comp_image[sub_mask>0,idx] = 1
-        remainder_mask -= sub_mask>0
+        # Assigning remaining pixels within the boundary mask to the last sub-compartment
+        #remaining_pixels = np.multiply(mask,remainder_mask)
+        remaining_pixels = remainder_mask
+        sub_comp_image[remaining_pixels>0,idx] = 1
 
-    # Assigning remaining pixels within the boundary mask to the last sub-compartment
-    #remaining_pixels = np.multiply(mask,remainder_mask)
-    remaining_pixels = remainder_mask
-    sub_comp_image[remaining_pixels>0,idx] = 1
+        final_mask = np.zeros_like(remainder_mask)
+        final_mask += sub_comp_image[:,:,0]
+        final_mask += 2*sub_comp_image[:,:,1]
+        final_mask += 3*sub_comp_image[:,:,2]
 
-    final_mask = np.zeros_like(remainder_mask)
-    final_mask += sub_comp_image[:,:,0]
-    final_mask += 2*sub_comp_image[:,:,1]
-    final_mask += 3*sub_comp_image[:,:,2]
-
-    return final_mask
-
-
-# Define feature extractor class
-feature_extractor = ParallelFeatureExtractor(
-    image_source = "..\\..\\Test Upload\\new Visium\\V12U21-010_XY02_21-0069.tif",
-    feature_list = [
-            lambda image,mask,coords: distance_transform_features(image,mask,coords),
-            lambda image,mask,coords: color_features(image,mask,coords),
-            lambda image,mask,coords: texture_features(image,mask,coords),
-            lambda image,mask,coords: morphological_features(image,mask,coords)
-    ],
-    preprocess = None,
-    sub_mask = lambda image,mask: stain_mask(image,mask),
-    mask_names = ['Nuclei','Eosinophilic','Luminal Space'],
-    channel_names = ['Red','Green','Blue'],
-    n_jobs = 4,
-    verbose = True
-)
-# Execute feature extraction
-feature_df = feature_extractor.start(spot_annotations['features'])
+        return final_mask
 
 
+    # Define feature extractor class
+    feature_extractor = ParallelFeatureExtractor(
+        image_source = "..\\..\\Test Upload\\new Visium\\V12U21-010_XY02_21-0069.tif",
+        feature_list = [
+                lambda image,mask,coords: distance_transform_features(image,mask,coords),
+                lambda image,mask,coords: color_features(image,mask,coords),
+                lambda image,mask,coords: texture_features(image,mask,coords),
+                lambda image,mask,coords: morphological_features(image,mask,coords)
+        ],
+        preprocess = None,
+        sub_mask = lambda image,mask: stain_mask(image,mask),
+        mask_names = ['Nuclei','Eosinophilic','Luminal Space'],
+        channel_names = ['Red','Green','Blue'],
+        n_jobs = 4,
+        verbose = True
+    )
+    # Execute feature extraction
+    feature_df = feature_extractor.start(spot_annotations['features'])
 
 
-# %%
-# Add properties to spot annotations
-spot_features = feature_df.to_dict('records')
-for f,s in zip(spot_features,spot_annotations['features']):
-    s['properties'] = s['properties'] | {"Pathomics": f}
 
-print(json.dumps(spot_annotations['features'][0]['properties'],indent=4))
+
+    # %%
+    # Add properties to spot annotations
+    spot_features = feature_df.to_dict('records')
+    for f,s in zip(spot_features,spot_annotations['features']):
+        s['properties'] = s['properties'] | {"Pathomics": f}
+
+    print(json.dumps(spot_annotations['features'][0]['properties'],indent=4))
 
 # %% [markdown]
 # ## Merging adjacent spots from the same cluster
@@ -254,8 +254,8 @@ def find_tissue(slide_tile_source):
     tissue_mask = remove_small_holes(tissue_mask,area_threshold=150)
     tissue_mask = remove_small_objects(tissue_mask,min_size=64)
 
-    plt.imshow(tissue_mask)
-    plt.show()
+    #plt.imshow(tissue_mask)
+    #plt.show()
     labeled_mask = label(tissue_mask)
     tissue_pieces = np.unique(labeled_mask).tolist()
     tissue_areas = [np.sum(labeled_mask==j) for j in tissue_pieces[1:]]
@@ -371,7 +371,7 @@ local_image_path = "..\\..\\Test Upload\\new Visium\\V12U21-010_XY02_21-0069.tif
 
 vis_session = Visualization(
     local_slides = [local_image_path],
-    local_annotations = [[spot_annotations]+spatially_agged+[tissue_mask]],
+    local_annotations = [spot_annotations],
     components = [
         [
             SlideMap(),

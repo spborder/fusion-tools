@@ -252,7 +252,20 @@ class SlideMap(MapComponent):
                     ),
                     dl.LayersControl(
                         id = {'type': 'map-layers-control','index': 0},
-                        children = []
+                        children = [
+                            html.Div(
+                                id = {'type': 'map-initial-annotations','index': 0},
+                                children = []
+                            ),
+                            html.Div(
+                                id = {'type': 'map-manual-rois','index': 0},
+                                children = []
+                            ),
+                            html.Div(
+                                id = {'type': 'map-generated-rois','index': 0},
+                                children = []
+                            )
+                        ]
                     ),
                     dl.EasyButton(
                         icon = 'fa-solid fa-arrows-to-dot',
@@ -477,7 +490,9 @@ class SlideMap(MapComponent):
                 Input({'type': 'slide-select-drop','index': ALL},'value')
             ],
             [
-                Output({'type': 'map-layers-control','index': MATCH},'children'),
+                Output({'type': 'map-initial-annotations','index': MATCH},'children'),
+                Output({'type': 'map-manual-rois','index': MATCH},'children'),
+                Output({'type': 'map-generated-rois','index': MATCH},'children'),
                 Output({'type': 'map-annotations-store','index':MATCH},'data'),
                 Output({'type': 'map-tile-layer-holder','index': MATCH},'children'),
                 Output({'type': 'map-slide-information','index': MATCH},'data')
@@ -504,7 +519,7 @@ class SlideMap(MapComponent):
                 Input({'type':'upload-shape-data','index': ALL},'contents')
             ],
             [
-                Output({'type': 'map-layers-control','index': MATCH},'children'),
+                Output({'type': 'map-manual-rois','index': MATCH},'children'),
                 Output({'type': 'map-annotations-store','index': MATCH},'data')
             ],
             [
@@ -512,6 +527,8 @@ class SlideMap(MapComponent):
                 State({'type': 'base-layer','index': ALL},'children'),
                 State({'type': 'feature-lineColor','index': ALL},'value'),
                 State({'type': 'adv-overlay-colormap','index': ALL},'value'),
+                State({'type': 'manual-roi-separate-switch','index': ALL},'checked'),
+                State({'type': 'manual-roi-summarize-switch','index': ALL},'checked')
             ]
         )(self.add_manual_roi)
 
@@ -740,7 +757,11 @@ class SlideMap(MapComponent):
         geo_annotations = json.dumps(geo_annotations)
         new_slide_info = json.dumps(new_slide_info)
 
-        return new_layer_children, geo_annotations, new_tile_layer, new_slide_info
+        # Updating manual and generated ROIs divs
+        manual_rois = []
+        gen_rois = []
+
+        return new_layer_children, manual_rois, gen_rois, geo_annotations, new_tile_layer, new_slide_info
 
     def upload_shape(self, upload_clicked, is_open):
 
@@ -792,6 +813,45 @@ class SlideMap(MapComponent):
             )
 
             return return_table
+        
+        def make_sub_accordion(input_data: Union[list,dict], main_list: list = [], sub_accordion_list:list = [],main_title:str=''):
+            """Recursively generating sub-accordion objects for nested properties
+
+            :param input_dict: Input dictionary containing nested and non-nested key/value pairs
+            :type input_dict: dict
+            :param sub_accordion_list: List of sub-accordions, defaults to []
+            :type sub_accordion_list: list, optional
+            """
+            for idx,in_data in enumerate(input_data):
+                title = list(in_data.keys())[0]
+                non_nested_data = [{'Sub-Property':key, 'Value': val} for key,val in in_data[title].items() if not type(val) in [list,dict]]
+                nested_data = [{key:val} for key,val in in_data[title].items() if type(val)==dict]
+                if len(non_nested_data)>0:
+                    sub_accordion_list.append(
+                        dbc.AccordionItem([
+                            html.Div([
+                                make_dash_table(pd.DataFrame.from_records(non_nested_data))
+                            ])
+                        ],title = title)
+                    )
+                if len(nested_data)>0:
+                    main_title = title
+                    main_list, sub_accordion_list = make_sub_accordion(nested_data, main_list, sub_accordion_list,main_title)
+                    print(f'len(sub_accordion_list): {len(sub_accordion_list)}')
+
+            if len(sub_accordion_list)>0:
+                main_list.append(
+                    dbc.AccordionItem(
+                        children = dbc.Accordion(sub_accordion_list),
+                        title = main_title
+                    )
+                )
+            sub_accordion_list = []
+            main_title = ''
+            
+            return main_list, sub_accordion_list
+
+
 
         accordion_children = []
         all_properties = list(clicked['properties'].keys())
@@ -808,19 +868,10 @@ class SlideMap(MapComponent):
         )
 
         # Now loading the dict properties as sub-accordions
-        dict_properties = [i for i in all_properties if type(clicked['properties'][i])==dict]
-        for d in dict_properties:
-            sub_properties = clicked['properties'][d]
-            sub_prop_record = [{'SubProperty': i, 'Value': j} for i,j in sub_properties.items() if not type(j) in [list,dict]]
-
-            if len(sub_prop_record)>0:
-                accordion_children.append(
-                    dbc.AccordionItem([
-                        html.Div([
-                            make_dash_table(pd.DataFrame.from_records(sub_prop_record))
-                        ])
-                    ],title = d)
-                )
+        sub_properties = [{i:clicked['properties'][i]} for i in clicked['properties'] if type(clicked['properties'][i])==dict]
+        test_sub_accordions, _ = make_sub_accordion(sub_properties)
+        if len(test_sub_accordions)>0:
+            accordion_children.extend(test_sub_accordions)
 
         # If this is a manual ROI then add a download option:
         if 'Manual' in clicked['properties']['name']:
@@ -844,7 +895,9 @@ class SlideMap(MapComponent):
 
         popup_div = html.Div(
             dbc.Accordion(
-                children = accordion_children
+                children = accordion_children,
+                start_collapsed=True,
+                style = {'maxHeight': '800px','overflow': 'scroll','width': '400px'}
             )
         )
 
@@ -922,7 +975,7 @@ class SlideMap(MapComponent):
 
         return annotation_components
 
-    def add_manual_roi(self,new_geojson:list, uploaded_shape: list, current_annotations:list, frame_layers:list, line_colors:list, colormap:list) -> list:
+    def add_manual_roi(self,new_geojson:list, uploaded_shape: list, current_annotations:list, frame_layers:list, line_colors:list, colormap:list, separate_switch: list, summarize_switch: list) -> list:
         """Adding a manual region of interest (ROI) to the SlideMap using dl.EditControl() tools including polygon, rectangle, and markers.
 
         :param new_geojson: Incoming GeoJSON object that is emitted by dl.EditControl() following annotation on SlideMap
@@ -947,19 +1000,29 @@ class SlideMap(MapComponent):
         current_annotations = json.loads(get_pattern_matching_value(current_annotations))
 
         colormap = get_pattern_matching_value(colormap)
+        separate_switch = get_pattern_matching_value(separate_switch)
+        summarize_switch = get_pattern_matching_value(summarize_switch)
+        separate_switch = separate_switch if not separate_switch is None else False
+        summarize_switch = summarize_switch if not summarize_switch is None else False
 
         if colormap is None or len(colormap)==0:
             colormap = 'blue->red'
         
         # All but the last one which holds the manual ROIs
-        initial_annotations = [i for i in current_annotations if not 'Manual' in i['properties']['name']]
+        initial_annotations = [i for i in current_annotations if not any([j in i['properties']['name'] for j in ['Manual','Filtered','Upload']])]
         # Current manual rois (used for determining if a new ROI has been created/edited)
         annotation_names = [i['properties']['name'] for i in current_annotations]
         manual_roi_idxes = [0]+[int(i.split(' ')[-1]) for i in annotation_names if 'Manual' in i]
+
         manual_rois = [i for i in current_annotations if 'Manual' in i['properties']['name']]
 
+        # The three different types of ROIs present on maps
+        manual_roi_idx = [idx for idx,i in enumerate(current_annotations) if 'Manual' in i['properties']['name']]
+        #filtered_rois = [idx for idx,i in enumerate(current_annotations) if 'Filtered' in i['properties']['name']]
+        #uploaded_rois = [idx for idx,i in enumerate(current_annotations) if 'Upload' in i['properties']['name']]
+
         # Initializing layers with partial update object
-        new_children = Patch()
+        new_manual_rois = Patch()
         added_rois = []
         added_roi_names = []
         deleted_rois = []
@@ -992,7 +1055,7 @@ class SlideMap(MapComponent):
                     # Aggregate if any initial annotations are present
                     if len(initial_annotations)>0:
                         # Spatial aggregation performed just between individual manual ROIs and initial annotations (no manual ROI to manual ROI aggregation)
-                        new_roi = spatially_aggregate(new_roi, initial_annotations)
+                        new_roi = spatially_aggregate(new_roi, initial_annotations,separate=separate_switch,summarize=summarize_switch)
                     
                     added_rois.append(new_roi)
                     added_roi_names.append(new_roi_name)
@@ -1020,17 +1083,17 @@ class SlideMap(MapComponent):
                 new_roi_name = uploaded_roi['properties']['name']
                 if len(initial_annotations)>0:
                     # Spatial aggregation performed just between individual manual ROIs and initial annotations (no manual ROI to manual ROI aggregation)
-                    new_roi = spatially_aggregate(uploaded_roi, initial_annotations)
+                    new_roi = spatially_aggregate(uploaded_roi, initial_annotations,separate=separate_switch,summarize=summarize_switch)
 
                 added_rois.append(new_roi)
                 added_roi_names.append(new_roi_name)
                 manual_roi_idxes.append(max(manual_roi_idxes)+1)
 
-
         # Checking for deleted manual ROIs
-        for m_idx,m in enumerate(manual_rois):
+        for m_idx,(m,man_idx) in enumerate(zip(manual_rois,manual_roi_idx)):
             if not m['features'][0]['geometry'] in [j['geometry'] for j  in new_geojson['features']]:
-                deleted_rois.append(m_idx)
+                # Adding both the index in the manual-rois layer and the index in the current annotations layer
+                deleted_rois.append((m_idx,man_idx))
 
         operation = False
         if len(added_rois)>0:
@@ -1040,22 +1103,22 @@ class SlideMap(MapComponent):
             new_layers = self.make_geojson_layers(
                 added_rois,added_roi_names,[len(initial_annotations)+max(manual_roi_idxes)],line_colors,colormap
             )
-            new_children.extend(new_layers)
+            new_manual_rois.extend(new_layers)
 
             current_annotations.extend(added_rois)
         
         if len(deleted_rois)>0:
             operation = True
-            for d_idx,d in enumerate(deleted_rois):
-                del new_children[(d-d_idx)+len(frame_layers)+len(initial_annotations)]
-                del current_annotations[(d-d_idx)+len(initial_annotations)]
+            for d_idx,(man_d,current_d) in enumerate(deleted_rois):
+                del new_manual_rois[man_d-d_idx]
+                del current_annotations[current_d-d_idx]
 
         annotations_data = json.dumps(current_annotations)
 
         if not operation:
-            new_children = no_update
+            new_manual_rois = no_update
 
-        return new_children, annotations_data
+        return new_manual_rois, annotations_data
 
     def update_image_overlay_transparency(self, new_opacity: float):
         """Update transparency of image overlay component

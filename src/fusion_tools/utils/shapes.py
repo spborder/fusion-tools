@@ -671,7 +671,7 @@ def find_intersecting(geo_source:Union[dict,str], geo_query:Polygon, return_prop
     elif return_shapes:
         return geo_intersect_geojson
 
-def spatially_aggregate(child_geo:dict, parent_geos: list, separate: bool = True, summarize: bool = True, ignore_list: list = []):
+def spatially_aggregate(child_geo:dict, parent_geos: list, separate: bool = True, summarize: bool = True, ignore_list: list = ["_id","_index"]):
     """Aggregate intersecting feature properties to a provided GeoJSON 
 
     :param child_geo: GeoJSON object that is receiving aggregated properties
