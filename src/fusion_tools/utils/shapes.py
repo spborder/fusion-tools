@@ -1017,7 +1017,7 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
         name_order = [i['properties']['name'] for i in all_geo_list]
 
     end = time.time()
-    print(f'Time for creating GeoDataFrames from selected names: {end-start}')
+    #print(f'Time for creating GeoDataFrames from selected names: {end-start}')
 
     # Now going through spatial queries
     start = time.time()
@@ -1058,7 +1058,7 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
         remainder_structures = structure_filtered
 
     end = time.time()
-    print(f'Time for spatial queries: {end-start}')
+    #print(f'Time for spatial queries: {end-start}')
 
     # Combining into one GeoJSON
     start = time.time()
@@ -1075,7 +1075,7 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
         combined_geojson['features'].extend(g_json['features'])
 
     end = time.time()
-    print(f'Time for generating combined geojson: {end-start}')
+    #print(f'Time for generating combined geojson: {end-start}')
 
     # Going through property filters:
     start = time.time()
@@ -1127,7 +1127,7 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
         filtered_geojson = combined_geojson
     
     end = time.time()
-    print(f'Time for property filters: {end-start}')
+    #print(f'Time for property filters: {end-start}')
 
     final_filter_reference_list = []
     for n in filter_reference_list:

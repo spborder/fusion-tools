@@ -1341,7 +1341,7 @@ class MultiFrameSlideMap(SlideMap):
                         children = [
                             dl.EditControl(
                                 id = {'type': 'edit-control','index': 0},
-                                draw = dict(polyline=False, line=False, circle = False, circlemarker=False),
+                                draw = dict(polyline=False, line=False, marker = False, circle = False, circlemarker=False),
                                 position='topleft'
                             )
                         ]

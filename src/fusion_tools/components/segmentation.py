@@ -16,6 +16,8 @@ import plotly.graph_objects as go
 from io import BytesIO
 from PIL import Image
 import requests
+import time
+import geojson
 
 from skimage.measure import label
 
@@ -27,7 +29,7 @@ from dash import dcc, callback, ctx, ALL, MATCH, exceptions, Patch, no_update, d
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform
-from dash_extensions.javascript import Namespace
+from dash_extensions.javascript import Namespace, assign
 
 # fusion-tools imports
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
@@ -966,115 +968,40 @@ class BulkLabels(Tool):
         )
 
         self.js_namespace.add(
-            name = "propertyFilter",
+            name = 'removeMarker',
             src = """
-                function(butt_click, structure_names, filter_json, map_annotations, slide_information) {
-                    var returnFeature = true;
-                    // Defining function to extract property value
-                    function checkFilter(feature, filterItem) {
-                        if (filterItem.name) {
-                            var filterSubProps = filterItem.name.split(" --> ");
-                            var prop_dict = feature.properties;
-                            for (let i=0; i<filterSubProps.length; i++) {
-                                if (filterSubProps[j] in prop_dict) {
-                                    var prop_dict = prop_dict[filterSubProps[j]];
-                                    var testVal = prop_dict;
-                                } else {
-                                    var testVal = false;
-                                }
-                            }
-                            
-                            if (filterItem.range & testVal) {
-                                if (typeof filterItem.range[0]==='number') {
-                                    if (testVal < filterItem.range[0]) {
-                                        returnFeature = returnFeature & false;
-                                    }
-                                    if (testVal > filterItem.range[1]) {
-                                        returnFeature = returnFeature & false;
-                                    }
-                                } else {
-                                    if (filterItem.range.includes(testVal)) {
-                                        returnFeature = returnFeature & true;
-                                    } else {
-                                        returnFeature = returnFeature & false;
-                                    }
-                                }
-                            } else {
-                                returnFeature = returnFeature & false;
-                            }
-                        } 
-
-                        return returnFeature;
-                    }
-
-                    customMarker = L.Marker.extend(
-                        data: {
-                            name: "structure",
-                            feature_idx: 0
-                        }
-                    );
-
-                    // Reading in filters dictionary
-                    const filters = JSON.parse(filter_json);
-                    console.log(filters);
-
-                    // Reading in annotations
-                    const annotations = JSON.parse(map_annotations);
-                    var namesList = [];
-                    for (let i = 0; i<annotations.length; i++) {
-                        namesList.push(annotations[i]["properties"]["name"]);
-                    }
-                    console.log(namesList);
-
-                    // Getting desired annotation for left joins
-                    var baseAnnotations = {
-                        "type": "FeatureCollection",
-                        "features": []
-                    };
-
-                    for (let i = 0; i<structure_names.length; i++) {
-                        baseAnnotations["features"].push(annotations[namesList.indexOf(structure_names[i])]);
-                    }
-
-                    // Performing filtration
-                    for (let j = 0; j < filters.length; j++) {
-                        // Checking if this is a spatial query
-                        if ("structure" in filters[j]) {
-                            var sqAnnotation = annotations[namesList.indexOf(filters[j]["structure"])];
-                            baseAnnotations.splice(i,1,sjoin(baseAnnotations[i],sqAnnotation, { how: "inner", op: filters[j]["type"] }));
-                        } else {
-                            for (let k = 0; k < baseAnnotations['features'].length; k++) {
-                                var check = checkFilter(baseAnnotations["features"], filters[j]);
-                                if (!check) {
-                                    baseAnnotations['features'].splice(k,1);
-                                }
-                            }
-                        }
-                    }
-                    console.log(baseAnnotations['features'].length);
-                    
-                    // Creating L.Marker() objects
-                    var marker_list = [];
-                    for (let j = 0; j < baseAnnotations['features'].length; j++) {
-                        var centroid = turf.centroid(turf.polygon(baseAnnotations['features'][j]['geometry']));
-
-                        marker_list.push(
-                            customMarker(
-                                centroid,
-                                data = {
-                                    name: "",
-                                    feature_idx: 0
-                                }
-                            ).bindPopup(
-
-                            )
-                        );
-
-                    }   
-
-                    return marker_list;
+                function(e,ctx){
+                    console.log(ctx);
+                    console.log(e);
+                    e.target.removeLayer(e.layer._leaflet_id);
+                    ctx.data.features.splice(ctx.data.features.indexOf(e.layer.feature),1);
                 }
             """
+        )
+
+        self.js_namespace.add(
+            name = 'tooltipMarker',
+            src = 'function(feature,layer,ctx){layer.bindTooltip("Double-click to remove")}'
+        )
+
+        self.js_namespace.add(
+            name = "markerRender",
+            src = """
+                function(feature,latlng,context) {
+                    marker = L.marker(latlng, {
+                        title: "BulkLabels Marker",
+                        alt: "BulkLabels Marker",
+                        riseOnHover: true,
+                        draggable: false,
+                    });
+
+                    return marker;
+                }
+            """
+        )
+
+        self.js_namespace.dump(
+            assets_folder = self.assets_folder
         )
 
     def gen_layout(self, session_data:dict):
@@ -1176,7 +1103,7 @@ class BulkLabels(Tool):
                     dcc.Store(
                         id = {'type': 'bulk-labels-filter-data','index': 0},
                         storage_type = 'memory',
-                        data = json.dumps({})
+                        data = json.dumps({'Spatial': [], 'Filters': []})
                     ),
                     dbc.Row([
                         dbc.Col([
@@ -1390,33 +1317,6 @@ class BulkLabels(Tool):
             ]
         )(self.update_label_structures)
 
-        """self.blueprint.clientside_callback(
-            ClientsideFunction(
-                namespace = 'fusionTools',
-                function_name = ''
-            ),
-            [
-                Input({'type': 'bulk-labels-update-structures','index': ALL},'n_clicks')
-            ],
-            [
-                Output({'type': 'bulk-labels-current-structures','index': ALL},'children'),
-                Output({'type': 'map-marker-div','index': ALL},'children'),
-                Output({'type': 'bulk-labels-label-source','index': ALL},'children'),
-                Output({'type': 'bulk-labels-label-type','index': ALL},'disabled'),
-                Output({'type': 'bulk-labels-label-text','index': ALL},'disabled'),
-                Output({'type': 'bulk-labels-label-rationale','index': ALL},'disabled'),
-                Output({'type': 'bulk-labels-apply-labels','index': ALL},'disabled'),
-                Output({'type': 'bulk-labels-download-labels','index': ALL},'disabled')
-            ],
-            [
-                State({'type': 'bulk-labels-include-structures','index': ALL},'value'),
-                State({'type': 'bulk-labels-add-property-div','index': ALL},'children'),
-                State({'type':'bulk-labels-spatial-query-div','index': ALL},'children'),
-                State({'type': 'map-annotations-store','index': ALL},'data'),
-                State({'type': 'map-slide-information','index': ALL},'data')
-            ]
-        )"""
-
         # Adding filtering data to a separate store:
         self.blueprint.callback(
             [
@@ -1436,7 +1336,6 @@ class BulkLabels(Tool):
                 State({'type': 'map-slide-information','index': ALL},'data')
             ]
         )(self.update_filter_data)
-
 
         # Adding new property
         self.blueprint.callback(
@@ -1482,17 +1381,15 @@ class BulkLabels(Tool):
             ],
             [
                 Output({'type': 'bulk-labels-labels-store','index': ALL},'data'),
-                #Output({'type': 'map-annotations-store','index': ALL},'data')
             ],
             [
-                State({'type': 'map-marker-div','index': ALL},'children'),
+                State({'type': 'bulk-labels-markers','index': ALL},'data'),
                 State({'type': 'bulk-labels-labels-store','index': ALL},'data'),
                 State({'type': 'bulk-labels-label-type','index': ALL},'value'),
                 State({'type': 'bulk-labels-label-text','index': ALL},'value'),
                 State({'type': 'bulk-labels-label-rationale','index': ALL},'value'),
                 State({'type': 'bulk-labels-label-source','index': ALL},'children'),
                 State({'type': 'bulk-labels-label-method','index': ALL},'value'),
-                State({'type': 'map-annotations-store','index': ALL},'data'),
                 State({'type':'map-slide-information','index':ALL},'data')
             ]
         )(self.apply_labels)
@@ -1537,20 +1434,6 @@ class BulkLabels(Tool):
             ]
         )(self.download_data)
 
-        # Clearing markers:
-        self.blueprint.callback(
-            [
-                Input({'type': 'label-marker-delete','index': ALL},'n_clicks')
-            ],
-            [
-                Output({'type': 'map-marker-div','index': ALL},'children'),
-                Output({'type': 'bulk-labels-current-structures','index': ALL},'children'),
-            ],
-            [
-                State({'type': 'map-marker-div','index': ALL},'children')
-            ]
-        )(self.remove_marker)
-
         # Updating label method description
         self.blueprint.callback(
             [
@@ -1560,6 +1443,20 @@ class BulkLabels(Tool):
                 Output({'type': 'bulk-labels-method-explanation','index': ALL},'children')
             ]
         )(self.update_method_explanation)
+
+        # Updating number of markers when one is removed:
+        self.blueprint.callback(
+            [
+                Input({'type': 'bulk-labels-markers','index': ALL},'n_dblclicks')
+            ],
+            [
+                Output({'type': 'bulk-labels-current-structures','index':ALL},'children')
+            ],
+            [
+                State({'type': 'bulk-labels-markers','index': ALL},'data')
+            ]
+        )(self.update_structure_count)
+
 
     def update_slide(self, new_annotations: list):
 
@@ -1823,7 +1720,6 @@ class BulkLabels(Tool):
 
         return [new_filter_data]
 
-
     def update_label_structures(self, update_structures_click:list, include_structures:list, filter_data:list, current_features:list, slide_information:list):
         """Go through current structures and return all those that pass spatial and property filters.
 
@@ -1859,33 +1755,34 @@ class BulkLabels(Tool):
                 color = 'success' if len(filtered_geojson['features'])>0 else 'danger'
             )
         ]
-
+        
         new_markers_div = [
-                dl.Marker(
-                    position = [
-                        (f['bbox'][0]+f['bbox'][2])/2,
-                        (f['bbox'][1]+f['bbox'][3])/2
-                    ][::-1],
-                    children = [
-                        dl.Popup(
-                            dbc.Button(
-                                'Clear Marker',
-                                color = 'danger',
-                                n_clicks = 0,
-                                id = {'type': f'{self.component_prefix}-label-marker-delete','index': f_idx}
-                            ),
-                            id = {'type':f'{self.component_prefix}-label-marker-popup','index': f_idx}
-                        ),
-                        html.Div(
-                            id = {'type': f'{self.component_prefix}-label-marker-data','index': f_idx},
-                            children = json.dumps(f_data),
-                            style = {'display': 'none'}
-                        )
-                    ],
-                    id = {'type': f'{self.component_prefix}-label-marker','index': f_idx}
-                )
-                for f_idx, (f,f_data) in enumerate(zip(filtered_geojson['features'],filtered_ref_list))
-            ]
+            dl.GeoJSON(
+                data = {
+                    'type': 'FeatureCollection',
+                    'features': [
+                        {
+                            'type': 'Feature',
+                            'geometry': {
+                                'type': 'Point',
+                                'coordinates': [
+                                    (f['bbox'][0]+f['bbox'][2])/2,
+                                    (f['bbox'][1]+f['bbox'][3])/2
+                                ]
+                            },
+                            'properties': f_data
+                        }
+                        for f,f_data in zip(filtered_geojson['features'],filtered_ref_list)
+                    ]
+                },
+                pointToLayer=self.js_namespace("markerRender"),
+                onEachFeature = self.js_namespace("tooltipMarker"),
+                id = {'type': f'{self.component_prefix}-bulk-labels-markers','index': 0},
+                eventHandlers = {
+                    'dblclick': self.js_namespace('removeMarker')
+                }
+            )
+        ]
 
         new_labels_source = f'`{json.dumps({"Spatial": filter_data["Spatial"],"Filters": filter_data["Filters"]})}`'
 
@@ -2109,7 +2006,7 @@ class BulkLabels(Tool):
 
         return current_labels
 
-    def apply_labels(self, button_click, current_markers, current_data, label_type, label_text, label_rationale, label_source, label_method, current_annotations,slide_information):
+    def apply_labels(self, button_click, current_markers, current_data, label_type, label_text, label_rationale, label_source, label_method, slide_information):
         """Applying current label to marked structures
 
         :param button_click: Button clicked
@@ -2147,11 +2044,12 @@ class BulkLabels(Tool):
         label_rationale = get_pattern_matching_value(label_rationale)
         label_source = json.loads(get_pattern_matching_value(label_source).replace('`',''))
         current_data = json.loads(get_pattern_matching_value(current_data))
-        current_annotations = json.loads(get_pattern_matching_value(current_annotations))
         current_markers = get_pattern_matching_value(current_markers)
         slide_information = json.loads(get_pattern_matching_value(slide_information))
 
-        marker_positions, marker_data = self.parse_marker_div(current_markers,slide_information)
+        scaled_markers = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/slide_information['x_scale'],c[1]/slide_information['y_scale']),g),current_markers)
+        
+        marker_positions = [i['geometry']['coordinates'] for i in scaled_markers['features']]
         labeled_items = self.search_labels(marker_positions, current_data, label_type, label_text, label_method)
 
         #TODO: Applying property to structures
@@ -2273,33 +2171,17 @@ class BulkLabels(Tool):
         else:
             raise exceptions.PreventUpdate
 
-    def remove_marker(self, clear_click, current_markers):
-        """Removing a marker from the current map
+    def update_structure_count(self, marker_dblclicked,marker_geo):
 
-        :param clear_click: Clear Marker button clicked
-        :type clear_click: list
-        :param current_markers: All current markers in the slide map
-        :type current_markers: list
-        :return: Updated set of markers and count of markers
-        :rtype: tuple
-        """
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
-        n_marked = len(get_pattern_matching_value(current_markers))
-
-        patched_list = Patch()
-        for v_idx,v in enumerate(clear_click):
-            if v:
-                del patched_list[v_idx]
-                break
-        
-        new_structures_div = [
+        marker_geo = get_pattern_matching_value(marker_geo)
+        new_structure_count_children = [
             dbc.Alert(
-                f'{n_marked-1} Structures Included!',
-                color = 'success' if (n_marked-1)>0 else 'danger'
+                f'{len(marker_geo["features"])} Structures Included!',
+                color = 'success' if len(marker_geo["features"])>0 else 'danger'
             )
         ]
 
-        return [patched_list], [new_structures_div]
-
+        return new_structure_count_children
