@@ -1077,8 +1077,6 @@ class BulkLabels(Tool):
             """
         )
 
-
-
     def gen_layout(self, session_data:dict):
         """Generating layout for BulkLabels component
 
@@ -1797,21 +1795,19 @@ class BulkLabels(Tool):
                         })
                     else:
                         distance_div = div['props']['children'][1]['props']['children']
-                        query_distance = distance_div[0]['props']['value']
+                        if 'value' in distance_div[0]['props']:
+                            query_distance = distance_div[0]['props']['value']
 
-                        if not query_distance is None:
-                            processed_queries.append({
-                                'type': query_type,
-                                'structure': query_structure,
-                                'distance': query_distance*x_scale
-                            })
+                            if not query_distance is None:
+                                processed_queries.append({
+                                    'type': query_type,
+                                    'structure': query_structure,
+                                    'distance': query_distance*x_scale
+                                })
 
         return processed_queries
 
     def update_filter_data(self, property_filter, sp_query_type, sp_query_structure, sp_query_distance, remove_sq, remove_prop, property_divs: list, spatial_divs: list, slide_information:list):
-
-        if not any([i['value'] for i in ctx.triggered]):
-            raise exceptions.PreventUpdate
 
         property_divs = get_pattern_matching_value(property_divs)
         spatial_divs = get_pattern_matching_value(spatial_divs)

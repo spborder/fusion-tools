@@ -25,6 +25,8 @@ import anndata as ad
 import uuid
 
 from typing_extensions import Union
+import time
+
 
 def load_annotations(file_path: str, name:Union[str,None]=None,**kwargs) -> dict:
     assert os.path.exists(file_path)
@@ -1005,15 +1007,20 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
     :rtype: tuple
     """
     # First getting the listed structures:
+    
+    start = time.time()
     if not structures == ['all']:
         structure_filtered = [gpd.GeoDataFrame.from_features(i['features']) for i in all_geo_list if i['properties']['name'] in structures]
         name_order = [i['properties']['name'] for i in all_geo_list if i['properties']['name'] in structures]
-
     else:
         structure_filtered = [gpd.GeoDataFrame.from_features(i['features']) for i in all_geo_list]
         name_order = [i['properties']['name'] for i in all_geo_list]
 
+    end = time.time()
+    print(f'Time for creating GeoDataFrames from selected names: {end-start}')
+
     # Now going through spatial queries
+    start = time.time()
     filter_reference_list = {
         n: {}
         for n in name_order
@@ -1050,7 +1057,11 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
     else:
         remainder_structures = structure_filtered
 
+    end = time.time()
+    print(f'Time for spatial queries: {end-start}')
+
     # Combining into one GeoJSON
+    start = time.time()
     combined_geojson = {
         'type': 'FeatureCollection',
         'features': []
@@ -1063,7 +1074,11 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
         }
         combined_geojson['features'].extend(g_json['features'])
 
+    end = time.time()
+    print(f'Time for generating combined geojson: {end-start}')
+
     # Going through property filters:
+    start = time.time()
     if len(filter_list)>0:
         filtered_geojson = {
             'type': 'FeatureCollection',
@@ -1111,6 +1126,9 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
     else:
         filtered_geojson = combined_geojson
     
+    end = time.time()
+    print(f'Time for property filters: {end-start}')
+
     final_filter_reference_list = []
     for n in filter_reference_list:
         for combined_idx in filter_reference_list[n]:
