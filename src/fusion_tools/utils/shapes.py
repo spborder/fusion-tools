@@ -1166,16 +1166,3 @@ def path_to_mask(path, shape):
     return mask
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
