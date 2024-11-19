@@ -528,6 +528,7 @@ class OverlayOptions(Tool):
         add_filter_click = get_pattern_matching_value(add_filter_click)
         overlay_options = get_pattern_matching_value(overlay_options)
         overlay_info_state = json.loads(get_pattern_matching_value(overlay_info_state))
+        #TODO: See if these can be added as an "OR" or "AND" to get more specific filtering 
         if len(list(overlay_info_state.keys()))==0:
             raise exceptions.PreventUpdate
 

@@ -1007,6 +1007,13 @@ class BulkLabels(Tool):
                         return returnFeature;
                     }
 
+                    customMarker = L.Marker.extend(
+                        data: {
+                            name: "structure",
+                            feature_idx: 0
+                        }
+                    );
+
                     // Reading in filters dictionary
                     const filters = JSON.parse(filter_json);
                     console.log(filters);
@@ -1052,12 +1059,20 @@ class BulkLabels(Tool):
                         var centroid = turf.centroid(turf.polygon(baseAnnotations['features'][j]['geometry']));
 
                         marker_list.push(
-                            L.Marker(
-                                centroid
-                            ).bindPopup()
+                            customMarker(
+                                centroid,
+                                data = {
+                                    name: "",
+                                    feature_idx: 0
+                                }
+                            ).bindPopup(
+
+                            )
                         );
 
                     }   
+
+                    return marker_list;
                 }
             """
         )
@@ -1159,6 +1174,11 @@ class BulkLabels(Tool):
                         id = {'type': 'bulk-labels-labels-store','index': 0},
                         storage_type = 'memory',
                         data = json.dumps({'labels': [], 'labels_metadata': []})
+                    ),
+                    dcc.Store(
+                        id = {'type': 'bulk-labels-filter-data','index': 0},
+                        storage_type = 'memory',
+                        data = json.dumps({})
                     ),
                     dbc.Row([
                         dbc.Col([
@@ -1372,7 +1392,7 @@ class BulkLabels(Tool):
             ]
         )(self.update_label_structures)
 
-        self.blueprint.clientside_callback(
+        """self.blueprint.clientside_callback(
             ClientsideFunction(
                 namespace = 'fusionTools',
                 function_name = ''
@@ -1397,7 +1417,28 @@ class BulkLabels(Tool):
                 State({'type': 'map-annotations-store','index': ALL},'data'),
                 State({'type': 'map-slide-information','index': ALL},'data')
             ]
-        )
+        )"""
+
+        # Adding filtering data to a separate store:
+        self.blueprint.callback(
+            [
+                Input({'type': 'bulk-labels-filter-selector','index': ALL},'value'),
+                Input({'type': 'bulk-labels-spatial-query-drop','index': ALL},'value'),
+                Input({'type': 'bulk-labels-spatial-query-structures','index': ALL},'value'),
+                Input({'type': 'bulk-labels-spatial-query-nearest','index': ALL},'value'),
+                Input({'type': 'bulk-labels-remove-spatial-query-icon','index': ALL},'n_clicks'),
+                Input({'type': 'bulk-labels-remove-property-icon','index': ALL},'n_clicks')
+            ],
+            [
+                Output({'type': 'bulk-labels-filter-data', 'index': ALL},'data')
+            ],
+            [
+                State({'type': 'bulk-labels-add-property-div','index': ALL},'children'),
+                State({'type': 'bulk-labels-spatial-query-div','index':ALL},'children'),
+                State({'type': 'map-slide-information','index': ALL},'data')
+            ]
+        )(self.update_filter_data)
+
 
         # Adding new property
         self.blueprint.callback(
@@ -1443,7 +1484,7 @@ class BulkLabels(Tool):
             ],
             [
                 Output({'type': 'bulk-labels-labels-store','index': ALL},'data'),
-                Output({'type': 'map-annotations-store','index': ALL},'data')
+                #Output({'type': 'map-annotations-store','index': ALL},'data')
             ],
             [
                 State({'type': 'map-marker-div','index': ALL},'children'),
@@ -1716,17 +1757,18 @@ class BulkLabels(Tool):
             for div in add_property_parent:
                 div_children = div['props']['children']
                 filter_name = div_children[0]['props']['children'][0]['props']['children'][0]['props']['value']
+                
+                if 'props' in div_children[1]['props']['children']:
+                    if 'value' in div_children[1]['props']['children']['props']:
+                        filter_value = div_children[1]['props']['children']['props']['value']
+                    else:
+                        filter_value = div_children[1]['props']['children']['props']['children']['props']['value']
 
-                if 'value' in div_children[1]['props']['children']['props']:
-                    filter_value = div_children[1]['props']['children']['props']['value']
-                else:
-                    filter_value = div_children[1]['props']['children']['props']['children']['props']['value']
-
-                if not any([i is None for i in [filter_name,filter_value]]):
-                    processed_filters.append({
-                        'name': filter_name,
-                        'range': filter_value
-                    })
+                    if not any([i is None for i in [filter_name,filter_value]]):
+                        processed_filters.append({
+                            'name': filter_name,
+                            'range': filter_value
+                        })
 
         return processed_filters
 
@@ -1766,7 +1808,27 @@ class BulkLabels(Tool):
 
         return processed_queries
 
-    def update_label_structures(self, update_structures_click:list, include_structures:list, filter_properties:list, spatial_queries:list, current_features:list, slide_information:list):
+    def update_filter_data(self, property_filter, sp_query_type, sp_query_structure, sp_query_distance, remove_sq, remove_prop, property_divs: list, spatial_divs: list, slide_information:list):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        property_divs = get_pattern_matching_value(property_divs)
+        spatial_divs = get_pattern_matching_value(spatial_divs)
+
+        slide_information = json.loads(get_pattern_matching_value(slide_information))
+        processed_prop_filters = self.parse_filter_divs(property_divs)
+        processed_spatial_filters = self.parse_spatial_divs(spatial_divs,slide_information)
+
+        new_filter_data = json.dumps({
+            "Spatial": processed_spatial_filters,
+            "Filters": processed_prop_filters
+        })
+
+        return [new_filter_data]
+
+
+    def update_label_structures(self, update_structures_click:list, include_structures:list, filter_data:list, current_features:list, slide_information:list):
         """Go through current structures and return all those that pass spatial and property filters.
 
         :param update_structures_click: Button clicked
@@ -1791,13 +1853,9 @@ class BulkLabels(Tool):
 
         slide_information = json.loads(get_pattern_matching_value(slide_information))
 
-        include_properties = get_pattern_matching_value(filter_properties)
-        spatial_queries = get_pattern_matching_value(spatial_queries)
+        filter_data = json.loads(get_pattern_matching_value(filter_data))
 
-        processed_filters = self.parse_filter_divs(include_properties)
-        processed_spatial_queries = self.parse_spatial_divs(spatial_queries, slide_information)
-
-        filtered_geojson, filtered_ref_list = process_filters_queries(processed_filters, processed_spatial_queries, include_structures, current_features)
+        filtered_geojson, filtered_ref_list = process_filters_queries(filter_data["Filters"], filter_data["Spatial"], include_structures, current_features)
 
         new_structures_div = [
             dbc.Alert(
@@ -1833,7 +1891,7 @@ class BulkLabels(Tool):
                 for f_idx, (f,f_data) in enumerate(zip(filtered_geojson['features'],filtered_ref_list))
             ]
 
-        new_labels_source = f'`{json.dumps({"Spatial": processed_spatial_queries,"Filters": processed_filters})}`'
+        new_labels_source = f'`{json.dumps({"Spatial": filter_data["Spatial"],"Filters": filter_data["Filters"]})}`'
 
         if len(filtered_geojson['features'])>0:
             labels_type_disabled = False
@@ -2101,6 +2159,7 @@ class BulkLabels(Tool):
         labeled_items = self.search_labels(marker_positions, current_data, label_type, label_text, label_method)
 
         #TODO: Applying property to structures
+        """
         ann_names_order = [i['properties']['name'] for i in current_annotations]
         apply_label_dict = {'type': label_type, 'value': label_text}
         for m_d in marker_data:
@@ -2140,6 +2199,7 @@ class BulkLabels(Tool):
                         apply_label_dict
                     ]
 
+        """
 
         if 'labels' in current_data:
             current_data['labels'] = labeled_items['labels']
@@ -2161,9 +2221,9 @@ class BulkLabels(Tool):
             ]
 
         new_data = json.dumps(current_data)
-        new_annotations = json.dumps(current_annotations)
+        #new_annotations = json.dumps(current_annotations)
 
-        return [new_data], [new_annotations]
+        return [new_data]
 
     def refresh_labels(self, refresh_click, structure_options):
         """Clear current label components and start over

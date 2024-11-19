@@ -992,6 +992,7 @@ class SlideMap(MapComponent):
         :rtype: list
         """
         
+
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
 
@@ -1357,7 +1358,20 @@ class MultiFrameSlideMap(SlideMap):
                     ),
                     dl.LayersControl(
                         id = {'type': 'map-layers-control','index': 0},
-                        children = []
+                        children = [
+                            html.Div(
+                                id = {'type': 'map-initial-annotations','index': 0},
+                                children = []
+                            ),
+                            html.Div(
+                                id = {'type': 'map-manual-rois','index': 0},
+                                children = []
+                            ),
+                            html.Div(
+                                id = {'type': 'map-generated-rois','index': 0},
+                                children = []
+                            )
+                        ]
                     ),
                     dl.EasyButton(
                         icon = 'fa-solid fa-arrows-to-dot',
@@ -1491,6 +1505,8 @@ class MultiFrameSlideMap(SlideMap):
             raise TypeError("Missing 'frames' key in image metadata")
         
         return frame_layers
+
+
 
 class SlideImageOverlay(MapComponent):
     """Image overlay on specific coordinates within a SlideMap
