@@ -40,6 +40,7 @@ window.fusionTools = Object.assign({}, window.fusionTools, {
                 var overlayVal = Number.Nan;
                 if (overlayProp) {
                     if (overlayProp.name) {
+                        //TODO: Update this for different types of nested props (--+ = list, --# = external reference object)
                         var overlaySubProps = overlayProp.name.split(" --> ");
                         var prop_dict = feature.properties;
                         for (let i = 0; i < overlaySubProps.length; i++) {
@@ -101,6 +102,7 @@ window.fusionTools = Object.assign({}, window.fusionTools, {
                         // Iterating through filterVals list
                         var filter = filterVals[i];
                         if (filter.name) {
+                            //TODO: Update this for different types of nested props (--+ = list, --# = external reference object)
                             var filterSubProps = filter.name.split(" --> ");
                             var prop_dict = feature.properties;
                             for (let j = 0; j < filterSubProps.length; j++) {

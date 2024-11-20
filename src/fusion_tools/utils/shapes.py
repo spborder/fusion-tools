@@ -740,6 +740,7 @@ def spatially_aggregate(child_geo:dict, parent_geos: list, separate: bool = True
                             'Sum': nested_sum
                         }
 
+                        #TODO: Update this for different types of nested props (--+ = list, --# = external reference object)
                         sub_keys = reversed(p.split(' --> '))
                         for p_idx,part in enumerate(sub_keys):
                             nested_dict = {part: nested_dict}
@@ -756,6 +757,7 @@ def spatially_aggregate(child_geo:dict, parent_geos: list, separate: bool = True
                     props = numeric_df.columns.tolist()
                     for p in props:
                         mean_dict = mean_props[p]
+                        #TODO: Update this for different types of nested props (--+ = list, --# = external reference object)
                         for part in reversed(p.split(' --> ')):
                             mean_dict = {part: mean_dict}
 
@@ -801,6 +803,7 @@ def spatially_aggregate(child_geo:dict, parent_geos: list, separate: bool = True
                         'Sum': nested_sum
                     }
 
+                    #TODO: Update this for different types of nested props (--+ = list, --# = external reference object)
                     sub_keys = reversed(p.split(' --> '))
                     for part in sub_keys:
                         nested_dict = {part: nested_dict}
@@ -819,6 +822,7 @@ def spatially_aggregate(child_geo:dict, parent_geos: list, separate: bool = True
                 props = numeric_df.columns.tolist()
                 for p in props:
                     mean_dict = mean_props[p]
+                    #TODO: Update this for different types of nested props (--+ = list, --# = external reference object)
                     for part in reversed(p.split(' --> ')):
                         mean_dict = {part: mean_dict}
 
@@ -860,18 +864,44 @@ def extract_nested_prop(main_prop_dict: dict, depth: int, path: tuple = (), valu
                     values_list.append({
                         ' --> '.join(list(path+(keys,))): values
                     })
+
+                elif type(values)==list:
+                    values_list.extend(extract_listed_prop,path+(keys,),[])
+
                 else:
-                    # Skipping properties that are still nested
+                    # Skipping properties that are still nested 
                     continue
             else:
                 if type(values)==dict:
                     extract_nested_prop(values, depth-1, path+ (keys,), values_list)
-                else:
+                elif type(values)==list:
+                    values_list.extend(extract_listed_prop,path+(keys,),[])
+                elif type(values) in [int,float,str]:
                     # Only adding properties to the list one time
                     if not any([' --> '.join(list(path+(keys,))) in list(i.keys()) for i in values_list]):
                         values_list.append({
                             ' --> '.join(list(path+(keys,))): values
                         }) 
+                else:
+                    # Skipping properties of some mysterious fifth type
+                    continue
+
+    return values_list
+
+def extract_listed_prop(main_list: list, path: tuple = (), values_list: list = []):
+
+    if len(main_list)>0:
+        for item_idx,list_item in enumerate(main_list):
+            item_key = f'Value {item_idx}'
+            if type(list_item) in [int,float,str]:
+                values_list.append({
+                    ' --+ '.join(list(path+(item_key,))): list_item
+                })
+            elif type(list_item)==dict:
+                nested_n = find_nested_levels({item_key:list_item})
+                values_list.extend(extract_nested_prop({item_key: list_item},nested_n,path+(item_key,),[]))
+            elif type(list_item)==list:
+                extract_listed_prop(list_item,path+(item_key,),[])
 
     return values_list
 
@@ -916,8 +946,13 @@ def extract_geojson_properties(geo_list: list, reference_object: Union[str,None]
             for p in f_props:
                 # Checking for sub-properties
                 sub_props = []
-                if type(f['properties'][p])==dict:
-                    nested_value = extract_nested_prop({p: f['properties'][p]}, nested_depth, (), [])
+                if type(f['properties'][p]) in [dict,list]:
+                    # Pulling out nested properties (either dictionaries or lists or lists of dictionaries or dictionaries of lists, etc.)
+                    if type(f['properties'][p]) ==dict:
+                        nested_value = extract_nested_prop({p: f['properties'][p]}, nested_depth, (), [])
+                    elif type(f['properties'][p])==list:
+                        nested_value = extract_listed_prop(f['properties'][p],(p,),[])
+
                     if len(nested_value)>0:
                         for n in nested_value:
                             n_key = list(n.keys())[0]
@@ -950,7 +985,7 @@ def extract_geojson_properties(geo_list: list, reference_object: Union[str,None]
                                         property_info[n_key]['unique'].append(n_value)
                                         property_info[n_key]['distinct'] +=1
 
-                else:
+                elif type(f['properties'][p]) in [int,float,str]:
                     f_sup_val = f['properties'][p]
 
                     if not p in property_info:
@@ -986,7 +1021,6 @@ def extract_geojson_properties(geo_list: list, reference_object: Union[str,None]
 
     #TODO: After loading an experiment, reference the file here for additional properties
     
-
     
     geojson_properties = sorted(geojson_properties)
 
@@ -1090,6 +1124,7 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
 
             for f in filter_list:
                 if include:
+                    #TODO: Update this for different types of nested props (--+ = list, --# = external reference object)
                     filter_name_parts = f['name'].split(' --> ')
 
                     include = True
