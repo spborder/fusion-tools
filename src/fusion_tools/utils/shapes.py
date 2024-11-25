@@ -21,10 +21,13 @@ from scipy import ndimage
 
 import pandas as pd
 import anndata as ad
+import large_image
 
 import uuid
 
 from typing_extensions import Union
+import time
+
 
 def load_annotations(file_path: str, name:Union[str,None]=None,**kwargs) -> dict:
     assert os.path.exists(file_path)
@@ -66,18 +69,31 @@ def load_geojson(geojson_path: str, name:Union[str,None]=None) -> dict:
 
     with open(geojson_path,'r') as f:
         geojson_anns = json.load(f)
-
         f.close()
 
-    if not 'properties' in geojson_anns:
-        geojson_anns['properties'] = {}
+    if type(geojson_anns)==list:
+        for g in geojson_anns:
+            if not 'properties' in g:
+                g['properties'] = {}
+            else:
+                if 'name' in g['properties'] and name is None:
+                    name = g['properties']['name']
 
-    geo_id = uuid.uuid4().hex[:24] if not '_id' in geojson_anns['properties'] else geojson_anns['properties']['_id']
-    geojson_anns['properties'] = geojson_anns['properties'] | {'name': name if not name is None else geo_id, '_id': geo_id}
+            geo_id = uuid.uuid4().hex[:24] if not '_id' in g['properties'] else g['properties']['_id']
+            g['properties'] = g['properties'] | {'name': name if not name is None else geo_id, '_id': geo_id}
 
-    
-    for f_idx, f in enumerate(geojson_anns['features']):
-        f['properties'] = f['properties'] | {'name': name if not name is None else geo_id, '_id': uuid.uuid4().hex[:24], '_index': f_idx}
+            for f_idx, f in enumerate(g['features']):
+                f['properties'] = f['properties'] | {'name': name if not name is None else geo_id, '_id': uuid.uuid4().hex[:24], '_index': f_idx}
+
+    elif type(geojson_anns)==dict:
+        if not 'properties' in geojson_anns:
+            geojson_anns['properties'] = {}
+
+        geo_id = uuid.uuid4().hex[:24] if not '_id' in g['properties'] else geojson_anns['properties']['_id']
+        geojson_anns['properties'] = geojson_anns['properties'] | {'name': name if not name is None else geo_id, '_id': geo_id}
+
+        for f_idx, f in enumerate(geojson_anns['features']):
+            f['properties'] = f['properties'] | {'name': name if not name is None else geo_id, '_id': uuid.uuid4().hex[:24], '_index': f_idx}
 
     return geojson_anns
 
@@ -658,7 +674,7 @@ def find_intersecting(geo_source:Union[dict,str], geo_query:Polygon, return_prop
     elif return_shapes:
         return geo_intersect_geojson
 
-def spatially_aggregate(child_geo:dict, parent_geos: list, separate: bool = True, summarize: bool = True, ignore_list: list = []):
+def spatially_aggregate(child_geo:dict, parent_geos: list, separate: bool = True, summarize: bool = True, ignore_list: list = ["_id","_index"]):
     """Aggregate intersecting feature properties to a provided GeoJSON 
 
     :param child_geo: GeoJSON object that is receiving aggregated properties
@@ -725,6 +741,7 @@ def spatially_aggregate(child_geo:dict, parent_geos: list, separate: bool = True
                             'Sum': nested_sum
                         }
 
+                        #TODO: Update this for different types of nested props (--+ = list, --# = external reference object)
                         sub_keys = reversed(p.split(' --> '))
                         for p_idx,part in enumerate(sub_keys):
                             nested_dict = {part: nested_dict}
@@ -741,6 +758,7 @@ def spatially_aggregate(child_geo:dict, parent_geos: list, separate: bool = True
                     props = numeric_df.columns.tolist()
                     for p in props:
                         mean_dict = mean_props[p]
+                        #TODO: Update this for different types of nested props (--+ = list, --# = external reference object)
                         for part in reversed(p.split(' --> ')):
                             mean_dict = {part: mean_dict}
 
@@ -786,6 +804,7 @@ def spatially_aggregate(child_geo:dict, parent_geos: list, separate: bool = True
                         'Sum': nested_sum
                     }
 
+                    #TODO: Update this for different types of nested props (--+ = list, --# = external reference object)
                     sub_keys = reversed(p.split(' --> '))
                     for part in sub_keys:
                         nested_dict = {part: nested_dict}
@@ -804,6 +823,7 @@ def spatially_aggregate(child_geo:dict, parent_geos: list, separate: bool = True
                 props = numeric_df.columns.tolist()
                 for p in props:
                     mean_dict = mean_props[p]
+                    #TODO: Update this for different types of nested props (--+ = list, --# = external reference object)
                     for part in reversed(p.split(' --> ')):
                         mean_dict = {part: mean_dict}
 
@@ -845,18 +865,44 @@ def extract_nested_prop(main_prop_dict: dict, depth: int, path: tuple = (), valu
                     values_list.append({
                         ' --> '.join(list(path+(keys,))): values
                     })
+
+                elif type(values)==list:
+                    values_list.extend(extract_listed_prop,path+(keys,),[])
+
                 else:
-                    # Skipping properties that are still nested
+                    # Skipping properties that are still nested 
                     continue
             else:
                 if type(values)==dict:
                     extract_nested_prop(values, depth-1, path+ (keys,), values_list)
-                else:
+                elif type(values)==list:
+                    values_list.extend(extract_listed_prop,path+(keys,),[])
+                elif type(values) in [int,float,str]:
                     # Only adding properties to the list one time
                     if not any([' --> '.join(list(path+(keys,))) in list(i.keys()) for i in values_list]):
                         values_list.append({
                             ' --> '.join(list(path+(keys,))): values
                         }) 
+                else:
+                    # Skipping properties of some mysterious fifth type
+                    continue
+
+    return values_list
+
+def extract_listed_prop(main_list: list, path: tuple = (), values_list: list = []):
+
+    if len(main_list)>0:
+        for item_idx,list_item in enumerate(main_list):
+            item_key = f'Value {item_idx}'
+            if type(list_item) in [int,float,str]:
+                values_list.append({
+                    ' --+ '.join(list(path+(item_key,))): list_item
+                })
+            elif type(list_item)==dict:
+                nested_n = find_nested_levels({item_key:list_item})
+                values_list.extend(extract_nested_prop({item_key: list_item},nested_n,path+(item_key,),[]))
+            elif type(list_item)==list:
+                extract_listed_prop(list_item,path+(item_key,),[])
 
     return values_list
 
@@ -901,8 +947,13 @@ def extract_geojson_properties(geo_list: list, reference_object: Union[str,None]
             for p in f_props:
                 # Checking for sub-properties
                 sub_props = []
-                if type(f['properties'][p])==dict:
-                    nested_value = extract_nested_prop({p: f['properties'][p]}, nested_depth, (), [])
+                if type(f['properties'][p]) in [dict,list]:
+                    # Pulling out nested properties (either dictionaries or lists or lists of dictionaries or dictionaries of lists, etc.)
+                    if type(f['properties'][p]) ==dict:
+                        nested_value = extract_nested_prop({p: f['properties'][p]}, nested_depth, (), [])
+                    elif type(f['properties'][p])==list:
+                        nested_value = extract_listed_prop(f['properties'][p],(p,),[])
+
                     if len(nested_value)>0:
                         for n in nested_value:
                             n_key = list(n.keys())[0]
@@ -935,7 +986,7 @@ def extract_geojson_properties(geo_list: list, reference_object: Union[str,None]
                                         property_info[n_key]['unique'].append(n_value)
                                         property_info[n_key]['distinct'] +=1
 
-                else:
+                elif type(f['properties'][p]) in [int,float,str]:
                     f_sup_val = f['properties'][p]
 
                     if not p in property_info:
@@ -971,7 +1022,6 @@ def extract_geojson_properties(geo_list: list, reference_object: Union[str,None]
 
     #TODO: After loading an experiment, reference the file here for additional properties
     
-
     
     geojson_properties = sorted(geojson_properties)
 
@@ -992,17 +1042,20 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
     :rtype: tuple
     """
     # First getting the listed structures:
+    
+    start = time.time()
     if not structures == ['all']:
         structure_filtered = [gpd.GeoDataFrame.from_features(i['features']) for i in all_geo_list if i['properties']['name'] in structures]
         name_order = [i['properties']['name'] for i in all_geo_list if i['properties']['name'] in structures]
-
     else:
         structure_filtered = [gpd.GeoDataFrame.from_features(i['features']) for i in all_geo_list]
         name_order = [i['properties']['name'] for i in all_geo_list]
 
-    #all_names = [i['properties']['name'] for i in all_geo_list]
+    end = time.time()
+    #print(f'Time for creating GeoDataFrames from selected names: {end-start}')
 
     # Now going through spatial queries
+    start = time.time()
     filter_reference_list = {
         n: {}
         for n in name_order
@@ -1032,35 +1085,35 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                     )
 
                 intermediate_gdf = intermediate_gdf.drop([i for i in ['index_left','index_right'] if i in intermediate_gdf], axis = 1)
+                intermediate_gdf = intermediate_gdf.drop([i for i in intermediate_gdf if '_right' in i],axis=1)
+                intermediate_gdf.columns = [i.replace('_left','') if '_left' in i else i for i in intermediate_gdf ]
 
             remainder_structures.append(intermediate_gdf)
     else:
         remainder_structures = structure_filtered
 
+    end = time.time()
+    #print(f'Time for spatial queries: {end-start}')
+
     # Combining into one GeoJSON
+    start = time.time()
     combined_geojson = {
         'type': 'FeatureCollection',
         'features': []
     }
     for g,name in zip(remainder_structures,name_order):
         g_json = g.to_geo_dict(show_bbox=True)
-        #feature_geos = [i['geometry'] for i in g_json['features']]
-
-
         filter_reference_list[name] = {
             i+len(combined_geojson['features']):j['properties']['_index']
             for i,j in enumerate(g_json['features'])
         }
         combined_geojson['features'].extend(g_json['features'])
-        """
-        if len(g_json['features'])>0:
-            for idx, i in enumerate(all_geo_list[all_names.index(name)]['features']):
-                if i['geometry'] in feature_geos:
-                    filter_reference_list[name][len(combined_geojson['features'])] = idx
-                    combined_geojson['features'].append(g_json['features'][feature_geos.index(i['geometry'])])
-        """
+
+    end = time.time()
+    #print(f'Time for generating combined geojson: {end-start}')
 
     # Going through property filters:
+    start = time.time()
     if len(filter_list)>0:
         filtered_geojson = {
             'type': 'FeatureCollection',
@@ -1072,6 +1125,7 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
 
             for f in filter_list:
                 if include:
+                    #TODO: Update this for different types of nested props (--+ = list, --# = external reference object)
                     filter_name_parts = f['name'].split(' --> ')
 
                     include = True
@@ -1108,6 +1162,9 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
     else:
         filtered_geojson = combined_geojson
     
+    end = time.time()
+    #print(f'Time for property filters: {end-start}')
+
     final_filter_reference_list = []
     for n in filter_reference_list:
         for combined_idx in filter_reference_list[n]:
@@ -1144,8 +1201,41 @@ def path_to_mask(path, shape):
     mask = ndimage.binary_fill_holes(mask)
     return mask
 
+def get_feature_image(feature:dict, tile_source:None, return_mask: bool=False, style: Union[None,list,dict]=None):
+    """Extract image region associated with a given feature from tile_source (a large-image object)
 
+    :param feature: GeoJSON Feature with "geometry" field containing coordinates
+    :type feature: dict
+    :param tile_source: A large-image tile source object (or custom object with "getRegion" method)
+    :type tile_source: None
+    :param return_mask: Whether or not to return both the image region (bounding box) as well as a binary mask of the boundaries of that feature, defaults to False
+    :type return_mask: bool, optional
+    :param style: For multi-frame tile sources, this can either be official "bands": [] format as described by large-image or a list containing {channel_name: 'rgba()'} keys and values, defaults to None
+    :type style: Union[None,list,dict], optional
+    """
 
+    # Getting bounding box of feature:
+    if not 'geometry' in feature:
+        raise ValueError(f"Feature does not contain 'geometry' key: {list(feature.keys())}")
+    
+    feature_shape = shape(feature['geometry'])
+    # This will only work with geometries that have an "exterior", so not Point
+    if not feature_shape.geom_type=='Point':
+        feature_bounds = list(feature_shape.exterior.bounds)
+    else:
+        raise TypeError("Feature geometries of type: 'Point' are not implemented, try again using .buffer(1) or other to extract a valid bounding box")
+    
+    if style is None:
+
+        feature_image, mime_type = tile_source.getRegion(
+                region = {
+                    'left': feature_bounds[0],
+                    'top': feature_bounds[1],
+                    'right': feature_bounds[2],
+                    'bottom': feature_bounds[3]
+                },
+                format = large_image.constants.TILE_FORMAT_NUMPY
+            )
 
 
 

@@ -16,6 +16,8 @@ import plotly.graph_objects as go
 from io import BytesIO
 from PIL import Image
 import requests
+import time
+import geojson
 
 from skimage.measure import label
 
@@ -23,10 +25,11 @@ from skimage.measure import label
 import dash
 dash._dash_renderer._set_react_version('18.2.0')
 import dash_leaflet as dl
-from dash import dcc, callback, ctx, ALL, MATCH, exceptions, Patch, no_update, dash_table
+from dash import dcc, callback, ctx, ALL, MATCH, exceptions, Patch, no_update, dash_table, ClientsideFunction
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform
+from dash_extensions.javascript import Namespace, assign
 
 # fusion-tools imports
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
@@ -90,8 +93,12 @@ class FeatureAnnotation(Tool):
             image_metadata['sizeY']/(2**(image_metadata['levels']-1))
         ]
 
-        x_scale = (base_dims[0]*(240/image_metadata['tileHeight'])) / image_metadata['sizeX']
-        y_scale = -((base_dims[1]*(240/image_metadata['tileHeight'])) / image_metadata['sizeY'])
+        #x_scale = (base_dims[0]*(240/image_metadata['tileHeight'])) / image_metadata['sizeX']
+        #y_scale = -((base_dims[1]*(240/image_metadata['tileHeight'])) / image_metadata['sizeY'])
+
+        x_scale = base_dims[0] / image_metadata['sizeX']
+        y_scale = -(base_dims[1]) / image_metadata['sizeY']
+
 
         return x_scale, y_scale
 
@@ -913,6 +920,9 @@ class BulkLabels(Tool):
         self.ignore_list = ignore_list
         self.property_depth = property_depth
 
+        self.assets_folder = os.getcwd()+'/.fusion_assets/'
+        self.get_namespace()
+
     def __str__(self):
         return 'Bulk Labels'
 
@@ -941,10 +951,58 @@ class BulkLabels(Tool):
             image_metadata['sizeY']/(2**(image_metadata['levels']-1))
         ]
 
-        x_scale = (base_dims[0]*(240/image_metadata['tileHeight'])) / image_metadata['sizeX']
-        y_scale = -((base_dims[1]*(240/image_metadata['tileHeight'])) / image_metadata['sizeY'])
+        #x_scale = (base_dims[0]*(240/image_metadata['tileHeight'])) / image_metadata['sizeX']
+        #y_scale = -((base_dims[1]*(240/image_metadata['tileHeight'])) / image_metadata['sizeY'])
+
+        x_scale = base_dims[0] / image_metadata['sizeX']
+        y_scale = -(base_dims[1]) / image_metadata['sizeY']
+
 
         return x_scale, y_scale
+
+    def get_namespace(self):
+        """Adding JavaScript functions to the BulkLabels Namespace
+        """
+        self.js_namespace = Namespace(
+            "fusionTools","bulkLabels"
+        )
+
+        self.js_namespace.add(
+            name = 'removeMarker',
+            src = """
+                function(e,ctx){
+                    console.log(ctx);
+                    console.log(e);
+                    e.target.removeLayer(e.layer._leaflet_id);
+                    ctx.data.features.splice(ctx.data.features.indexOf(e.layer.feature),1);
+                }
+            """
+        )
+
+        self.js_namespace.add(
+            name = 'tooltipMarker',
+            src = 'function(feature,layer,ctx){layer.bindTooltip("Double-click to remove")}'
+        )
+
+        self.js_namespace.add(
+            name = "markerRender",
+            src = """
+                function(feature,latlng,context) {
+                    marker = L.marker(latlng, {
+                        title: "BulkLabels Marker",
+                        alt: "BulkLabels Marker",
+                        riseOnHover: true,
+                        draggable: false,
+                    });
+
+                    return marker;
+                }
+            """
+        )
+
+        self.js_namespace.dump(
+            assets_folder = self.assets_folder
+        )
 
     def gen_layout(self, session_data:dict):
         """Generating layout for BulkLabels component
@@ -1041,6 +1099,11 @@ class BulkLabels(Tool):
                         id = {'type': 'bulk-labels-labels-store','index': 0},
                         storage_type = 'memory',
                         data = json.dumps({'labels': [], 'labels_metadata': []})
+                    ),
+                    dcc.Store(
+                        id = {'type': 'bulk-labels-filter-data','index': 0},
+                        storage_type = 'memory',
+                        data = json.dumps({'Spatial': [], 'Filters': []})
                     ),
                     dbc.Row([
                         dbc.Col([
@@ -1177,6 +1240,10 @@ class BulkLabels(Tool):
                                 n_clicks = 0,
                                 id = {'type': 'bulk-labels-apply-labels','index': 0},
                                 disabled = True
+                            ),
+                            dbc.Tooltip(
+                                'Saves current label to labeling session but does not add label to structure-level data',
+                                target = {'type': 'bulk-labels-apply-labels','index': 0}
                             )
                         ])
                     ]),
@@ -1189,11 +1256,38 @@ class BulkLabels(Tool):
                                 id = {'type': 'bulk-labels-download-labels','index': 0},
                                 disabled = True
                             ),
+                            dbc.Tooltip(
+                                'Downloads both individual labels as well as associated labeling metadata containing rationales for labels.',
+                                target = {'type': 'bulk-labels-download-labels','index': 0}
+                            ),
                             dcc.Download(
                                 id = {'type':'bulk-labels-download-data','index': 0}
                             ),
                             dcc.Download(
                                 id = {'type': 'bulk-labels-download-metadata','index': 0}
+                            )
+                        ])
+                    ],style = {'marginTop': '10px'}),
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Button(
+                                'Add Labels to Structures',
+                                id = {'type': 'bulk-labels-add-labels-to-structures','index': 0},
+                                className = 'd-grid col-12 mx-auto',
+                                n_clicks = 0,
+                                disabled = True
+                            ),
+                            dbc.Tooltip(
+                                'Adds current labels to structures for use in plotting, filtering, etc.',
+                                target = {'type': 'bulk-labels-add-labels-to-structures','index': 0}
+                            )
+                        ])
+                    ],style = {'marginTop': '10px'}),
+                    dbc.Row([
+                        dbc.Col([
+                            html.Div(
+                                id = {'type': 'bulk-labels-label-stats-div','index': 0},
+                                children = []
                             )
                         ])
                     ],style = {'marginTop': '10px'})
@@ -1244,15 +1338,36 @@ class BulkLabels(Tool):
                 Output({'type': 'bulk-labels-label-text','index': ALL},'disabled'),
                 Output({'type': 'bulk-labels-label-rationale','index': ALL},'disabled'),
                 Output({'type': 'bulk-labels-apply-labels','index': ALL},'disabled'),
-                Output({'type': 'bulk-labels-download-labels','index': ALL},'disabled')
+                Output({'type': 'bulk-labels-download-labels','index': ALL},'disabled'),
+                Output({'type': 'bulk-labels-add-labels-to-structures','index': ALL},'disabled')
             ],
             [
                 State({'type': 'bulk-labels-include-structures','index': ALL},'value'),
-                State({'type': 'bulk-labels-add-property-div','index': ALL},'children'),
-                State({'type':'bulk-labels-spatial-query-div','index': ALL},'children'),
-                State({'type': 'map-annotations-store','index': ALL},'data')
+                State({'type': 'bulk-labels-filter-data','index': ALL},'data'),
+                State({'type': 'map-annotations-store','index': ALL},'data'),
+                State({'type': 'map-slide-information','index': ALL},'data')
             ]
         )(self.update_label_structures)
+
+        # Adding filtering data to a separate store:
+        self.blueprint.callback(
+            [
+                Input({'type': 'bulk-labels-filter-selector','index': ALL},'value'),
+                Input({'type': 'bulk-labels-spatial-query-drop','index': ALL},'value'),
+                Input({'type': 'bulk-labels-spatial-query-structures','index': ALL},'value'),
+                Input({'type': 'bulk-labels-spatial-query-nearest','index': ALL},'value'),
+                Input({'type': 'bulk-labels-remove-spatial-query-icon','index': ALL},'n_clicks'),
+                Input({'type': 'bulk-labels-remove-property-icon','index': ALL},'n_clicks')
+            ],
+            [
+                Output({'type': 'bulk-labels-filter-data', 'index': ALL},'data')
+            ],
+            [
+                State({'type': 'bulk-labels-add-property-div','index': ALL},'children'),
+                State({'type': 'bulk-labels-spatial-query-div','index':ALL},'children'),
+                State({'type': 'map-slide-information','index': ALL},'data')
+            ]
+        )(self.update_filter_data)
 
         # Adding new property
         self.blueprint.callback(
@@ -1262,6 +1377,9 @@ class BulkLabels(Tool):
             ],
             [
                 Output({'type': 'bulk-labels-add-property-div','index': ALL},'children')
+            ],
+            [
+                State({'type': 'bulk-labels-property-info','index': ALL},'data')
             ]
         )(self.update_label_properties)
 
@@ -1295,17 +1413,18 @@ class BulkLabels(Tool):
             ],
             [
                 Output({'type': 'bulk-labels-labels-store','index': ALL},'data'),
-                Output({'type': 'map-annotations-store','index': ALL},'data')
+                Output({'type': 'bulk-labels-apply-labels','index': ALL},'color'),
+                Output({'type': 'bulk-labels-label-stats-div','index': ALL},'children')
             ],
             [
-                State({'type': 'map-marker-div','index': ALL},'children'),
+                State({'type': 'bulk-labels-markers','index': ALL},'data'),
                 State({'type': 'bulk-labels-labels-store','index': ALL},'data'),
                 State({'type': 'bulk-labels-label-type','index': ALL},'value'),
                 State({'type': 'bulk-labels-label-text','index': ALL},'value'),
                 State({'type': 'bulk-labels-label-rationale','index': ALL},'value'),
                 State({'type': 'bulk-labels-label-source','index': ALL},'children'),
                 State({'type': 'bulk-labels-label-method','index': ALL},'value'),
-                State({'type': 'map-annotations-store','index': ALL},'data')
+                State({'type':'map-slide-information','index':ALL},'data')
             ]
         )(self.apply_labels)
 
@@ -1328,7 +1447,9 @@ class BulkLabels(Tool):
                 Output({'type': 'bulk-labels-label-source','index': ALL},'children'),
                 Output({'type': 'bulk-labels-apply-labels','index': ALL},'disabled'),
                 Output({'type': 'bulk-labels-include-structures','index':ALL},'options'),
-                Output({'type': 'bulk-labels-spatial-query-structures','index':ALL},'options')
+                Output({'type': 'bulk-labels-spatial-query-structures','index':ALL},'options'),
+                Output({'type': 'bulk-labels-apply-labels','index': ALL},'color'),
+                Output({'type': 'map-marker-div','index': ALL},'children')
             ],
             [
                 State({'type': 'feature-overlay','index':ALL},'name')
@@ -1349,20 +1470,6 @@ class BulkLabels(Tool):
             ]
         )(self.download_data)
 
-        # Clearing markers:
-        self.blueprint.callback(
-            [
-                Input({'type': 'label-marker-delete','index': ALL},'n_clicks')
-            ],
-            [
-                Output({'type': 'map-marker-div','index': ALL},'children'),
-                Output({'type': 'bulk-labels-current-structures','index': ALL},'children'),
-            ],
-            [
-                State({'type': 'map-marker-div','index': ALL},'children')
-            ]
-        )(self.remove_marker)
-
         # Updating label method description
         self.blueprint.callback(
             [
@@ -1372,6 +1479,47 @@ class BulkLabels(Tool):
                 Output({'type': 'bulk-labels-method-explanation','index': ALL},'children')
             ]
         )(self.update_method_explanation)
+
+        # Updating number of markers when one is removed:
+        self.blueprint.callback(
+            [
+                Input({'type': 'bulk-labels-markers','index': ALL},'n_dblclicks')
+            ],
+            [
+                Output({'type': 'bulk-labels-current-structures','index':ALL},'children')
+            ],
+            [
+                State({'type': 'bulk-labels-markers','index': ALL},'data')
+            ]
+        )(self.update_structure_count)
+
+        # Adding current labels to structure data
+        self.blueprint.callback(
+            [
+                Input({'type': 'bulk-labels-add-labels-to-structures','index': ALL},'n_clicks')
+            ],
+            [
+                Output({'type': 'map-annotations-store','index': ALL},'data')
+            ],
+            [
+                State({'type': 'map-annotations-store','index': ALL},'data'),
+                State({'type': 'bulk-labels-labels-store','index': ALL},'data')
+            ]
+        )(self.add_labels_to_structures)
+
+        # Editing current labels by editing the label table
+        self.blueprint.callback(
+            [
+                Input({'type': 'bulk-labels-label-table','index': ALL},'data'),
+            ],
+            [
+                Output({'type': 'bulk-labels-labels-store','index': ALL},'data')
+            ],
+            [
+                State({'type': 'bulk-labels-labels-store','index': ALL},'data'),
+            ]
+        )(self.update_label_table)
+
 
     def update_slide(self, new_annotations: list):
 
@@ -1425,6 +1573,8 @@ class BulkLabels(Tool):
         """
 
         if query_type is None:
+            raise exceptions.PreventUpdate
+        if not type(query_type)==str:
             raise exceptions.PreventUpdate
         
         query_types = {
@@ -1567,21 +1717,22 @@ class BulkLabels(Tool):
             for div in add_property_parent:
                 div_children = div['props']['children']
                 filter_name = div_children[0]['props']['children'][0]['props']['children'][0]['props']['value']
+                
+                if 'props' in div_children[1]['props']['children']:
+                    if 'value' in div_children[1]['props']['children']['props']:
+                        filter_value = div_children[1]['props']['children']['props']['value']
+                    else:
+                        filter_value = div_children[1]['props']['children']['props']['children']['props']['value']
 
-                if 'value' in div_children[1]['props']['children']['props']:
-                    filter_value = div_children[1]['props']['children']['props']['value']
-                else:
-                    filter_value = div_children[1]['props']['children']['props']['children']['props']['value']
-
-                if not any([i is None for i in [filter_name,filter_value]]):
-                    processed_filters.append({
-                        'name': filter_name,
-                        'range': filter_value
-                    })
+                    if not any([i is None for i in [filter_name,filter_value]]):
+                        processed_filters.append({
+                            'name': filter_name,
+                            'range': filter_value
+                        })
 
         return processed_filters
 
-    def parse_spatial_divs(self, spatial_query_parent: list)->list:
+    def parse_spatial_divs(self, spatial_query_parent: list, slide_information:dict)->list:
         """Parsing through parent div containing all spatial queries and returning them in list form
 
         :param spatial_query_parent: Div containing spatial query child divs
@@ -1590,6 +1741,7 @@ class BulkLabels(Tool):
         :rtype: list
         """
         processed_queries = []
+        x_scale = slide_information['x_scale']
         if not spatial_query_parent is None:
             for div in spatial_query_parent:
                 div_children = div['props']['children'][0]['props']['children']
@@ -1605,18 +1757,35 @@ class BulkLabels(Tool):
                         })
                     else:
                         distance_div = div['props']['children'][1]['props']['children']
-                        query_distance = distance_div[0]['props']['value']
+                        if 'value' in distance_div[0]['props']:
+                            query_distance = distance_div[0]['props']['value']
 
-                        if not query_distance is None:
-                            processed_queries.append({
-                                'type': query_type,
-                                'structure': query_structure,
-                                'distance': query_distance*self.x_scale
-                            })
+                            if not query_distance is None:
+                                processed_queries.append({
+                                    'type': query_type,
+                                    'structure': query_structure,
+                                    'distance': query_distance*x_scale
+                                })
 
         return processed_queries
 
-    def update_label_structures(self, update_structures_click:list, include_structures:list, filter_properties:list, spatial_queries:list, current_features:list):
+    def update_filter_data(self, property_filter, sp_query_type, sp_query_structure, sp_query_distance, remove_sq, remove_prop, property_divs: list, spatial_divs: list, slide_information:list):
+
+        property_divs = get_pattern_matching_value(property_divs)
+        spatial_divs = get_pattern_matching_value(spatial_divs)
+
+        slide_information = json.loads(get_pattern_matching_value(slide_information))
+        processed_prop_filters = self.parse_filter_divs(property_divs)
+        processed_spatial_filters = self.parse_spatial_divs(spatial_divs,slide_information)
+
+        new_filter_data = json.dumps({
+            "Spatial": processed_spatial_filters,
+            "Filters": processed_prop_filters
+        })
+
+        return [new_filter_data]
+
+    def update_label_structures(self, update_structures_click:list, include_structures:list, filter_data:list, current_features:list, slide_information:list):
         """Go through current structures and return all those that pass spatial and property filters.
 
         :param update_structures_click: Button clicked
@@ -1639,13 +1808,11 @@ class BulkLabels(Tool):
         include_structures = get_pattern_matching_value(include_structures)
         current_features = json.loads(get_pattern_matching_value(current_features))
 
-        include_properties = get_pattern_matching_value(filter_properties)
-        spatial_queries = get_pattern_matching_value(spatial_queries)
+        slide_information = json.loads(get_pattern_matching_value(slide_information))
 
-        processed_filters = self.parse_filter_divs(include_properties)
-        processed_spatial_queries = self.parse_spatial_divs(spatial_queries)
+        filter_data = json.loads(get_pattern_matching_value(filter_data))
 
-        filtered_geojson, filtered_ref_list = process_filters_queries(processed_filters, processed_spatial_queries, include_structures, current_features)
+        filtered_geojson, filtered_ref_list = process_filters_queries(filter_data["Filters"], filter_data["Spatial"], include_structures, current_features)
 
         new_structures_div = [
             dbc.Alert(
@@ -1653,35 +1820,36 @@ class BulkLabels(Tool):
                 color = 'success' if len(filtered_geojson['features'])>0 else 'danger'
             )
         ]
-
+        
         new_markers_div = [
-                dl.Marker(
-                    position = [
-                        (f['bbox'][0]+f['bbox'][2])/2,
-                        (f['bbox'][1]+f['bbox'][3])/2
-                    ][::-1],
-                    children = [
-                        dl.Popup(
-                            dbc.Button(
-                                'Clear Marker',
-                                color = 'danger',
-                                n_clicks = 0,
-                                id = {'type': f'{self.component_prefix}-label-marker-delete','index': f_idx}
-                            ),
-                            id = {'type':f'{self.component_prefix}-label-marker-popup','index': f_idx}
-                        ),
-                        html.Div(
-                            id = {'type': f'{self.component_prefix}-label-marker-data','index': f_idx},
-                            children = json.dumps(f_data),
-                            style = {'display': 'none'}
-                        )
-                    ],
-                    id = {'type': f'{self.component_prefix}-label-marker','index': f_idx}
-                )
-                for f_idx, (f,f_data) in enumerate(zip(filtered_geojson['features'],filtered_ref_list))
-            ]
+            dl.GeoJSON(
+                data = {
+                    'type': 'FeatureCollection',
+                    'features': [
+                        {
+                            'type': 'Feature',
+                            'geometry': {
+                                'type': 'Point',
+                                'coordinates': [
+                                    (f['bbox'][0]+f['bbox'][2])/2,
+                                    (f['bbox'][1]+f['bbox'][3])/2
+                                ]
+                            },
+                            'properties': f_data | {'_id': f['properties']['_id']}
+                        }
+                        for f,f_data in zip(filtered_geojson['features'],filtered_ref_list)
+                    ]
+                },
+                pointToLayer=self.js_namespace("markerRender"),
+                onEachFeature = self.js_namespace("tooltipMarker"),
+                id = {'type': f'{self.component_prefix}-bulk-labels-markers','index': 0},
+                eventHandlers = {
+                    'dblclick': self.js_namespace('removeMarker')
+                }
+            )
+        ]
 
-        new_labels_source = f'`{json.dumps({"Spatial": processed_spatial_queries,"Filters": processed_filters})}`'
+        new_labels_source = f'`{json.dumps({"Spatial": filter_data["Spatial"],"Filters": filter_data["Filters"]})}`'
 
         if len(filtered_geojson['features'])>0:
             labels_type_disabled = False
@@ -1689,15 +1857,17 @@ class BulkLabels(Tool):
             labels_rationale_disabled = False
             labels_apply_button_disabled = False
             labels_download_button_disabled = False
+            labels_add_to_structures_button_disabled = False
         else:
             labels_type_disabled = True
             labels_text_disabled = True
             labels_rationale_disabled = True
             labels_apply_button_disabled = True
             labels_download_button_disabled = True
+            labels_add_to_structures_button_disabled = True
 
 
-        return [new_structures_div], [new_markers_div], [new_labels_source], [labels_type_disabled], [labels_text_disabled], [labels_rationale_disabled], [labels_apply_button_disabled], [labels_download_button_disabled]
+        return [new_structures_div], [new_markers_div], [new_labels_source], [labels_type_disabled], [labels_text_disabled], [labels_rationale_disabled], [labels_apply_button_disabled], [labels_download_button_disabled], [labels_add_to_structures_button_disabled]
 
     def update_label_properties(self, add_click:list, remove_click:list, property_info:list):
         """Adding/removing property filter dropdown
@@ -1715,7 +1885,7 @@ class BulkLabels(Tool):
         
         properties_div = Patch()
         add_click = get_pattern_matching_value(add_click)
-        property_info = json.loads(get_pattern_matching_value(property_info))
+        property_info = json.loads(get_pattern_matching_value(property_info))['property_info']
 
         if 'bulk-labels-add-property-icon' in ctx.triggered_id['type']:
 
@@ -1777,7 +1947,7 @@ class BulkLabels(Tool):
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
-        property_info = json.loads(get_pattern_matching_value(property_info))
+        property_info = json.loads(get_pattern_matching_value(property_info))['property_info']
         property_values = property_info[property_value]
 
         if 'min' in property_values:
@@ -1810,36 +1980,13 @@ class BulkLabels(Tool):
                 )
             )
 
-        return values_selector
+        return values_selector 
 
-    def parse_marker_div(self, parent_marker_div):
-        """Parse div containing markers, extracting position and data from each
-
-        :param parent_marker_div: Div containing all current Markers
-        :type parent_marker_div: list
-        :return: Coordinates for all markers and associated data (source structure and index)
-        :rtype: tuple
-        """
-
-        marker_coords = []
-        marker_data = []
-        for p in parent_marker_div:
-            coords = p['props']['position']
-            data = json.loads(p['props']['children'][-1]['props']['children'])
-            
-            marker_coords.append(
-                [coords[1]/self.x_scale,coords[0]/self.y_scale]
-            )
-            marker_data.append(data)
-            
-
-        return marker_coords, marker_data        
-
-    def search_labels(self, marker_centroids, current_labels, label_type, label_text, label_method):
+    def search_labels(self, marker_features, current_labels, label_type, label_text, label_method):
         """Checking current labels and adding the new label based on label_method (inclusive, exclusive, or unlabeled).
 
-        :param marker_centroids: Centroids for all new markers
-        :type marker_centroids: list
+        :param marker_features: GeoJSON Features for new markers
+        :type marker_features: list
         :param current_labels: List of all current labels (dicts with keys: centroid, labels)
         :type current_labels: list
         :param label_type: String corresponding to the type for the new label
@@ -1856,8 +2003,10 @@ class BulkLabels(Tool):
         else:
             current_labels['labels'] = []
             current_centroids = []
-        for m_idx, m in enumerate(marker_centroids):
-            if m in current_centroids:
+        for m_idx, m in enumerate(marker_features):
+            m_centroid = m['geometry']['coordinates']
+            m_id = m['properties']['_id']
+            if m_centroid in current_centroids:
                 cent_idx = current_centroids.index(m)
                 if label_method=='in':
                     # Adding inclusive label to current set of labels 
@@ -1893,7 +2042,8 @@ class BulkLabels(Tool):
             else:
                 current_labels['labels'].append(
                     {
-                        'centroid': m,
+                        'centroid': m_centroid,
+                        '_id': m_id,
                         'labels': [{
                             'type': label_type,
                             'value': label_text
@@ -1903,7 +2053,7 @@ class BulkLabels(Tool):
 
         return current_labels
 
-    def apply_labels(self, button_click, current_markers, current_data, label_type, label_text, label_rationale, label_source, label_method, current_annotations):
+    def apply_labels(self, button_click, current_markers, current_data, label_type, label_text, label_rationale, label_source, label_method, slide_information):
         """Applying current label to marked structures
 
         :param button_click: Button clicked
@@ -1941,58 +2091,19 @@ class BulkLabels(Tool):
         label_rationale = get_pattern_matching_value(label_rationale)
         label_source = json.loads(get_pattern_matching_value(label_source).replace('`',''))
         current_data = json.loads(get_pattern_matching_value(current_data))
-        current_annotations = json.loads(get_pattern_matching_value(current_annotations))
         current_markers = get_pattern_matching_value(current_markers)
+        slide_information = json.loads(get_pattern_matching_value(slide_information))
 
-        marker_positions, marker_data = self.parse_marker_div(current_markers)
-        labeled_items = self.search_labels(marker_positions, current_data, label_type, label_text, label_method)
+        scaled_markers = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/slide_information['x_scale'],c[1]/slide_information['y_scale']),g),current_markers)
+        
+        labeled_items = self.search_labels(scaled_markers['features'], current_data, label_type, label_text, label_method)
 
-        #TODO: Applying property to structures
-        ann_names_order = [i['properties']['name'] for i in current_annotations]
-        apply_label_dict = {'type': label_type, 'value': label_text}
-        for m_d in marker_data:
-            ann_idx = ann_names_order.index(m_d['name'])
-            if label_method=='in':
-                if 'fusion_labels' in current_annotations[ann_idx]['features'][m_d['feature_index']]['properties']:
-                    current_annotations[ann_idx]['features'][m_d['feature_index']]['properties']['fusion_labels'].append(
-                        apply_label_dict
-                    )
-                else:
-                    current_annotations[ann_idx]['features'][m_d['feature_index']]['properties']['fusion_labels'] = [
-                        apply_label_dict
-                    ]
-            elif label_method=='over':
-                if 'fusion_labels' in current_annotations[ann_idx]['features'][m_d['feature_index']]['properties']:
-                    if any([label_type==i['type'] for i in current_annotations[ann_idx]['features'][m_d['feature_index']]['properties']['fusion_labels']]):
-                        current_annotations[ann_idx]['features'][m_d['feature_index']]['properties']['fusion_labels'] = [
-                            i if not i['type']==label_type else apply_label_dict
-                            for i in current_annotations[ann_idx]['features'][m_d['feature_index']]['properties']['fusion_labels']
-                        ]
-                    else:
-                        current_annotations[ann_idx]['features'][m_d['feature_index']]['properties']['fusion_labels'].append(
-                            apply_label_dict
-                        )
-                else:
-                    current_annotations[ann_idx]['features'][m_d['feature_index']]['properties']['fusion_labels'] = [
-                        apply_label_dict
-                    ]
-            elif label_method=='un':
-                if 'fusion_labels' in current_annotations[ann_idx]['features'][m_d['feature_index']]['properties']['fusion_labels']:
-                    if not any([label_type==i['type'] for i in current_annotations[ann_idx]['features'][m_d['feature_index']]['properties']['fusion_labels']]):
-                        current_annotations[ann_idx]['features'][m_d['feature_index']]['properties']['fusion_labels'].append(
-                            apply_label_dict
-                        )
-                else:
-                    current_annotations[ann_idx]['features'][m_d['feature_index']]['properties']['fusion_labels'] = [
-                        apply_label_dict
-                    ]
-
-
-        if 'labels' in current_data:
+        if 'labels' in current_data and 'labels_metadata' in current_data:
             current_data['labels'] = labeled_items['labels']
             current_data['labels_metadata'].append(
                 {
                     'type': label_type,
+                    'label': label_text,
                     'rationale': label_rationale,
                     'source': label_source
                 }
@@ -2002,15 +2113,56 @@ class BulkLabels(Tool):
             current_data['labels_metadata'] = [
                 {
                     'type': label_type,
+                    'label': label_text,
                     'rationale': label_rationale,
                     'source': label_source
                 }
             ]
 
         new_data = json.dumps(current_data)
-        new_annotations = json.dumps(current_annotations)
 
-        return [new_data], [new_annotations]
+        # Creating a table for count of unique labels:
+        labels = []
+        for l in labeled_items['labels']:
+            for m in l['labels']:
+                # Accounting for multiple values for the same "type"
+                l_dict = {
+                    'Label Type': m['type'],
+                    'Value': m['value']
+                }
+
+            labels.append(l_dict)
+
+        label_count_df = pd.DataFrame.from_records(labels).groupby(by='Label Type')
+        label_counts = label_count_df.value_counts(['Value']).to_frame()
+        label_counts.reset_index(inplace=True)
+        label_counts.columns = ['Label Type','Label Value','Count']
+
+        label_count_table = dash_table.DataTable(
+            columns = [{'name':i,'id':i,'selectable':True} for i in label_counts],
+            data = label_counts.to_dict('records'),
+            editable=True,   
+            row_deletable=True,                                     
+            sort_mode='multi',
+            sort_action = 'native',
+            page_current=0,
+            page_size=5,
+            style_cell = {
+                'overflow':'hidden',
+                'textOverflow':'ellipsis',
+                'maxWidth':0
+            },
+            tooltip_data = [
+                {
+                    column: {'value':str(value),'type':'markdown'}
+                    for column, value in row.items()
+                } for row in label_counts.to_dict('records')
+            ],
+            tooltip_duration = None,
+            id = {'type': f'{self.component_prefix}-bulk-labels-label-table','index':0}
+        )
+
+        return [new_data], ['success'], [label_count_table]
 
     def refresh_labels(self, refresh_click, structure_options):
         """Clear current label components and start over
@@ -2036,6 +2188,8 @@ class BulkLabels(Tool):
             rationale_disable = True
             label_source = '`Label Source`'
             apply_disable = True
+            apply_style = 'primary'
+            markers = []
 
             include_options = [{'label': i, 'value': i} for i in structure_options]
             if len(ctx.outputs_list[13])>0:
@@ -2043,7 +2197,7 @@ class BulkLabels(Tool):
             else:
                 spatial_queries_structures = []
 
-            return [include_structures], [spatial_queries], [add_property], [current_structures],[label_type],[type_disable],[label_text], [text_disable], [label_rationale], [rationale_disable], [label_source], [apply_disable], [include_options], spatial_queries_structures
+            return [include_structures], [spatial_queries], [add_property], [current_structures],[label_type],[type_disable],[label_text], [text_disable], [label_rationale], [rationale_disable], [label_source], [apply_disable], [include_options], spatial_queries_structures, [apply_style], [markers]
         else:
             raise exceptions.PreventUpdate
 
@@ -2064,32 +2218,118 @@ class BulkLabels(Tool):
         else:
             raise exceptions.PreventUpdate
 
-    def remove_marker(self, clear_click, current_markers):
-        """Removing a marker from the current map
+    def update_structure_count(self, marker_dblclicked,marker_geo):
 
-        :param clear_click: Clear Marker button clicked
-        :type clear_click: list
-        :param current_markers: All current markers in the slide map
-        :type current_markers: list
-        :return: Updated set of markers and count of markers
-        :rtype: tuple
-        """
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
-        n_marked = len(get_pattern_matching_value(current_markers))
-
-        patched_list = Patch()
-        values_to_remove = np.where(clear_click)[0].tolist()
-        for v in values_to_remove:
-            del patched_list[v]
-        
-        new_structures_div = [
+        marker_geo = get_pattern_matching_value(marker_geo)
+        new_structure_count_children = [
             dbc.Alert(
-                f'{n_marked-1} Structures Included!',
-                color = 'success' if (n_marked-1)>0 else 'danger'
+                f'{len(marker_geo["features"])} Structures Included!',
+                color = 'success' if len(marker_geo["features"])>0 else 'danger'
             )
         ]
 
-        return [patched_list], [new_structures_div]
+        return new_structure_count_children
+    
+    def add_labels_to_structures(self, button_click, current_annotations, current_labels):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        current_annotations = json.loads(get_pattern_matching_value(current_annotations))
+        current_labels = json.loads(get_pattern_matching_value(current_labels))
+
+        label_ids = [i['_id'] for i in current_labels['labels']]
+        for c in current_annotations:
+            feature_ids = [i['properties']['_id'] for i in c['features']]
+            id_intersect = list(set(label_ids) & set(feature_ids))
+            if len(id_intersect)>0:
+                for id in id_intersect:
+                    feature_label = current_labels['labels'][label_ids.index(id)]
+                    print(feature_label)
+                    c['features'][feature_ids.index(id)]['properties'] = c['features'][feature_ids.index(id)]['properties'] | current_labels['labels'][label_ids.index(id)]
+
+        updated_annotations = json.dumps(current_annotations)
+
+        return [updated_annotations]
+
+    def update_label_table(self, table_data, current_labels):
+        
+        table_data = get_pattern_matching_value(table_data)
+        current_labels = json.loads(get_pattern_matching_value(current_labels))
+        if not table_data is None:
+            included_label_types = sorted(list(set([i['Label Type'] for i in table_data])))
+            current_label_types = sorted(list(set([i['type'] for i in current_labels['labels_metadata']])))
+            
+            included_label_values = []
+            current_label_values = []
+            for t in included_label_types:
+                included_label_values.extend(sorted([i['Label Value'] for i in table_data if i['Label Type']==t]))
+                current_label_values.extend(sorted([i['label'] for i in current_labels['labels_metadata'] if i['type']==t]))
+
+            # Removing not-included label from labels and label metadata
+            if not included_label_types==current_label_types or not included_label_values==current_label_values:
+                # If the len of included_label_types does not equal the len of current_label_types then there has been a type deletion
+                deletion = False
+                replation = False
+                if not len(included_label_types)==len(current_label_types):
+                    # This would be a deletion of one label type/value
+                    #print(f'type deletion: {included_label_types}, {current_label_types}')
+                    deletion = True
+                    replation = False
+                else:
+                    # If the len of the types are the same length then check if they contain the same values:
+                    if not included_label_types==current_label_types:
+                        # This is a type replation
+                        #print(f'type replation: {included_label_types}, {current_label_types}')
+                        deletion = False
+                        replation = {'type': [i for i in included_label_types if not i in current_label_types][0]}
+
+                    else:
+                        # In this case there is most likely a value replation
+                        if not included_label_values==current_label_values:
+                            #print(f'value replation: {included_label_values}, {current_label_values}')
+                            deletion = False
+                            replation = {'value': [i for i in included_label_values if not i in current_label_values][0]}
+
+                for l_idx,l in enumerate(current_labels['labels']):
+                    for l_m_idx,l_m in enumerate(l['labels']):
+                        if not l_m['type'] in included_label_types:
+                            if deletion:
+                                del current_labels['labels'][l_idx]['labels'][l_m_idx]
+                            elif replation:
+                                current_labels['labels'][l_idx]['labels'][l_m_idx]['type'] = replation['type']
+                        else:
+                            if not l_m['value'] in included_label_values:
+                                if deletion:
+                                    del current_labels['labels'][l_idx]['labels'][l_m_idx]
+                                elif replation:
+                                    current_labels['labels'][l_idx]['labels'][l_m_idx]['value'] = replation['value']
+
+                    if len(l['labels'])==0:
+                        del current_labels['labels'][l_idx]
+                
+                if deletion:
+                    current_labels['labels_metadata'] = [i for i in current_labels['labels_metadata'] if i['label'] in included_label_values and i['type'] in included_label_types]
+                elif replation:
+                    if 'type' in replation:
+                        current_labels['labels_metadata'] = [i if i['type'] in included_label_types else i | replation for i in current_labels['labels_metadata']]
+                    elif 'value' in replation:
+                        current_labels['labels_metadata'] = [i if i['label'] in included_label_values else i | {'label': replation['value']} for i in current_labels['labels_metadata']]
+                
+                updated_labels = json.dumps(current_labels)
+            else:
+                raise exceptions.PreventUpdate
+        else:
+            updated_labels = json.dumps({})
+
+        return [updated_labels]
+
+
+
+
+
+
 

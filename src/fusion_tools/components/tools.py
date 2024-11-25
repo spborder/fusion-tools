@@ -55,7 +55,7 @@ class OverlayOptions(Tool):
     :type Tool: None
     """
     def __init__(self,
-                 ignore_list: list = [],
+                 ignore_list: list = ["_id", "_index"],
                  property_depth: int = 4
                  ):
         """Constructor method
@@ -85,7 +85,7 @@ class OverlayOptions(Tool):
             ]
         )
 
-        self.js_namespace = Namespace("fusionTools","default")
+        self.js_namespace = Namespace("fusionTools","slideMap")
 
         # Add callbacks here
         self.get_callbacks()
@@ -281,6 +281,36 @@ class OverlayOptions(Tool):
                                     ]
                                 ),
                                 dbc.AccordionItem(
+                                    title = dcc.Markdown('*Manual ROI Options*'),
+                                    children = [
+                                        dbc.Card([
+                                            dbc.CardBody([
+                                                # Whether to separate structures or not
+                                                # Whether to summarize or not
+                                                dmc.Switch(
+                                                    size = 'lg',
+                                                    radius = 'lg',
+                                                    label = 'Separate Intersecting Structures',
+                                                    onLabel="ON",
+                                                    offLabel="OFF",
+                                                    description = "Separates aggregated properties by which structure they are derived from",
+                                                    id = {'type': 'manual-roi-separate-switch','index':0}
+                                                ),
+                                                html.Hr(),
+                                                dmc.Switch(
+                                                    size = 'lg',
+                                                    radius = 'lg',
+                                                    label = "Summarize Aggregated Properties",
+                                                    onLabel = "ON",
+                                                    offLabel = "OFF",
+                                                    description = "Whether to report summaries of aggregated properties or just the MEAN",
+                                                    id = {'type': 'manual-roi-summarize-switch','index': 0}
+                                                )
+                                            ])
+                                        ])
+                                    ]
+                                ),
+                                dbc.AccordionItem(
                                     title = dcc.Markdown('*Export Layers*'),
                                     children = [
                                         dbc.Card([
@@ -460,7 +490,7 @@ class OverlayOptions(Tool):
                     dmc.ColorPicker(
                         id = {'type': f'{self.component_prefix}-feature-lineColor','index': f_idx},
                         format = 'hex',
-                        value = '#FFFFFF',
+                        value = '#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255)),
                         fullWidth=True
                     ),
                     dbc.Button(
@@ -498,6 +528,7 @@ class OverlayOptions(Tool):
         add_filter_click = get_pattern_matching_value(add_filter_click)
         overlay_options = get_pattern_matching_value(overlay_options)
         overlay_info_state = json.loads(get_pattern_matching_value(overlay_info_state))
+        #TODO: See if these can be added as an "OR" or "AND" to get more specific filtering 
         if len(list(overlay_info_state.keys()))==0:
             raise exceptions.PreventUpdate
 
@@ -981,7 +1012,7 @@ class PropertyViewer(Tool):
     """
     def __init__(self,
                  ignore_list: list = [],
-                 property_depth: int = 4
+                 property_depth: int = 6
                  ):
         """Constructor method
 
@@ -1584,7 +1615,7 @@ class PropertyPlotter(Tool):
     """
     def __init__(self,
                  ignore_list: list = [],
-                 property_depth: int = 4
+                 property_depth: int = 6
                  ):
         """Constructor method
 
@@ -2139,7 +2170,7 @@ class PropertyPlotter(Tool):
                 text = '<br>'.join(
                     textwrap.wrap(
                         f'{property_column}',
-                        width=15
+                        width=80
                     )
                 ),
                 font = dict(size = 10)
@@ -2148,7 +2179,7 @@ class PropertyPlotter(Tool):
                 text = '<br>'.join(
                     textwrap.wrap(
                         label_col,
-                        width=15
+                        width=80
                     )
                 ) if not label_col is None else 'Group',
                 font = dict(size = 10)
@@ -2184,7 +2215,7 @@ class PropertyPlotter(Tool):
                     title = '<br>'.join(
                         textwrap.wrap(
                             f'Scatter plot of {plot_cols[0]} and {plot_cols[1]} labeled by {label_col}',
-                            width = 30
+                            width = 60
                             )
                         )
                 )
@@ -2233,7 +2264,7 @@ class PropertyPlotter(Tool):
                     title = '<br>'.join(
                         textwrap.wrap(
                             f'Scatter plot of {plot_cols[0]} and {plot_cols[1]}',
-                            width = 30
+                            width = 60
                             )
                         )
                 )

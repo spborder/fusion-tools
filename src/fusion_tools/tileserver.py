@@ -14,7 +14,6 @@ import numpy as np
 import uvicorn
 
 from fusion_tools.utils.shapes import load_annotations, convert_histomics
-from fusion_tools.components.maps import SlideImageOverlay
 
 class TileServer:
     """Components which pull information from a slide(s)
@@ -75,16 +74,16 @@ class LocalTileServer(TileServer):
     def __len__(self):
         return len(self.tile_sources)
     
-    def add_new_image(self,new_image_path:str, new_annotations:Union[str,list,dict,None]):
+    def add_new_image(self,new_image_path:str, new_annotations:Union[str,list,dict,None], new_metadata:Union[dict,None] = None):
 
         self.local_image_paths.append(new_image_path)
         self.names.append(new_image_path.split(os.sep)[-1])
         new_tile_source = large_image.open(new_image_path)
-        new_metadata = new_tile_source.getMetadata()
+        new_tiles_metadata = new_tile_source.getMetadata()
 
         # Treating 3-frame images as RGB by default
-        if 'frames' in new_metadata:
-            if len(new_metadata['frames'])==3:
+        if 'frames' in new_tiles_metadata:
+            if len(new_tiles_metadata['frames'])==3:
                 new_tile_source = large_image.open(
                     new_image_path,
                     style = {
@@ -99,7 +98,10 @@ class LocalTileServer(TileServer):
                 )
 
         self.tile_sources.append(new_tile_source)
-        self.tiles_metadatas.append(new_tile_source.getMetadata())
+        if not new_metadata is None:
+            self.tiles_metadata.append(new_tiles_metadata | new_metadata)
+        else:
+            self.tiles_metadatas.append(new_tiles_metadata)
 
         if not new_annotations is None:
             if type(new_annotations)==str:
@@ -110,13 +112,13 @@ class LocalTileServer(TileServer):
                     print(f'Unrecognized annotation format: {new_annotations}')
                     self.annotations.append([])
 
-            elif isinstance(new_annotations,SlideImageOverlay):
+            elif hasattr(new_annotations,"to_dict"):
                 self.annotations.append([new_annotations.to_dict()])
 
             elif type(new_annotations)==list:
                 processed_anns = []
                 for n in new_annotations:
-                    if isinstance(n,SlideImageOverlay):
+                    if hasattr(n,"to_dict"):
                         processed_anns.append(n.to_dict())
                     elif type(n)==dict:
                         if 'annotation' in n:
@@ -216,11 +218,13 @@ class LocalTileServer(TileServer):
         
         if image<len(self.tile_sources) and image>=0:
             try:
+                if not style=='':
+                    self.tile_sources[image] = large_image.open(self.local_image_paths[image],style=json.loads(style))
+
                 raw_tile = self.tile_sources[image].getTile(
                             x = x,
                             y = y,
                             z = z,
-                            style = json.loads(style) if not style=='' else None
                         )
                 
             except large_image.exceptions.TileSourceXYZRangeError:
@@ -258,6 +262,8 @@ class LocalTileServer(TileServer):
         :rtype: Response
         """
         if image<len(self.tile_sources) and image>=0:
+            if not style=='':
+                self.tile_sources[image] = large_image.open(self.local_image_paths[image],style = json.loads(style))
             image_region, mime_type = self.tile_sources[image].getRegion(
                 region = {
                     'left': left,
@@ -265,7 +271,6 @@ class LocalTileServer(TileServer):
                     'right': right,
                     'bottom': bottom
                 },
-                style = json.loads(style)
             )
 
             return Response(content = image_region, media_type = 'image/png')

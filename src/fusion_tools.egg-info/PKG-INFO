@@ -1,6 +1,6 @@
 Metadata-Version: 2.1
 Name: fusion-tools
-Version: 2.1.1
+Version: 2.4.3
 Summary: Modular visualization and analysis dashboard creation for high-resolution microscopy images
 Home-page: https://github.com/spborder/fusion-tools
 Author: Sam Border
@@ -9,29 +9,33 @@ Classifier: Development Status :: 4 - Beta
 Classifier: Programming Language :: Python :: 3
 Classifier: License :: OSI Approved :: Apache Software License
 Classifier: Operating System :: OS Independent
+Requires-Python: >=3.8
 Description-Content-Type: text/markdown
 License-File: LICENSE
 Requires-Dist: lxml>=4.9.2
 Requires-Dist: geojson>=3.0.1
 Requires-Dist: shapely>=2.0.1
+Requires-Dist: anndata
 Requires-Dist: geopandas
 Requires-Dist: girder-client
 Requires-Dist: numpy>=1.20.0
 Requires-Dist: large-image[common]
 Requires-Dist: wsi-annotations-kit
-Requires-Dist: dash-leaflet[all]>=1.0.15
-Requires-Dist: dash-extensions
-Requires-Dist: dash-bootstrap-components
-Requires-Dist: dash-mantine-components>=0.14.4
-Requires-Dist: dash-treeview-antd
 Requires-Dist: requests
-Requires-Dist: uuid
+Requires-Dist: uuid>=1.30
 Requires-Dist: scikit-image
-Requires-Dist: umap-learn
-Requires-Dist: fastapi>=0.103.2
-Requires-Dist: uvicorn
-Requires-Dist: statsmodels
+Requires-Dist: umap-learn>=0.5.6
+Requires-Dist: statsmodels>=0.14.2
 Requires-Dist: typing-extensions>=4.8.0
+Provides-Extra: interactive
+Requires-Dist: dash-leaflet[all]>=1.0.15; extra == "interactive"
+Requires-Dist: dash>=2.18.1; extra == "interactive"
+Requires-Dist: dash-extensions>=1.0.18; extra == "interactive"
+Requires-Dist: dash_mantine_components>=0.14.4; extra == "interactive"
+Requires-Dist: dash-bootstrap-components>=1.6.0; extra == "interactive"
+Requires-Dist: dash_treeview_antd>=0.0.1; extra == "interactive"
+Requires-Dist: fastapi>=0.103.2; extra == "interactive"
+Requires-Dist: uvicorn>=0.30.6; extra == "interactive"
 
 # *fusion-tools*
 Modular visualization and analysis dashboard creation for high-resolution microscopy images.
@@ -53,7 +57,6 @@ One such example would be the `Visualization` and `SlideMap` class:
 
 ```python
 from fusion_tools import Visualization
-from fusion_tools.tileserver import LocalTileServer
 from fusion_tools.components import SlideMap
 
 vis_session = Visualization(
@@ -118,7 +121,6 @@ You can also access remote tile servers (either through `DSATileServer` or `Cust
 ```python
 
 from fusion_tools import Visualization, DSAHandler
-from fusion_tools.tileserver import DSATileServer
 from fusion_tools.components import SlideMap
 
 # Grabbing first item from demo DSA instance
@@ -163,7 +165,6 @@ You can also use some of `segmentation` components for adding labels and annotat
 ```python
 
 from fusion_tools import Visualization, DSAHandler
-from fusion_tools.tileserver import DSATileServer
 from fusion_tools.components import SlideMap, FeatureAnnotation, BulkLabels
 
 # Grabbing first item from demo DSA instance
@@ -201,6 +202,64 @@ vis_session.start()
 
 ```
 
+### New in *fusion-tools*>2.0.0!
+Now you can add multiple slides to a single visualization session and you can even view them side-by-side!
+- By default, components in the same *row* are **linked**, or they can interact with each other through callbacks. This can be updated using the "linkage" kwarg when initializing a `Visualization` session.
+- If two of the same types of components (e.g., two `SlideMap` components) are placed in the same row and "linkage" is set to "row", callbacks will not work. **Beware!**
+
+```python
+
+from fusion_tools import Visualization
+from fusion_tools.components import SlideMap, OverlayOptions, PropertyViewer, PropertyPlotter
+from fusion_tools.handler import DSAHandler
+
+# Mixed types of slides and annotations
+local_slide_list = ['slide1.tif','slide2.ome.tif','slide3.svs']
+local_annotations_list = ['slide1_annotations.xml','slide2 annotations.json','annotations for slide3.h5ad']
+
+dsa_handler = DSAHandler(
+    girderApiUrl = 'http://example_dsa_address.com/api/v1'
+)
+
+dsa_items_list = [
+    'item_uuid_1',
+    'item_uuid_2'
+]
+
+dsa_tileservers = [dsa_handler.get_tile_server(i) for i in dsa_items_list]
+
+# Setting linkage to "col" to enable side-by-side visualization
+vis_sess = Visualization(
+    local_slides = local_slide_list,
+    local_annotations = local_annotations_list,
+    tileservers = dsa_tileservers,
+    linkage = 'col',
+    components = [
+        [
+            [
+                SlideMap(),
+                OverlayOptions(),
+                PropertyViewer(),
+                PropertyPlotter()
+            ],            
+            [
+                SlideMap(),
+                OverlayOptions(),
+                PropertyViewer(),
+                PropertyPlotter()
+            ]
+        ]
+    ],
+    app_options={'port': 8050}
+)
+
+vis_sess.start()
+
+
+```
+<div align="center">
+    <img src="docs/images/side-by-side-view.PNG">
+</div>
 
 
 ## Contributing

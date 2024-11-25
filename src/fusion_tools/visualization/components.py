@@ -29,15 +29,12 @@ class Visualization:
 
         components = [
             [
-                SlideMap(
-                    tile_server = LocalTileServer("/path/to/slide.svs"),
-                    annotations = geojson_list
-                )
+                SlideMap()
             ],
             [
                 [
-                    OverlayOptions(geojson_list),
-                    PropertyViewer(geojson_list)
+                    OverlayOptions(),
+                    PropertyViewer()
                 ]
             ]
         ]
@@ -49,6 +46,7 @@ class Visualization:
     def __init__(self,
                  local_slides: Union[list,str,None] = None,
                  local_annotations: Union[list,dict,None] = None,
+                 slide_metadata: Union[list,dict,None] = None,
                  tileservers: Union[list,TileServer,None] = None,
                  components: list = [],
                  app_options: dict = {},
@@ -56,13 +54,24 @@ class Visualization:
                  ):
         """Constructor method
 
-        :param components: List of rows, columns, and tabs to include current visualization session
-        :type components: list
-        :param app_options: Additional application options, defaults to {}
+        :param local_slides: Filepath for individual slide or list of filepaths stored locally, defaults to None
+        :type local_slides: Union[list,str,None], optional
+        :param local_annotations: List of processed annotations or filepaths for annotations stored locally (aligns with local_slides), defaults to None
+        :type local_annotations: Union[list,dict,None], optional
+        :param slide_metadata: List or single dictionary containing slide-level metadata keys and values, defaults to None
+        :type slide_metadata: Union[list,dict,None], optional
+        :param tileservers: Single tileserver or multiple tileservers, defaults to None
+        :type tileservers: Union[list,TileServer,None], optional
+        :param components: List of components in layout format (rows-->columns-->tabs for nested lists), defaults to []
+        :type components: list, optional
+        :param app_options: Additional options for the running visualization session, defaults to {}
         :type app_options: dict, optional
+        :param linkage: Which levels of components are linked through callbacks (can be 'row','col',or 'tab'), defaults to 'row'
+        :type linkage: str, optional
         """
 
         self.local_slides = local_slides
+        self.slide_metadata = slide_metadata
         self.tileservers = tileservers
         self.local_annotations = local_annotations
         self.components = components
@@ -95,7 +104,9 @@ class Visualization:
                 MultiplexerTransform()
             ],
             'external_scripts': [
-                'https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.1.0/chroma.min.js'
+                'https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.1.0/chroma.min.js',
+                'https://cdn.jsdelivr.net/npm/spatialmerge',
+                'https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js'
             ]
         }
 
@@ -129,19 +140,23 @@ class Visualization:
         if not self.local_slides is None:
             if self.local_annotations is None:
                 self.local_annotations = [None]*len(self.local_slides)
+            
+            if self.slide_metadata is None:
+                self.slide_metadata = [None]*len(self.local_slides)
 
             self.local_tile_server = LocalTileServer(
                 tile_server_port=self.app_options['port'] if not self.app_options['jupyter'] else self.app_options['port']+10,
                 host = self.app_options['host']
             )
 
-            for s_idx,(s,anns) in enumerate(zip(self.local_slides,self.local_annotations)):
+            for s_idx,(s,anns,meta) in enumerate(zip(self.local_slides,self.local_annotations,self.slide_metadata)):
                 slide_dict = {}
                 if not s is None:
                     # Adding this slide to list of local slides
                     self.local_tile_server.add_new_image(
                         new_image_path = s,
-                        new_annotations = anns
+                        new_annotations = anns,
+                        new_metadata = meta
                     )
 
                     slide_dict = {
@@ -183,6 +198,15 @@ class Visualization:
                         'regions_url': t.regions_url,
                         'metadata_url': t.metadata_url,
                         'annotations_url': t.annotations_url
+                    })
+                elif type(t)==CustomTileServer:
+                    slide_store.append({
+                        'start_idx': (s_idx+t_idx+t),
+                        'name': t.name,
+                        'tiles_url': t.tiles_url,
+                        'regions_url': t.regions_url if hasattr(t,'regions_url') else None,
+                        'metadata_url': t.metadata_url if hasattr(t,'metadata_url') else None,
+                        'annotations_url': t.annotations_url if hasattr(t,'annotations_url') else None
                     })
 
         return slide_store

@@ -1,5 +1,5 @@
 window.fusionTools = Object.assign({}, window.fusionTools, {
-    default: {
+    slideMap: {
         centerMap: function(e, ctx) {
             ctx.map.flyTo([-120, 120], 1);
         },
@@ -40,14 +40,18 @@ window.fusionTools = Object.assign({}, window.fusionTools, {
                 var overlayVal = Number.Nan;
                 if (overlayProp) {
                     if (overlayProp.name) {
+                        //TODO: Update this for different types of nested props (--+ = list, --# = external reference object)
                         var overlaySubProps = overlayProp.name.split(" --> ");
                         var prop_dict = feature.properties;
                         for (let i = 0; i < overlaySubProps.length; i++) {
-                            if (overlaySubProps[i] in prop_dict) {
-                                var prop_dict = prop_dict[overlaySubProps[i]];
-                                var overlayVal = prop_dict;
-                            } else {
-                                var overlayVal = Number.Nan;
+                            if (prop_dict == prop_dict && prop_dict != null && typeof prop_dict === 'object') {
+                                if (overlaySubProps[i] in prop_dict) {
+                                    var prop_dict = prop_dict[overlaySubProps[i]];
+                                    var overlayVal = prop_dict;
+                                } else {
+                                    prop_dict = Number.Nan;
+                                    var overlayVal = Number.Nan;
+                                }
                             }
                         }
                     } else {
@@ -80,7 +84,6 @@ window.fusionTools = Object.assign({}, window.fusionTools, {
                 return style;
             }
 
-
             ,
         featureFilter: function(feature, context) {
                 const {
@@ -99,19 +102,23 @@ window.fusionTools = Object.assign({}, window.fusionTools, {
                         // Iterating through filterVals list
                         var filter = filterVals[i];
                         if (filter.name) {
+                            //TODO: Update this for different types of nested props (--+ = list, --# = external reference object)
                             var filterSubProps = filter.name.split(" --> ");
                             var prop_dict = feature.properties;
                             for (let j = 0; j < filterSubProps.length; j++) {
-                                if (filterSubProps[j] in prop_dict) {
-                                    var prop_dict = prop_dict[filterSubProps[j]];
-                                    var testVal = prop_dict;
-                                } else {
-                                    returnFeature = returnFeature & false;
+                                if (prop_dict == prop_dict && prop_dict != null && typeof prop_dict === 'object') {
+                                    if (filterSubProps[j] in prop_dict) {
+                                        var prop_dict = prop_dict[filterSubProps[j]];
+                                        var testVal = prop_dict;
+                                    } else {
+                                        prop_dict = Number.Nan;
+                                        returnFeature = returnFeature & false;
+                                    }
                                 }
                             }
                         }
 
-                        if (filter.range) {
+                        if (filter.range && returnFeature) {
                             if (typeof filter.range[0] === 'number') {
                                 if (testVal < filter.range[0]) {
                                     returnFeature = returnFeature & false;
@@ -132,7 +139,6 @@ window.fusionTools = Object.assign({}, window.fusionTools, {
                     return returnFeature;
                 }
                 return returnFeature;
-
             }
 
             ,

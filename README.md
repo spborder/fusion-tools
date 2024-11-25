@@ -18,7 +18,6 @@ One such example would be the `Visualization` and `SlideMap` class:
 
 ```python
 from fusion_tools import Visualization
-from fusion_tools.tileserver import LocalTileServer
 from fusion_tools.components import SlideMap
 
 vis_session = Visualization(
@@ -83,7 +82,6 @@ You can also access remote tile servers (either through `DSATileServer` or `Cust
 ```python
 
 from fusion_tools import Visualization, DSAHandler
-from fusion_tools.tileserver import DSATileServer
 from fusion_tools.components import SlideMap
 
 # Grabbing first item from demo DSA instance
@@ -128,7 +126,6 @@ You can also use some of `segmentation` components for adding labels and annotat
 ```python
 
 from fusion_tools import Visualization, DSAHandler
-from fusion_tools.tileserver import DSATileServer
 from fusion_tools.components import SlideMap, FeatureAnnotation, BulkLabels
 
 # Grabbing first item from demo DSA instance
@@ -166,6 +163,64 @@ vis_session.start()
 
 ```
 
+### New in *fusion-tools*>2.0.0!
+Now you can add multiple slides to a single visualization session and you can even view them side-by-side!
+- By default, components in the same *row* are **linked**, or they can interact with each other through callbacks. This can be updated using the "linkage" kwarg when initializing a `Visualization` session.
+- If two of the same types of components (e.g., two `SlideMap` components) are placed in the same row and "linkage" is set to "row", callbacks will not work. **Beware!**
+
+```python
+
+from fusion_tools import Visualization
+from fusion_tools.components import SlideMap, OverlayOptions, PropertyViewer, PropertyPlotter
+from fusion_tools.handler import DSAHandler
+
+# Mixed types of slides and annotations
+local_slide_list = ['slide1.tif','slide2.ome.tif','slide3.svs']
+local_annotations_list = ['slide1_annotations.xml','slide2 annotations.json','annotations for slide3.h5ad']
+
+dsa_handler = DSAHandler(
+    girderApiUrl = 'http://example_dsa_address.com/api/v1'
+)
+
+dsa_items_list = [
+    'item_uuid_1',
+    'item_uuid_2'
+]
+
+dsa_tileservers = [dsa_handler.get_tile_server(i) for i in dsa_items_list]
+
+# Setting linkage to "col" to enable side-by-side visualization
+vis_sess = Visualization(
+    local_slides = local_slide_list,
+    local_annotations = local_annotations_list,
+    tileservers = dsa_tileservers,
+    linkage = 'col',
+    components = [
+        [
+            [
+                SlideMap(),
+                OverlayOptions(),
+                PropertyViewer(),
+                PropertyPlotter()
+            ],            
+            [
+                SlideMap(),
+                OverlayOptions(),
+                PropertyViewer(),
+                PropertyPlotter()
+            ]
+        ]
+    ],
+    app_options={'port': 8050}
+)
+
+vis_sess.start()
+
+
+```
+<div align="center">
+    <img src="docs/images/side-by-side-view.PNG">
+</div>
 
 
 ## Contributing
