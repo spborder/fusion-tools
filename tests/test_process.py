@@ -378,7 +378,7 @@ vis_session = Visualization(
             [
                 OverlayOptions(),
                 PropertyPlotter(),
-                #BulkLabels(),
+                BulkLabels(),
                 HRAViewer()
             ]
         ]

@@ -1201,50 +1201,6 @@ def path_to_mask(path, shape):
     mask = ndimage.binary_fill_holes(mask)
     return mask
 
-def get_feature_image(feature:dict, tile_source:None, return_mask: bool=False, style: Union[None,list,dict]=None):
-    """Extract image region associated with a given feature from tile_source (a large-image object)
-
-    :param feature: GeoJSON Feature with "geometry" field containing coordinates
-    :type feature: dict
-    :param tile_source: A large-image tile source object (or custom object with "getRegion" method)
-    :type tile_source: None
-    :param return_mask: Whether or not to return both the image region (bounding box) as well as a binary mask of the boundaries of that feature, defaults to False
-    :type return_mask: bool, optional
-    :param style: For multi-frame tile sources, this can either be official "bands": [] format as described by large-image or a list containing {channel_name: 'rgba()'} keys and values, defaults to None
-    :type style: Union[None,list,dict], optional
-    """
-
-    # Getting bounding box of feature:
-    if not 'geometry' in feature:
-        raise ValueError(f"Feature does not contain 'geometry' key: {list(feature.keys())}")
-    
-    feature_shape = shape(feature['geometry'])
-    # This will only work with geometries that have an "exterior", so not Point
-    if not feature_shape.geom_type=='Point':
-        feature_bounds = list(feature_shape.exterior.bounds)
-    else:
-        raise TypeError("Feature geometries of type: 'Point' are not implemented, try again using .buffer(1) or other to extract a valid bounding box")
-    
-    if style is None:
-
-        feature_image, mime_type = tile_source.getRegion(
-                region = {
-                    'left': feature_bounds[0],
-                    'top': feature_bounds[1],
-                    'right': feature_bounds[2],
-                    'bottom': feature_bounds[3]
-                },
-                format = large_image.constants.TILE_FORMAT_NUMPY
-            )
-
-
-
-
-
-
-
-
-
 
 
 

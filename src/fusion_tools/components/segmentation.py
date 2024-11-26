@@ -1307,7 +1307,9 @@ class BulkLabels(Tool):
                 Input({'type': 'map-annotations-store','index': ALL},'data')
             ],
             [
-                Output({'type': 'bulk-labels-property-info','index': ALL},'data')
+                Output({'type': 'bulk-labels-property-info','index': ALL},'data'),
+                Output({'type': 'bulk-labels-labels-store','index': ALL},'data'),
+                Output({'type': 'bulk-labels-label-stats-div','index': ALL},'children')
             ]
         )(self.update_slide)
 
@@ -1520,7 +1522,6 @@ class BulkLabels(Tool):
             ]
         )(self.update_label_table)
 
-
     def update_slide(self, new_annotations: list):
 
         if not any([i['value'] or i['value']==0 for i in ctx.triggered]):
@@ -1536,8 +1537,10 @@ class BulkLabels(Tool):
         }
 
         new_property_info = json.dumps(new_property_info)
+        new_labels_data = json.dumps({'labels': [], 'labels_metadata': []})
+        new_label_stats_div = []
 
-        return [new_property_info]
+        return [new_property_info], [new_labels_data], [new_label_stats_div]
 
     def update_method_explanation(self, method):
         """Updating explanation given for the selected label method
@@ -1761,11 +1764,14 @@ class BulkLabels(Tool):
                             query_distance = distance_div[0]['props']['value']
 
                             if not query_distance is None:
-                                processed_queries.append({
-                                    'type': query_type,
-                                    'structure': query_structure,
-                                    'distance': query_distance*x_scale
-                                })
+                                try:
+                                    processed_queries.append({
+                                        'type': query_type,
+                                        'structure': query_structure,
+                                        'distance': query_distance*x_scale
+                                    })
+                                except TypeError:
+                                    continue
 
         return processed_queries
 
@@ -2003,36 +2009,37 @@ class BulkLabels(Tool):
         else:
             current_labels['labels'] = []
             current_centroids = []
+
         for m_idx, m in enumerate(marker_features):
-            m_centroid = m['geometry']['coordinates']
+            m_centroid = list(m['geometry']['coordinates'])
             m_id = m['properties']['_id']
             if m_centroid in current_centroids:
-                cent_idx = current_centroids.index(m)
+                cent_idx = current_centroids.index(m_centroid)
                 if label_method=='in':
                     # Adding inclusive label to current set of labels 
-                    current_labels[cent_idx]['labels'].append(
+                    current_labels['labels'][cent_idx]['labels'].append(
                         {
                             'type': label_type,
                             'value': label_text
                         }
                     )
                 elif label_method=='over':
-                    if label_type in any([i['type'] for i in current_labels[cent_idx['labels']]]):
+                    if any([label_type==i['type'] for i in current_labels['labels'][cent_idx]['labels']]):
                         # Overruling label previously assigned for this "type"
-                        current_labels[cent_idx]['labels'] = [i if not i['type']==label_type else {'type': label_type,'value': label_text} for i in current_labels[cent_idx]]
+                        current_labels['labels'][cent_idx]['labels'] = [i if not i['type']==label_type else {'type': label_type,'value': label_text} for i in current_labels['labels'][cent_idx]['labels']]
                     
                     else:
                         # Not previously labeled, nothing to overrule
-                        current_labels[cent_idx]['labels'].append(
+                        current_labels['labels'][cent_idx]['labels'].append(
                             {
                                 'type': label_type,
                                 'value': label_text
                             }
                         )
                 elif label_method=='un':
-                    if not label_type in any([i['type'] for i in current_labels[cent_idx]['labels']]):
+                    if not any([label_type==i['type'] for i in current_labels['labels'][cent_idx]['labels']]):
                         # Only adding this label if no other label of this "type" is added
-                        current_labels[cent_idx]['labels'].append(
+                        current_labels['labels'][cent_idx]['labels'].append(
                             {
                                 'type': label_type,
                                 'value': label_text
@@ -2131,7 +2138,7 @@ class BulkLabels(Tool):
                     'Value': m['value']
                 }
 
-            labels.append(l_dict)
+                labels.append(l_dict)
 
         label_count_df = pd.DataFrame.from_records(labels).groupby(by='Label Type')
         label_counts = label_count_df.value_counts(['Value']).to_frame()
@@ -2289,10 +2296,14 @@ class BulkLabels(Tool):
 
                     else:
                         # In this case there is most likely a value replation
-                        if not included_label_values==current_label_values:
+                        if not included_label_values==current_label_values and len(included_label_values)==len(current_label_values):
                             #print(f'value replation: {included_label_values}, {current_label_values}')
                             deletion = False
                             replation = {'value': [i for i in included_label_values if not i in current_label_values][0]}
+                        elif not len(included_label_values)==len(current_label_values):
+                            # This is a deletion
+                            deletion = True
+                            replation = False
 
                 for l_idx,l in enumerate(current_labels['labels']):
                     for l_m_idx,l_m in enumerate(l['labels']):

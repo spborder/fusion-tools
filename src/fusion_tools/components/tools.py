@@ -8,6 +8,7 @@ Visualization tools which can be linked to SlideMap components (but don't have t
 import os
 import sys
 import json
+import geojson
 import numpy as np
 import pandas as pd
 import textwrap
@@ -462,7 +463,8 @@ class OverlayOptions(Tool):
                 Output({'type': 'export-current-layers-data','index': ALL},'data')
             ],
             [
-                State({'type': 'map-annotations-store','index': ALL},'data')
+                State({'type': 'map-annotations-store','index': ALL},'data'),
+                State({'type': 'map-slide-information','index':ALL},'data')
             ]
         )(self.export_layers)
 
@@ -995,14 +997,24 @@ class OverlayOptions(Tool):
 
         return [line_color_tabs]
 
-    def export_layers(self, button_click, current_layers):
+    def export_layers(self, button_click, current_layers,slide_information):
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
         #TODO: Re-scale these so that the annotations are in the image CRS
+        slide_information = json.loads(get_pattern_matching_value(slide_information))
+
+        # Scaling annotations:
+        current_layers = json.loads(get_pattern_matching_value(current_layers))
+        scaled_layers = []
+        for c in current_layers:
+            scaled_layer = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/slide_information['x_scale'],c[1]/slide_information['y_scale']),g),c)
+            scaled_layers.append(scaled_layer)
         
-        return [{'content': get_pattern_matching_value(current_layers),'filename': 'fusion-tools-current-layers.json'}]
+        string_layers = json.dumps(scaled_layers)
+        
+        return [{'content': string_layers,'filename': 'fusion-tools-current-layers.json'}]
 
 class PropertyViewer(Tool):
     """PropertyViewer Tool which allows users to view distribution of properties across the current viewport of the SlideMap
