@@ -1065,29 +1065,160 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
 
         for s,name in zip(structure_filtered,name_order):
             intermediate_gdf = s.copy()
+
+            # only used for OR mods
+            include_list = [(False,)]*intermediate_gdf.shape[0]
+
             for s_q in spatial_list:
                 sq_geo = [i for i in all_geo_list if i['properties']['name']==s_q['structure']][0]
                 sq_structure = gpd.GeoDataFrame.from_features(sq_geo['features'])
 
                 if not s_q['type'] == 'nearest':
-                    intermediate_gdf = gpd.sjoin(
-                        left_df = intermediate_gdf, 
-                        right_df = sq_structure, 
-                        how = 'inner', 
-                        predicate=s_q['type']
-                    )
+                    if 'mod' in s_q:
+                        if s_q['mod']=='not':
+                            intermediate_gdf = gpd.sjoin(
+                                left_df = intermediate_gdf, 
+                                right_df = sq_structure, 
+                                how = 'left', 
+                                predicate = s_q['type']
+                            )
+
+                            # Updating include_list (removing items)
+                            del_count = 0
+                            for idx,i in enumerate(intermediate_gdf['_id_right'].isna().tolist()):
+                                if not i:
+                                    del include_list[idx-del_count]
+                                    del_count+=1
+                                else:
+                                    include_list[idx-del_count]+=(True,)
+
+                            intermediate_gdf = intermediate_gdf.loc[intermediate_gdf['_id_right'].isna()]
+                            
+                        elif s_q['mod']=='and':
+                            intermediate_gdf = gpd.sjoin(
+                                left_df = intermediate_gdf,
+                                right_df = sq_structure,
+                                how = 'left',
+                                predicate = s_q['type']
+                            )
+                            # Updating include_list (removing items)
+                            del_count = 0
+                            for idx,i in enumerate(intermediate_gdf['_id_right'].isna().tolist()):
+                                if i:
+                                    del include_list[idx-del_count]
+                                    del_count+=1
+                                else:
+                                    include_list[idx-del_count]+=(True,)
+
+                            intermediate_gdf = intermediate_gdf.loc[intermediate_gdf['_id_right'].notna()]
+                            
+                        elif s_q['mod']=='or':
+                            or_gdf = gpd.sjoin(
+                                left_df = intermediate_gdf,
+                                right_df = sq_structure,
+                                how = 'left',
+                                predicate = s_q['type']
+                            )
+                            current_remove = or_gdf['_id_right'].isna().tolist()
+                            include_list = [i+(not j,) for i,j in list(zip(include_list,current_remove))]
+                            
+                    else:
+                        intermediate_gdf = gpd.sjoin(
+                            left_df = intermediate_gdf,
+                            right_df = sq_structure,
+                            how = 'left',
+                            predicate = s_q['type']
+                        )
+
+                        # Updating include_list (removing items)
+                        del_count = 0
+                        for idx,i in enumerate(intermediate_gdf['_id_right'].isna().tolist()):
+                            if i:
+                                del include_list[idx-del_count]
+                                del_count+=1
+                            else:
+                                include_list[idx-del_count]+=(True,)
+
+                        intermediate_gdf = intermediate_gdf.loc[intermediate_gdf['_id_right'].notna()]
+
                 else:
-                    intermediate_gdf = gpd.sjoin_nearest(
-                        left_df = intermediate_gdf, 
-                        right_df = sq_structure,
-                        how = 'inner',
-                        max_distance = s_q['distance']
-                    )
+                    if 'mod' in s_q:
+                        if s_q['mod']=='not':
+                            intermediate_gdf = gpd.sjoin_nearest(
+                                left_df = intermediate_gdf, 
+                                right_df = sq_structure,
+                                how = 'left',
+                                max_distance = s_q['distance']
+                            )
+
+                            # Updating include_list (removing items)
+                            del_count = 0
+                            for idx,i in enumerate(intermediate_gdf['_id_right'].isna().tolist()):
+                                if not i:
+                                    del include_list[idx-del_count]
+                                    del_count+=1
+                                else:
+                                    include_list[idx-del_count]+=(True,)
+
+                            intermediate_gdf = intermediate_gdf.loc[intermediate_gdf['_id_right'].isna()]
+
+                        elif s_q['mod']=='and':
+                            intermediate_gdf = gpd.sjoin_nearest(
+                                left_df = intermediate_gdf, 
+                                right_df = sq_structure,
+                                how = 'left',
+                                max_distance = s_q['distance']
+                            )
+
+                            # Updating include_list (removing items)
+                            del_count = 0
+                            for idx,i in enumerate(intermediate_gdf['_id_right'].isna().tolist()):
+                                if i:
+                                    del include_list[idx-del_count]
+                                    del_count+=1
+                                else:
+                                    include_list[idx-del_count]+=(True,)
+
+                            intermediate_gdf = intermediate_gdf.loc[intermediate_gdf['_id_right'].notna()]
+                        
+                        elif s_q['mod']=='or':
+                            or_gdf = gpd.sjoin_nearest(
+                                left_df = intermediate_gdf, 
+                                right_df = sq_structure,
+                                how = 'left',
+                                max_distance = s_q['distance']
+                            )
+
+                            current_remove = or_gdf['_id_right'].isna().tolist()
+                            include_list = [i+(not j,) for i,j in list(zip(include_list,current_remove))]
+                            
+                    else:
+
+                        intermediate_gdf = gpd.sjoin_nearest(
+                            left_df = intermediate_gdf, 
+                            right_df = sq_structure,
+                            how = 'left',
+                            max_distance = s_q['distance']
+                        )
+
+                        # Updating include_list (removing items)
+                        del_count = 0
+                        for idx,i in enumerate(intermediate_gdf['_id_right'].isna().tolist()):
+                            if i:
+                                del include_list[idx-del_count]
+                                del_count+=1
+                            else:
+                                include_list[idx-del_count]+=(True,)
+
+                        intermediate_gdf = intermediate_gdf.loc[intermediate_gdf['_id_right'].notna()]
+                    
 
                 intermediate_gdf = intermediate_gdf.drop([i for i in ['index_left','index_right'] if i in intermediate_gdf], axis = 1)
                 intermediate_gdf = intermediate_gdf.drop([i for i in intermediate_gdf if '_right' in i],axis=1)
                 intermediate_gdf.columns = [i.replace('_left','') if '_left' in i else i for i in intermediate_gdf ]
 
+            # Applying the OR mods
+            intermediate_gdf = intermediate_gdf.loc[[any(i) for i in include_list]]
             remainder_structures.append(intermediate_gdf)
     else:
         remainder_structures = structure_filtered
@@ -1120,38 +1251,63 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
             'features': []
         }
 
+        mod_list = []
+        for m in filter_list:
+            if 'mod' in m:
+                mod_list.append(m['mod'])
+            else:
+                mod_list.append('and')
+
         for feat_idx, feat in enumerate(combined_geojson['features']):
-            include = True
+            include_list = []
 
-            for f in filter_list:
-                if include:
-                    #TODO: Update this for different types of nested props (--+ = list, --# = external reference object)
-                    filter_name_parts = f['name'].split(' --> ')
+            for f,m in zip(filter_list,mod_list):
+                #TODO: Update this for different types of nested props (--+ = list, --# = external reference object)
+                filter_name_parts = f['name'].split(' --> ')
 
-                    include = True
-                    feat_props = feat['properties'].copy()
-                    feat_props = {i.replace('_left',''):j for i,j in feat_props.items()}
+                feat_props = feat['properties'].copy()
+                feat_props = {i.replace('_left',''):j for i,j in feat_props.items()}
 
-                    for filt in filter_name_parts:
+                for filt in filter_name_parts:
+                    if feat_props:
                         if filt in feat_props:
                             feat_props = feat_props[filt]
                         else:
-                            include = include & False
-                            break
-                    
-                    if include:
-                        if all([type(i) in [int,float] for i in f['range']]):
-                            if f['range'][0]<=feat_props and feat_props<=f['range'][1]:
-                                include = include & True
-                            else:
-                                include = include & False
-                        
-                        elif all([type(i)==str for i in f['range']]):
-                            if feat_props in f['range']:
-                                include = include & True
-                            else:
-                                include = include & False
+                            feat_props = False
                 
+                if feat_props:
+                    if all([type(i) in [int,float] for i in f['range']]):
+                        if f['range'][0]<=feat_props and feat_props<=f['range'][1]:
+                            include_list.append(True)
+                        else:
+                            include_list.append(False)
+                    
+                    elif all([type(i)==str for i in f['range']]):
+                        if feat_props in f['range']:
+                            include_list.append(True)
+                        else:
+                            include_list.append(False)
+                
+                else:
+                    include_list.append(False)
+                                
+            
+            include = None
+            for m,i in zip(mod_list,include_list):
+                if not include is None:
+                    if m == 'and':
+                        include = include & i
+                    elif m == 'or': 
+                        include = include | i
+                    elif m == 'not':
+                        include = include & (not i)
+                else:
+                    if not m == 'not':
+                        include = i
+                    else:
+                        include = not i
+            print(include)
+
             if include:
                 filtered_geojson['features'].append(feat)
             else:

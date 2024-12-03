@@ -196,7 +196,6 @@ class DSAHandler(Handler):
 
         folder_items = self.gc.get(f'/resource/{folder_info["_id"]}',
                                                   parameters = {
-                                                      'type': folder_info["type"],
                                                       'limit': 0 
                                                   })
 

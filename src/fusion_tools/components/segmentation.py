@@ -1309,7 +1309,9 @@ class BulkLabels(Tool):
             [
                 Output({'type': 'bulk-labels-property-info','index': ALL},'data'),
                 Output({'type': 'bulk-labels-labels-store','index': ALL},'data'),
-                Output({'type': 'bulk-labels-label-stats-div','index': ALL},'children')
+                Output({'type': 'bulk-labels-label-stats-div','index': ALL},'children'),
+                Output({'type': 'bulk-labels-spatial-query-div','index': ALL},'children'),
+                Output({'type': 'bulk-labels-add-property-div','index': ALL},'children')
             ]
         )(self.update_slide)
 
@@ -1359,7 +1361,9 @@ class BulkLabels(Tool):
                 Input({'type': 'bulk-labels-spatial-query-structures','index': ALL},'value'),
                 Input({'type': 'bulk-labels-spatial-query-nearest','index': ALL},'value'),
                 Input({'type': 'bulk-labels-remove-spatial-query-icon','index': ALL},'n_clicks'),
-                Input({'type': 'bulk-labels-remove-property-icon','index': ALL},'n_clicks')
+                Input({'type': 'bulk-labels-remove-property-icon','index': ALL},'n_clicks'),
+                Input({'type': 'bulk-labels-spatial-query-mod','index': ALL},'value'),
+                Input({'type': 'bulk-labels-filter-property-mod','index': ALL},'value')
             ],
             [
                 Output({'type': 'bulk-labels-filter-data', 'index': ALL},'data')
@@ -1539,8 +1543,10 @@ class BulkLabels(Tool):
         new_property_info = json.dumps(new_property_info)
         new_labels_data = json.dumps({'labels': [], 'labels_metadata': []})
         new_label_stats_div = []
+        new_spatial_query_div = []
+        new_property_filter_div = []
 
-        return [new_property_info], [new_labels_data], [new_label_stats_div]
+        return [new_property_info], [new_labels_data], [new_label_stats_div], [new_spatial_query_div],[new_property_filter_div]
 
     def update_method_explanation(self, method):
         """Updating explanation given for the selected label method
@@ -1653,6 +1659,18 @@ class BulkLabels(Tool):
                         dbc.Col([
                             dcc.Dropdown(
                                 options = [
+                                    {'label': html.Span('AND',style={'color': 'rgb(0,0,255)'}),'value': 'and'},
+                                    {'label': html.Span('OR',style={'color': 'rgb(0,255,0)'}),'value': 'or'},
+                                    {'label': html.Span('NOT',style={'color': 'rgb(255,0,0)'}),'value': 'not'}
+                                ],
+                                value = 'and',
+                                placeholder='Modifier',
+                                id = {'type': f'{self.component_prefix}-bulk-labels-spatial-query-mod','index': add_click}
+                            )
+                        ],md = 2),
+                        dbc.Col([
+                            dcc.Dropdown(
+                                options = [
                                     {'label': 'intersects','value': 'intersects'},
                                     {'label': 'contains','value': 'contains'},
                                     {'label': 'within','value': 'within'},
@@ -1665,7 +1683,7 @@ class BulkLabels(Tool):
                                 multi= False,
                                 id = {'type': f'{self.component_prefix}-bulk-labels-spatial-query-drop','index': add_click}
                             )
-                        ],md = 5),
+                        ],md = 3),
                         dbc.Col([
                             dcc.Dropdown(
                                 options = structure_names,
@@ -1719,16 +1737,21 @@ class BulkLabels(Tool):
         if not add_property_parent is None:
             for div in add_property_parent:
                 div_children = div['props']['children']
-                filter_name = div_children[0]['props']['children'][0]['props']['children'][0]['props']['value']
-                
+                filter_mod = div_children[0]['props']['children'][0]['props']['children'][0]['props']['value']
+                print(f'filter_mod: {filter_mod}')
+                filter_name = div_children[0]['props']['children'][1]['props']['children'][0]['props']['value']
+                print(f'filter_name: {filter_name}')
                 if 'props' in div_children[1]['props']['children']:
                     if 'value' in div_children[1]['props']['children']['props']:
                         filter_value = div_children[1]['props']['children']['props']['value']
                     else:
                         filter_value = div_children[1]['props']['children']['props']['children']['props']['value']
+                    
+                    print(f'filter_value: {filter_value}')
 
-                    if not any([i is None for i in [filter_name,filter_value]]):
+                    if not any([i is None for i in [filter_mod,filter_name,filter_value]]):
                         processed_filters.append({
+                            'mod': filter_mod,
                             'name': filter_name,
                             'range': filter_value
                         })
@@ -1749,12 +1772,16 @@ class BulkLabels(Tool):
             for div in spatial_query_parent:
                 div_children = div['props']['children'][0]['props']['children']
 
-                query_type = div_children[0]['props']['children'][0]['props']['value']
-                query_structure = div_children[1]['props']['children'][0]['props']['value']
+                query_mod = div_children[0]['props']['children'][0]['props']['value']
+                print(f'query_mod: {query_mod}')
+                query_type = div_children[1]['props']['children'][0]['props']['value']
+                print(f'query_type: {query_type}')
+                query_structure = div_children[2]['props']['children'][0]['props']['value']
                 
-                if not any([i is None for i in [query_type,query_structure]]):
+                if not any([i is None for i in [query_mod,query_type,query_structure]]):
                     if not query_type=='nearest':
                         processed_queries.append({
+                            'mod': query_mod,
                             'type': query_type,
                             'structure': query_structure
                         })
@@ -1762,10 +1789,11 @@ class BulkLabels(Tool):
                         distance_div = div['props']['children'][1]['props']['children']
                         if 'value' in distance_div[0]['props']:
                             query_distance = distance_div[0]['props']['value']
-
-                            if not query_distance is None:
+                            print(f'query_distance: {query_distance}')
+                            if not any([i is None for i in [query_mod,query_type,query_structure,query_distance]]):
                                 try:
                                     processed_queries.append({
+                                        'mod': query_mod,
                                         'type': query_type,
                                         'structure': query_structure,
                                         'distance': query_distance*x_scale
@@ -1775,7 +1803,7 @@ class BulkLabels(Tool):
 
         return processed_queries
 
-    def update_filter_data(self, property_filter, sp_query_type, sp_query_structure, sp_query_distance, remove_sq, remove_prop, property_divs: list, spatial_divs: list, slide_information:list):
+    def update_filter_data(self, property_filter, sp_query_type, sp_query_structure, sp_query_distance, remove_sq, remove_prop, spatial_mod,prop_mod,property_divs: list, spatial_divs: list, slide_information:list):
 
         property_divs = get_pattern_matching_value(property_divs)
         spatial_divs = get_pattern_matching_value(spatial_divs)
@@ -1818,6 +1846,7 @@ class BulkLabels(Tool):
 
         filter_data = json.loads(get_pattern_matching_value(filter_data))
 
+        #TODO: Add the mods to this function
         filtered_geojson, filtered_ref_list = process_filters_queries(filter_data["Filters"], filter_data["Spatial"], include_structures, current_features)
 
         new_structures_div = [
@@ -1900,13 +1929,25 @@ class BulkLabels(Tool):
                     dbc.Row([
                         dbc.Col([
                             dcc.Dropdown(
+                                options = [
+                                    {'label': html.Span('AND',style={'color':'rgb(0,0,255)'}),'value': 'and'},
+                                    {'label': html.Span('OR',style={'color': 'rgb(0,255,0)'}),'value': 'or'},
+                                    {'label': html.Span('NOT',style={'color':'rgb(255,0,0)'}),'value': 'not'}
+                                ],
+                                value = 'and',
+                                placeholder='Modifier',
+                                id = {'type': f'{self.component_prefix}-bulk-labels-filter-property-mod','index': add_click}
+                            )
+                        ],md=2),
+                        dbc.Col([
+                            dcc.Dropdown(
                                 options = list(property_info.keys()),
                                 value = [],
                                 multi = False,
                                 placeholder = 'Select property',
                                 id = {'type': f'{self.component_prefix}-bulk-labels-filter-property-drop','index':add_click}
                             )
-                        ],md=10),
+                        ],md=8),
                         dbc.Col([
                             html.A(
                                 html.I(
