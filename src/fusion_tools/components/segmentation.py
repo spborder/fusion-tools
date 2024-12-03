@@ -1773,9 +1773,9 @@ class BulkLabels(Tool):
                 div_children = div['props']['children'][0]['props']['children']
 
                 query_mod = div_children[0]['props']['children'][0]['props']['value']
-                print(f'query_mod: {query_mod}')
+                #print(f'query_mod: {query_mod}')
                 query_type = div_children[1]['props']['children'][0]['props']['value']
-                print(f'query_type: {query_type}')
+                #print(f'query_type: {query_type}')
                 query_structure = div_children[2]['props']['children'][0]['props']['value']
                 
                 if not any([i is None for i in [query_mod,query_type,query_structure]]):
