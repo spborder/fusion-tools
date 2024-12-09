@@ -1215,7 +1215,7 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
 
                 intermediate_gdf = intermediate_gdf.drop([i for i in ['index_left','index_right'] if i in intermediate_gdf], axis = 1)
                 intermediate_gdf = intermediate_gdf.drop([i for i in intermediate_gdf if '_right' in i],axis=1)
-                intermediate_gdf.columns = [i.replace('_left','') if '_left' in i else i for i in intermediate_gdf ]
+                intermediate_gdf.columns = [i.replace('_left','') if '_left' in i else i for i in intermediate_gdf]
 
             # Applying the OR mods
             intermediate_gdf = intermediate_gdf.loc[[any(i) for i in include_list]]

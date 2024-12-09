@@ -277,12 +277,18 @@ def distance_transform_features(image:np.ndarray, mask:np.ndarray, coords:list)-
         distance_transform = distance_transform_edt(mask_regions)
         distance_transform[distance_transform==0] = np.nan
         
+        distance_transform_quantiles = np.quantile(distance_transform[~np.isnan(distance_transform)], [float(i/10) for i in range(1,11)]).tolist()
+
         feature_values[f'Mask {m}'] = {
             'Distance Transform': {
                 "Mean": np.nanmean(distance_transform),
                 "Median": np.nanmedian(distance_transform),
                 "Max": np.nanmax(distance_transform),
-                "Sum": np.nansum(distance_transform)
+                "Sum": np.nansum(distance_transform),
+                'Quantiles': {
+                    f'{k}%': q
+                    for k,q in zip(list(range(10,110,10)),distance_transform_quantiles)
+                }
             }
         }
 
@@ -334,13 +340,12 @@ def texture_features(image:np.ndarray, mask:np.ndarray, coords: list)->dict:
     """
 
     feature_values = {}
-    texture_features = ['Contrast','Homogeneity','Correlation','Energy']
+    texture_features = ['Contrast','Homogeneity','Correlation','Energy','Dissimilarity','ASM']
     mask_labels = [i for i in np.unique(mask).tolist() if not i==0]
     channels = np.shape(image)[-1]
 
     for m_idx, m in enumerate(mask_labels):
-        masked_pixels = (1/255)*(mask==m).astype(np.uint8)
-
+        masked_pixels = (mask==m).astype(np.uint8)
         feature_values[f'Mask {m}'] = {}
         for c in range(0,channels):
             masked_channel = np.uint8(image[:,:,c] * masked_pixels)
@@ -348,8 +353,12 @@ def texture_features(image:np.ndarray, mask:np.ndarray, coords: list)->dict:
             
             feature_values[f'Mask {m}'][f'Channel {c}'] = {}
             for t in texture_features:
-                t_value = graycoprops(texture_matrix,t.lower())[0][0]
-                
+                if not t=='ASM':
+                    t_value = graycoprops(texture_matrix,t.lower())[0][0]
+                else:
+                    t_value = graycoprops(texture_matrix,t)[0][0]
+
+
                 feature_values[f'Mask {m}'][f'Channel {c}'][t] = float(t_value)
 
     return feature_values
@@ -370,13 +379,14 @@ def morphological_features(image:np.ndarray,mask:np.ndarray,coords:list)->dict:
     feature_values = {}
 
     mask_labels = [i for i in np.unique(mask).tolist() if not i==0]
+    properties_tuple = ('area','eccentricity','equivalent_diameter_area','extent','perimeter','euler_number','solidity','area_bbox','area_convex')
 
     for m_idx, m in enumerate(mask_labels):
         props = pd.DataFrame(
                     regionprops_table(
                         label(mask==m),
                         image,
-                        properties = ('area','centroid','eccentricity','equivalent_diameter_area','extent','euler_number')
+                        properties = properties_tuple
                     )
                 ).select_dtypes(exclude='object')
 
@@ -386,8 +396,28 @@ def morphological_features(image:np.ndarray,mask:np.ndarray,coords:list)->dict:
                 'Mean': float(props[p].mean()),
                 'Median': float(props[p].median()),
                 'Max': float(props[p].max()),
-                'Min': float(props[p].min())
+                'Min': float(props[p].min()),
+                'Sum': float(props[p].sum())
             }
+
+    all_areas_mask = (mask>0)
+    props = pd.DataFrame(
+        regionprops_table(
+            label(all_areas_mask),
+            image,
+            properties = properties_tuple
+        )
+    )
+    feature_values['Boundary Mask'] = {'Count': props.shape[0]}
+    for p in props.columns.tolist():
+        feature_values['Boundary Mask'][p] = {
+            'Mean': float(props[p].mean()),
+            'Median': float(props[p].median()),
+            'Max': float(props[p].max()),
+            'Min': float(props[p].min()),
+            'Sum': float(props[p].sum())
+        }
+
 
     return feature_values
 

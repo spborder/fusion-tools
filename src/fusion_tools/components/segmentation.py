@@ -1789,7 +1789,7 @@ class BulkLabels(Tool):
                         distance_div = div['props']['children'][1]['props']['children']
                         if 'value' in distance_div[0]['props']:
                             query_distance = distance_div[0]['props']['value']
-                            print(f'query_distance: {query_distance}')
+                            #print(f'query_distance: {query_distance}')
                             if not any([i is None for i in [query_mod,query_type,query_structure,query_distance]]):
                                 try:
                                     processed_queries.append({
