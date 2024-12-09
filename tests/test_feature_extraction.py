@@ -144,10 +144,10 @@ def main():
     feature_extractor = ParallelFeatureExtractor(
         image_source = tile_server,
         feature_list = [
-            lambda image,mask,coords: distance_transform_features(image,mask,coords),
-            lambda image,mask,coords: color_features(image,mask,coords),
-            lambda image,mask,coords: texture_features(image,mask,coords),
-            lambda image,mask,coords: morphological_features(image,mask,coords)
+            'distance_transform',
+            'morphology',
+            'color',
+            'texture'
         ],
         preprocess = None,
         sub_mask = lambda image,mask: stain_mask(image,mask),

@@ -70,7 +70,20 @@ class ParallelFeatureExtractor:
             else:
                 raise AttributeError(f"Missing metadata for image source: {self.image_source}")
 
-        self.feature_list = feature_list
+        # Defining built-in features that can be defined with a string
+        built_in_features = {
+            'distance_transform': lambda image,mask,coords: distance_transform_features(image,mask,coords),
+            'morphology': lambda image,mask,coords: morphological_features(image,mask,coords),
+            'color': lambda image,mask,coords: color_features(image,mask,coords),
+            'texture': lambda image,mask,coords: texture_features(image,mask,coords)
+        }
+        self.feature_list = [
+            built_in_features[i]
+            if type(i)==str
+            else i
+            for i in feature_list
+        ]
+
         self.preprocess = preprocess
         self.sub_mask = sub_mask
         self.mask_names = mask_names
