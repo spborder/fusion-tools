@@ -18,6 +18,7 @@ from skimage.morphology import remove_small_holes, remove_small_objects
 from skimage.segmentation import watershed
 from skimage.draw import polygon2mask
 from skimage.filters import threshold_otsu
+from skimage.transform import resize
 
 from scipy.ndimage import distance_transform_edt
 
@@ -235,6 +236,11 @@ class ParallelFeatureExtractor:
 
         # Making mask of just the original shape's pixels within the image_region bounding box
         mask = self.make_mask(coords)
+        
+        # Checking if the dimensions of the mask are equal to the first 2 dimensions of the image
+        if not image_region.shape[0]==mask.shape[0] or not image_region.shape[1]==mask.shape[1]:
+            mask = resize(mask,[image_region.shape[0],image_region.shape[1]],preserve_range=True)
+
         if not self.sub_mask is None:
             mask = self.sub_mask(image_region,mask)
 
