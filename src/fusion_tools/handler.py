@@ -21,6 +21,7 @@ from PIL import Image
 from io import BytesIO
 
 from fusion_tools.tileserver import DSATileServer
+from fusion_tools.components import Tool
 
 class Handler:
     pass
@@ -356,4 +357,222 @@ class DSAHandler(Handler):
 
         return DSATileServer(api_url = self.girderApiUrl, item_id = item)
 
+    def create_survey(self, survey_args:dict):
+        """Create a survey component which will route collected data to a specific file in the connected DSA instance.
+
+        :param survey_args: Setup arguments for survey questions
+        :type survey_args: dict
+        """
+        pass
     
+    def create_uploader(self, folder_id:str, uploader_args:dict):
+        """Create uploader component layout to a specific folder. "uploader_args" contains optional additional arguments.
+
+        :param folder_id: ID for folder to upload to
+        :type folder_id: str
+        :param uploader_args: Optional arguments
+        :type uploader_args: dict
+        """
+        pass
+
+    def create_dataset_builder(self,builder_args:dict):
+        """Table view allowing parsing of dataset/slide-level metadata and adding remote/local slides to current session.
+
+        :param builder_args: Optional arguments to include in dataset builder layout.
+        :type builder_args: dict
+        """
+        pass
+
+    def create_metadata_table(self,metadata_args:dict):
+        """Create table of metadata keys/values for a folder or collection
+
+        :param metadata_args: Additional arguments specifying location of folder and any keys to ignore.
+        :type metadata_args: dict
+        """
+        pass
+
+    def post_annotations(self, item:str, annotations: Union[str,list,dict,None] = None):
+        """Add annotations to an item in Girder.
+
+        :param item: ID for the item that is receiving the annotations
+        :type item: str
+        :param annotations: Formatted dictionary, path, or list of dictionaries/paths with the annotations., defaults to None
+        :type annotations: Union[str,list,dict,None], optional
+        """
+        pass
+
+    def add_metadata(self, item:str, metadata:dict):
+        """Add metadata key/value to a specific item
+
+        :param item: ID for item that is receiving the metadata
+        :type item: str
+        :param metadata: Metadata key/value combination (can contain multiple keys and values (JSON formatted))
+        :type metadata: dict
+        """
+        pass
+
+    def list_plugins(self):
+        """List all of the plugins/CLIs available for the current DSA instance
+        """
+        pass
+
+    def add_plugin(self, image_name:str):
+        """Add a plugin/CLI to the current DSA instance by name of the Docker image (requires admin login)
+
+        :param image_name: Name of Docker image on Docker Hub
+        :type image_name: str
+        """
+        pass
+
+    def create_plugin_inputs(self, plugin_id:str):
+        """Creates formatted input component for the specified plugin/CLI ID.
+
+        :param plugin_id: ID for plugin to create input component for.
+        :type plugin_id: str
+        """
+        pass
+
+    def run_plugin(self, plugin_id:str, arguments:dict):
+        """Run a plugin given a set of input arguments
+
+        :param plugin_id: ID for plugin to run.
+        :type plugin_id: str
+        :param arguments: Dictionary containing keys/values for each input argument to a plugin
+        :type arguments: dict
+        """
+        pass
+
+    def create_plugin_progress(self):
+        """Creates component that monitors current and past job logs.
+        """
+        pass
+
+
+
+class DatasetBuilder(Tool):
+    """Handler for DatasetBuilder component, enabling selection/deselection of folders and slides to add to current visualization session.
+
+    :param Tool: General class for components that perform visualization and analysis of data.
+    :type Tool: None
+    """
+    def __init__(self,
+                 handler: Handler):
+        
+        self.handler = handler
+
+    def load(self, component_prefix:int):
+        pass
+
+    def gen_layout(self, session_data: Union[dict,None]):
+        pass
+
+    def get_callbacks(self):
+        pass
+
+
+
+class DSAUploader(Tool):
+    """Handler for DSAUploader component, handling uploading data to a specific folder, adding metadata, and running sets of preprocessing plugins.
+
+    :param Tool: General class for components that perform visualization and analysis of data.
+    :type Tool: None
+    """
+    def __init__(self,
+                 dsa_handler: DSAHandler):
+        
+        self.dsa_handler = dsa_handler
+
+    def load(self,component_prefix:int):
+        pass
+
+    def gen_layout(self,session_data:Union[dict,None]):
+        pass
+
+    def get_callbacks(self):
+        pass
+
+
+class DSAPluginRunner(Tool):
+    """Handler for DSAPluginRunner component, letting users specify input arguments to plugins to run on connected DSA instance.
+
+    :param Tool: General class for components that perform visualization and analysis of data.
+    :type Tool: None
+    """
+    def __init__(self,
+                 dsa_handler: DSAHandler):
+        
+        self.dsa_handler = dsa_handler
+
+    def load(self, component_prefix: int):
+        pass
+
+    def gen_layout(self, session_data:Union[dict,None]):
+        pass
+
+    def get_callbacks(self):
+        pass
+
+
+class DSAPluginProgress(Tool):
+    """Handler for DSAPluginProgress component, letting users check the progress of currently running or previously run plugins as well as cancellation of running plugins.
+
+    :param Tool: General class for components that perform visualization and analysis of data.
+    :type Tool: None
+    """
+    def __init__(self,
+                 dsa_handler: DSAHandler):
+        
+        self.dsa_handler = dsa_handler
+    
+    def load(self,component_prefix:int):
+        pass
+
+    def gen_layout(self,session_data:Union[dict,None]):
+        pass
+
+    def get_callbacks(self):
+        pass
+
+
+class DSASurvey(Tool):
+    """Handler for DSASurvey component, letting users add a survey questionnaire to a layout (with optional login for targeting specific users).
+
+    :param Tool: General class for components that perform visualization and analysis of data.
+    :type Tool: None
+    """
+    def __init__(self,
+                 dsa_handler:DSAHandler,
+                 survey_args:dict):
+        
+        self.dsa_handler = dsa_handler
+        self.survey_args = survey_args
+
+    def load(self, component_prefix:int):
+        pass
+
+    def gen_layout(self, session_data:Union[dict,None]):
+        pass
+
+    def get_callbacks(self):
+        pass
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

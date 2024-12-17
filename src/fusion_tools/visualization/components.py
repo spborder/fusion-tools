@@ -105,8 +105,6 @@ class Visualization:
             ],
             'external_scripts': [
                 'https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.1.0/chroma.min.js',
-                'https://cdn.jsdelivr.net/npm/spatialmerge',
-                'https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js'
             ]
         }
 

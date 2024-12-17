@@ -1,7 +1,13 @@
 # Changelog
 
 <!--next-version-placeholder-->
+## v2.1.0 -> v2.5.5 (11/2024)
 
+### Features
+- Expanded feature extraction options
+    - `sub_mask` option enabling extraction of regions within images to calculate features on.
+- Expanded functionality for `BulkLabels` component
+    - Combine multiple queries using *NOT*, *AND*, and *OR* to refine structure selection.
 
 ## v2.1.0 (11/07/2024)
 

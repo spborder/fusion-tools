@@ -48,6 +48,7 @@ class LocalTileServer(TileServer):
         self.tiles_metadatas = [i.getMetadata() for i in self.tile_sources]
         self.annotations = self.load_annotations()
 
+        self.app = FastAPI()
         self.router = APIRouter()
         self.router.add_api_route('/',self.root,methods=["GET"])
         self.router.add_api_route('/names',self.get_names,methods=["GET"])
@@ -99,7 +100,7 @@ class LocalTileServer(TileServer):
 
         self.tile_sources.append(new_tile_source)
         if not new_metadata is None:
-            self.tiles_metadata.append(new_tiles_metadata | new_metadata)
+            self.tiles_metadata.append(new_tiles_metadata | {'user': new_metadata})
         else:
             self.tiles_metadatas.append(new_tiles_metadata)
 
@@ -288,9 +289,8 @@ class LocalTileServer(TileServer):
         :param port: Tile server port from which tiles are accessed, defaults to '8050'
         :type port: str, optional
         """
-        app = FastAPI()
-        app.include_router(self.router)
-        uvicorn.run(app,host=self.host,port=self.tile_server_port)
+        self.app.include_router(self.router)
+        uvicorn.run(self.app,host=self.host,port=self.tile_server_port)
 
 class DSATileServer(TileServer):
     """Use for linking visualization with remote tiles API (DSA server)

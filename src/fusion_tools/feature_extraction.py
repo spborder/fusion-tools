@@ -219,7 +219,7 @@ class ParallelFeatureExtractor:
         mask = polygon2mask(
             image_shape = (height,width),
             polygon = scaled_coords
-        ).astype(int)
+        )
 
         return mask
 
@@ -239,7 +239,7 @@ class ParallelFeatureExtractor:
         
         # Checking if the dimensions of the mask are equal to the first 2 dimensions of the image
         if not image_region.shape[0]==mask.shape[0] or not image_region.shape[1]==mask.shape[1]:
-            mask = resize(mask,[image_region.shape[0],image_region.shape[1]],preserve_range=True)
+            mask = resize(mask,[image_region.shape[0],image_region.shape[1]],preserve_range=True,anti_aliasing=False)
 
         if not self.sub_mask is None:
             mask = self.sub_mask(image_region,mask)

@@ -14,6 +14,7 @@ import scipy.ndimage as ndi
 from skimage.morphology import remove_small_holes, remove_small_objects
 from skimage.measure import label, find_contours
 from skimage.feature import peak_local_max
+from skimage.transform import rescale
 
 
 from fusion_tools.handler import DSAHandler
@@ -146,7 +147,7 @@ def main():
             'color',
             'texture'
         ],
-        preprocess = None,
+        preprocess = lambda image: rescale(image,2,channel_axis=-1),
         sub_mask = lambda image,mask: stain_mask(image,mask),
         mask_names = ['Nuclei','Eosinophilic','Luminal Space'],
         channel_names = ['Red','Green','Blue'],

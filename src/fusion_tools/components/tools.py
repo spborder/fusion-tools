@@ -3463,6 +3463,102 @@ class HRAViewer(Tool):
 
 
 
+class GlobalPropertyPlotter(Tool):
+    def __init__(self,
+                 ignore_list: list = [],
+                 property_depth: int = 6):
+        
+        self.ignore_list = ignore_list
+        self.property_depth = property_depth
+
+    def load(self, component_prefix: int):
+        self.component_prefix = component_prefix
+
+        self.title = 'Global Property Plotter'
+        self.blueprint = DashBlueprint(
+            transforms = [
+                PrefixIdTransform(prefix = f'{self.component_prefix}'),
+                MultiplexerTransform()
+            ]
+        )        
+        
+        self.get_callbacks()
+
+    def gen_layout(self, session_data: dict):
+        
+        layout = html.Div([
+            dbc.Card([
+                dbc.CardBody([
+                    dbc.Row([
+                        html.H3('Global Property Plotter')
+                    ]),
+                    html.Hr(),
+                    dbc.Row(
+                        'Select one or a combination of properties to generate a plot.'
+                    ),
+                    html.Hr(),
+                    dbc.Row(
+                        dbc.Label('Select properties below: ',html_for = {'type': 'global-property-plotter-drop','index': 0})
+                    ),
+                    dbc.Row([
+                        dcc.Dropdown(
+                            options = [],
+                            value = [],
+                            id = {'type': 'global-property-plotter-drop','index': 0},
+                            multi = True,
+                            placeholder = 'Features'
+                        )
+                    ]),
+                    html.Hr(),
+                    dbc.Row(
+                        dbc.Label('Select structures to include: ', html_for = {'type': 'global-property-plotter-structures','index': 0})
+                    ),
+                    dbc.Row([
+                        dcc.Dropdown(
+                            options = [],
+                            value = [],
+                            id = {'type': 'global-property-plotter-structures','index': 0},
+                            multi = True,
+                            placeholder = 'Structures'
+                        )
+                    ]),
+                    html.Hr(),
+                    dbc.Row([
+                        dbc.Label('Select additional metadata filters: ',html_for = {'type': 'global-property-plotter-add-filter-parent','index': 0}),
+                        html.Div('Click the icon below to add a filter.')
+                    ]),
+                    dbc.Row([
+                        html.Div(
+                            id = {'type': 'global-property-plotter-add-filter-parent','index': 0},
+                            children = []
+                        )
+                    ],align = 'center'),
+                    dbc.Row([
+                        dbc.Col([
+                            html.Div([
+                                html.A(
+                                    html.I(
+                                        className = 'bi bi-filter-circle fa-2x',
+                                        n_clicks = 0,
+                                        id = {'type': 'global-property-plotter-add-filter-butt','index': 0}
+                                    )
+                                ),
+                                dbc.Tooltip(
+                                    target = {'type': 'global-property-plotter-add-filter-butt','index': 0},
+                                    children = 'Click to add a filter.'
+                                )
+                            ])
+                        ])
+                    ],align='center',justify='center')
+                ])
+            ])
+        ],style = {'maxHeight': '100vh','overflow':'scroll'})
+
+        self.blueprint.layout = layout
+
+    def get_callbacks(self):
+        pass
+
 
 
 
