@@ -21,6 +21,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 from umap import UMAP
 
+from PIL import Image
+
 from io import BytesIO
 import requests
 
@@ -3466,10 +3468,29 @@ class HRAViewer(Tool):
 class GlobalPropertyPlotter(Tool):
     def __init__(self,
                  ignore_list: list = [],
-                 property_depth: int = 6):
+                 property_depth: int = 6,
+                 preloaded_properties: Union[pd.DataFrame,None] = None,
+                 structure_column: Union[str,None] = None,
+                 slide_column: Union[str,None] = None,
+                 bbox_columns: Union[list,str,None] = None
+                 ):
         
         self.ignore_list = ignore_list
         self.property_depth = property_depth
+        self.preloaded_properties = preloaded_properties
+        self.structure_column = structure_column
+        self.slide_column = slide_column
+        self.bbox_columns = bbox_columns
+
+        if not self.preloaded_properties is None:
+            self.preloaded_options = [i for i in self.preloaded_properties.columns.tolist() if not i in ignore_list]
+        else:
+            #TODO: Extract all plottable properties, slide names, bounding boxes, structures and define those here if not preloaded
+            self.preloaded_options = None
+
+    def extract_all_properties(self, session_data):
+        # This function would use the session data to extract annotations, properties, and format them in a reasonable way
+        pass
 
     def load(self, component_prefix: int):
         self.component_prefix = component_prefix
@@ -3484,6 +3505,75 @@ class GlobalPropertyPlotter(Tool):
         
         self.get_callbacks()
 
+    def generate_property_dict(self, available_properties, title: str = 'Features'):
+        all_properties = {
+            'title': title,
+            'key': '0',
+            'children': []
+        }
+
+        def add_prop_level(level_children, prop, index_list):
+            new_keys = {}
+            if len(level_children)==0:
+                if not prop[0] in self.ignore_list:
+                    new_key = f'{"-".join(index_list)}-0'
+                    p_dict = {
+                        'title': prop[0],
+                        'key': new_key,
+                        'children': []
+                    }
+                    l_dict = p_dict['children']
+                    if len(prop)==1:
+                        new_keys[new_key] = prop[0]
+                    for p_idx,p in enumerate(prop[1:]):
+                        if not p in self.ignore_list:
+                            new_key = f'{"-".join(index_list+["0"]*(p_idx+2))}'
+                            l_dict.append({
+                                'title': p,
+                                'key': new_key,
+                                'children': []
+                            })
+                            l_dict = l_dict[0]['children']
+
+                            new_keys[new_key] = ' --> '.join(prop[:p_idx+2])
+
+                    level_children.append(p_dict)
+            else:
+                for p_idx,p in enumerate(prop):
+                    if not p in self.ignore_list:
+                        if any([p==i['title'] for i in level_children]):
+                            title_idx = [i['title'] for i in level_children].index(p)
+                            level_children = level_children[title_idx]['children']
+                            index_list.append(str(title_idx))
+                        else:
+                            new_key = f'{"-".join(index_list)}-{len(level_children)}'
+                            other_children = len(level_children)
+                            level_children.append({
+                                'title': p,
+                                'key': new_key,
+                                'children': []
+                            })
+                            level_children = level_children[-1]['children']
+                            index_list.append(str(other_children))
+                            if p_idx==len(prop)-1:
+                                new_keys[new_key] = ' --> '.join(prop[:p_idx+1])
+            
+            return new_keys
+        
+        list_levels = [i.split(' --> ') if '-->' in i else [i] for i in available_properties]
+        unique_levels = list(set([len(i) for i in list_levels]))
+        sorted_level_idxes = np.argsort(unique_levels)[::-1]
+        property_keys = {}
+        for s in sorted_level_idxes:
+            depth_count = unique_levels[s]
+            props_with_level = [i for i in list_levels if len(i)==depth_count]
+            for p in props_with_level:
+                feature_children = all_properties['children']
+                property_keys = property_keys | add_prop_level(feature_children,p,['0'])
+
+
+        return all_properties, property_keys
+
     def gen_layout(self, session_data: dict):
         
         layout = html.Div([
@@ -3497,12 +3587,24 @@ class GlobalPropertyPlotter(Tool):
                         'Select one or a combination of properties to generate a plot.'
                     ),
                     html.Hr(),
-                    dbc.Row(
-                        dbc.Label('Select properties below: ',html_for = {'type': 'global-property-plotter-drop','index': 0})
+                    dbc.Row([
+                        dbc.Label('Select properties below: ',html_for = {'type': 'global-property-plotter-drop','index': 0}),
+                        dmc.Switch(
+                            id = {'type': 'global-property-plotter-drop-type','index': 0},
+                            offLabel = 'Dropdown Menu',
+                            onLabel = 'Tree View',
+                            size = 'lg',
+                            checked = False
+                        )
+                    ]),
+                    dcc.Store(
+                        id = {'type': 'global-property-plotter-session-store','index': 0},
+                        data = json.dumps(session_data),
+                        storage_type = 'memory'
                     ),
                     dbc.Row([
                         dcc.Dropdown(
-                            options = [],
+                            options = [] if self.preloaded_options is None else self.preloaded_options,
                             value = [],
                             id = {'type': 'global-property-plotter-drop','index': 0},
                             multi = True,
@@ -3520,7 +3622,7 @@ class GlobalPropertyPlotter(Tool):
                             id = {'type': 'global-property-plotter-structures','index': 0},
                             multi = True,
                             placeholder = 'Structures'
-                        )
+                        ),
                     ]),
                     html.Hr(),
                     dbc.Row([
@@ -3549,7 +3651,51 @@ class GlobalPropertyPlotter(Tool):
                                 )
                             ])
                         ])
-                    ],align='center',justify='center')
+                    ],align='center',justify='center'),
+                    html.Hr(),
+                    dbc.Row([
+                        dbc.Label('Select a label to apply to points in the plot',html_for = {'type': 'global-property-plotter-label-drop','index': 0})
+                    ]),
+                    dbc.Row([
+                        dcc.Dropdown(
+                            options = [] if self.preloaded_features is None else self.preloaded_features.select_dtypes(include='object').columns.tolist(),
+                            value = [],
+                            multi = False,
+                            id = {'type': 'global-property-plotter-label-drop','index': 0},
+                            placeholder = 'Label'
+                        )
+                    ]),
+                    dbc.Row([
+                        dbc.Button(
+                            'Generate Plot!',
+                            id = {'type': 'global-property-plotter-plot-butt','index': 0},
+                            n_clicks = 0,
+                            className = 'd-grid col-12 mx-auto'
+                        )
+                    ]),
+                    dbc.Row([
+                        dbc.Col([
+                            dcc.Loading(
+                                dcc.Store(
+                                    id = {'type': 'global-property-plotter-store','index': 0},
+                                    data = json.dumps({'property_names': [], 'structure_names': [], 'label_names': [], 'filters': [], 'data': []}),
+                                    storage_type = 'memory'
+                                ),
+                                html.Div(
+                                    id = {'type': 'global-property-plotter-plot-div','index': 0},
+                                    children = []
+                                )
+                            )
+                        ],md = 6),
+                        dbc.Col([
+                            dcc.Loading(
+                                html.Div(
+                                    id = {'type': 'global-property-plotter-selected-div','index': 0},
+                                    children = []
+                                )
+                            )
+                        ],md=6)
+                    ])
                 ])
             ])
         ],style = {'maxHeight': '100vh','overflow':'scroll'})
@@ -3557,7 +3703,511 @@ class GlobalPropertyPlotter(Tool):
         self.blueprint.layout = layout
 
     def get_callbacks(self):
-        pass
+        
+        #TODO: Callbacks
+        # Callback for updating type of feature selector (either dropdown or tree)
+        # Callback for running statistics
+        # Callback for exporting plot data
+
+        # Updating filters
+        self.blueprint.callback(
+            [
+                Input({'type': 'global-property-plotter-add-filter-butt','index': ALL},'n_clicks'),
+                Input({'type': 'global-property-plotter-remove-property-icon','index': ALL},'n_clicks')
+            ],
+            [
+                Output({'type': 'global-property-plotter-add-filter-parent','index': ALL},'children')
+            ],
+            [
+                State({'type': 'global-property-plotter-property-info','index': ALL},'data')
+            ]
+        )(self.update_filter_properties)
+
+        # Updating store containing properties, structures, labels, and filters
+        self.blueprint.callback(
+            [
+                Input({'type': 'global-property-plotter-drop','index': ALL},'value'),
+                Input({'type': 'global-property-plotter-structures','index': ALL},'value'),
+                Input({'type': 'global-property-plotter-label-drop','index': ALL},'value'),
+                Input({'type': 'global-property-plotter-filter-selector','index':ALL},'value'),
+                Input({'type': 'global-property-plotter-remove-property-icon','index': ALL},'n_clicks'),
+                Input({'type': 'global-property-plotter-filter-property-mod','index': ALL},'value')
+            ],
+            [
+                Output({'type': 'global-property-plotter-store','index': ALL},'data')
+            ],
+            [
+                State({'type':'global-property-plotter-add-filter-parent','index': ALL},'children'),
+                State({'type': 'global-property-plotter-store','index': ALL},'data')
+            ]
+        )(self.update_properties_and_filters)
+
+        # Generating plot of selected properties, structures, labels
+        self.blueprint.callback(
+            [
+                Input({'type': 'global-property-plotter-plot-butt','index':ALL},'n_clicks')
+            ],
+            [
+                Output({'type': 'global-property-plotter-store','index': ALL},'data'),
+                Output({'type': 'global-property-plotter-plot-div','index': ALL},'children')
+            ],
+            [
+                State({'type': 'global-property-plotter-store','index': ALL},'data')
+            ]
+        )(self.generate_plot)
+
+        # Selecting points within the plot
+        self.blueprint.callback(
+            [
+                Input({'type': 'global-property-plotter-plot','index': ALL},'selectedData'),
+            ],
+            [
+                Output({'type': 'global-property-plotter-selected-div','index': ALL},'children')
+            ],
+            [
+                State({'type': 'global-property-plotter-session-store','index':ALL},'data')
+            ]
+        )(self.select_data_from_plot)
+
+    def update_properties_and_filters(self, property_selection, structure_selection, label_selection,remove_prop, prop_mod, property_divs,current_data):
+        """Updating the properties, structures, and filters incorporated into the main plot
+
+        :param property_selection: Properties selected for plotting
+        :type property_selection: list
+        :param structure_selection: Structures selected to be plotted
+        :type structure_selection: list
+        :param label_selection: Label selected for the plot
+        :type label_selection: list
+        :param remove_prop: Remove property filter clicked
+        :type remove_prop: list
+        :param prop_mod: Modifier applied to property filter changed
+        :type prop_mod: list
+        :param property_divs: Children of property filter parent has been updated
+        :type property_divs: list
+        :param current_data: Contents of the global-property-store, updated by this plugin.
+        :type current_data: list
+        :return: Updated global-property-store object
+        :rtype: list
+        """
+        
+        current_data = json.loads(get_pattern_matching_value(current_data))
+        property_divs = get_pattern_matching_value(property_divs)
+
+        processed_prop_filters = self.parse_filter_divs(property_divs)
+
+        current_data['filters'] = processed_prop_filters
+        current_data['property_names'] = get_pattern_matching_value(property_selection)
+        current_data['structure_names'] = get_pattern_matching_value(structure_selection)
+        current_data['label_names'] = get_pattern_matching_value(label_selection)
+        
+        return [json.dumps(current_data)]
+
+    def generate_plot(self, butt_click, current_data):
+        """Generate a new plot based on selected properties
+
+        :param butt_click: Generate Plot button clicked
+        :type butt_click: list
+        :param current_data: Dictionary containing current selected properties (in a list)
+        :type current_data: list
+        """
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        current_data = json.loads(get_pattern_matching_value(current_data))
+        property_names = current_data['property_names']
+        structure_names = current_data['structure_names']
+        label_names = current_data['label_names']
+        filters = current_data['filters']
+
+        if len(property_names)==0 | len(structure_names)==0:
+            raise exceptions.PreventUpdate
+        
+        # Applying filters to the current data
+        filtered_properties = pd.DataFrame()
+        if not self.preloaded_properties is None:
+            include_list = [(False,)]*self.preloaded_properties.shape[0]
+            filtered_properties = self.preloaded_properties.copy()
+            for f in filters:
+                if f['name'] in filtered_properties:
+                    if not filtered_properties[f['name']].dtype=='object':
+                        structure_status = [f['range'][0]<=i and f['range'][1]>=i for i in filtered_properties[f['name']].tolist()]
+                    else:
+                        structure_status = [i in f['range'] for i in filtered_properties[f['name']].tolist()]
+
+                    if f['mod']=='not':
+                        structure_status = [not(i) for i in structure_status]
+
+                    if f['mod'] in ['not','and']:
+                        del_count = 0
+                        for idx,i in enumerate(structure_status):
+                            if not i:
+                                del include_list[idx-del_count]
+                                del_count+=1
+                            else:
+                                include_list[idx-del_count]+=(True,)
+
+                        filtered_properties = filtered_properties.loc[structure_status,:]
+                    elif f['mod']=='or':
+                        include_list = [i+(j,) for i,j in zip(include_list,structure_status)]
+
+            filtered_properties = filtered_properties.loc[[any(i) for i in include_list]]
+        else:
+            #TODO: Grab the properties from the current visualization session or query them in some other way
+            pass
+
+        if filtered_properties.empty:
+            raise exceptions.PreventUpdate
+        else:
+            current_data['data'] = filtered_properties.to_dict('records')
+
+            if len(property_names)==1:
+                plot_fig = self.gen_violin_plot(filtered_properties, label_names, property_names[0], [self.slide_column]+self.bbox_columns)
+            elif len(property_names)==2:
+                plot_fig = self.gen_scatter_plot(filtered_properties,property_names,None,[self.slide_column]+self.bbox_columns)
+            elif len(property_names)>2:
+                
+                umap_columns = self.gen_umap_cols(filtered_properties,property_names)
+                filtered_properties['UMAP1'] = umap_columns['UMAP1'].tolist()
+                filtered_properties['UMAP2'] = umap_columns['UMAP2'].tolist()
+
+                current_data['data'] = filtered_properties.to_dict('records')
+ 
+                plot_fig = self.gen_scatter_plot(filtered_properties,['UMAP1','UMAP2'],label_names,[self.slide_column]+self.bbox_columns)
+
+            return_fig = dcc.Graph(
+                id = {'type': f'{self.component_prefix}-global-property-plotter-plot','index': 0},
+                figure = plot_fig
+            )
+
+        return [json.dumps(current_data)],[return_fig]
+
+    def gen_violin_plot(self, data_df:pd.DataFrame, label_col: Union[str,None], property_column: str, customdata_columns:list):
+        """Generating a violin plot using provided data, property columns, and customdata
+
+
+        :param data_df: Extracted data from current GeoJSON features
+        :type data_df: pd.DataFrame
+        :param label_col: Name of column to use for label
+        :type label_col: Union[str,None]
+        :param property_column: Name of column to use for property (y-axis) value
+        :type property_column: str
+        :param customdata_columns: Names of columns to use for customdata (accessible from clickData and selectedData)
+        :type customdata_columns: list
+        :return: Figure containing violin plot data
+        :rtype: go.Figure
+        """
+        figure = go.Figure(
+            data = go.Violin(
+                x = None if label_col is None else data_df[label_col],
+                y = data_df[property_column],
+                customdata = data_df[customdata_columns] if not customdata_columns is None else None,
+                points = 'all',
+                pointpos=0,
+                spanmode='hard'
+            )
+        )
+        
+        figure.update_layout(
+            legend = dict(
+                orientation='h',
+                y = 0,
+                yanchor='top',
+                xanchor='left'
+            ),
+            title = '<br>'.join(
+                textwrap.wrap(
+                    f'{property_column}',
+                    width=80
+                )
+            ),
+            yaxis_title = dict(
+                text = '<br>'.join(
+                    textwrap.wrap(
+                        f'{property_column}',
+                        width=80
+                    )
+                ),
+                font = dict(size = 10)
+            ),
+            xaxis_title = dict(
+                text = '<br>'.join(
+                    textwrap.wrap(
+                        label_col,
+                        width=80
+                    )
+                ) if not label_col is None else 'Group',
+                font = dict(size = 10)
+            ),
+            margin = {'r':0,'b':25}
+        )
+
+        return figure
+
+    def gen_scatter_plot(self, data_df:pd.DataFrame, plot_cols:list, label_col:Union[str,None], customdata_cols:list):
+        """Generating a 2D scatter plot using provided data
+
+
+        :param data_df: Extracted data from current GeoJSON features
+        :type data_df: pd.DataFrame
+        :param plot_cols: Names of columns containing properties for the scatter plot
+        :type plot_cols: list
+        :param label_cols: Name of column to use to label markers.
+        :type label_cols: Union[str,None]
+        :param customdata_cols: Names of columns to use for customdata on plot
+        :type customdata_cols: list
+        :return: Scatter plot figure
+        :rtype: go.Figure
+        """
+        if not label_col is None:
+            figure = go.Figure(
+                data = px.scatter(
+                    data_frame=data_df,
+                    x = plot_cols[0],
+                    y = plot_cols[1],
+                    color = label_col,
+                    custom_data = customdata_cols,
+                    title = '<br>'.join(
+                        textwrap.wrap(
+                            f'Scatter plot of {plot_cols[0]} and {plot_cols[1]} labeled by {label_col}',
+                            width = 60
+                            )
+                        )
+                )
+            )
+            if not data_df[label_col].dtype == np.number:
+                figure.update_layout(
+                    legend = dict(
+                        orientation='h',
+                        y = 0,
+                        yanchor='top',
+                        xanchor='left'
+                    ),
+                    margin = {'r':0,'b':25}
+                )
+            else:
+
+                custom_data_idx = [i for i in range(data_df.shape[1]) if data_df.columns.tolist()[i] in customdata_cols]
+                figure = go.Figure(
+                    go.Scatter(
+                        x = data_df[plot_cols[0]].values,
+                        y = data_df[plot_cols[1]].values,
+                        customdata = data_df.iloc[:,custom_data_idx].to_dict('records'),
+                        mode = 'markers',
+                        marker = {
+                            'color': data_df[label_col].values,
+                            'colorbar':{
+                                'title': label_col
+                            },
+                            'colorscale':'jet'
+                        },
+                        text = data_df[label_col].values,
+                        hovertemplate = "label: %{text}"
+
+                    )
+                )
+
+        else:
+
+            figure = go.Figure(
+                data = px.scatter(
+                    data_frame=data_df,
+                    x = plot_cols[0],
+                    y = plot_cols[1],
+                    color = None,
+                    custom_data = customdata_cols,
+                    title = '<br>'.join(
+                        textwrap.wrap(
+                            f'Scatter plot of {plot_cols[0]} and {plot_cols[1]}',
+                            width = 60
+                            )
+                        )
+                )
+            )
+
+        return figure
+
+    def gen_umap_cols(self, data_df:pd.DataFrame, property_columns: list)->pd.DataFrame:
+        """Scale and run UMAP for dimensionality reduction
+
+
+        :param data_df: Extracted data from current GeoJSON features
+        :type data_df: pd.DataFrame
+        :param property_columns: Names of columns containing properties for UMAP plot
+        :type property_columns: list
+        :return: Dataframe containing colunns named UMAP1 and UMAP2
+        :rtype: pd.DataFrame
+        """
+        quant_data = data_df.loc[:,[i for i in property_columns if i in data_df.columns]].fillna(0)
+        for p in property_columns:
+            quant_data[p] = pd.to_numeric(quant_data[p],errors='coerce')
+        quant_data = quant_data.values
+        feature_data_means = np.nanmean(quant_data,axis=0)
+        feature_data_stds = np.nanstd(quant_data,axis=0)
+
+        scaled_data = (quant_data-feature_data_means)/feature_data_stds
+        scaled_data[np.isnan(scaled_data)] = 0.0
+        scaled_data[~np.isfinite(scaled_data)] = 0.0
+        umap_reducer = UMAP()
+        embeddings = umap_reducer.fit_transform(scaled_data)
+        umap_df = pd.DataFrame(data = embeddings, columns = ['UMAP1','UMAP2']).fillna(0)
+
+        umap_df.columns = ['UMAP1','UMAP2']
+        umap_df.reset_index(drop=True, inplace=True)
+
+        return umap_df
+
+    def parse_filter_divs(self, add_property_parent: list)->list:
+        """Processing parent div object and extracting name and range for each property filter.
+
+        :param add_property_parent: Parent div containing property filters
+        :type add_property_parent: list
+        :return: List of property filters (dicts with keys: name and range)
+        :rtype: list
+        """
+        processed_filters = []
+        if not add_property_parent is None:
+            for div in add_property_parent:
+                div_children = div['props']['children']
+                filter_mod = div_children[0]['props']['children'][0]['props']['children'][0]['props']['value']
+                filter_name = div_children[0]['props']['children'][1]['props']['children'][0]['props']['value']
+                if 'props' in div_children[1]['props']['children']:
+                    if 'value' in div_children[1]['props']['children']['props']:
+                        filter_value = div_children[1]['props']['children']['props']['value']
+                    else:
+                        filter_value = div_children[1]['props']['children']['props']['children']['props']['value']
+                    
+                    if not any([i is None for i in [filter_mod,filter_name,filter_value]]):
+                        processed_filters.append({
+                            'mod': filter_mod,
+                            'name': filter_name,
+                            'range': filter_value
+                        })
+
+        return processed_filters
+
+    def update_filter_properties(self, add_click:list, remove_click:list, property_info:list):
+        """Adding/removing property filter dropdown
+
+        :param add_click: Add property filter clicked
+        :type add_click: list
+        :param remove_click: Remove property filter clicked
+        :type remove_click: list
+        :return: Property filter dropdown and parent div of range selector
+        :rtype: tuple
+        """
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        properties_div = Patch()
+        add_click = get_pattern_matching_value(add_click)
+        property_info = json.loads(get_pattern_matching_value(property_info))['property_info']
+
+        if 'global-property-plotter-add-filter-butt' in ctx.triggered_id['type']:
+
+            def new_property_div():
+                return html.Div([
+                    dbc.Row([
+                        dbc.Col([
+                            dcc.Dropdown(
+                                options = [
+                                    {'label': html.Span('AND',style={'color':'rgb(0,0,255)'}),'value': 'and'},
+                                    {'label': html.Span('OR',style={'color': 'rgb(0,255,0)'}),'value': 'or'},
+                                    {'label': html.Span('NOT',style={'color':'rgb(255,0,0)'}),'value': 'not'}
+                                ],
+                                value = 'and',
+                                placeholder='Modifier',
+                                id = {'type': f'{self.component_prefix}-bulk-labels-filter-property-mod','index': add_click}
+                            )
+                        ],md=2),
+                        dbc.Col([
+                            dcc.Dropdown(
+                                options = list(property_info.keys()),
+                                value = [],
+                                multi = False,
+                                placeholder = 'Select property',
+                                id = {'type': f'{self.component_prefix}-global-property-plotter-filter-property-drop','index':add_click}
+                            )
+                        ],md=8),
+                        dbc.Col([
+                            html.A(
+                                html.I(
+                                    id = {'type': f'{self.component_prefix}-global-property-plotter-remove-property-icon','index': add_click},
+                                    n_clicks = 0,
+                                    className = 'bi bi-x-circle-fill fa-2x',
+                                    style = {'color': 'rgb(255,0,0)'}
+                                )
+                            )
+                        ], md = 2)
+                    ]),
+                    html.Div(
+                        id = {'type': f'{self.component_prefix}-global-property-plotter-property-selector-div','index': add_click},
+                        children = []
+                    )
+                ])
+
+            properties_div.append(new_property_div())
+
+        elif 'global-property-plotter-remove-property-icon' in ctx.triggered_id['type']:
+
+            values_to_remove = []
+            for i, val in enumerate(remove_click):
+                if val:
+                    values_to_remove.insert(0,i)
+
+            for v in values_to_remove:
+                del properties_div[v]
+
+        
+        return [properties_div]
+
+    def select_data_from_plot(self, selected_data, session_data):
+        """Select point(s) from the plot and extract the image from that/those point(s)
+
+        :param selected_data: Multiple points selected using either a box or lasso select
+        :type selected_data: list
+        :param session_data: Data for each slide in the current session
+        :type session_data: list
+        """
+
+        session_data = json.loads(get_pattern_matching_value(session_data))
+        selected_data = get_pattern_matching_value(selected_data)
+
+        session_names = [i['name'] for i in session_data]
+        selected_image_list = []
+        for s_idx,s in enumerate(selected_data['points']):
+            s_slide = s['customdata'][0]
+            s_bbox = s['customdata'][1:]
+
+            image_region = Image.open(
+                BytesIO(
+                    requests.get(
+                        session_data[session_names.index(s_slide)]['regions_url']+f'?top={s_bbox[0]}&left={s_bbox[1]}&bottom={s_bbox[2]}&right={s_bbox[3]}'
+                    ).content
+                )
+            )
+
+            selected_image_list.append(image_region)
+
+            if len(selected_image_list)==1:
+                selected_image = go.Figure(
+                    data = px.imshow(selected_image_list[0])['data'],
+                    layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
+                    )
+            elif len(selected_image_list)>1:
+                selected_image = go.Figure(
+                    data = px.imshow(np.stack(selected_image_list,axis=0),animation_frame=0,binary_string=True),
+                    layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
+                    )
+            else:
+                selected_image = go.Figure()
+                print(f'No images found')
+                print(f'selected:{selected_data}')
+
+        return [selected_image]
+
+
 
 
 

@@ -1306,7 +1306,6 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                         include = i
                     else:
                         include = not i
-            print(include)
 
             if include:
                 filtered_geojson['features'].append(feat)

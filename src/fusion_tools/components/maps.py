@@ -824,6 +824,7 @@ class SlideMap(MapComponent):
             :param sub_accordion_list: List of sub-accordions, defaults to []
             :type sub_accordion_list: list, optional
             """
+            #TODO: This part doesn't always have the correct titles for sub-accordions
             for idx,in_data in enumerate(input_data):
                 title = list(in_data.keys())[0]
                 non_nested_data = [{'Sub-Property':key, 'Value': val} for key,val in in_data[title].items() if not type(val) in [list,dict]]
