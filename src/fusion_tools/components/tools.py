@@ -3490,7 +3490,47 @@ class GlobalPropertyPlotter(Tool):
 
     def extract_all_properties(self, session_data):
         # This function would use the session data to extract annotations, properties, and format them in a reasonable way
-        pass
+        session_properties = pd.DataFrame()
+        for s in session_data:
+            slide_name = s['name']
+            annotations = requests.get(s['annotations_url']).json()
+            metadata = requests.get(s['metadata_url']).json()
+
+            slide_properties = pd.DataFrame()
+            for ann in annotations:
+                ann_properties = pd.json_normalize([i['properties'] for i in ann['features']],sep=' --> ')
+                ann_properties['Structure'] = [ann['properties']['name']]*ann_properties.shape[0]
+                ann_properties['Slide Name'] = [slide_name]*ann_properties.shape[0]
+
+                # Pulling out slide-level metadata
+                if 'user' in metadata:
+                    ann_properties = pd.concat([ann_properties,pd.DataFrame.from_records([metadata]*ann_properties.shape[0])],axis=1,ignore_index=True)
+
+                bbox_list = []
+                for f in ann['features']:
+                    bbox = list(shape(f['geometry']).bounds)
+                    bbox_list.append({'min_x':bbox[0],'min_y':bbox[1],'max_x':bbox[2],'max_y':bbox[3]})
+
+                ann_properties = pd.concat([ann_properties,pd.DataFrame.from_records(bbox_list)],axis=1,ignore_index=True)
+                
+                if not ann_properties.empty:
+                    if slide_properties.empty:
+                        slide_properties = ann_properties
+                    else:
+                        slide_properties = pd.concat([slide_properties,ann_properties],axis=0,ignore_index=True)
+                
+            if session_properties.empty:
+                session_properties = slide_properties
+            else:
+                session_properties = pd.concat([session_properties,slide_properties],axis=0,ignore_index=True)
+
+
+        self.preloaded_properties = session_properties
+        self.preloaded_options = session_properties.select_dtypes(exclude='object').columns.tolist()
+        self.structure_column = 'Structure'
+        self.slide_column = 'Slide Name'
+        self.bbox_columns = ['min_x','min_y','max_x','max_y']
+
 
     def load(self, component_prefix: int):
         self.component_prefix = component_prefix
@@ -3576,6 +3616,9 @@ class GlobalPropertyPlotter(Tool):
 
     def gen_layout(self, session_data: dict):
         
+        if self.preloaded_properties is None:
+            self.extract_all_properties(session_data)
+
         layout = html.Div([
             dbc.Card([
                 dbc.CardBody([
