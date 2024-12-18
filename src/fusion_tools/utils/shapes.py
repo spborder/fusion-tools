@@ -414,6 +414,24 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
 
     return spot_annotations
 
+def detect_histomics(query_annotations:Union[list,dict]):
+    """Check whether a list/dict of annotations are in histomics format
+
+    :param query_annotations: Input query annotation
+    :type query_annotations: Union[list,dict]
+    """
+
+    if type(query_annotations)==dict:
+        query_annotations = [query_annotations]
+    
+    result = False
+    for q in query_annotations:
+        if type(q)==dict:
+            if 'annotation' in q:
+                result = True
+    
+    return result
+
 def convert_histomics(json_anns: Union[list,dict]):
     
     if type(json_anns)==dict:

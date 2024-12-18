@@ -21,7 +21,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from umap import UMAP
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from io import BytesIO
 import requests
@@ -41,7 +41,13 @@ from dash_extensions.javascript import Namespace, arrow_function
 
 # fusion-tools imports
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
-from fusion_tools.utils.shapes import find_intersecting, extract_geojson_properties, process_filters_queries
+from fusion_tools.utils.shapes import (
+    find_intersecting, 
+    extract_geojson_properties, 
+    process_filters_queries,
+    detect_histomics,
+    convert_histomics
+)
 from fusion_tools.utils.stats import get_label_statistics, run_wilcox_rank_sum
 
 
@@ -3472,7 +3478,8 @@ class GlobalPropertyPlotter(Tool):
                  preloaded_properties: Union[pd.DataFrame,None] = None,
                  structure_column: Union[str,None] = None,
                  slide_column: Union[str,None] = None,
-                 bbox_columns: Union[list,str,None] = None
+                 bbox_columns: Union[list,str,None] = None,
+                 nested_prop_sep: str = ' --> '
                  ):
         
         self.ignore_list = ignore_list
@@ -3481,11 +3488,13 @@ class GlobalPropertyPlotter(Tool):
         self.structure_column = structure_column
         self.slide_column = slide_column
         self.bbox_columns = bbox_columns
+        self.nested_prop_sep = nested_prop_sep
 
         if not self.preloaded_properties is None:
             self.preloaded_options = [i for i in self.preloaded_properties.columns.tolist() if not i in ignore_list]
+            self.property_tree, self.property_keys = self.generate_property_dict(self.preloaded_options)
+
         else:
-            #TODO: Extract all plottable properties, slide names, bounding boxes, structures and define those here if not preloaded
             self.preloaded_options = None
 
     def extract_all_properties(self, session_data):
@@ -3494,11 +3503,17 @@ class GlobalPropertyPlotter(Tool):
         for s in session_data:
             slide_name = s['name']
             annotations = requests.get(s['annotations_url']).json()
+            
+            # Checking if these are histomics formatted or GeoJSON formatted
+            is_histomics = detect_histomics(annotations)
+            if is_histomics:
+                annotations = convert_histomics(annotations)
+
             metadata = requests.get(s['metadata_url']).json()
 
             slide_properties = pd.DataFrame()
             for ann in annotations:
-                ann_properties = pd.json_normalize([i['properties'] for i in ann['features']],sep=' --> ')
+                ann_properties = pd.json_normalize([i['properties'] for i in ann['features']],sep=self.nested_prop_sep)
                 ann_properties['Structure'] = [ann['properties']['name']]*ann_properties.shape[0]
                 ann_properties['Slide Name'] = [slide_name]*ann_properties.shape[0]
 
@@ -3511,8 +3526,10 @@ class GlobalPropertyPlotter(Tool):
                     bbox = list(shape(f['geometry']).bounds)
                     bbox_list.append({'min_x':bbox[0],'min_y':bbox[1],'max_x':bbox[2],'max_y':bbox[3]})
 
+                ann_cols = ann_properties.columns.tolist()
                 ann_properties = pd.concat([ann_properties,pd.DataFrame.from_records(bbox_list)],axis=1,ignore_index=True)
-                
+                ann_properties.columns = ann_cols+['min_x','min_y','max_x','max_y']
+
                 if not ann_properties.empty:
                     if slide_properties.empty:
                         slide_properties = ann_properties
@@ -3531,7 +3548,6 @@ class GlobalPropertyPlotter(Tool):
         self.slide_column = 'Slide Name'
         self.bbox_columns = ['min_x','min_y','max_x','max_y']
 
-
     def load(self, component_prefix: int):
         self.component_prefix = component_prefix
 
@@ -3545,7 +3561,7 @@ class GlobalPropertyPlotter(Tool):
         
         self.get_callbacks()
 
-    def generate_property_dict(self, available_properties, title: str = 'Features'):
+    def generate_property_dict(self, available_properties, title: str = 'Properties'):
         all_properties = {
             'title': title,
             'key': '0',
@@ -3575,7 +3591,7 @@ class GlobalPropertyPlotter(Tool):
                             })
                             l_dict = l_dict[0]['children']
 
-                            new_keys[new_key] = ' --> '.join(prop[:p_idx+2])
+                            new_keys[new_key] = self.nested_prop_sep.join(prop[:p_idx+2])
 
                     level_children.append(p_dict)
             else:
@@ -3596,11 +3612,11 @@ class GlobalPropertyPlotter(Tool):
                             level_children = level_children[-1]['children']
                             index_list.append(str(other_children))
                             if p_idx==len(prop)-1:
-                                new_keys[new_key] = ' --> '.join(prop[:p_idx+1])
+                                new_keys[new_key] = self.nested_prop_sep.join(prop[:p_idx+1])
             
             return new_keys
         
-        list_levels = [i.split(' --> ') if '-->' in i else [i] for i in available_properties]
+        list_levels = [i.split(self.nested_prop_sep) if self.nested_prop_sep in i else [i] for i in available_properties]
         unique_levels = list(set([len(i) for i in list_levels]))
         sorted_level_idxes = np.argsort(unique_levels)[::-1]
         property_keys = {}
@@ -3614,10 +3630,37 @@ class GlobalPropertyPlotter(Tool):
 
         return all_properties, property_keys
 
+    def extract_property_info(self):
+
+        if not self.preloaded_properties is None:
+            
+            property_info = {}
+            for p in self.preloaded_properties:
+                if any([i in str(self.preloaded_properties[p].dtype).lower() for i in ['object','category','string']]):
+                    property_info[p] = {
+                        'unique': self.preloaded_properties[p].unique().tolist(),
+                        'distinct': int(self.preloaded_properties[p].nunique())
+                    }
+                elif any([i in str(self.preloaded_properties[p].dtype).lower() for i in ['int','float','bool']]):
+                    property_info[p] = {
+                        'min': float(self.preloaded_properties[p].min()),
+                        'max': float(self.preloaded_properties[p].max()),
+                        'distinct': int(self.preloaded_properties[p].nunique())
+                    }
+                else:
+                    print(f'property: {p} has dtype {self.preloaded_properties[p].dtype} which is not implemented!')
+
+            return property_info
+        else:
+            return None
+
     def gen_layout(self, session_data: dict):
         
         if self.preloaded_properties is None:
             self.extract_all_properties(session_data)
+            self.property_tree, self.property_keys = self.generate_property_dict(self.preloaded_options)
+
+        property_info = self.extract_property_info()
 
         layout = html.Div([
             dbc.Card([
@@ -3637,7 +3680,8 @@ class GlobalPropertyPlotter(Tool):
                             offLabel = 'Dropdown Menu',
                             onLabel = 'Tree View',
                             size = 'lg',
-                            checked = False
+                            checked = False,
+                            description = 'Select related properties in groups with "Tree View" or select properties individually with "Dropdown Menu"'
                         )
                     ]),
                     dcc.Store(
@@ -3645,13 +3689,21 @@ class GlobalPropertyPlotter(Tool):
                         data = json.dumps(session_data),
                         storage_type = 'memory'
                     ),
+                    dcc.Store(
+                        id = {'type': 'global-property-plotter-property-info','index': 0},
+                        data = json.dumps(property_info),
+                        storage_type = 'memory'
+                    ),
                     dbc.Row([
-                        dcc.Dropdown(
-                            options = [] if self.preloaded_options is None else self.preloaded_options,
-                            value = [],
-                            id = {'type': 'global-property-plotter-drop','index': 0},
-                            multi = True,
-                            placeholder = 'Features'
+                        html.Div(
+                            dcc.Dropdown(
+                                options = [] if self.preloaded_options is None else self.preloaded_options,
+                                value = [],
+                                id = {'type': 'global-property-plotter-drop','index': 0},
+                                multi = True,
+                                placeholder = 'Properties'
+                            ),
+                            id = {'type': 'global-property-plotter-drop-div','index': 0}
                         )
                     ]),
                     html.Hr(),
@@ -3660,7 +3712,7 @@ class GlobalPropertyPlotter(Tool):
                     ),
                     dbc.Row([
                         dcc.Dropdown(
-                            options = [],
+                            options = [] if self.structure_column is None or self.preloaded_properties is None else self.preloaded_properties[self.structure_column].unique().tolist(),
                             value = [],
                             id = {'type': 'global-property-plotter-structures','index': 0},
                             multi = True,
@@ -3701,13 +3753,13 @@ class GlobalPropertyPlotter(Tool):
                     ]),
                     dbc.Row([
                         dcc.Dropdown(
-                            options = [] if self.preloaded_features is None else self.preloaded_features.select_dtypes(include='object').columns.tolist(),
+                            options = [] if self.preloaded_properties is None else self.preloaded_properties.columns.tolist(),
                             value = [],
                             multi = False,
                             id = {'type': 'global-property-plotter-label-drop','index': 0},
                             placeholder = 'Label'
                         )
-                    ]),
+                    ],style = {'marginBottom':'10px'}),
                     dbc.Row([
                         dbc.Button(
                             'Generate Plot!',
@@ -3715,10 +3767,10 @@ class GlobalPropertyPlotter(Tool):
                             n_clicks = 0,
                             className = 'd-grid col-12 mx-auto'
                         )
-                    ]),
+                    ],style = {'marginBottom': '10px'}),
                     dbc.Row([
                         dbc.Col([
-                            dcc.Loading(
+                            dcc.Loading([
                                 dcc.Store(
                                     id = {'type': 'global-property-plotter-store','index': 0},
                                     data = json.dumps({'property_names': [], 'structure_names': [], 'label_names': [], 'filters': [], 'data': []}),
@@ -3728,7 +3780,7 @@ class GlobalPropertyPlotter(Tool):
                                     id = {'type': 'global-property-plotter-plot-div','index': 0},
                                     children = []
                                 )
-                            )
+                            ])
                         ],md = 6),
                         dbc.Col([
                             dcc.Loading(
@@ -3752,6 +3804,16 @@ class GlobalPropertyPlotter(Tool):
         # Callback for running statistics
         # Callback for exporting plot data
 
+        # Changing type of property selector (from dropdown to tree and back)
+        self.blueprint.callback(
+            [
+                Input({'type': 'global-property-plotter-drop-type','index':ALL},'checked')
+            ],
+            [
+                Output({'type': 'global-property-plotter-drop-div','index': ALL},'children')
+            ]
+        )(self.update_drop_type)
+
         # Updating filters
         self.blueprint.callback(
             [
@@ -3766,21 +3828,36 @@ class GlobalPropertyPlotter(Tool):
             ]
         )(self.update_filter_properties)
 
+        # Updating filter property selector type based on selected property
+        self.blueprint.callback(
+            [
+                Input({'type': 'global-property-plotter-filter-property-drop','index': MATCH},'value')
+            ],
+            [
+                Output({'type': 'global-property-plotter-selector-div','index': MATCH},'children')
+            ],
+            [
+                State({'type': 'global-property-plotter-property-info','index': ALL},'data')
+            ]
+        )(self.update_property_selector)
+
         # Updating store containing properties, structures, labels, and filters
         self.blueprint.callback(
             [
                 Input({'type': 'global-property-plotter-drop','index': ALL},'value'),
+                Input({'type': 'global-property-plotter-drop','index': ALL},'checked'),
                 Input({'type': 'global-property-plotter-structures','index': ALL},'value'),
                 Input({'type': 'global-property-plotter-label-drop','index': ALL},'value'),
-                Input({'type': 'global-property-plotter-filter-selector','index':ALL},'value'),
+                Input({'type': 'global-property-plotter-filter-property-mod','index': ALL},'value'),
                 Input({'type': 'global-property-plotter-remove-property-icon','index': ALL},'n_clicks'),
-                Input({'type': 'global-property-plotter-filter-property-mod','index': ALL},'value')
+                Input({'type': 'global-property-plotter-filter-selector','index': ALL},'value')
+                
             ],
             [
                 Output({'type': 'global-property-plotter-store','index': ALL},'data')
             ],
             [
-                State({'type':'global-property-plotter-add-filter-parent','index': ALL},'children'),
+                State({'type': 'global-property-plotter-add-filter-parent','index': ALL},'children'),
                 State({'type': 'global-property-plotter-store','index': ALL},'data')
             ]
         )(self.update_properties_and_filters)
@@ -3812,11 +3889,45 @@ class GlobalPropertyPlotter(Tool):
             ]
         )(self.select_data_from_plot)
 
-    def update_properties_and_filters(self, property_selection, structure_selection, label_selection,remove_prop, prop_mod, property_divs,current_data):
+    def update_drop_type(self, switch_switched):
+        """Update the property selection mode (either dropdown menu or tree view)
+
+        :param switch_switched: Switch selected
+        :type switch_switched: list
+        :return: New property selector component
+        :rtype: list
+        """
+
+        switch_switched = get_pattern_matching_value(switch_switched)
+        if switch_switched:
+            # This is using the Tree View
+            property_drop = dta.TreeView(
+                id = {'type': f'{self.component_prefix}-global-property-plotter-drop','index': 0},
+                multiple = True,
+                checkable = True,
+                checked = [],
+                selected = [],
+                expanded = [],
+                data = self.property_tree
+            )
+        else:
+            property_drop = dcc.Dropdown(
+                options = [] if self.preloaded_options is None else self.preloaded_options,
+                value = [],
+                id = {'type': f'{self.component_prefix}-global-property-plotter-drop','index': 0},
+                multi = True,
+                placeholder = 'Properties'
+            )
+
+        return [property_drop]
+
+    def update_properties_and_filters(self, property_selection, property_checked, structure_selection, label_selection, filter_prop_mod, filter_prop_remove, filter_prop_selector, property_divs,current_data):
         """Updating the properties, structures, and filters incorporated into the main plot
 
         :param property_selection: Properties selected for plotting
         :type property_selection: list
+        :param property_checked: Properties selected from property tree view
+        :type property_checked: list
         :param structure_selection: Structures selected to be plotted
         :type structure_selection: list
         :param label_selection: Label selected for the plot
@@ -3839,7 +3950,10 @@ class GlobalPropertyPlotter(Tool):
         processed_prop_filters = self.parse_filter_divs(property_divs)
 
         current_data['filters'] = processed_prop_filters
-        current_data['property_names'] = get_pattern_matching_value(property_selection)
+        if not get_pattern_matching_value(property_selection) is None:
+            current_data['property_names'] = get_pattern_matching_value(property_selection)
+        elif not get_pattern_matching_value(property_checked) is None:
+            current_data['property_names'] = [self.property_keys[i] for i in get_pattern_matching_value(property_checked) if i in self.property_keys]
         current_data['structure_names'] = get_pattern_matching_value(structure_selection)
         current_data['label_names'] = get_pattern_matching_value(label_selection)
         
@@ -3869,32 +3983,34 @@ class GlobalPropertyPlotter(Tool):
         # Applying filters to the current data
         filtered_properties = pd.DataFrame()
         if not self.preloaded_properties is None:
-            include_list = [(False,)]*self.preloaded_properties.shape[0]
-            filtered_properties = self.preloaded_properties.copy()
-            for f in filters:
-                if f['name'] in filtered_properties:
-                    if not filtered_properties[f['name']].dtype=='object':
-                        structure_status = [f['range'][0]<=i and f['range'][1]>=i for i in filtered_properties[f['name']].tolist()]
-                    else:
-                        structure_status = [i in f['range'] for i in filtered_properties[f['name']].tolist()]
+            filtered_properties = self.preloaded_properties[self.preloaded_properties[self.structure_column].isin(structure_names)]
 
-                    if f['mod']=='not':
-                        structure_status = [not(i) for i in structure_status]
+            include_list = [(False,)]*filtered_properties.shape[0]
+            if len(filters)>0:
+                for f in filters:
+                    if f['name'] in filtered_properties:
+                        if not filtered_properties[f['name']].dtype=='object':
+                            structure_status = [f['range'][0]<=i and f['range'][1]>=i for i in filtered_properties[f['name']].tolist()]
+                        else:
+                            structure_status = [i in f['range'] for i in filtered_properties[f['name']].tolist()]
 
-                    if f['mod'] in ['not','and']:
-                        del_count = 0
-                        for idx,i in enumerate(structure_status):
-                            if not i:
-                                del include_list[idx-del_count]
-                                del_count+=1
-                            else:
-                                include_list[idx-del_count]+=(True,)
+                        if f['mod']=='not':
+                            structure_status = [not(i) for i in structure_status]
 
-                        filtered_properties = filtered_properties.loc[structure_status,:]
-                    elif f['mod']=='or':
-                        include_list = [i+(j,) for i,j in zip(include_list,structure_status)]
+                        if f['mod'] in ['not','and']:
+                            del_count = 0
+                            for idx,i in enumerate(structure_status):
+                                if not i:
+                                    del include_list[idx-del_count]
+                                    del_count+=1
+                                else:
+                                    include_list[idx-del_count]+=(True,)
 
-            filtered_properties = filtered_properties.loc[[any(i) for i in include_list]]
+                            filtered_properties = filtered_properties.loc[structure_status,:]
+                        elif f['mod']=='or':
+                            include_list = [i+(j,) for i,j in zip(include_list,structure_status)]
+
+                filtered_properties = filtered_properties.loc[[any(i) for i in include_list]]
         else:
             #TODO: Grab the properties from the current visualization session or query them in some other way
             pass
@@ -4129,6 +4245,55 @@ class GlobalPropertyPlotter(Tool):
 
         return processed_filters
 
+    def update_property_selector(self, property_value:str, property_info:list):
+        """Updating property filter range selector
+
+        :param property_value: Name of property to generate selector for
+        :type property_value: str
+        :param property_info: Dictionary containing range/unique values for each property
+        :type property_info: list
+        :return: Either a multi-dropdown for categorical properties or a RangeSlider for quantitative values
+        :rtype: tuple
+        """
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        property_info = json.loads(get_pattern_matching_value(property_info))
+        property_values = property_info[property_value]
+
+        if 'min' in property_values:
+            # Used for numeric type filters
+            values_selector = html.Div(
+                dcc.RangeSlider(
+                    id = {'type':f'{self.component_prefix}-global-property-plotter-filter-selector','index': ctx.triggered_id['index']},
+                    min = property_values['min'] - 0.01,
+                    max = property_values['max'] + 0.01,
+                    value = [property_values['min'], property_values['max']],
+                    step = 0.01,
+                    marks = None,
+                    tooltip = {
+                        'placement': 'bottom',
+                        'always_visible': True
+                    },
+                    allowCross=True,
+                    disabled = False
+                ),
+                style = {'display': 'inline-block','margin':'auto','width': '100%'}
+            )
+
+        elif 'unique' in property_values:
+            values_selector = html.Div(
+                dcc.Dropdown(
+                    id = {'type': f'{self.component_prefix}-global-property-plotter-filter-selector','index': ctx.triggered_id['index']},
+                    options = property_values['unique'],
+                    value = property_values['unique'],
+                    multi = True
+                )
+            )
+
+        return values_selector 
+
     def update_filter_properties(self, add_click:list, remove_click:list, property_info:list):
         """Adding/removing property filter dropdown
 
@@ -4145,7 +4310,7 @@ class GlobalPropertyPlotter(Tool):
         
         properties_div = Patch()
         add_click = get_pattern_matching_value(add_click)
-        property_info = json.loads(get_pattern_matching_value(property_info))['property_info']
+        property_info = json.loads(get_pattern_matching_value(property_info))
 
         if 'global-property-plotter-add-filter-butt' in ctx.triggered_id['type']:
 
@@ -4161,7 +4326,7 @@ class GlobalPropertyPlotter(Tool):
                                 ],
                                 value = 'and',
                                 placeholder='Modifier',
-                                id = {'type': f'{self.component_prefix}-bulk-labels-filter-property-mod','index': add_click}
+                                id = {'type': f'{self.component_prefix}-global-property-plotter-filter-property-mod','index': add_click}
                             )
                         ],md=2),
                         dbc.Col([
@@ -4185,7 +4350,7 @@ class GlobalPropertyPlotter(Tool):
                         ], md = 2)
                     ]),
                     html.Div(
-                        id = {'type': f'{self.component_prefix}-global-property-plotter-property-selector-div','index': add_click},
+                        id = {'type': f'{self.component_prefix}-global-property-plotter-selector-div','index': add_click},
                         children = []
                     )
                 ])
@@ -4204,7 +4369,7 @@ class GlobalPropertyPlotter(Tool):
 
         
         return [properties_div]
-
+    
     def select_data_from_plot(self, selected_data, session_data):
         """Select point(s) from the plot and extract the image from that/those point(s)
 
@@ -4214,11 +4379,15 @@ class GlobalPropertyPlotter(Tool):
         :type session_data: list
         """
 
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
         session_data = json.loads(get_pattern_matching_value(session_data))
         selected_data = get_pattern_matching_value(selected_data)
 
         session_names = [i['name'] for i in session_data]
         selected_image_list = []
+        selected_image = go.Figure()
         for s_idx,s in enumerate(selected_data['points']):
             s_slide = s['customdata'][0]
             s_bbox = s['customdata'][1:]
@@ -4226,7 +4395,7 @@ class GlobalPropertyPlotter(Tool):
             image_region = Image.open(
                 BytesIO(
                     requests.get(
-                        session_data[session_names.index(s_slide)]['regions_url']+f'?top={s_bbox[0]}&left={s_bbox[1]}&bottom={s_bbox[2]}&right={s_bbox[3]}'
+                        session_data[session_names.index(s_slide)]['regions_url']+f'?top={s_bbox[1]}&left={s_bbox[0]}&bottom={s_bbox[3]}&right={s_bbox[2]}'
                     ).content
                 )
             )
@@ -4235,12 +4404,39 @@ class GlobalPropertyPlotter(Tool):
 
             if len(selected_image_list)==1:
                 selected_image = go.Figure(
-                    data = px.imshow(selected_image_list[0])['data'],
+                    data = px.imshow(selected_image_list[0]),
                     layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
                     )
             elif len(selected_image_list)>1:
+                image_dims = [np.array(i).shape for i in selected_image_list]
+                max_height = max([i[0] for i in image_dims])
+                max_width = max([i[1] for i in image_dims])
+
+                modded_images = []
+                for img in selected_image_list:
+                    img_width, img_height = img.size
+                    delta_width = max_width - img_width
+                    delta_height = max_height - img_height
+
+                    pad_width = delta_width // 2
+                    pad_height = delta_height // 2
+
+                    mod_img = np.array(
+                        ImageOps.expand(
+                            img,
+                            border = (
+                                pad_width,
+                                pad_height,
+                                delta_width - pad_width,
+                                delta_height - pad_height
+                            ),
+                            fill=0
+                        )
+                    )
+                    modded_images.append(mod_img)
+
                 selected_image = go.Figure(
-                    data = px.imshow(np.stack(selected_image_list,axis=0),animation_frame=0,binary_string=True),
+                    data = px.imshow(np.stack(modded_images,axis=0),animation_frame=0,binary_string=True),
                     layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
                     )
             else:
@@ -4248,7 +4444,7 @@ class GlobalPropertyPlotter(Tool):
                 print(f'No images found')
                 print(f'selected:{selected_data}')
 
-        return [selected_image]
+        return [dcc.Graph(figure = selected_image)]
 
 
 
