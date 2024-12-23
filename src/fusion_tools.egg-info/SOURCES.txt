@@ -33,6 +33,7 @@ tests/test_feature_annotation.py
 tests/test_feature_extraction.py
 tests/test_generate_property_dict.py
 tests/test_get_gene_info.py
+tests/test_global_property_plotter.py
 tests/test_hra_viewer.py
 tests/test_image_overlay.py
 tests/test_model_train.py

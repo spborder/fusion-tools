@@ -432,6 +432,24 @@ def detect_histomics(query_annotations:Union[list,dict]):
     
     return result
 
+def detect_geojson(query_annotations:Union[list,dict]):
+    """Check whether a list/dict of annotations are in GeoJSON format
+
+    :param query_annotations: Input query annotation
+    :type query_annotations: Union[list,dict]
+    """
+    if type(query_annotations)==dict:
+        query_annotations = [query_annotations]
+    
+    result = False
+    for q in query_annotations:
+        if type(q)==dict:
+            if 'type' in q:
+                if q['type']=='FeatureCollection':
+                    result = True
+    
+    return result
+
 def convert_histomics(json_anns: Union[list,dict]):
     
     if type(json_anns)==dict:

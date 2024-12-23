@@ -3471,7 +3471,13 @@ class HRAViewer(Tool):
 
 
 
-class GlobalPropertyPlotter(Tool):
+class MultiTool:
+    """General class for a Tool which works on multiple slides at once
+    """
+    pass
+
+
+class GlobalPropertyPlotter(MultiTool):
     def __init__(self,
                  ignore_list: list = [],
                  property_depth: int = 6,
@@ -3560,6 +3566,9 @@ class GlobalPropertyPlotter(Tool):
         )        
         
         self.get_callbacks()
+
+    def __str__(self):
+        return 'Global Property Plotter'
 
     def generate_property_dict(self, available_properties, title: str = 'Properties'):
         all_properties = {
@@ -4389,8 +4398,14 @@ class GlobalPropertyPlotter(Tool):
         selected_image_list = []
         selected_image = go.Figure()
         for s_idx,s in enumerate(selected_data['points']):
-            s_slide = s['customdata'][0]
-            s_bbox = s['customdata'][1:]
+            print(s)
+            if type(s['customdata'])==list:
+                s_slide = s['customdata'][0]
+                s_bbox = s['customdata'][1:]
+            elif type(s['customdata'])==dict:
+                s_custom = list(s['customdata'].values())
+                s_slide = s_custom[0]
+                s_bbox = s_custom[1:]
 
             image_region = Image.open(
                 BytesIO(
@@ -4445,10 +4460,6 @@ class GlobalPropertyPlotter(Tool):
                 print(f'selected:{selected_data}')
 
         return [dcc.Graph(figure = selected_image)]
-
-
-
-
 
 
 

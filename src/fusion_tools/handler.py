@@ -22,6 +22,7 @@ from io import BytesIO
 
 from fusion_tools.tileserver import DSATileServer
 from fusion_tools.components import Tool
+from fusion_tools.utils.shapes import load_annotations, detect_histomics
 
 class Handler:
     pass
@@ -399,8 +400,34 @@ class DSAHandler(Handler):
         :param annotations: Formatted dictionary, path, or list of dictionaries/paths with the annotations., defaults to None
         :type annotations: Union[str,list,dict,None], optional
         """
-        pass
 
+        if type(annotations)==str:
+            annotations = load_annotations(annotations)
+        
+        if type(annotations)==dict:
+            annotations = [annotations]
+        
+        if all([detect_histomics(a) for a in annotations]):
+            self.gc.post(
+                f'/annotation/{item}/item?token={self.user_token}',
+                data = json.dumps(annotations),
+                headers = {
+                    'X-HTTP-Method': 'POST',
+                    'Content-Type': 'application/json'
+                }
+            )
+        else:
+            # Default format is GeoJSON (#TODO: Have to verify that lists of GeoJSONs are acceptable)
+            self.gc.post(
+                f'/annotation/{item}/item?token={self.user_token}',
+                data = json.dumps(annotations),
+                headers = {
+                    'X-HTTP-Method': 'POST',
+                    'Content-Type': 'application/json'
+                }
+            )
+        return True
+        
     def add_metadata(self, item:str, metadata:dict):
         """Add metadata key/value to a specific item
 
@@ -409,20 +436,108 @@ class DSAHandler(Handler):
         :param metadata: Metadata key/value combination (can contain multiple keys and values (JSON formatted))
         :type metadata: dict
         """
-        pass
+        try:
+            # Adding item-level metadata
+            self.gc.put(f'/item/{item}/metadata',parameters={'metadata':json.dumps(metadata)})
+
+            return True
+        except:
+            return False
 
     def list_plugins(self):
         """List all of the plugins/CLIs available for the current DSA instance
         """
-        pass
+        
+        return self.gc.get('/slicer_cli_web/cli')
 
-    def add_plugin(self, image_name:str):
+    def add_plugin(self, image_name:Union[str,list]):
         """Add a plugin/CLI to the current DSA instance by name of the Docker image (requires admin login)
 
         :param image_name: Name of Docker image on Docker Hub
         :type image_name: str
         """
-        pass
+        if type(image_name)==str:
+            image_name = [image_name]
+        
+        current_cli = self.list_plugins()
+        cli_names = [i['image'] for i in current_cli]
+        put_responses = []
+        for i in image_name:
+            if i in cli_names:
+                print(f'------Deleting old version of {i}-------')
+                self.gc.delete(f'/slicer_cli_web/cli/{current_cli[cli_names.index(i)]['_id']}')
+                self.gc.delete(
+                    f'/slicer_cli_web/docker_image',
+                    parameters = {
+                        'name': i,
+                        'delete_from_local_repo': True
+                    }
+                )
+            
+            put_response = self.gc.put('/slicer_cli_web/docker_image',parameters={'name':i})
+            print(f'--------Image: {i} successfully added--------------')
+            put_responses.append(put_response)
+        return put_responses
+        
+    def create_user_folder(self, parent_path, folder_name, metadata = None):
+        """
+        Creating a folder in user's public folder
+        """
+        public_folder_path = parent_path
+        public_folder_id = self.gc.get('/resource/lookup',parameters={'path':public_folder_path})['_id']
+
+        # Creating folder
+        if not metadata is None:
+            new_folder = self.gc.loadOrCreateFolder(
+                folderName = folder_name,
+                parentId = public_folder_id,
+                parentType = 'folder',
+                metadata = metadata
+            )
+        else:
+            new_folder = self.gc.loadOrCreateFolder(
+                folderName = folder_name,
+                parentId = public_folder_id,
+                parentType = 'folder'
+            )
+
+        return new_folder
+    
+    def create_new_user(self,username,password,email,firstName,lastName):
+        """Create a new user on this DSA instance
+
+        :param username: Username (publically visible)
+        :type username: str
+        :param password: Password (not publically visible)
+        :type password: str
+        :param email: Email (must not overlap with other users)
+        :type email: str
+        :param firstName: First Name to use for user
+        :type firstName: str
+        :param lastName: Last Name to use for user
+        :type lastName: str
+        """
+
+        try:
+            self.gc.post(
+                '/user',
+                parameters = {
+                    'login': username.lower(),
+                    'password': password,
+                    'email': email,
+                    'firstName': firstName,
+                    'lastName': lastName
+                }
+            )
+            user_info = self.gc.authenticate(username.lower(),password)
+
+            return user_info
+
+        except:
+            print('---------Error creating new account!------------')
+            print('Make sure you are using a unique email address!')
+
+            return False
 
     def create_plugin_inputs(self, plugin_id:str):
         """Creates formatted input component for the specified plugin/CLI ID.
@@ -447,6 +562,10 @@ class DSAHandler(Handler):
         """
         pass
 
+    def create_login_component(self):
+        """Creates login button for multiple DSA users to use the same fusion-tools instance
+        """
+        pass
 
 
 class DatasetBuilder(Tool):
@@ -555,24 +674,6 @@ class DSASurvey(Tool):
 
     def get_callbacks(self):
         pass
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 

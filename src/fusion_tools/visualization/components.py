@@ -25,8 +25,12 @@ import nest_asyncio
 class Visualization:
     """General holder class used for initialization. Components added after initialization.
 
+    To initialize a new visualization session, you can use the following syntax:
     .. code-block:: python
 
+        # This is for a slide stored on the same computer you're running the fusion-tools instance from.
+        local_slide = ['/path/to/slide.tif']
+        annotations = ['/path/to/annotations.json']
         components = [
             [
                 SlideMap()
@@ -38,7 +42,11 @@ class Visualization:
                 ]
             ]
         ]
-        vis_session = Visualization(components)
+        vis_session = Visualization(
+            local_slides = local_slide,
+            local_annotations = local_annotations,
+            components = components
+        )
         vis_session.start()
 
     """
@@ -48,7 +56,7 @@ class Visualization:
                  local_annotations: Union[list,dict,None] = None,
                  slide_metadata: Union[list,dict,None] = None,
                  tileservers: Union[list,TileServer,None] = None,
-                 components: list = [],
+                 components: Union[list,dict] = [],
                  app_options: dict = {},
                  linkage: str = 'row'
                  ):
@@ -63,7 +71,7 @@ class Visualization:
         :param tileservers: Single tileserver or multiple tileservers, defaults to None
         :type tileservers: Union[list,TileServer,None], optional
         :param components: List of components in layout format (rows-->columns-->tabs for nested lists), defaults to []
-        :type components: list, optional
+        :type components: Union[list,dict], optional
         :param app_options: Additional options for the running visualization session, defaults to {}
         :type app_options: dict, optional
         :param linkage: Which levels of components are linked through callbacks (can be 'row','col',or 'tab'), defaults to 'row'
@@ -79,10 +87,11 @@ class Visualization:
         self.linkage = linkage
 
         # New parameter defining how unique components can be linked
+        # page = components in the same page can communicate
         # row = components in the same row can communicate
         # col = components in the same column can communicate
         # tab = components in the same tab can communicate
-        assert self.linkage in ['row','col','tab']
+        assert self.linkage in ['page','row','col','tab']
 
         self.default_options = {
             'title': 'FUSION',
@@ -219,6 +228,7 @@ class Visualization:
 
         header = dbc.Navbar(
             dbc.Container([
+                dcc.Location(id='page-url',refresh=False),
                 dbc.Row([
                     dbc.Col([
                         html.Div([
@@ -290,10 +300,6 @@ class Visualization:
         return layout
 
     def get_layout_children(self):
-        """
-        Generate children of layout container from input list of components and layout options
-        
-        """
         """Generating layout of embedded components from structure of components list
 
         :return: List of dbc.Row(dbc.Col(dbc.Tabs())) components
@@ -304,115 +310,151 @@ class Visualization:
         n_cols = 1
         n_tabs = 0
 
-        n_rows = len(self.components)
-        if any([type(i)==list for i in self.components]):
-            n_cols = max([len(i) for i in self.components if type(i)==list])
-
-            if any([any([type(j)==list for j in i]) for i in self.components if type(i)==list]):
-                n_tabs = max([max([len(i) for i in j if type(i)==list]) for j in self.components if type(j)==list])
-
-        print(f'------Creating Visualization with {n_rows} rows, {n_cols} columns, and {n_tabs} tabs--------')
-        print(f'----------------- Components in the same {self.linkage} may communicate through callbacks---------')
-        
         component_prefix = 0
         layout_children = []
         row_components = []
         col_components = []
         tab_components = []
-        for row_idx,row in enumerate(self.components):
+
+        if type(self.components)==list:
+            n_rows = len(self.components)
+            if any([type(i)==list for i in self.components]):
+                n_cols = max([len(i) for i in self.components if type(i)==list])
+
+                if any([any([type(j)==list for j in i]) for i in self.components if type(i)==list]):
+                    n_tabs = max([max([len(i) for i in j if type(i)==list]) for j in self.components if type(j)==list])
+
+            print(f'------Creating Visualization with {n_rows} rows, {n_cols} columns, and {n_tabs} tabs--------')
+            print(f'----------------- Components in the same {self.linkage} may communicate through callbacks---------')
+        
+            self.components = {
+                'app': self.components 
+            }
+
+        elif type(self.components)==dict:
+            for page in self.components:
+                n_rows = len(self.components[page])
+                if any([type(i)==list for i in self.components[page]]):
+                    n_cols = max([len(i) for i in self.components[page] if type(i)==list])
+
+                    if any([any([type(j)==list for j in i]) for i in self.components[page] if type(i)==list]):
+                        n_tabs = max([max([len(i) for i in j if type(i)==list]) for j in self.components[page] if type(j)==list])
+
+                print(f'------Creating Visualization Page {page} with {n_rows} rows, {n_cols} columns, and {n_tabs} tabs--------')
+                print(f'----------------- Components in the same {self.linkage} may communicate through callbacks---------')
             
-            if self.linkage=='row':
-                component_prefix = row_idx
+            side_bar = html.Div([
+                dbc.Offcanvas([
+                    dbc.Nav([
+                        dbc.NavLink(p,href=f'/{p.lower().replace(" ","")}',active='exact',id={'type': 'nav-page-link','index': p_idx})
+                        for p_idx,p in enumerate(list(self.components.keys()))
+                    ],vertical=True,pills=True)
+                ], id = {'type': 'page-off-canvas','index': 0},style = {'background-color','#f8f9fa'})
+            ])
 
-            row_children = []
-            if type(row)==list:
-                col_components = []
-                for col_idx,col in enumerate(row):
-                    if self.linkage=='col':
-                        component_prefix = col_idx
+            layout_children.append(side_bar)
 
-                    if not type(col)==list:
-                        col.load(component_prefix = component_prefix)
-                        col.gen_layout(session_data = self.vis_store_content)
-                        col_components.append(str(col))
-                        
-                        row_children.append(
-                            dbc.Col(
-                                dbc.Card([
-                                    dbc.CardHeader(
-                                        col.title
-                                    ),
-                                    dbc.CardBody(
-                                        col.blueprint.embed(self.viewer_app)
-                                    )
-                                ]),
-                                width = True
-                            )
-                        )
-                    else:
-                        tab_components = []
-                        tabs_children = []
-                        for tab_idx,tab in enumerate(col):
-                            if self.linkage=='tab': 
-                                component_prefix = tab_idx
+
+        #TODO: Update for multi-page layouts
+        for page_idx,page in enumerate(list(self.compontents.keys())):
+
+            if self.linkage=='page':
+                component_prefix = page_idx
+
+            for row_idx,row in enumerate(self.components[page]):
+                
+                if self.linkage=='row':
+                    component_prefix = row_idx
+
+                row_children = []
+                if type(row)==list:
+                    col_components = []
+                    for col_idx,col in enumerate(row):
+                        if self.linkage=='col':
+                            component_prefix = col_idx
+
+                        if not type(col)==list:
+                            col.load(component_prefix = component_prefix)
+                            col.gen_layout(session_data = self.vis_store_content)
+                            col_components.append(str(col))
                             
-                            tab.load(component_prefix = component_prefix)
-                            tab.gen_layout(session_data = self.vis_store_content)
-                            tab_components.append(str(tab))
-
-                            tabs_children.append(
-                                dbc.Tab(
-                                    dbc.Card(
+                            row_children.append(
+                                dbc.Col(
+                                    dbc.Card([
+                                        dbc.CardHeader(
+                                            col.title
+                                        ),
                                         dbc.CardBody(
-                                            tab.blueprint.embed(self.viewer_app)
+                                            col.blueprint.embed(self.viewer_app)
                                         )
-                                    ),
-                                    label = tab.title,
-                                    tab_id = tab.title.lower().replace(' ','-')
+                                    ]),
+                                    width = True
                                 )
                             )
-                        col_components.append(tab_components)
+                        else:
+                            tab_components = []
+                            tabs_children = []
+                            for tab_idx,tab in enumerate(col):
+                                if self.linkage=='tab': 
+                                    component_prefix = tab_idx
+                                
+                                tab.load(component_prefix = component_prefix)
+                                tab.gen_layout(session_data = self.vis_store_content)
+                                tab_components.append(str(tab))
 
-                        row_children.append(
-                            dbc.Col(
-                                dbc.Card([
-                                    dbc.CardHeader('Tools'),
-                                    dbc.CardBody(
-                                        dbc.Tabs(
-                                            tabs_children,
-                                            id = {'type': f'{component_prefix}-vis-layout-tabs','index': np.random.randint(0,1000)},
-                                            active_tab=col[0].title.lower().replace(' ','-')
-                                        )
+                                tabs_children.append(
+                                    dbc.Tab(
+                                        dbc.Card(
+                                            dbc.CardBody(
+                                                tab.blueprint.embed(self.viewer_app)
+                                            )
+                                        ),
+                                        label = tab.title,
+                                        tab_id = tab.title.lower().replace(' ','-')
                                     )
-                                ]),
-                                width = True
-                            )
-                        )
-            
-                row_components.append(col_components)
-            else:
-                
-                row.load(component_prefix = component_prefix)
-                row.gen_layout(session_data = self.vis_store_content)
-                row_components.append(str(row))
+                                )
+                            col_components.append(tab_components)
 
-                row_children.append(
-                    dbc.Col(
-                        dbc.Card([
-                            dbc.CardHeader(row.title),
-                            dbc.CardBody(
-                                row.blueprint.embed(self.viewer_app)
+                            row_children.append(
+                                dbc.Col(
+                                    dbc.Card([
+                                        dbc.CardHeader('Tools'),
+                                        dbc.CardBody(
+                                            dbc.Tabs(
+                                                tabs_children,
+                                                id = {'type': f'{component_prefix}-vis-layout-tabs','index': np.random.randint(0,1000)},
+                                                active_tab=col[0].title.lower().replace(' ','-')
+                                            )
+                                        )
+                                    ]),
+                                    width = True
+                                )
                             )
-                        ]),
-                        width = True
+                
+                    row_components.append(col_components)
+                else:
+                    
+                    row.load(component_prefix = component_prefix)
+                    row.gen_layout(session_data = self.vis_store_content)
+                    row_components.append(str(row))
+
+                    row_children.append(
+                        dbc.Col(
+                            dbc.Card([
+                                dbc.CardHeader(row.title),
+                                dbc.CardBody(
+                                    row.blueprint.embed(self.viewer_app)
+                                )
+                            ]),
+                            width = True
+                        )
+                    )
+
+                layout_children.append(
+                    dbc.Row(
+                        row_children
                     )
                 )
-
-            layout_children.append(
-                dbc.Row(
-                    row_children
-                )
-            )
 
         return layout_children
 
