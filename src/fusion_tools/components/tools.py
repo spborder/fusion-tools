@@ -101,9 +101,6 @@ class OverlayOptions(Tool):
 
     def gen_layout(self, session_data:dict):
         """Generating OverlayOptions layout, added to DashBlueprint() object to be embedded in larger layout.
-
-        :return: OverlayOptions layout
-        :rtype: dash.html.Div.Div
         """
 
         adv_colormaps = [

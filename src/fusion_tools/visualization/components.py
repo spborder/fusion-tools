@@ -201,6 +201,7 @@ class Visualization:
                     slide_store.append({
                         'start_idx': (s_idx+t_idx+1),
                         'name': t.name,
+                        'api_url': t.base_url,
                         'tiles_url': t.tiles_url,
                         'regions_url': t.regions_url,
                         'metadata_url': t.metadata_url,

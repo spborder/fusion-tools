@@ -20,6 +20,19 @@ from skimage.draw import polygon
 from PIL import Image
 from io import BytesIO
 
+# Dash imports
+import dash
+dash._dash_renderer._set_react_version('18.2.0')
+import dash_leaflet as dl
+import dash_leaflet.express as dlx
+from dash import dcc, callback, ctx, ALL, MATCH, exceptions, Patch, no_update, dash_table
+from dash.dash_table.Format import Format, Scheme
+import dash_bootstrap_components as dbc
+import dash_mantine_components as dmc
+import dash_treeview_antd as dta
+from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform
+from dash_extensions.javascript import Namespace, arrow_function
+
 from fusion_tools.tileserver import DSATileServer
 from fusion_tools.components import Tool
 from fusion_tools.utils.shapes import load_annotations, detect_histomics
@@ -358,6 +371,17 @@ class DSAHandler(Handler):
 
         return DSATileServer(api_url = self.girderApiUrl, item_id = item)
 
+    def get_collections(self)->list:
+        """Get list of all available collections in DSA instance.
+
+        :return: List of available collections info.
+        :rtype: list
+        """
+
+        collections = self.gc.get('/collection')
+
+        return collections
+
     def create_survey(self, survey_args:dict):
         """Create a survey component which will route collected data to a specific file in the connected DSA instance.
 
@@ -575,18 +599,114 @@ class DatasetBuilder(Tool):
     :type Tool: None
     """
     def __init__(self,
-                 handler: Handler):
+                 handler: Union[DSAHandler,list] = []
+                ):
         
         self.handler = handler
 
     def load(self, component_prefix:int):
-        pass
+
+        self.component_prefix = component_prefix
+
+        self.title = 'Dataset Builder'
+        self.blueprint = DashBlueprint(
+            transforms=[
+                PrefixIdTransform(prefix=f'{component_prefix}'),
+                MultiplexerTransform()
+            ]
+        )
+
+        self.get_callbacks()
 
     def gen_layout(self, session_data: Union[dict,None]):
-        pass
+        """Generating DatasetBuilder layout, adding to DashBlueprint() object to be embedded in larger layout.
+
+        :param session_data: Data on current session, not used in this component.
+        :type session_data: Union[dict,None]
+        """
+
+        collections_info = []
+        if type(self.handler)==list:
+            #TODO: Get this working for stringing together multiple DSA instances
+            # Just have to find a way to link back to the right DSAHandler instance
+            collections = [] 
+        else:
+            collections = self.handler.get_collections()
+            for c in collections:
+                collections_info.append({
+                    'Collection': c['name'],
+                    'Number of Slides': len(self.handler.get_folder_slide_count(folder_path = c['_id']))
+                } | c['meta'])
+
+
+        layout = html.Div([
+            dbc.Card(
+                dbc.CardBody([
+                    dbc.Row(
+                        html.H3('Dataset Builder')
+                    ),
+                    html.Hr(),
+                    dbc.Row(
+                        'Search through available collections, folders, and slides to assemble a visualization session.'
+                    ),
+                    html.Hr(),
+                    dbc.Row([
+                        html.Div(
+                            id = {'type': 'dataset-builder-collection-div','index': 0},
+                            children = []
+                        )
+                    ],style={'marginBottom':'10px'}),
+                    html.Hr(),
+                    dbc.Row([
+                        html.Div(
+                            id = {'type': 'dataset-builder-collection-contents-div','index':0},
+                            children = []
+                        )
+                    ],style = {'marginBottom':'10px'})
+                ])
+            )
+        ], style = {'maxHeight': '90vh','overflow': 'scroll'})
+
+
+        self.blueprint.layout = layout
 
     def get_callbacks(self):
+
+        # Callback for collection selection (populating table with collection contents)
+
+        # Callback for selecting folder/item from collection-contents-div
+
+        # Callback for plotting slide-level metadata if there is any
+
+        # Callback for viewing thumbnail of selected slide(s)
         pass
+
+
+class DSAUploadType:
+    """Formatted upload type for a DSAUploader Component.
+    """
+    def __init__(self,
+                 name: str,
+                 input_files: list = [],
+                 processing_plugins:Union[list,None] = None,
+                 required_metadata: Union[list,None] = None):
+        """Constructor method
+
+        :param name: Name for this upload type (appears in dropdown menu in DSAUploader component)
+        :type name: str
+        :param input_files: List of dictionaries containing the following keys: name:str, description: str, accepted_types: Union[list,None], preprocessing_plugins: Union[list,None]
+        :type input_files: list
+        :param processing_plugins: List of plugins to run after data has been uploaded. Allows for input of plugin-specific arguments after completion of file uploads., defaults to None
+        :type processing_plugins: Union[list,None], optional
+        :param required_metadata: List of "keys" which require user input either by uploading a file or by manual addition.
+        :type required_metadata: Union[list,None], optional
+        """
+        
+        self.name = name
+        self.input_files = input_files
+        self.processing_plugins = processing_plugins
+        self.required_metadata = required_metadata
+
 
 
 
@@ -597,17 +717,85 @@ class DSAUploader(Tool):
     :type Tool: None
     """
     def __init__(self,
-                 dsa_handler: DSAHandler):
+                 dsa_handler: Union[DSAHandler,list] = [],
+                 dsa_upload_types: Union[DSAUploadType,list] = []):
         
         self.dsa_handler = dsa_handler
+        self.dsa_upload_types = dsa_upload_types
 
     def load(self,component_prefix:int):
-        pass
+
+        self.component_prefix = component_prefix
+
+        self.title = 'Dataset Uploader'
+        self.blueprint = DashBlueprint(
+            transforms=[
+                PrefixIdTransform(prefix=f'{component_prefix}'),
+                MultiplexerTransform()
+            ]
+        )
+
+        self.get_callbacks()
 
     def gen_layout(self,session_data:Union[dict,None]):
-        pass
 
+        #TODO: Layout start:
+        # Whether the upload is to a specific collection or to a User folder (Public/Private)
+        # Selecting folder to upload to based on previous selection
+        # Select which type of upload this is
+        # Load upload type format based on DSAUploadType properties
+
+        layout = html.Div([
+            dbc.Card(
+                dbc.CardBody([
+                    dbc.Row(
+                        html.H3('Dataset Uploader')
+                    ),
+                    html.Hr(),
+                    dbc.Row(
+                        'Uploading slides and associated files to a particular folder on attached DSA instance. Access pre-processing plugins.'
+                    ),
+                    html.Hr(),
+                    dbc.Row([
+                        html.Div(
+                            id = {'type': 'dsa-uploader-collection-or-user-div','index': 0},
+                            children = []
+                        )
+                    ]),
+                    html.Hr(),
+                    dbc.Row([
+                        html.Div(
+                            id = {'type': 'dsa-uploader-folder-in-div','index': 0},
+                            children = []
+                        )
+                    ]),
+                    html.Hr(),
+                    dbc.Row([
+                        html.Div(
+                            id = {'type': 'dsa-uploader-upload-type-div','index': 0},
+                            children = []
+                        )
+                    ]),
+                    html.Hr(),
+                    dbc.Row([
+                        html.Div(
+                            id = {'type': 'dsa-uploader-processing-plugins-div','index': 0},
+                            children = []
+                        )
+                    ])
+                ])
+            )
+        ],style = {'maxHeight': '90vh','overflow': 'scroll'})
+
+        self.blueprint.layout = layout
+        
     def get_callbacks(self):
+
+        # Callback for selecting whether to upload to public/private collection or user public/private folder
+        # Callback for selecting folder to upload to based on previous selection
+        # Callback for populating with DSAUploadType specifications
+        # Callback for running processing plugin with inputs
+
         pass
 
 
@@ -644,13 +832,66 @@ class DSAPluginProgress(Tool):
         self.dsa_handler = dsa_handler
     
     def load(self,component_prefix:int):
-        pass
+        
+        self.component_prefix = component_prefix
+
+        self.blueprint = DashBlueprint(
+            transforms=[
+                PrefixIdTransform(prefix=f'{component_prefix}'),
+                MultiplexerTransform()
+            ]
+        )
+
+        self.get_callbacks()
 
     def gen_layout(self,session_data:Union[dict,None]):
-        pass
+
+        layout = html.Div([
+            dbc.Card(
+                dbc.CardBody([
+                    dbc.Row(
+                        html.H3('DSA Plugin Progress')
+                    ),
+                    html.Hr(),
+                    dbc.Row(
+                        'Monitor the progress of currently running plugins.'
+                    ),
+                ])
+            )
+        ])
+        
+        self.blueprint.layout = layout
 
     def get_callbacks(self):
+
+        # Callback for getting latest logs for plugin
+        # Callback for cancelling plugin
+
         pass
+
+
+
+
+class SurveyType:
+    def __init__(self,
+                 question_list:list = [],
+                 users: list = [],
+                 storage_folder: str = ''
+                ):
+        """Type of survey to expose to select users.
+
+        :param question_list: List of questions to include in the survey as well as expected types for responses.
+        :type question_list: list, optional
+        :param users: List of usernames that the survey is accessible to.
+        :type users: list, optional
+        :param storage_folder: Id of folder that will contain survey results
+        :type storage_folder: str, optional
+        
+        """    
+
+        self.question_list = question_list
+        self.users = users
+        self.storage_folder = storage_folder
 
 
 class DSASurvey(Tool):
@@ -660,19 +901,49 @@ class DSASurvey(Tool):
     :type Tool: None
     """
     def __init__(self,
-                 dsa_handler:DSAHandler,
-                 survey_args:dict):
+                 dsa_handler: DSAHandler,
+                 survey: SurveyType):
         
         self.dsa_handler = dsa_handler
-        self.survey_args = survey_args
+        self.survey = survey
 
     def load(self, component_prefix:int):
-        pass
+
+        self.component_prefix = component_prefix
+
+        self.blueprint = DashBlueprint(
+            transforms=[
+                PrefixIdTransform(prefix=f'{component_prefix}'),
+                MultiplexerTransform()
+            ]
+        )
+
+        self.get_callbacks()
 
     def gen_layout(self, session_data:Union[dict,None]):
-        pass
+
+        layout = html.Div([
+            dbc.Card(
+                dbc.CardBody([
+                    dbc.Row(
+                        html.H3('DSA Survey')
+                    ),
+                    html.Hr(),
+                    dbc.Row()
+                ])
+            )
+        ])
+
+        self.blueprint.layout = layout
 
     def get_callbacks(self):
+
+        # Callback for submitting survey responses
+        # Callback for admins seeing current survey responses
+        # Callback for admins to download current survey results
+        # Callback for admins to add usernames to the survey
+
+
         pass
 
 

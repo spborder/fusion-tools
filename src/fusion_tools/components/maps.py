@@ -1512,7 +1512,6 @@ class MultiFrameSlideMap(SlideMap):
         return frame_layers
 
 
-
 class SlideImageOverlay(MapComponent):
     """Image overlay on specific coordinates within a SlideMap
 
