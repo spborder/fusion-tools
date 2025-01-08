@@ -36,6 +36,7 @@ from dash_extensions.javascript import Namespace, arrow_function
 from fusion_tools.tileserver import DSATileServer
 from fusion_tools.components import Tool
 from fusion_tools.utils.shapes import load_annotations, detect_histomics
+from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 
 class Handler:
     pass
@@ -177,7 +178,7 @@ class DSAHandler(Handler):
 
         return ann_counts_df
     
-    def get_path_info(self, item_path: str) -> dict:
+    def get_path_info(self, path: str) -> dict:
         """Get information for a given resource path
 
         :param item_path: Path in DSA instance for a given resource
@@ -185,33 +186,119 @@ class DSAHandler(Handler):
         :return: Dictionary containing id and metadata, etc.
         :rtype: dict
         """
-
         # First searching for the "resource"
-        assert any([i in item_path for i in ['collection','user']])
+        assert any([i in path for i in ['collection','user']])
+        try:
+            resource_find = self.gc.get('/resource/lookup',parameters={'path': path})
+            if resource_find['_modelType']=='collection':
+                resource_find = resource_find | self.gc.get(f'/collection/{resource_find["_id"]}/details')
+            elif resource_find['_modelType']=='folder':
+                resource_find = resource_find | self.gc.get(f'/folder/{resource_find["_id"]}/details')
 
-        resource_find = self.gc.get('/resource/lookup',parameters={'path': item_path})
-
-        return resource_find
+            return resource_find
+        except girder_client.HttpError:
+            #TODO: Make this error handling a little better (return some error type)
+            return 'Resource not found'
     
-    def get_folder_slide_count(self, folder_path: str, ignore_histoqc = True) -> list:
-        """Get number of slides contained in a folder
+    def get_folder_info(self, folder_id:str)->dict:
+        """Getting folder info from ID
+
+        :param folder_id: ID assigned to that folder
+        :type folder_id: str
+        :return: Dictionary with details like name, parentType, meta, updated, size, etc.
+        :rtype: dict
+        """
+
+        try:
+            folder_info = self.gc.get(f'/folder/{folder_id}') | self.gc.get(f'/folder/{folder_id}/details')
+
+            return folder_info
+        except girder_client.HttpError:
+            #TODO: Change up the return here for an error
+            return 'Folder not found!'
+        
+    def get_folder_rootpath(self, folder_id:str)->list:
+        """Get the rootpath for a given folder Id.
+
+        :param folder_id: Girder Id for a folder
+        :type folder_id: str
+        :return: List of objects in that folder's path that are parents
+        :rtype: list
+        """
+
+        try:
+            folder_rootpath = self.gc.get(f'/folder/{folder_id}/rootpath')
+
+            return folder_rootpath
+        except girder_client.HttpError:
+            #TODO: Change up the return here for error
+            return 'Folder not found!'
+    
+    def get_collection_slide_count(self, collection_name, ignore_histoqc = True) -> int:
+        """Get a count of all of the slides in a given collection across all child folders
+
+        :param collection_name: Name of collection ('/collection/{}')
+        :type collection_name: str
+        :param ignore_histoqc: Whether to ignore folders containing histoqc outputs (not slides)., defaults to True
+        :type ignore_histoqc: bool, optional
+        :return: Total count of slides (large-image objects) in a given collection
+        :rtype: int
+        """
+        
+        collection_info = self.get_path_info(f'/collection/{collection_name}')
+        collection_slides = self.get_folder_slides(collection_info['_id'], folder_type = 'collection', ignore_histoqc = True)
+
+        return len(collection_slides)
+        
+    def get_folder_folders(self, folder_id:str, folder_type:str = 'folder'):
+        """Get the folders within a folder
+
+        :param folder_id: Girder Id for a folder
+        :type folder_id: str
+        :param folder_type: Either "folder" or "collection", defaults to 'folder'
+        :type folder_type: str, optional
+        """
+
+        try:
+            folder_folders = self.gc.get(
+                f'/folder',
+                parameters = {
+                    'parentType': folder_type,
+                    'parentId': folder_id,
+                    'limit': 0
+                })
+
+            return folder_folders
+        except girder_client.HttpError:
+            #TODO: Fix error return
+            return 'Folder not found!'
+        
+    def get_folder_slides(self, folder_path:str, folder_type:str = 'folder', ignore_histoqc:bool = True) -> list:
+        """Get all slides in a folder
 
         :param folder_path: Path in DSA for a folder
         :type folder_path: str
+        :param folder_type: Whether it's a folder or a collection
+        :type folder_type: str, optional
         :param ignore_histoqc: Whether or not to ignore images in the histoqc_outputs folder, defaults to True
         :type ignore_histoqc: bool, optional
         :return: List of image items contained within a folder
         :rtype: list
         """
 
+        assert folder_type in ['folder','collection']
+
         if '/' in folder_path:
             folder_info = self.get_path_info(folder_path)
         else:
-            folder_info = self.gc.get(f'/folder/{folder_path}')
+            if folder_type=='folder':
+                folder_info = self.gc.get(f'/folder/{folder_path}')
+            else:
+                folder_info = self.gc.get(f'/collection/{folder_path}')
 
         folder_items = self.gc.get(f'/resource/{folder_info["_id"]}/items',
                                                   parameters = {
-                                                      'type': 'folder',
+                                                      'type': folder_type,
                                                       'limit': 0 
                                                   })
 
@@ -385,9 +472,13 @@ class DSAHandler(Handler):
     def create_survey(self, survey_args:dict):
         """Create a survey component which will route collected data to a specific file in the connected DSA instance.
 
-        :param survey_args: Setup arguments for survey questions
+        :param survey_args: Setup arguments for survey questions (keys = questions list, usernames list, storage folder)
         :type survey_args: dict
         """
+
+        #TODO: Process:
+        # 1) Parse survey args
+        # 2) Return SurveyComponent
         pass
     
     def create_uploader(self, folder_id:str, uploader_args:dict):
@@ -398,15 +489,26 @@ class DSAHandler(Handler):
         :param uploader_args: Optional arguments
         :type uploader_args: dict
         """
+
+        #TODO: 
+
         pass
 
-    def create_dataset_builder(self,builder_args:dict):
+    def create_dataset_builder(self,include:Union[list,None]=None):
         """Table view allowing parsing of dataset/slide-level metadata and adding remote/local slides to current session.
 
-        :param builder_args: Optional arguments to include in dataset builder layout.
-        :type builder_args: dict
+        :param include: List of collections to only include (None = include everything accessible to this user), defaults to None
+        :type include: Union[list,None], optional
+        :return: DatasetBuilder instance
+        :rtype: DatasetBuilder
         """
-        pass
+        
+        dataset_builder = DatasetBuilder(
+            handler = self,
+            include_only=include
+        )
+
+        return dataset_builder
 
     def create_metadata_table(self,metadata_args:dict):
         """Create table of metadata keys/values for a folder or collection
@@ -489,7 +591,7 @@ class DSAHandler(Handler):
         for i in image_name:
             if i in cli_names:
                 print(f'------Deleting old version of {i}-------')
-                self.gc.delete(f'/slicer_cli_web/cli/{current_cli[cli_names.index(i)]['_id']}')
+                self.gc.delete(f'/slicer_cli_web/cli/{current_cli[cli_names.index(i)]["_id"]}')
                 self.gc.delete(
                     f'/slicer_cli_web/docker_image',
                     parameters = {
@@ -569,6 +671,15 @@ class DSAHandler(Handler):
         :param plugin_id: ID for plugin to create input component for.
         :type plugin_id: str
         """
+
+        #TODO: Process:
+        # 1) Get XML for plugin
+        # 2) Read <parameters> and <parameters advanced=True> tags separate out
+        # 3) Create inputs for basic types of inputs (string, integer, float, and string-enumeration)
+        # 4) Create inputs for more difficult types of inputs (region, image, file, folder)
+        # 5) Create a "Run" button (if "test" option is available create a "Test" button as well)
+        # 6) Check progress in PluginProgress component
+        # 7) Create some kinda popup or something indicating that the plugin is currently running and to check back later for results
         pass
 
     def run_plugin(self, plugin_id:str, arguments:dict):
@@ -579,6 +690,10 @@ class DSAHandler(Handler):
         :param arguments: Dictionary containing keys/values for each input argument to a plugin
         :type arguments: dict
         """
+        #TODO: Process:
+        # 1) Parse arguments
+        # 2) Submit plugin run request
+        # 3) Return job info 
         pass
 
     def create_plugin_progress(self):
@@ -599,9 +714,11 @@ class DatasetBuilder(Tool):
     :type Tool: None
     """
     def __init__(self,
-                 handler: Union[DSAHandler,list] = []
+                 handler: Union[DSAHandler,list] = [],
+                 include_only: Union[list,None] = None
                 ):
         
+        self.include_only = include_only
         self.handler = handler
 
     def load(self, component_prefix:int):
@@ -633,11 +750,17 @@ class DatasetBuilder(Tool):
         else:
             collections = self.handler.get_collections()
             for c in collections:
-                collections_info.append({
-                    'Collection': c['name'],
-                    'Number of Slides': len(self.handler.get_folder_slide_count(folder_path = c['_id']))
-                } | c['meta'])
+                slide_count = self.handler.get_collection_slide_count(collection_name = c['name'])
+                folder_count = self.handler.get_path_info(path = f'/collection/{c["name"]}')
+                if slide_count>0:
+                    collections_info.append({
+                        'Collection Name': c['name'],
+                        'Collection ID': c['_id'],
+                        'Number of Slides': slide_count,
+                        'Number of Folders': folder_count['nFolders']
+                    } | c['meta'])
 
+        collections_df = pd.DataFrame.from_records(collections_info)
 
         layout = html.Div([
             dbc.Card(
@@ -650,10 +773,23 @@ class DatasetBuilder(Tool):
                         'Search through available collections, folders, and slides to assemble a visualization session.'
                     ),
                     html.Hr(),
+                    html.Div(
+                        dcc.Store(
+                            id = {'type':'dataset-builder-data-store','index': 0},
+                            storage_type='memory',
+                            data = json.dumps({'include_slides':[], 'selected_collections': [], 'available_collections': collections_info})
+                        )
+                    ),
                     dbc.Row([
                         html.Div(
                             id = {'type': 'dataset-builder-collection-div','index': 0},
-                            children = []
+                            children = [
+                                self.make_selectable_dash_table(
+                                    dataframe = collections_df,
+                                    id = {'type': 'dataset-builder-collections-table','index': 0},
+                                    multi_row = True
+                                )
+                            ]
                         )
                     ],style={'marginBottom':'10px'}),
                     html.Hr(),
@@ -662,7 +798,7 @@ class DatasetBuilder(Tool):
                             id = {'type': 'dataset-builder-collection-contents-div','index':0},
                             children = []
                         )
-                    ],style = {'marginBottom':'10px'})
+                    ],style = {'marginBottom':'10px','maxHeight':'70vh','overflow':'scroll'})
                 ])
             )
         ], style = {'maxHeight': '90vh','overflow': 'scroll'})
@@ -673,13 +809,434 @@ class DatasetBuilder(Tool):
     def get_callbacks(self):
 
         # Callback for collection selection (populating table with collection contents)
+        self.blueprint.callback(
+            [
+                Input({'type':'dataset-builder-collections-table','index': ALL},'selected_rows')
+            ],
+            [
+                State({'type':'dataset-builder-data-store','index': ALL},'data')
+            ],
+            [
+                Output({'type':'dataset-builder-collection-contents-div','index': ALL},'children'),
+                Output({'type':'dataset-builder-data-store','index': ALL},'data')
+            ],
+            prevent_initial_call = True
+        )(self.collection_selection)
 
-        # Callback for selecting folder/item from collection-contents-div
+        # Callback for selecting folder from collection-contents-div
+        self.blueprint.callback(
+            [
+                Input({'type':'dataset-builder-collection-folder-table','index':MATCH},'selected_rows'),
+                Input({'type':'dataset-builder-collection-folder-crumb','index':ALL},'n_clicks')
+            ],
+            [
+                State({'type':'dataset-builder-collection-folder-table','index': MATCH},'data'),
+                State({'type': 'dataset-builder-collection-folder-nav-parent','index': MATCH},'children')
+            ],
+            [
+                Output({'type':'dataset-builder-collection-folder-div','index': MATCH},'style'),
+                Output({'type':'dataset-builder-collection-folder-div','index':MATCH},'children'),
+                Output({'type':'dataset-builder-collection-slide-div','index':MATCH},'children'),
+                Output({'type':'dataset-builder-collection-folder-nav-parent','index': MATCH},'children')
+            ],
+            prevent_initial_call = True
+        )(self.update_folder_div)
+
+        # Callback for selecting slide(s) to be added to visualization session
+        self.blueprint.callback(
+            [
+                Input({'type':'dataset-builder-slide-table','index':ALL},'selected_rows'),
+                Input({'type':'dataset-builder-slide-select-all','index':ALL},'n_clicks'),
+                Input({'type':'dataset-builder-slide-remove-icon','index': ALL},'n_clicks'),
+                Input({'type':'dataset-builder-slide-remove-all-button','index': ALL},'n_clicks')
+            ],
+            [
+                Output({'type': 'dataset-builder-selected-slides','index': ALL},'children')
+            ]
+        )(self.slide_selection)
 
         # Callback for plotting slide-level metadata if there is any
 
         # Callback for viewing thumbnail of selected slide(s)
-        pass
+
+    def make_selectable_dash_table(self, dataframe:pd.DataFrame, id:dict, multi_row:bool = True):
+        """Generate a selectable DataTable to add to the layout
+
+        :param dataframe: Pandas DataFrame containing columns/rows of interest
+        :type dataframe: pd.DataFrame
+        :param id: Dictionary containing "type" and "index" keys for interactivity
+        :type id: dict
+        :param multi_row: Whether to allow selection of multiple rows in the table or just single, defaults to True
+        :type multi_row: bool, optional
+        :return: dash_table.DataTable component to be added to layout
+        :rtype: dash_table.DataTable
+        """
+
+        dataframe = pd.json_normalize(dataframe.to_dict('records'))
+        selectable_table = dash_table.DataTable(
+            id = id,
+            columns = [{'name':i,'id':i,'deletable':False} for i in dataframe.columns],
+            data = dataframe.to_dict('records'),
+            editable = False,
+            filter_action='native',
+            sort_action = 'native',
+            sort_mode = 'multi',
+            column_selectable = 'single',
+            row_selectable = 'multi' if multi_row else 'single',
+            row_deletable = False,
+            selected_columns = [],
+            selected_rows = [],
+            page_action='native',
+            page_current=0,
+            page_size=10,
+            style_cell = {
+                'overflow':'hidden',
+                'textOverflow':'ellipsis',
+                'maxWidth':0                
+            },
+            tooltip_data = [
+                {
+                    column: {'value':str(value),'type':'markdown'}
+                    for column, value in row.items()
+                } for row in dataframe.to_dict('records')
+            ],
+            tooltip_duration = None
+        )
+
+        return selectable_table
+
+    def organize_folder_contents(self, folder_info:dict, show_empty:bool=False, ignore_histoqc:bool=True)->list:
+        """For a given folder selection, return a list of slides(0th) and folders (1th)
+
+        :param folder_info: Folder info dict returned by self.handler.get_path_info(path)
+        :type folder_info: dict
+        :param show_empty: Whether or not to display folders which contain 0 slides, defaults to False
+        :type show_empty: bool, optional
+        :return: List of slides within the current folder as well as folders within that folder
+        :rtype: list
+        """
+
+        folder_folders = []
+        folder_slides = []
+        print(folder_info)
+
+        # Starting with slides (which will report parent folderId but not that parent's folderId (if applicable))
+        all_folder_slides = self.handler.get_folder_slides(
+            folder_path = folder_info['_id'],
+            folder_type = folder_info['_modelType'],
+            ignore_histoqc=ignore_histoqc
+        )
+
+        folder_slides_folders = [i['folderId'] for i in all_folder_slides]
+        unique_folders = list(set(folder_slides_folders))
+        folders_in_folder = []
+        for u in unique_folders:
+            if not u==folder_info['_id'] and not u in folders_in_folder:
+                # This is for all folders in this folder
+                # This grabs parent folders of this folder
+                u_folder_info = self.handler.get_folder_info(folder_id=u)
+                u_folder_rootpath = self.handler.get_folder_rootpath(u)
+                # Folders in order from collection-->child folder-->etc.
+                folder_ids = [i['object']['_id'] for i in u_folder_rootpath]
+
+                if folder_ids[-1]==folder_info['_id']:
+                    child_folder_path = '/collection/'+'/'.join([i['object']['name'] for i in u_folder_rootpath]+[u_folder_info['name']])
+                else:
+                    # Folder that is immediate child of current folder:
+                    child_folder_idx = folder_ids.index(folder_info['_id'])
+                    child_folder_path = '/collection/'+'/'.join([i['object']['name'] for i in u_folder_rootpath[:child_folder_idx+2]])
+
+                child_folder_path_info = self.handler.get_path_info(
+                    path = child_folder_path
+                )
+                if not child_folder_path_info['_id'] in folders_in_folder:
+                    folders_in_folder.append(child_folder_path_info['_id'])
+                    
+                    # Adding folder to list if the number of items is above zero or show_empty is True
+                    folder_folders.append({
+                        'Folder Name': child_folder_path_info['name'],
+                        'Folder ID': child_folder_path_info['_id'],
+                        'Number of Folders': child_folder_path_info['nFolders'],
+                        'Number of Slides': child_folder_path_info['nItems'],
+                        'Last Updated': child_folder_path_info['updated']
+                    } | child_folder_path_info['meta'])
+
+
+            elif u==folder_info['_id']:
+                # This means that there are some slides that are direct children (not in a sub-folder) in this folder. 
+                # This adds them all at once
+                for i in all_folder_slides:
+                    if i['folderId']==folder_info['_id']:
+                        folder_slides.append(
+                            {
+                                'Slide Name': i['name'],
+                                'Slide ID': i['_id'],
+                                'Last Updated':i['updated']
+                            } | {k:v for k,v in i['meta'].items() if type(v)==str}
+                        )
+
+        if show_empty:
+            # This is how you get all the empty folders within a folder (does not get child empty folders)
+            empty_folders = self.handler.get_folder_folders(
+                folder_id = folder_info['_id'],
+                folder_type = folder_info['_modelType']
+            )
+            
+            for f in empty_folders:
+                if not f['_id'] in folders_in_folder and not f['_id'] in unique_folders:
+                    folder_info = self.handler.gc.get(f'/folder/{f["_id"]}/details')
+                    folder_folders.append(
+                        {
+                            'Folder Name': f['name'],
+                            'Folder ID': f['_id'],
+                            'Number of Folders': folder_info['nFolders'],
+                            'Number of Slides': folder_info['nItems'],
+                            'Last Updated': f['updated']
+                        }
+                    )
+
+
+        return folder_slides, folder_folders
+
+    def collection_selection(self, collection_rows, builder_data):
+        """Callback for when one/multiple collections are selected from the collections table
+
+        :param collection_rows: Row indices of selected collections
+        :type collection_rows: list
+        :param builder_data: Data store on available collections and currently included slides
+        :type builder_data: list
+        :return: Children of collection-contents-div (items/folders within selected collections)
+        :rtype: list
+        """
+        selected_collections = get_pattern_matching_value(collection_rows)
+        builder_data = json.loads(get_pattern_matching_value(builder_data))
+
+        if selected_collections is None and len(builder_data['selected_collections'])==0:
+            return ['Select a Collection to get started'], no_update
+        elif selected_collections is None and len(builder_data['selected_collections'])>0:
+            selected_collections = []
+
+        if len(selected_collections)==1 and len(builder_data['selected_collections'])==0:
+            collection_contents = []
+        else:
+            collection_contents = Patch()
+
+        def add_collection_card(collection_info,idx):
+            # For each collection, grab all items and unique folders (as well as those that are not nested in a folder)
+            folder_slides, folder_folders = self.organize_folder_contents(
+                folder_info = self.handler.get_path_info(f'/collection/{collection_info["Collection Name"]}')
+            )
+
+            if len(folder_slides)>0:
+
+                non_nested_df = pd.DataFrame.from_records(folder_slides)
+                non_nested_table = self.make_selectable_dash_table(
+                    dataframe=non_nested_df,
+                    id = {'type': f'{self.component_prefix}-dataset-builder-collection-slide-table','index': idx},
+                    multi_row=True
+                )
+
+            else:
+                non_nested_table= html.Div()
+
+            if len(folder_folders)>0:
+                folder_table = self.make_selectable_dash_table(
+                    dataframe=pd.DataFrame.from_records(folder_folders),
+                    id = {'type': f'{self.component_prefix}-dataset-builder-collection-folder-table','index': idx},
+                    multi_row=False
+                )
+            else:
+                folder_table = html.Div()
+
+            new_card = html.Div(
+                dbc.Card([
+                    dbc.CardHeader(f'Collection: {collection_info["Collection Name"]}'),
+                    dbc.CardBody([
+                        html.H6(
+                            children = [
+                                dbc.Stack([
+                                    html.A('/collection'),
+                                    html.A(
+                                        f'/{collection_info["Collection Name"]}/',
+                                        id = {'type': f'{self.component_prefix}-dataset-builder-collection-folder-crumb','index': idx},
+                                        style = {'color': 'rgb(0,0,255)'}
+                                    )
+                                ],direction='horizontal')
+                            ],
+                            id = {'type': f'{self.component_prefix}-dataset-builder-collection-folder-nav-parent','index': idx},
+                            style = {'textTransform':'none','display':'inline'}
+                        ),
+                        html.Hr(),
+                        html.Div([
+                            folder_table
+                        ], id = {'type': f'{self.component_prefix}-dataset-builder-collection-folder-div','index': idx}),
+                        html.Hr(),
+                        html.Div([
+                            non_nested_table
+                        ], style = {'marginTop':'10px'},id = {'type': f'{self.component_prefix}-dataset-builder-collection-slide-div','index': idx})
+                    ]),
+                    dbc.CardFooter(html.P(f'Selected Slides: 0',id = {'type': f'{self.component_prefix}-selected-slide-count','index': idx}))
+                ]),
+                style = {'marginBottom':'10px'}
+            )
+            
+            return new_card
+        
+        if len(selected_collections)>0:
+            if len(list(set(selected_collections).difference(builder_data['selected_collections'])))>0:
+                # Adding a new collection
+                new_collection_idx = list(set(selected_collections).difference(builder_data['selected_collections']))[0]
+                collection_contents.append(add_collection_card(builder_data['available_collections'][new_collection_idx],new_collection_idx))
+            elif len(list(set(builder_data['selected_collections']).difference(selected_collections)))>0:
+                # Removing a collection
+                rem_collection_idx = list(set(builder_data['selected_collections']).difference(selected_collections))[0]
+                del collection_contents[builder_data['selected_collections'].index(rem_collection_idx)]
+
+        else:
+            collection_contents = ['Select a Collection to get started!']
+
+        builder_data['selected_collections'] = selected_collections
+        builder_data = json.dumps(builder_data)
+            
+        return [collection_contents], [builder_data]
+
+    def update_folder_div(self,folder_row,crumb_click,collection_folders,current_crumbs):
+        """Selecting a folder from the collection's folder table
+
+        :param folder_row: Selected folder (list of 1 index)
+        :type folder_row: list
+        :param crumb_click: If one of the folder path parts was clicked it will trigger this.
+        :type crumb_click: int
+        :param collection_folders: Current data in the collection's folder table
+        :type collection_folders: list
+        :param current_crumbs: List of current path parts that can be selected to go up a folder
+        :type current_crumbs: list
+        :return: Sub-folder and slide selection tables for further selection
+        :rtype: tuple
+        """
+
+
+        if type(current_crumbs)==list:
+            current_crumbs = current_crumbs[0]['props']['children']
+        else:
+            current_crumbs = current_crumbs['props']['children']
+
+        new_crumbs = []
+        path_parts = []
+        for i in current_crumbs:
+            path_part = i['props']['children']
+            if not path_part in ['/collection','/user']:
+                crumb = html.A(
+                    path_part,
+                    id = {'type': f'{self.component_prefix}-dataset-builder-collection-folder-crumb','index': ctx.triggered_id['index']},
+                    style = {'color': 'rgb(0,0,255)'}
+                )
+            else:
+                crumb = html.A(path_part)
+
+            path_parts.append(path_part)
+            new_crumbs.append(crumb)
+        
+        if 'dataset-builder-collection-folder-table' in ctx.triggered_id['type']:
+            print('folder selected from table')
+            
+            # Triggers callback when creating new folder table
+            if len(folder_row)==0:
+                return no_update, no_update, no_update
+
+            new_folder_name = collection_folders[folder_row[0]]['Folder Name']
+            folder_table_style = {'display':'inline-block','width':'100%'}
+            
+            new_crumbs += [html.A(
+                new_folder_name + '/',
+                id = {'type': f'{self.component_prefix}-dataset-builder-collection-folder-crumb','index': ctx.triggered_id['index']},
+                style = {'color': 'rgb(0,0,255)'}
+            )]
+            
+            folder_path = ''.join(path_parts+[new_folder_name])
+            folder_info = self.handler.get_path_info(
+                path = folder_path
+            )
+            
+            folder_slides, folder_folders = self.organize_folder_contents(
+                folder_info=folder_info
+            )
+
+            if len(folder_folders)>0:
+                folder_table = self.make_selectable_dash_table(
+                    dataframe = pd.DataFrame.from_records(folder_folders),
+                    id = {'type': f'{self.component_prefix}-dataset-builder-collection-folder-table','index': ctx.triggered_id['index']},
+                    multi_row=False
+                )
+            else:
+                folder_table_style = {'display':'none'}
+                folder_table = no_update
+
+                
+            if len(folder_slides)>0:
+                slides_table = self.make_selectable_dash_table(
+                    dataframe=pd.DataFrame.from_records(folder_slides),
+                    id = {'type': f'{self.component_prefix}-dataset-builder-slide-table','index': ctx.triggered_id['index']},
+                    multi_row=True
+                )
+            else:
+                slides_table = html.Div()
+
+
+        elif 'dataset-builder-collection-folder-crumb' in ctx.triggered_id['type']:
+            n_clicks = [i['props']['n_clicks'] if 'n_clicks' in i['props'] else 0 for i in current_crumbs]
+            n_click_idx = np.argmax(n_clicks)
+            if n_click_idx==len(current_crumbs)-1:
+                folder_table_style = no_update
+            else:
+                folder_table_style = {'display':'inline-block','width':'100%'}
+                new_crumbs = new_crumbs[:n_click_idx+1]
+                
+                new_path = ''.join(path_parts[:n_click_idx+1])[:-1]
+                folder_info = self.handler.get_path_info(
+                    path = new_path
+                )
+                
+                folder_slides, folder_folders = self.organize_folder_contents(
+                    folder_info=folder_info
+                )
+
+                if len(folder_folders)>0:
+                    folder_table = self.make_selectable_dash_table(
+                        dataframe = pd.DataFrame.from_records(folder_folders),
+                        id = {'type': f'{self.component_prefix}-dataset-builder-collection-folder-table','index': ctx.triggered_id['index']},
+                        multi_row=False
+                    )
+                else:
+                    folder_table = no_update
+                    folder_table_style = {'display':'none'}
+
+                    
+                if len(folder_slides)>0:
+                    slides_table = self.make_selectable_dash_table(
+                        dataframe=pd.DataFrame.from_records(folder_slides),
+                        id = {'type': f'{self.component_prefix}-dataset-builder-slide-table','index': ctx.triggered_id['index']},
+                        multi_row=True
+                    )
+                else:
+                    slides_table = html.Div()
+                
+        new_crumbs = dbc.Stack(new_crumbs,direction='horizontal')
+
+        return folder_table_style, folder_table, slides_table, new_crumbs
+
+    def slide_selection(self, slide_rows, slide_all, slide_rem, slide_rem_all):
+
+        print(ctx.triggered)
+        print(slide_rows)
+        print(slide_all)
+        print(slide_rem)
+        print(slide_rem_all)
+
+        raise exceptions.PreventUpdate
+
+
+
 
 
 class DSAUploadType:

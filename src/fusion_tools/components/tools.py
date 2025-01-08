@@ -81,6 +81,9 @@ class OverlayOptions(Tool):
 
         self.ignore_list = ignore_list
         self.property_depth = property_depth
+    
+    def __str__(self):
+        return 'Overlay Options'
         
     def load(self,component_prefix:int):
 
@@ -1041,6 +1044,9 @@ class PropertyViewer(Tool):
         self.ignore_list = ignore_list
         self.property_depth = property_depth   
 
+    def __str__(self):
+        return 'Property Viewer'
+
     def load(self, component_prefix: int):
 
         self.component_prefix = component_prefix
@@ -1647,6 +1653,9 @@ class PropertyPlotter(Tool):
         """
         self.ignore_list = ignore_list
         self.property_depth = property_depth
+
+    def __str__(self):
+        return 'Property Plotter'
 
     def load(self, component_prefix:int):
 
@@ -3109,6 +3118,9 @@ class HRAViewer(Tool):
             for i in self.asct_b_release['Organ'].tolist()
         ]
 
+    def __str__(self):
+        return "HRA Viewer"
+
     def load(self, component_prefix: int):
         
         self.component_prefix = component_prefix
@@ -3499,6 +3511,9 @@ class GlobalPropertyPlotter(MultiTool):
 
         else:
             self.preloaded_options = None
+
+    def __str__(self):
+        return "Global Property Plotter"
 
     def extract_all_properties(self, session_data):
         # This function would use the session data to extract annotations, properties, and format them in a reasonable way

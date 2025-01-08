@@ -1015,7 +1015,6 @@ class SlideMap(MapComponent):
         initial_annotations = [i for i in current_annotations if not any([j in i['properties']['name'] for j in ['Manual','Filtered','Upload']])]
         # Current manual rois (used for determining if a new ROI has been created/edited)
         annotation_names = [i['properties']['name'] for i in current_annotations]
-        print(f'current annotation names: {annotation_names}')
         manual_roi_idxes = [0]+[int(i.split(' ')[-1]) for i in annotation_names if 'Manual' in i]
 
         manual_rois = [i for i in current_annotations if 'Manual' in i['properties']['name']]
@@ -1116,8 +1115,6 @@ class SlideMap(MapComponent):
             for d_idx,(man_d,current_d) in enumerate(deleted_rois):
                 del new_manual_rois[man_d-d_idx]
                 del current_annotations[current_d-d_idx]
-
-        print(f'operation: {operation}')
 
         annotations_data = json.dumps(current_annotations)
 

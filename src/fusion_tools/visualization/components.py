@@ -6,14 +6,14 @@ import json
 # Dash imports
 import dash
 dash._dash_renderer._set_react_version('18.2.0')
-from dash import dcc
+from dash import dcc, ALL, MATCH, ctx, exceptions, no_update
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-from dash_extensions.enrich import DashProxy, html, MultiplexerTransform
+from dash_extensions.enrich import DashProxy, html, MultiplexerTransform, PrefixIdTransform, Input, State, Output
 
 from typing_extensions import Union
 from fusion_tools.tileserver import TileServer, DSATileServer, LocalTileServer, CustomTileServer
-from fusion_tools.components import SlideImageOverlay
+from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 import threading
 
 import uvicorn
@@ -57,6 +57,7 @@ class Visualization:
                  slide_metadata: Union[list,dict,None] = None,
                  tileservers: Union[list,TileServer,None] = None,
                  components: Union[list,dict] = [],
+                 header: Union[list,None] = None,
                  app_options: dict = {},
                  linkage: str = 'row'
                  ):
@@ -70,8 +71,10 @@ class Visualization:
         :type slide_metadata: Union[list,dict,None], optional
         :param tileservers: Single tileserver or multiple tileservers, defaults to None
         :type tileservers: Union[list,TileServer,None], optional
-        :param components: List of components in layout format (rows-->columns-->tabs for nested lists), defaults to []
+        :param components: List of components in layout format (rows-->columns-->tabs for nested lists) or dictionary containing names of pages and their component lists, defaults to []
         :type components: Union[list,dict], optional
+        :param header: List of components to add to collapsed upper portion of the visualization, defaults to None
+        :type header: Union[list,None], optional
         :param app_options: Additional options for the running visualization session, defaults to {}
         :type app_options: dict, optional
         :param linkage: Which levels of components are linked through callbacks (can be 'row','col',or 'tab'), defaults to 'row'
@@ -83,6 +86,7 @@ class Visualization:
         self.tileservers = tileservers
         self.local_annotations = local_annotations
         self.components = components
+        self.header = header
         self.app_options = app_options
         self.linkage = linkage
 
@@ -137,6 +141,65 @@ class Visualization:
 
         self.viewer_app.title = self.app_options['title']
         self.viewer_app.layout = self.gen_layout()
+        self.get_callbacks()
+
+    def get_callbacks(self):
+
+        self.viewer_app.callback(
+            [
+                Input('page-url','pathname'),
+                Input({'type':'page-button','index': ALL},'n_clicks')
+            ],
+            [
+                Output('vis-container','children'),
+                Output('page-url','pathname')
+            ],
+            prevent_initial_call = True
+        )(self.update_page)
+
+        self.viewer_app.callback(
+            [
+                Input('navbar-toggler','n_clicks')
+            ],
+            [
+                Output('navbar-collapse','is_open')
+            ],
+            [
+                State('navbar-collapse','is_open')
+            ]
+        )(self.open_navbar)
+
+    def open_navbar(self, clicked, is_open):
+
+        if clicked:
+            return not is_open
+        return is_open
+    
+    def update_page(self, pathname, path_button):
+        """Updating page in multi-page application
+
+        :param pathname: Pathname or suffix of current url which is a key to the page name
+        :type pathname: str
+        """
+
+        if ctx.triggered_id=='page-url':
+            if pathname in self.layout_dict:
+                # If that path is in the layout dict, return that page content
+                return self.layout_dict[pathname], no_update
+            else:
+                # Otherwise, return a list of clickable links for valid pages
+                not_found_page = html.Div([
+                    html.H1('Uh oh!'),
+                    html.H2(f'The page: {pathname}, is not in the current layout!'),
+                    html.Hr()
+                ] + [
+                    html.P(html.A(page,href=page))
+                    for page in self.layout_dict
+                ])
+                return not_found_page, pathname
+        elif ctx.triggered_id['type']=='page-button':
+            new_pathname = list(self.layout_dict.keys())[ctx.triggered_id['index']]
+            return self.layout_dict[new_pathname], new_pathname 
     
     def initialize_stores(self):
 
@@ -225,7 +288,7 @@ class Visualization:
         :return: Total layout containing embedded components
         :rtype: dmc.MantineProvider
         """
-        layout_children = self.get_layout_children()
+        self.get_layout_children()
 
         header = dbc.Navbar(
             dbc.Container([
@@ -242,6 +305,25 @@ class Visualization:
                         dbc.NavbarToggler(id='navbar-toggler'),
                         dbc.Collapse(
                             dbc.Nav([
+                                dbc.NavItem(
+                                    dbc.DropdownMenu(
+                                        children = [
+                                            dbc.DropdownMenuItem(
+                                                dbc.Button(
+                                                    page,
+                                                    id = {'type': 'page-button','index':page_idx},
+                                                    n_clicks = 0
+                                                )
+                                            )
+                                            for page_idx,page in enumerate(self.layout_dict)
+                                        ],
+                                        label = 'Pages Menu',
+                                        nav = True,
+                                        style = {
+                                            'border-radius':'5px'
+                                        }
+                                    )
+                                ),
                                 dbc.NavItem(
                                     dbc.Button(
                                         'CMIL Website',
@@ -289,14 +371,15 @@ class Visualization:
                 vis_data,
                 html.Div(
                     dbc.Container(
-                        id = 'vis-container',
+                        id = 'full-vis-container',
                         fluid = True,
-                        children = [header] + layout_children
+                        children = [header] + [html.Div(id = 'vis-container',children = [])]
                     ),
                     style = self.app_options['app_style'] if 'app_style' in self.app_options else {}
                 )
             ]
         )
+
 
         return layout
 
@@ -312,7 +395,8 @@ class Visualization:
         n_tabs = 0
 
         component_prefix = 0
-        layout_children = []
+        self.layout_dict = {}
+        page_components = []
         row_components = []
         col_components = []
         tab_components = []
@@ -329,7 +413,7 @@ class Visualization:
             print(f'----------------- Components in the same {self.linkage} may communicate through callbacks---------')
         
             self.components = {
-                'app': self.components 
+                'main': self.components 
             }
 
         elif type(self.components)==dict:
@@ -344,24 +428,14 @@ class Visualization:
                 print(f'------Creating Visualization Page {page} with {n_rows} rows, {n_cols} columns, and {n_tabs} tabs--------')
                 print(f'----------------- Components in the same {self.linkage} may communicate through callbacks---------')
             
-            side_bar = html.Div([
-                dbc.Offcanvas([
-                    dbc.Nav([
-                        dbc.NavLink(p,href=f'/{p.lower().replace(" ","")}',active='exact',id={'type': 'nav-page-link','index': p_idx})
-                        for p_idx,p in enumerate(list(self.components.keys()))
-                    ],vertical=True,pills=True)
-                ], id = {'type': 'page-off-canvas','index': 0},style = {'background-color','#f8f9fa'})
-            ])
 
-            layout_children.append(side_bar)
-
-
-        #TODO: Update for multi-page layouts
-        for page_idx,page in enumerate(list(self.compontents.keys())):
-
+        # Iterating through each named page
+        for page_idx,page in enumerate(list(self.components.keys())):
+            page_children = []
             if self.linkage=='page':
                 component_prefix = page_idx
 
+            row_components = []
             for row_idx,row in enumerate(self.components[page]):
                 
                 if self.linkage=='row':
@@ -451,13 +525,14 @@ class Visualization:
                         )
                     )
 
-                layout_children.append(
+                page_children.append(
                     dbc.Row(
                         row_children
                     )
                 )
 
-        return layout_children
+            page_components.append(row_components)
+            self.layout_dict['/app/'+page.lower().replace(" ","-")] = page_children
 
     def start(self):
         """Starting visualization session based on provided app_options
