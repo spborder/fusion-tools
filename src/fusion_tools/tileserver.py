@@ -55,6 +55,7 @@ class LocalTileServer(TileServer):
         self.router.add_api_route('/{image}/tiles/{z}/{x}/{y}',self.get_tile,methods=["GET"])
         self.router.add_api_route('/{image}/metadata',self.get_metadata,methods=["GET"])
         self.router.add_api_route('/{image}/tiles/region',self.get_region,methods=["GET"])
+        self.router.add_api_route('/{image}/tiles/thumbnail',self.get_thumbnail,methods=["GET"])
         self.router.add_api_route('/{image}/annotations',self.get_annotations,methods=["GET"])
 
     def load_annotations(self):
@@ -278,10 +279,25 @@ class LocalTileServer(TileServer):
         else:
             return Response(content = 'invalid image index', media_type = 'application/json')
 
+    def get_thumbnail(self, image:int):
+        """Grabbing an image thumbnail
+
+        :param image: _description_
+        :type image: int
+        """
+
+        if image<len(self.names) and image>=0:
+            thumbnail,mime_type = large_image.open(self.local_image_paths[image]).getThumbnail(encoding='PNG')
+            return Response(content = thumbnail, media_type = 'image/png')
+        else:
+            return Response(content = 'invalid image index', media_type = 'application/json')
+
     def get_annotations(self,image:int):
 
         if image<len(self.names) and image>=0:
             return Response(content = json.dumps(self.annotations[image]),media_type='application/json')
+        else:
+            return Response(content = 'invalid image index', media_type = 'application/json')
 
     def start(self):
         """Starting tile server instance on a provided port

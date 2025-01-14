@@ -55,7 +55,12 @@ from fusion_tools.utils.stats import get_label_statistics, run_wilcox_rank_sum
 class Tool:
     """General class for interactive components that visualize, edit, or perform analyses on data.
     """
-    pass
+    def __init__(self):
+        # Property referring to how the layout is updated with a change in the 
+        # visualization session
+        self.session_update = False
+    
+    
 
 class OverlayOptions(Tool):
     """OverlayOptions Tool which enables editing overlay visualization properties including line color, fill color, and filters.
@@ -79,6 +84,7 @@ class OverlayOptions(Tool):
         :type property_depth: int, optional
         """
 
+        super().__init__()
         self.ignore_list = ignore_list
         self.property_depth = property_depth
     
@@ -1041,6 +1047,8 @@ class PropertyViewer(Tool):
         :param property_depth: Depth at which to search for nested properties. Properties nested further than this value will be ignored.
         :type property_depth: int, optional
         """
+        
+        super().__init__()
         self.ignore_list = ignore_list
         self.property_depth = property_depth   
 
@@ -1651,6 +1659,8 @@ class PropertyPlotter(Tool):
         :param property_depth: Depth at which to search for nested properties. Properties nested further than this will be ignored.
         :type property_depth: int, optional
         """
+        
+        super().__init__()
         self.ignore_list = ignore_list
         self.property_depth = property_depth
 
@@ -3103,6 +3113,8 @@ class HRAViewer(Tool):
     def __init__(self):
         """Constructor method
         """
+        
+        super().__init__()
         self.asct_b_version = 7
 
         self.asct_b_release = pd.read_csv(
@@ -3483,7 +3495,11 @@ class HRAViewer(Tool):
 class MultiTool:
     """General class for a Tool which works on multiple slides at once
     """
-    pass
+    def __init__(self):
+        # Property referring to how the layout is updated with a change in the 
+        # visualization session
+        self.session_update = True
+    
 
 
 class GlobalPropertyPlotter(MultiTool):
@@ -3497,6 +3513,7 @@ class GlobalPropertyPlotter(MultiTool):
                  nested_prop_sep: str = ' --> '
                  ):
         
+        super().__init__()
         self.ignore_list = ignore_list
         self.property_depth = property_depth
         self.preloaded_properties = preloaded_properties
@@ -3518,7 +3535,7 @@ class GlobalPropertyPlotter(MultiTool):
     def extract_all_properties(self, session_data):
         # This function would use the session data to extract annotations, properties, and format them in a reasonable way
         session_properties = pd.DataFrame()
-        for s in session_data:
+        for s in session_data['current']:
             slide_name = s['name']
             annotations = requests.get(s['annotations_url']).json()
             

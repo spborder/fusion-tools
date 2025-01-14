@@ -53,6 +53,7 @@ class FeatureAnnotation(Tool):
         :type storage_path: str
         """
 
+        super().__init__()
         self.storage_path = storage_path
         self.labels_format = labels_format
         self.annotations_format = annotations_format
@@ -917,6 +918,7 @@ class BulkLabels(Tool):
         """Constructor method
         """
 
+        super().__init__()
         self.ignore_list = ignore_list
         self.property_depth = property_depth
 

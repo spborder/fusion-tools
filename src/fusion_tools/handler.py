@@ -72,6 +72,19 @@ class DSAHandler(Handler):
         # Token used for authenticating requests
         self.user_token = self.gc.get(f'/token/session')['token']
 
+    def authenticate_new(self, username:str, password:str):
+
+        try:
+            user_info = self.gc.authenticate(
+                username = username,
+                password = password
+            )
+            user_info['token'] = self.gc.get('token/session')['token']
+            return user_info
+        
+        except girder_client.AuthenticationError:
+            return f'Error logging in with username: {username}'
+
     def get_image_region(self, item_id: str, coords_list: list, style: Union[dict,None] = None)->np.ndarray:
         """
         Grabbing image region from list of bounding box coordinates
@@ -108,6 +121,22 @@ class DSAHandler(Handler):
         else:
             print('Adding style parameters are in progress')
             raise NotImplementedError
+
+        return image_array
+
+    def get_image_thumbnail(self, item_id:str)->np.ndarray:
+
+        image_array = np.uint8(
+            np.array(
+                Image.open(
+                    BytesIO(
+                        requests.get(
+                            self.gc.urlBase+f'/item/{item_id}/tiles/thumbnail?token={self.user_token}'
+                        ).content
+                    )
+                )
+            )
+        )
 
         return image_array
 
@@ -481,13 +510,11 @@ class DSAHandler(Handler):
         # 2) Return SurveyComponent
         pass
     
-    def create_uploader(self, folder_id:str, uploader_args:dict):
+    def create_uploader(self, upload_types:list):
         """Create uploader component layout to a specific folder. "uploader_args" contains optional additional arguments.
 
-        :param folder_id: ID for folder to upload to
-        :type folder_id: str
-        :param uploader_args: Optional arguments
-        :type uploader_args: dict
+        :param upload_types: List of UploadTypes objects including current varieties of formatted, linked upload procedures
+        :type upload_types: list
         """
 
         #TODO: 
@@ -656,6 +683,7 @@ class DSAHandler(Handler):
                 }
             )
             user_info = self.gc.authenticate(username.lower(),password)
+            user_info['token'] = self.gc.get('token/session')['token']
 
             return user_info
 
@@ -704,7 +732,485 @@ class DSAHandler(Handler):
     def create_login_component(self):
         """Creates login button for multiple DSA users to use the same fusion-tools instance
         """
-        pass
+        
+        login_component = DSALoginComponent(
+            handler = self,
+            default_user = {
+                'username': self.username,
+                'token': self.user_token
+            }
+        )
+
+        return login_component
+
+
+class DSALoginComponent(Tool):
+    """Handler for DSALoginComponent, enabling login to the running DSA instance
+
+    :param Tool: General class for components that perform visualization and analysis of data.
+    :type Tool: None
+
+    """
+    def __init__(self,
+                 handler: DSAHandler,
+                 default_user: Union[dict,None] = None
+                ):
+        self.handler = handler
+        self.default_user = default_user
+
+        self.session_update = True
+
+    def load(self,component_prefix:int):
+
+        self.component_prefix = component_prefix
+
+        self.title = 'DSA Login Component'
+        self.blueprint = DashBlueprint(
+            transforms=[
+                PrefixIdTransform(prefix=f'{component_prefix}'),
+                MultiplexerTransform()
+            ]
+        )
+
+        self.get_callbacks()
+    
+    def update_layout(self, session_data:dict, use_prefix:bool):
+        
+                
+        layout = html.Div([
+            html.H4(
+                id = {'type': 'dsa-login-current-user','index': 0},
+                children = [
+                    f'Welcome, {session_data["current_user"]["login"]}!' if "current_user" in session_data else 'Welcome, Guest!'
+                ]
+            ),
+            html.Hr(),
+            html.Div(
+                id = {'type': 'dsa-login-div','index': 0},
+                children = [
+                    dbc.Stack([
+                        dbc.Button(
+                            'Login',
+                            className = 'd-grid col-6 mx-auto',
+                            color = 'success',
+                            id = {'type': 'dsa-login-button','index': 0}
+                        ),
+                        dbc.Tooltip(
+                            'For registered users, login to view your previous uploads or shared collections!',
+                            target = {'type': 'dsa-login-button','index': 0},
+                            placement='top'
+                        ),
+                        dbc.Button(
+                            'Create an Account',
+                            className = 'd-grid col-6 mx-auto',
+                            color = 'warning',
+                            id = {'type': 'dsa-login-create-account-button','index': 0}
+                        ),
+                        dbc.Tooltip(
+                            'Create an account in order to upload slides to the DSA instance, to access user surveys, or to share data!',
+                            target = {'type': 'dsa-create-account-button','index': 0},
+                            placement='top'
+                        )
+                    ],direction='horizontal',gap=2)
+                ]
+            )
+        ],style = {'marginTop':'10px','marginBottom':'10px','marginLeft':'10px','marginRight':'10px'})
+
+        if use_prefix:
+            PrefixIdTransform(prefix=self.component_prefix).transform_layout(layout)
+
+        return layout
+
+    def gen_layout(self,session_data:dict):
+        """Creating the layout for this component, assigning it to the DashBlueprint object
+
+        :param session_data: Dictionary containing relevant information for the current session
+        :type session_data: dict
+        """
+
+        self.blueprint.layout = self.update_layout(session_data,use_prefix=False)
+
+    def get_callbacks(self):
+
+        # Callback for selecting Login vs. Create Account
+        self.blueprint.callback(
+            [
+                Input({'type': 'dsa-login-button','index': ALL},'n_clicks'),
+                Input({'type': 'dsa-login-create-account-button','index': ALL},'n_clicks'),
+                Input({'type': 'dsa-login-back-icon','index': ALL},'n_clicks')
+            ],
+            [
+                Output({'type': 'dsa-login-div','index': ALL},'children')
+            ]
+        )(self.display_login_fields)
+
+        # Callback for clicking Login button with username and password
+        self.blueprint.callback(
+            [
+                Input({'type': 'dsa-login-login-submit','index': ALL},'n_clicks')
+            ],
+            [
+                State({'type': 'dsa-login-username-input','index': ALL},'value'),
+                State({'type': 'dsa-login-password-input','index': ALL},'value'),
+                State('anchor-vis-store','data')
+            ],
+            [
+                Output({'type': 'dsa-login-username-error-div','index': ALL},'children'),
+                Output({'type': 'dsa-login-password-error-div','index': ALL},'children'),
+                Output({'type': 'dsa-login-login-error-div','index':ALL},'children'),
+                Output({'type': 'dsa-login-current-user','index': ALL},'children'),
+                Output('anchor-vis-store','data')
+            ]
+        )(self.submit_login)
+
+        # Callback for clicking Create Account with input details
+        self.blueprint.callback(
+            [
+                Input({'type':'dsa-login-create-account-submit','index': ALL},'n_clicks')
+            ],
+            [
+                State({'type': 'dsa-login-firstname-input','index': ALL},'value'),
+                State({'type': 'dsa-login-lastname-input','index': ALL},'value'),
+                State({'type': 'dsa-login-email-input','index': ALL},'value'),
+                State({'type': 'dsa-login-username-input','index': ALL},'value'),
+                State({'type': 'dsa-login-password-input','index': ALL},'value'),
+                State('anchor-vis-store','data')
+            ],
+            [
+                Output({'type': 'dsa-login-email-error-div','index': ALL},'children'),
+                Output({'type': 'dsa-login-username-error-div','index': ALL},'children'),
+                Output({'type': 'dsa-login-password-error-div','index': ALL},'children'),
+                Output({'type': 'dsa-login-create-account-error-div','index': ALL},'children'),
+                Output({'type': 'dsa-login-current-user','index': ALL},'children'),
+                Output('anchor-vis-store','data')
+            ]
+        )(self.submit_create_account)
+        
+    def display_login_fields(self, login_clicked, create_account_clicked, back_clicked):
+        """Displaying login fields depending on if login, create account, or back is clicked
+
+        :param login_clicked: Login button clicked
+        :type login_clicked: list
+        :param create_account_clicked: Create Account button clicked
+        :type create_account_clicked: list
+        :param back_clicked: Back icon clicked
+        :type back_clicked: list
+        """
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        if 'dsa-login-button' in ctx.triggered_id['type']:
+            # Create input fields for "username" and "password" and a button for Login
+            new_children = html.Div([
+                dbc.Row([
+                    dbc.Col(
+                        html.A(
+                            dbc.Stack([
+                                html.P(
+                                    html.I(
+                                        className = 'fa-solid fa-arrow-left',
+                                        style = {'marginRight':'5px'}
+                                    )
+                                ),
+                                html.P(
+                                    'Back'
+                                )
+                            ],direction='horizontal'),
+                            id = {'type': f'{self.component_prefix}-dsa-login-back-icon','index': 0},
+                            n_clicks = 0
+                        )
+                    )
+                ]),
+                dbc.Stack([
+                    dbc.InputGroup([
+                        dbc.InputGroupText(
+                            'Username: '
+                        ),
+                        dbc.Input(
+                            id = {'type': f'{self.component_prefix}-dsa-login-username-input','index': 0},
+                            placeholder='username',
+                            type = 'text',
+                            required = True,
+                            value = [],
+                            maxLength = 1000,
+                            pattern = '^[a-z0-9]+$'
+                        )
+                    ]),
+                    html.Div(
+                        id = {'type': f'{self.component_prefix}-dsa-login-username-error-div','index': 0},
+                        children = []
+                    ),
+                    dbc.InputGroup([
+                        dbc.InputGroupText(
+                            'Password: '
+                        ),
+                        dbc.Input(
+                            id = {'type': f'{self.component_prefix}-dsa-login-password-input','index': 0},
+                            type = 'password',
+                            required = True,
+                            value = [],
+                            maxLength = 1000
+                        )
+                    ]),
+                    html.Div(
+                        id = {'type': f'{self.component_prefix}-dsa-login-password-error-div','index': 0},
+                        children = []
+                    ),
+                    dbc.Button(
+                        'Login!',
+                        className = 'd-grid col-12 mx-auto',
+                        color = 'primary',
+                        id = {'type': f'{self.component_prefix}-dsa-login-login-submit','index': 0},
+                        n_clicks = 0
+                    ),
+                    html.Div(
+                        id = {'type': f'{self.component_prefix}-dsa-login-login-error-div','index': 0},
+                        children = []
+                    )
+                ],direction = 'vertical',gap=1)
+            ])
+
+        elif 'dsa-login-create-account-button' in ctx.triggered_id['type']:
+            # Create input fields for "username" and "password" and a button for Login
+            new_children = html.Div([
+                dbc.Row([
+                    dbc.Col(
+                        html.A(
+                            dbc.Stack([
+                                html.P(
+                                    html.I(
+                                        className = 'fa-solid fa-arrow-left',
+                                        style = {'marginRight':'2px'}
+                                    )
+                                ),
+                                html.P(
+                                    'Back'
+                                )
+                            ],direction='horizontal'),
+                            id = {'type': f'{self.component_prefix}-dsa-login-back-icon','index': 0},
+                            n_clicks = 0
+                        )
+                    )
+                ]),
+                dbc.Stack([
+                    dbc.InputGroup([
+                        dbc.InputGroupText(
+                            'First Name: '
+                        ),
+                        dbc.Input(
+                            id = {'type': f'{self.component_prefix}-dsa-login-firstname-input','index': 0},
+                            placeholder='First Name',
+                            type = 'text',
+                            required = True,
+                            value = [],
+                            maxLength = 1000,
+                            pattern = '^[a-zA-Z]+$'
+                        )
+                    ]),
+                    dbc.InputGroup([
+                        dbc.InputGroupText(
+                            'Last Name: '
+                        ),
+                        dbc.Input(
+                            id = {'type': f'{self.component_prefix}-dsa-login-lastname-input','index':0},
+                            placeholder = 'Last Name',
+                            type = 'text',
+                            required = True,
+                            value = [],
+                            maxLength = 1000,
+                            pattern = '^[a-zA-Z]+$'
+                        )
+                    ]),
+                    dbc.InputGroup([
+                        dbc.InputGroupText(
+                            'Email: '
+                        ),
+                        dbc.Input(
+                            id = {'type': f'{self.component_prefix}-dsa-login-email-input','index':0},
+                            placeholder = 'email address',
+                            type = 'email',
+                            required = True,
+                            value = [],
+                            maxLength = 1000,
+                            pattern = "^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$"
+                        )
+                    ]),
+                    html.Div(
+                        id = {'type': f'{self.component_prefix}-dsa-login-email-error-div','index': 0},
+                        children = []
+                    ),
+                    dbc.InputGroup([
+                        dbc.InputGroupText(
+                            'Username: '
+                        ),
+                        dbc.Input(
+                            id = {'type': f'{self.component_prefix}-dsa-login-username-input','index': 0},
+                            placeholder='username',
+                            type = 'text',
+                            required = True,
+                            value = [],
+                            maxLength = 1000,
+                            pattern = '^[a-z0-9]+$'
+                        )
+                    ]),
+                    html.Div(
+                        id = {'type': f'{self.component_prefix}-dsa-login-username-error-div','index': 0},
+                        children = []
+                    ),
+                    dbc.InputGroup([
+                        dbc.InputGroupText(
+                            'Password: '
+                        ),
+                        dbc.Input(
+                            id = {'type': f'{self.component_prefix}-dsa-login-password-input','index': 0},
+                            type = 'password',
+                            required = True,
+                            value = [],
+                            maxLength = 1000
+                        )
+                    ]),
+                    html.Div(
+                        id = {'type': f'{self.component_prefix}-dsa-login-password-error-div','index': 0},
+                        children = []
+                    ),
+                    dbc.Button(
+                        'Login!',
+                        className = 'd-grid col-12 mx-auto',
+                        color = 'primary',
+                        id = {'type': f'{self.component_prefix}-dsa-login-create-account-submit','index': 0},
+                        n_clicks = 0
+                    ),
+                    html.Div(
+                        id = {'type': f'{self.component_prefix}-dsa-login-create-account-error-div','index':0},
+                        children = []
+                    )
+                ],direction='vertical',gap=1)
+            ])
+    
+        elif 'dsa-login-back-icon' in ctx.triggered_id['type']:
+            new_children = dbc.Stack([
+                dbc.Button(
+                    'Login',
+                    className = 'd-grid col-6 mx-auto',
+                    color = 'success',
+                    id = {'type': f'{self.component_prefix}-dsa-login-button','index': 0}
+                ),
+                dbc.Tooltip(
+                    'For registered users, login to view your previous uploads or shared collections!',
+                    target = {'type': f'{self.component_prefix}-dsa-login-button','index': 0},
+                    placement='top'
+                ),
+                dbc.Button(
+                    'Create an Account',
+                    className = 'd-grid col-6 mx-auto',
+                    color = 'warning',
+                    id = {'type': f'{self.component_prefix}-dsa-login-create-account-button','index': 0}
+                ),
+                dbc.Tooltip(
+                    'Create an account in order to upload slides to the DSA instance, to access user surveys, or to share data!',
+                    target = {'type': f'{self.component_prefix}-dsa-create-account-button','index': 0},
+                    placement='top'
+                )
+            ],direction='horizontal',gap=2)
+
+        return [new_children]
+    
+    def submit_login(self, login_clicked,username_input, password_input, session_data):
+        
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        session_data = json.loads(session_data)
+        
+        username_input = get_pattern_matching_value(username_input)
+        password_input = get_pattern_matching_value(password_input)
+
+        if username_input is None or username_input == '':
+            username_error_div = dbc.Alert('Make sure to enter a username!',color = 'danger')
+        else:
+            username_error_div = []
+        
+        if password_input is None or password_input == '':
+            password_error_div = dbc.Alert('Make sure to enter your password!',color = 'danger')
+        else:
+            password_error_div = []
+
+        if not any([i is None or i=='' for i in [username_input,password_input]]):
+            new_login_output = self.handler.authenticate_new(
+                username = username_input,
+                password= password_input
+            )
+            print(new_login_output)
+            if not type(new_login_output)==str:
+                session_data['current_user'] = new_login_output
+                current_user = f"Welcome, {new_login_output['login']}"
+                session_data = json.dumps(session_data)
+                login_error_div = []
+            else:
+                session_data = no_update
+                current_user = no_update
+                login_error_div = dbc.Alert(f'Error logging in with username: {username_input}',color = 'danger')
+        else:
+            session_data = no_update
+            current_user = no_update
+            login_error_div = []
+        
+        return [username_error_div], [password_error_div], [login_error_div], [current_user], session_data
+
+    def submit_create_account(self, clicked,firstname_input, lastname_input, email_input, username_input, password_input,session_data):
+        
+        
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        session_data = json.loads(session_data)
+        
+        firstname_input = get_pattern_matching_value(firstname_input)
+        lastname_input = get_pattern_matching_value(lastname_input)
+        username_input = get_pattern_matching_value(username_input)
+        password_input = get_pattern_matching_value(password_input)
+        email_input = get_pattern_matching_value(email_input)
+
+        if username_input is None or username_input=='':
+            username_error_div = dbc.Alert('Make sure to enter a username!',color = 'danger')
+        else:
+            username_error_div = []
+        
+        if password_input is None or password_input == '':
+            password_error_div = dbc.Alert('Make sure to enter your password!',color = 'danger')
+        else:
+            password_error_div = []
+
+        if email_input is None or email_input == '':
+            email_error_div = dbc.Alert('Make sure to enter a valid email address! (And not the same as any other account)',color = 'danger')
+        else:
+            email_error_div = []
+
+        if not any([i is None or i =='' for i in [firstname_input,lastname_input,email_input,username_input,password_input]]):
+            create_user_output = self.handler.create_new_user(
+                username = username_input,
+                password = password_input,
+                email = email_input,
+                firstName = firstname_input,
+                lastName= lastname_input
+            )
+            if create_user_output:
+                session_data['current_user'] = create_user_output
+                current_user = f"Welcome, {create_user_output['login']}"
+                session_data = json.dumps(session_data)
+                create_account_error_div = []
+            else:
+                session_data = no_update
+                current_user = no_update
+                create_account_error_div = dbc.Alert(f'Error creating account with username: {username_input}',color = 'danger')
+        else:
+            session_data = no_update
+            current_user = no_update
+            create_account_error_div = []
+        
+        return [username_error_div],[password_error_div],[email_error_div], [create_account_error_div], [current_user],session_data
+        
 
 
 class DatasetBuilder(Tool):
@@ -718,8 +1224,19 @@ class DatasetBuilder(Tool):
                  include_only: Union[list,None] = None
                 ):
         
+        super().__init__()
+
+        # Although this is a "Tool", it does update it's layout based on the "current" Visualization Session
+        self.session_update = True
+
         self.include_only = include_only
         self.handler = handler
+
+        #TODO: Make this part update-able, just not every time the layout is updated (main slowdown is getting the slide count due to large metadata)
+        self.collections_df = self.gen_collections_dataframe()
+
+    def __str__(self):
+        return 'Dataset Builder'
 
     def load(self, component_prefix:int):
 
@@ -735,12 +1252,7 @@ class DatasetBuilder(Tool):
 
         self.get_callbacks()
 
-    def gen_layout(self, session_data: Union[dict,None]):
-        """Generating DatasetBuilder layout, adding to DashBlueprint() object to be embedded in larger layout.
-
-        :param session_data: Data on current session, not used in this component.
-        :type session_data: Union[dict,None]
-        """
+    def gen_collections_dataframe(self):
 
         collections_info = []
         if type(self.handler)==list:
@@ -762,6 +1274,45 @@ class DatasetBuilder(Tool):
 
         collections_df = pd.DataFrame.from_records(collections_info)
 
+        return collections_df
+
+    def update_layout(self, session_data:dict, use_prefix: bool):
+        """Generating DatasetBuilder layout
+
+        :return: Div object containing interactive components for the SlideMap object.
+        :rtype: dash.html.Div.Div
+        """
+
+        # Adding current session data here
+        starting_slides = []
+        starting_slides_components = []
+        starting_slide_idx = 0
+        for s in session_data['current']:
+            if 'api_url' in s:
+                if s['api_url']==self.handler.girderApiUrl:
+                    # Getting the id of the DSA slide from this same instance
+                    slide_id = s['tiles_url'].split('/item/')[1].split('/')[0]
+                    starting_slides.append(slide_id)
+                    starting_slides_components.append(
+                        self.make_selected_slide(
+                            slide_id = slide_id,
+                            idx = starting_slide_idx
+                        )
+                    )
+                    starting_slide_idx += 1
+            else:
+                thumbnail_address = s['regions_url'].replace('region','thumbnail')
+                slide_index = thumbnail_address.split('/')[-3]
+                starting_slides.append(f'local{slide_index}')
+                starting_slides_components.append(
+                    self.make_selected_slide(
+                        slide_id = thumbnail_address,
+                        idx = starting_slide_idx,
+                        local_slide=True
+                    )
+                )
+                starting_slide_idx+=1
+
         layout = html.Div([
             dbc.Card(
                 dbc.CardBody([
@@ -777,15 +1328,36 @@ class DatasetBuilder(Tool):
                         dcc.Store(
                             id = {'type':'dataset-builder-data-store','index': 0},
                             storage_type='memory',
-                            data = json.dumps({'include_slides':[], 'selected_collections': [], 'available_collections': collections_info})
+                            data = json.dumps({'selected_slides':starting_slides, 'selected_collections': [], 'available_collections': self.collections_df.to_dict("records")})
                         )
                     ),
+                    dbc.Row([
+                        html.Div(
+                            id = {'type':'dataset-builder-local-slides-div','index': 0},
+                            children = [
+                                self.make_selectable_dash_table(
+                                    dataframe=pd.DataFrame.from_records([
+                                        {
+                                            'Slide Name': j['name'],
+                                            'Slide ID': f'local{j_idx}'
+                                        }
+                                        for j_idx,j in enumerate(session_data['local'])
+                                    ]),
+                                    id = {'type':'dataset-builder-slide-table','index': 999},
+                                    multi_row= True,
+                                    selected_rows = [idx for idx,i in enumerate(session_data['local']) if i in session_data['current']]
+                                )
+                            ],
+                            style = {'marginBottom':'5px'}
+                        )
+                    ]),
+                    html.Hr(),
                     dbc.Row([
                         html.Div(
                             id = {'type': 'dataset-builder-collection-div','index': 0},
                             children = [
                                 self.make_selectable_dash_table(
-                                    dataframe = collections_df,
+                                    dataframe = self.collections_df,
                                     id = {'type': 'dataset-builder-collections-table','index': 0},
                                     multi_row = True
                                 )
@@ -798,13 +1370,46 @@ class DatasetBuilder(Tool):
                             id = {'type': 'dataset-builder-collection-contents-div','index':0},
                             children = []
                         )
-                    ],style = {'marginBottom':'10px','maxHeight':'70vh','overflow':'scroll'})
+                    ],style = {'marginBottom':'10px','maxHeight':'70vh','overflow':'scroll'}),
+                    html.Div([
+                        dmc.Affix([
+                            dmc.Accordion([
+                                dmc.AccordionItem([
+                                    dmc.AccordionControl(
+                                        dbc.Stack([
+                                            html.I(className='fa-solid fa-microscope',style={'marginRight':'2px'}),
+                                            html.H5(f'Visualization Session: ({len(starting_slides)})',style={'textTransform':'none'},id = {'type': 'dataset-builder-vis-session-count','index': 0})
+                                        ],direction='horizontal')
+                                    ),
+                                    dmc.AccordionPanel([
+                                        html.Div(
+                                            id = {'type':'dataset-builder-selected-slides','index': 0},
+                                            children = starting_slides_components,
+                                            style = {'maxHeight':'50vh','overflow':'scroll'}
+                                        )
+                                    ])
+                                ],value = 'dataset-builder-vis-session')
+                            ],style={'width':'25vw'},radius='lg',variant='separated',chevronPosition='left')
+                        ],
+                        position = {'bottom':'20','right':'20'})
+                    ])
                 ])
             )
         ], style = {'maxHeight': '90vh','overflow': 'scroll'})
 
+        if use_prefix:
+            PrefixIdTransform(prefix = self.component_prefix).transform_layout(layout)
+        
+        return layout
 
-        self.blueprint.layout = layout
+    def gen_layout(self, session_data: Union[dict,None]):
+        """Generating DatasetBuilder layout, adding to DashBlueprint() object to be embedded in larger layout.
+
+        :param session_data: Data on current session, not used in this component.
+        :type session_data: Union[dict,None]
+        """
+
+        self.blueprint.layout = self.update_layout(session_data,use_prefix=False)
 
     def get_callbacks(self):
 
@@ -814,7 +1419,8 @@ class DatasetBuilder(Tool):
                 Input({'type':'dataset-builder-collections-table','index': ALL},'selected_rows')
             ],
             [
-                State({'type':'dataset-builder-data-store','index': ALL},'data')
+                State({'type':'dataset-builder-data-store','index': ALL},'data'),
+                State({'type':'dataset-builder-collection-contents-div','index': ALL},'children')
             ],
             [
                 Output({'type':'dataset-builder-collection-contents-div','index': ALL},'children'),
@@ -831,7 +1437,8 @@ class DatasetBuilder(Tool):
             ],
             [
                 State({'type':'dataset-builder-collection-folder-table','index': MATCH},'data'),
-                State({'type': 'dataset-builder-collection-folder-nav-parent','index': MATCH},'children')
+                State({'type': 'dataset-builder-collection-folder-nav-parent','index': MATCH},'children'),
+                State({'type':'dataset-builder-data-store','index': ALL},'data')
             ],
             [
                 Output({'type':'dataset-builder-collection-folder-div','index': MATCH},'style'),
@@ -847,19 +1454,40 @@ class DatasetBuilder(Tool):
             [
                 Input({'type':'dataset-builder-slide-table','index':ALL},'selected_rows'),
                 Input({'type':'dataset-builder-slide-select-all','index':ALL},'n_clicks'),
-                Input({'type':'dataset-builder-slide-remove-icon','index': ALL},'n_clicks'),
-                Input({'type':'dataset-builder-slide-remove-all-button','index': ALL},'n_clicks')
+                Input({'type':'dataset-builder-slide-remove-all','index':ALL},'n_clicks'),
+                Input({'type':'dataset-builder-slide-remove-icon','index': ALL},'n_clicks')
             ],
             [
-                Output({'type': 'dataset-builder-selected-slides','index': ALL},'children')
+                State({'type': 'dataset-builder-collection-folder-nav-parent','index': ALL},'children'),
+                State({'type':'dataset-builder-slide-table','index': ALL},'data'),
+                State({'type':'dataset-builder-data-store','index': ALL},'data'),
+                State({'type':'dataset-builder-selected-slides','index': ALL},'children'),
+                State({'type':'dataset-builder-collection-contents-div','index': ALL},'children'),
+                State('anchor-vis-store','data')
+            ],
+            [
+                Output({'type': 'dataset-builder-selected-slides','index': ALL},'children'),
+                Output({'type': 'dataset-builder-vis-session-count','index': ALL},'children'),
+                Output({'type':'dataset-builder-data-store','index':ALL},'data')
             ]
         )(self.slide_selection)
 
+        # Passing current visualization data to the visualization session for usage in other pages
+        self.blueprint.callback(
+            [
+                Input({'type':'dataset-builder-data-store','index': ALL},'data')
+            ],
+            [
+                State('anchor-vis-store','data')
+            ],
+            [
+                Output('anchor-vis-store','data')
+            ]
+        )(self.update_vis_store)
+
         # Callback for plotting slide-level metadata if there is any
 
-        # Callback for viewing thumbnail of selected slide(s)
-
-    def make_selectable_dash_table(self, dataframe:pd.DataFrame, id:dict, multi_row:bool = True):
+    def make_selectable_dash_table(self, dataframe:pd.DataFrame, id:dict, multi_row:bool = True, selected_rows: list = []):
         """Generate a selectable DataTable to add to the layout
 
         :param dataframe: Pandas DataFrame containing columns/rows of interest
@@ -871,6 +1499,8 @@ class DatasetBuilder(Tool):
         :return: dash_table.DataTable component to be added to layout
         :rtype: dash_table.DataTable
         """
+
+        #Optional: Can hide "ID" columns by adding any column containing "ID" to a list of "hidden_columns"
 
         dataframe = pd.json_normalize(dataframe.to_dict('records'))
         selectable_table = dash_table.DataTable(
@@ -884,8 +1514,7 @@ class DatasetBuilder(Tool):
             column_selectable = 'single',
             row_selectable = 'multi' if multi_row else 'single',
             row_deletable = False,
-            selected_columns = [],
-            selected_rows = [],
+            selected_rows = selected_rows,
             page_action='native',
             page_current=0,
             page_size=10,
@@ -918,7 +1547,6 @@ class DatasetBuilder(Tool):
 
         folder_folders = []
         folder_slides = []
-        print(folder_info)
 
         # Starting with slides (which will report parent folderId but not that parent's folderId (if applicable))
         all_folder_slides = self.handler.get_folder_slides(
@@ -998,18 +1626,75 @@ class DatasetBuilder(Tool):
 
         return folder_slides, folder_folders
 
-    def collection_selection(self, collection_rows, builder_data):
+    def make_selected_slide(self, slide_id:str,idx:int,local_slide = False):
+        """Creating a visualization session component for a selected slide
+
+        :param slide_id: Girder Id for the slide to be added
+        :type slide_id: str
+        """
+        
+        if not local_slide:
+            item_info = self.handler.gc.get(f'/item/{slide_id}')
+            item_thumbnail = self.handler.get_image_thumbnail(slide_id)
+            folder_info = self.handler.get_folder_info(item_info['folderId'])
+            slide_info = {
+                k:v for k,v in item_info.items() if type(v) in [int,float,str]
+            }
+        else:
+            # For local slides, "slide_id" is the request for getting the slide thumbnail
+            item_idx = int(slide_id.split('/')[-3])
+
+            try:
+                item_thumbnail = Image.open(BytesIO(requests.get(slide_id).content))
+                local_names = requests.get(slide_id.replace(f'{item_idx}/tiles/thumbnail','names')).json()['message']
+            except (requests.exceptions.ConnectionError, requests.exceptions.RetryError):
+                # Triggered on initialization of application because the LocalTileServer instance is not running yet
+                item_thumbnail = np.zeros((256,256,3)).astype(np.uint8)
+                local_names = ['LOADING LOCALTILESERVER']*(item_idx+1)
+
+            folder_info = {'name': 'Local Slides'}
+            slide_info = {'name': local_names[item_idx]}               
+
+
+        slide_card = html.Div([
+            dbc.Card([
+                dbc.CardHeader(f"{folder_info['name']}/{slide_info['name']}"),
+                dbc.CardBody([
+                    dbc.Stack([
+                        html.Img(
+                            src=Image.fromarray(item_thumbnail) if type(item_thumbnail)==np.ndarray else item_thumbnail
+                        ),
+                        html.A(
+                            html.I(
+                                id = {'type': f'{self.component_prefix}-dataset-builder-slide-remove-icon','index': idx},
+                                n_clicks = 0,
+                                className = 'bi bi-x-circle-fill fa-2x',
+                                style = {'color': 'rgb(255,0,0)','marginRight':'2px'}
+                            )
+                        )
+                    ],direction='horizontal',gap=3)
+                ])
+            ])
+        ],style = {'marginBottom': '2px','width':'25vw'})
+        
+        return slide_card        
+
+    def collection_selection(self, collection_rows, builder_data, collection_div_children):
         """Callback for when one/multiple collections are selected from the collections table
 
         :param collection_rows: Row indices of selected collections
         :type collection_rows: list
         :param builder_data: Data store on available collections and currently included slides
         :type builder_data: list
+        :param colleciton_div_children: Child cards created by collection_selection
+        :type colleciton_div_children: list
         :return: Children of collection-contents-div (items/folders within selected collections)
         :rtype: list
         """
         selected_collections = get_pattern_matching_value(collection_rows)
         builder_data = json.loads(get_pattern_matching_value(builder_data))
+
+        collection_card_indices = self.get_component_indices(collection_div_children)
 
         if selected_collections is None and len(builder_data['selected_collections'])==0:
             return ['Select a Collection to get started'], no_update
@@ -1029,11 +1714,19 @@ class DatasetBuilder(Tool):
 
             if len(folder_slides)>0:
 
+                # Checking if any of the slides are already present in the "selected_slides"
+                current_selected_slides = builder_data['selected_slides']
+                selected_rows = [
+                    idx for idx,i in enumerate(folder_slides)
+                    if i['Slide ID'] in current_selected_slides
+                ]
+
                 non_nested_df = pd.DataFrame.from_records(folder_slides)
                 non_nested_table = self.make_selectable_dash_table(
                     dataframe=non_nested_df,
                     id = {'type': f'{self.component_prefix}-dataset-builder-collection-slide-table','index': idx},
-                    multi_row=True
+                    multi_row=True,
+                    selected_rows=selected_rows
                 )
 
             else:
@@ -1073,11 +1766,30 @@ class DatasetBuilder(Tool):
                         html.Hr(),
                         html.Div([
                             non_nested_table
-                        ], style = {'marginTop':'10px'},id = {'type': f'{self.component_prefix}-dataset-builder-collection-slide-div','index': idx})
+                        ], style = {'marginTop':'10px'},id = {'type': f'{self.component_prefix}-dataset-builder-collection-slide-div','index': idx}),
+                        html.Div(
+                            dbc.Stack([
+                                dbc.Button(
+                                    'Select All!',
+                                    className = 'd-grid col-6 mx-auto',
+                                    n_clicks = 0,
+                                    color = 'success',
+                                    id = {'type':f'{self.component_prefix}-dataset-builder-slide-select-all','index': idx}
+                                ),
+                                dbc.Button(
+                                    'Remove All',
+                                    className = 'd-grid col-6 mx-auto',
+                                    n_clicks = 0,
+                                    color = 'danger',
+                                    id = {'type': f'{self.component_prefix}-dataset-builder-slide-remove-all','index':idx}
+                                )
+                            ],direction='horizontal',style = {'marginTop':'10px'})
+                            if len(folder_slides)>0 else []
+                        )
                     ]),
-                    dbc.CardFooter(html.P(f'Selected Slides: 0',id = {'type': f'{self.component_prefix}-selected-slide-count','index': idx}))
                 ]),
-                style = {'marginBottom':'10px'}
+                style = {'marginBottom':'10px'},
+                id = {'type': f'{self.component_prefix}-dataset-builder-collection-card-div','index': idx}
             )
             
             return new_card
@@ -1086,7 +1798,9 @@ class DatasetBuilder(Tool):
             if len(list(set(selected_collections).difference(builder_data['selected_collections'])))>0:
                 # Adding a new collection
                 new_collection_idx = list(set(selected_collections).difference(builder_data['selected_collections']))[0]
-                collection_contents.append(add_collection_card(builder_data['available_collections'][new_collection_idx],new_collection_idx))
+                new_component_idx = max(collection_card_indices)+1 if len(collection_card_indices)>0 else 0
+
+                collection_contents.append(add_collection_card(builder_data['available_collections'][new_collection_idx],new_component_idx))
             elif len(list(set(builder_data['selected_collections']).difference(selected_collections)))>0:
                 # Removing a collection
                 rem_collection_idx = list(set(builder_data['selected_collections']).difference(selected_collections))[0]
@@ -1100,7 +1814,106 @@ class DatasetBuilder(Tool):
             
         return [collection_contents], [builder_data]
 
-    def update_folder_div(self,folder_row,crumb_click,collection_folders,current_crumbs):
+    def extract_path_parts(self, current_parts:Union[list,dict], search_key: list = ['props','children'])->tuple:
+        """Recursively extract pieces of folder paths stored as clickable components.
+
+        :param current_parts: list or dictionary containing html.A or dbc.Stack of html.A components.
+        :type current_parts: Union[list,dict]
+        :param search_key: Property keys to search for in nested dicts, defaults to ['props','children']
+        :type search_key: list, optional
+        :return: Tuple containing all the parts of the folder path
+        :rtype: tuple
+        """
+        path_pieces = ()
+        if type(current_parts)==list:
+            for c in current_parts:
+                if type(c)==dict:
+                    for key,value in c.items():
+                        if key in search_key:
+                            if type(value)==str:
+                                path_pieces += (value,)
+                            elif type(value) in [list,dict]:
+                                path_pieces += self.extract_path_parts(value)
+                elif type(c)==list:
+                    path_pieces += self.extract_path_parts(c)
+        elif type(current_parts)==dict:
+            for key,value in current_parts.items():
+                if key in search_key:
+                    if type(value)==str:
+                        path_pieces += (value,)
+                    elif type(value) in [list,dict]:
+                        path_pieces += self.extract_path_parts(value)
+
+        return path_pieces
+
+    def get_clicked_part(self, current_parts: Union[list,dict])->list:
+        """Get the "n_clicks" value for components which have "id". If they have "id" but not "n_clicks", assign 0
+
+        :param current_parts: Either a list or dictionary containing components
+        :type current_parts: Union[list,dict]
+        :return: List of values corresponding to "n_clicks" 
+        :rtype: list
+        """
+        
+        n_clicks_list = []
+        if type(current_parts)==list:
+            for c in current_parts:
+                if type(c)==dict:
+                    if 'id' in list(c.keys()):
+                        if 'n_clicks' in list(c.keys()):
+                            n_clicks_list.append(c['n_clicks'])
+                        else:
+                            n_clicks_list.append(0)
+                    else:
+                        for key,value in c.items():
+                            if key=='props':
+                                n_clicks_list += self.get_clicked_part(value)
+                            elif key=='n_clicks':
+                                n_clicks_list.append(value)
+                elif type(c)==list:
+                    n_clicks_list += self.get_clicked_part(c)
+        elif type(current_parts)==dict:
+            if 'id' in list(current_parts.keys()):
+                if 'n_clicks' in list(current_parts.keys()):
+                    n_clicks_list.append(current_parts['n_clicks'])
+                else:
+                    n_clicks_list.append(0)
+            else:
+                for key,value in current_parts.items():
+                    if type(value)==dict:
+                        if key=='props':
+                            n_clicks_list += self.get_clicked_part(value)
+                        elif key=='n_clicks':
+                            n_clicks_list.append(value)
+                    elif type(value)==list:
+                        n_clicks_list += self.get_clicked_part(value)
+
+        return n_clicks_list
+
+    def get_component_indices(self, components: Union[list,dict])->list:
+        
+        index_list = []
+        if type(components)==list:
+            for c in components:
+                if type(c)==dict:
+                    for key,value in c.items():
+                        if key=='id':
+                            index_list.append(value['index'])
+                        elif key in ['props','children']:
+                            index_list += self.get_component_indices(value)
+                elif type(c)==list:
+                    index_list += self.get_component_indices(c)
+
+        elif type(components)==dict:
+            for key,value in components.items():
+                if key=='id':
+                    index_list.append(value['index'])
+                elif key in ['props','children']:
+                    index_list += self.get_component_indices(value)
+
+        return index_list
+
+    def update_folder_div(self,folder_row,crumb_click,collection_folders,current_crumbs,builder_data):
         """Selecting a folder from the collection's folder table
 
         :param folder_row: Selected folder (list of 1 index)
@@ -1111,34 +1924,31 @@ class DatasetBuilder(Tool):
         :type collection_folders: list
         :param current_crumbs: List of current path parts that can be selected to go up a folder
         :type current_crumbs: list
+        :param builder_data: Current contents of data store for dataset-builder, used for determining if a slide is already selected
+        :type builder_data: list
         :return: Sub-folder and slide selection tables for further selection
         :rtype: tuple
         """
 
-
-        if type(current_crumbs)==list:
-            current_crumbs = current_crumbs[0]['props']['children']
-        else:
-            current_crumbs = current_crumbs['props']['children']
-
+        path_parts = self.extract_path_parts(current_crumbs)
         new_crumbs = []
-        path_parts = []
-        for i in current_crumbs:
-            path_part = i['props']['children']
-            if not path_part in ['/collection','/user']:
-                crumb = html.A(
-                    path_part,
-                    id = {'type': f'{self.component_prefix}-dataset-builder-collection-folder-crumb','index': ctx.triggered_id['index']},
-                    style = {'color': 'rgb(0,0,255)'}
+        for i in path_parts:
+            if not i in ['/collection','/user']:
+                new_crumbs.append(
+                    html.A(
+                        i,
+                        id = {'type': f'{self.component_prefix}-dataset-builder-collection-folder-crumb','index': ctx.triggered_id['index']},
+                        style = {'color': 'rgb(0,0,255)'}
+                    )
                 )
             else:
-                crumb = html.A(path_part)
+                new_crumbs.append(
+                    html.A(i)
+                )
 
-            path_parts.append(path_part)
-            new_crumbs.append(crumb)
+        builder_data = json.loads(get_pattern_matching_value(builder_data))
         
         if 'dataset-builder-collection-folder-table' in ctx.triggered_id['type']:
-            print('folder selected from table')
             
             # Triggers callback when creating new folder table
             if len(folder_row)==0:
@@ -1147,13 +1957,15 @@ class DatasetBuilder(Tool):
             new_folder_name = collection_folders[folder_row[0]]['Folder Name']
             folder_table_style = {'display':'inline-block','width':'100%'}
             
-            new_crumbs += [html.A(
-                new_folder_name + '/',
-                id = {'type': f'{self.component_prefix}-dataset-builder-collection-folder-crumb','index': ctx.triggered_id['index']},
-                style = {'color': 'rgb(0,0,255)'}
-            )]
+            new_crumbs += [
+                html.A(
+                    new_folder_name + '/',
+                    id = {'type': f'{self.component_prefix}-dataset-builder-collection-folder-crumb','index': ctx.triggered_id['index']},
+                    style = {'color': 'rgb(0,0,255)'}
+                )
+            ]
             
-            folder_path = ''.join(path_parts+[new_folder_name])
+            folder_path = ''.join(list(path_parts+(new_folder_name,)))
             folder_info = self.handler.get_path_info(
                 path = folder_path
             )
@@ -1174,25 +1986,51 @@ class DatasetBuilder(Tool):
 
                 
             if len(folder_slides)>0:
-                slides_table = self.make_selectable_dash_table(
-                    dataframe=pd.DataFrame.from_records(folder_slides),
-                    id = {'type': f'{self.component_prefix}-dataset-builder-slide-table','index': ctx.triggered_id['index']},
-                    multi_row=True
-                )
+                current_selected_slides = builder_data['selected_slides']
+                selected_rows = [
+                    idx for idx,i in enumerate(folder_slides)
+                    if i['Slide ID'] in current_selected_slides
+                ]
+
+                slides_table = html.Div([
+                    self.make_selectable_dash_table(
+                        dataframe=pd.DataFrame.from_records(folder_slides),
+                        id = {'type': f'{self.component_prefix}-dataset-builder-slide-table','index': ctx.triggered_id['index']},
+                        multi_row=True,
+                        selected_rows= selected_rows
+                    ),
+                    dbc.Stack([
+                        dbc.Button(
+                            'Select All!',
+                            className = 'd-grid col-6 mx-auto',
+                            n_clicks = 0,
+                            color = 'success',
+                            id = {'type':f'{self.component_prefix}-dataset-builder-slide-select-all','index': ctx.triggered_id['index']}
+                        ),
+                        dbc.Button(
+                            'Remove All',
+                            className = 'd-grid col-6 mx-auto',
+                            n_clicks = 0,
+                            color = 'danger',
+                            id = {'type': f'{self.component_prefix}-dataset-builder-slide-remove-all','index':ctx.triggered_id['index']}
+                        )
+                    ],direction='horizontal',style = {'marginTop':'10px'})
+                ])
             else:
                 slides_table = html.Div()
 
 
         elif 'dataset-builder-collection-folder-crumb' in ctx.triggered_id['type']:
-            n_clicks = [i['props']['n_clicks'] if 'n_clicks' in i['props'] else 0 for i in current_crumbs]
+            n_clicks = [0]+self.get_clicked_part(current_crumbs)
             n_click_idx = np.argmax(n_clicks)
             if n_click_idx==len(current_crumbs)-1:
                 folder_table_style = no_update
+                folder_table = no_update
             else:
                 folder_table_style = {'display':'inline-block','width':'100%'}
                 new_crumbs = new_crumbs[:n_click_idx+1]
                 
-                new_path = ''.join(path_parts[:n_click_idx+1])[:-1]
+                new_path = ''.join(list(path_parts)[:n_click_idx+1])[:-1]
                 folder_info = self.handler.get_path_info(
                     path = new_path
                 )
@@ -1213,11 +2051,37 @@ class DatasetBuilder(Tool):
 
                     
                 if len(folder_slides)>0:
-                    slides_table = self.make_selectable_dash_table(
-                        dataframe=pd.DataFrame.from_records(folder_slides),
-                        id = {'type': f'{self.component_prefix}-dataset-builder-slide-table','index': ctx.triggered_id['index']},
-                        multi_row=True
-                    )
+
+                    current_selected_slides = builder_data['selected_slides']
+                    selected_rows = [
+                        idx for idx,i in enumerate(folder_slides)
+                        if i['Slide ID'] in current_selected_slides
+                    ]
+
+                    slides_table = html.Div([
+                        self.make_selectable_dash_table(
+                            dataframe=pd.DataFrame.from_records(folder_slides),
+                            id = {'type': f'{self.component_prefix}-dataset-builder-slide-table','index': ctx.triggered_id['index']},
+                            multi_row=True,
+                            selected_rows=selected_rows
+                        ),
+                        dbc.Stack([
+                            dbc.Button(
+                                'Select All!',
+                                className = 'd-grid col-6 mx-auto',
+                                n_clicks = 0,
+                                color = 'success',
+                                id = {'type':f'{self.component_prefix}-dataset-builder-slide-select-all','index': ctx.triggered_id['index']}
+                            ),
+                            dbc.Button(
+                                'Remove All',
+                                className = 'd-grid col-6 mx-auto',
+                                n_clicks = 0,
+                                color = 'danger',
+                                id = {'type': f'{self.component_prefix}-dataset-builder-slide-remove-all','index':ctx.triggered_id['index']}
+                            )
+                        ],direction='horizontal',style = {'marginTop':'10px'})
+                    ])
                 else:
                     slides_table = html.Div()
                 
@@ -1225,16 +2089,174 @@ class DatasetBuilder(Tool):
 
         return folder_table_style, folder_table, slides_table, new_crumbs
 
-    def slide_selection(self, slide_rows, slide_all, slide_rem, slide_rem_all):
+    def slide_selection(self, slide_rows, slide_all, slide_rem_all, slide_rem, current_crumbs, slide_table_data, builder_data, current_slide_components, current_collection_components, vis_session_data):
 
-        print(ctx.triggered)
-        print(slide_rows)
-        print(slide_all)
-        print(slide_rem)
-        print(slide_rem_all)
+        builder_data = json.loads(get_pattern_matching_value(builder_data))
+        vis_session_data = json.loads(vis_session_data)
 
-        raise exceptions.PreventUpdate
+        current_slide_indices = self.get_component_indices(current_slide_components)
+        current_collection_indices = list(set(self.get_component_indices(current_collection_components)))
 
+        # When slide-table is not in layout
+        if not ctx.triggered_id:
+            raise exceptions.PreventUpdate
+        
+        active_folders = []
+        for p in current_crumbs:
+            path = ''.join(list(self.extract_path_parts(p)))
+            active_folders.append(path)
+
+        current_selected_slides = builder_data['selected_slides']
+
+        selected_slides = Patch()
+        
+        if 'dataset-builder-slide-table' in ctx.triggered_id['type']:
+            # This part has to get triggered for both selection and de-selection of rows in a slide-table
+            table_selected_slides = []
+            not_selected_slides = []
+            for s_r,slide_table in zip(slide_rows,slide_table_data):
+                if not s_r is None:
+                    table_selected_slides.extend([slide_table[i] for i in s_r])
+                    not_selected_slides.extend([slide_table[i] for i in range(len(slide_table)) if not i in s_r])
+
+            new_slides = list(set([i['Slide ID'] for i in table_selected_slides]).difference(current_selected_slides))
+            
+            for s_idx,s in enumerate(new_slides):
+                if not 'local' in s:
+                    new_slide_component = self.make_selected_slide(
+                        slide_id = s,
+                        idx = max(current_slide_indices)+s_idx+1 if len(current_slide_indices)>0 else s_idx
+                    )
+                else:
+                    local_idx = int(s.split('local')[-1])
+                    new_slide_component = self.make_selected_slide(
+                        slide_id = vis_session_data['local'][local_idx]['regions_url'].replace('region','thumbnail'),
+                        idx = max(current_slide_indices)+s_idx+1 if len(current_slide_indices)>0 else s_idx,
+                        local_slide=True
+                    )
+
+                selected_slides.append(new_slide_component)
+
+            current_selected_slides.extend(new_slides)
+
+            new_rem_slides = list(set(current_selected_slides) & set([i['Slide ID'] for i in not_selected_slides]))
+            print(f'new_rem_slides: {new_rem_slides}')
+            for d_idx,d in enumerate(new_rem_slides):
+                del selected_slides[current_selected_slides.index(d)]
+                del current_selected_slides[current_selected_slides.index(d)]           
+
+        elif 'dataset-builder-slide-select-all' in ctx.triggered_id['type']:
+            # This part only gets triggered when n_clicks is greater than 0 (ignore trigger on creation)
+            if any([i['value'] for i in ctx.triggered]):
+                select_all_idx = ctx.triggered_id['index']
+                select_all_slides = slide_table_data[current_collection_indices.index(select_all_idx)]
+
+                new_slides = list(set([i['Slide ID'] for i in select_all_slides]).difference(current_selected_slides))
+                selected_slides.extend([
+                    self.make_selected_slide(
+                        slide_id = s,
+                        idx = max(current_slide_indices)+s_idx+1 if len(current_slide_indices)>0 else s_idx
+                    )
+                    for s_idx,s in enumerate(new_slides)
+                ])
+                current_selected_slides.extend(new_slides)
+
+            else:
+                raise exceptions.PreventUpdate
+
+        elif 'dataset-builder-slide-remove-all' in ctx.triggered_id['type']:
+            # This part only gets triggered when n_clicks is greater than 0 (ignore trigger on creation)
+            if any([i['value'] for i in ctx.triggered]):
+                remove_all_idx = ctx.triggered_id['index']
+                remove_all_slides = slide_table_data[current_collection_indices.index(remove_all_idx)]
+
+                new_rem_slides = list(set(current_selected_slides) & set([i['Slide ID'] for i in remove_all_slides]))
+                for d_idx,d in enumerate(new_rem_slides):
+                    del selected_slides[current_selected_slides.index(d)]
+                    del current_selected_slides[current_selected_slides.index(d)]
+
+            else:
+                raise exceptions.PreventUpdate      
+            
+        elif 'dataset-builder-slide-remove-icon' in ctx.triggered_id['type']:
+            rem_idx = current_slide_indices.index(ctx.triggered_id['index'])
+            del selected_slides[rem_idx]
+            del current_selected_slides[rem_idx]
+
+        else:
+            raise exceptions.PreventUpdate
+        
+        # Need folder id, rootpath, slide info, 
+        builder_data['selected_slides'] = current_selected_slides
+        builder_data = json.dumps(builder_data)
+
+        # Updated count of included slides:
+        included_slide_count = f'Visualization Session ({len(current_selected_slides)})'
+
+        return [selected_slides], [included_slide_count], [builder_data]
+
+    def update_vis_store(self, new_slide_data, current_vis_data):
+        """Updating current visualization session based on selected slide(s)
+
+        :param new_slide_data: New slides to be added to the Visualization Session
+        :type new_slide_data: list
+        :param current_vis_data: Current Visualization Session data
+        :type current_vis_data: list
+        :return: Updated Visualization Session 
+        :rtype: str
+        """
+        
+        new_slide_data = get_pattern_matching_value(new_slide_data)
+        if new_slide_data is None:
+            raise exceptions.PreventUpdate
+        
+        new_slide_data = json.loads(get_pattern_matching_value(new_slide_data))
+        current_vis_data = json.loads(current_vis_data)
+        prev_vis_data_in_handler = []
+        for i in current_vis_data['current']:
+            if 'api_url' in i:
+                if i['api_url']==self.handler.girderApiUrl:
+                    prev_vis_data_in_handler.append(i)
+            else:
+                prev_vis_data_in_handler.append(i)
+
+        # Adding new slides to current_vis_data
+        new_slide_info = []
+        for s in new_slide_data['selected_slides']:
+            if not 'local' in s:
+                slide_info = self.handler.gc.get(f'/item/{s}')
+                new_slide_info.append(
+                    {
+                        'name': slide_info['name'],
+                        'api_url': self.handler.girderApiUrl,
+                        'tiles_url': f'{self.handler.girderApiUrl}/item/{s}/tiles/zxy'+'/{z}/{x}/{y}',
+                        'regions_url': f'{self.handler.girderApiUrl}/item/{s}/tiles/region',
+                        'metadata_url': f'{self.handler.girderApiUrl}/item/{s}/tiles',
+                        'annotations_url': f'{self.handler.girderApiUrl}/annotation/item/{s}'
+                    }
+                )
+            else:
+                local_idx = int(s.split('local')[-1])
+                new_slide_info.append(
+                    current_vis_data['local'][local_idx]
+                )
+        
+        prev_slides_in_handler = [i['tiles_url'] for i in prev_vis_data_in_handler]
+        new_slides_in_handler = [i['tiles_url'] for i in new_slide_info]
+
+        if sorted(prev_slides_in_handler)==sorted(new_slides_in_handler):
+            return no_update
+        else:
+            new_slides = [new_slide_info[idx] for idx,i in enumerate(new_slides_in_handler) if not i in prev_slides_in_handler]
+            rem_slides = [prev_slides_in_handler[idx] for idx,i in enumerate(prev_slides_in_handler) if not i in new_slides_in_handler]
+
+            for s_idx,s in enumerate(current_vis_data['current']):
+                if s['tiles_url'] in rem_slides:
+                    del current_vis_data['current'][s_idx]
+            
+            current_vis_data['current'].extend(new_slides)
+
+            return json.dumps(current_vis_data)
 
 
 
@@ -1264,9 +2286,6 @@ class DSAUploadType:
         self.processing_plugins = processing_plugins
         self.required_metadata = required_metadata
 
-
-
-
 class DSAUploader(Tool):
     """Handler for DSAUploader component, handling uploading data to a specific folder, adding metadata, and running sets of preprocessing plugins.
 
@@ -1279,6 +2298,9 @@ class DSAUploader(Tool):
         
         self.dsa_handler = dsa_handler
         self.dsa_upload_types = dsa_upload_types
+
+    def __str__(self):
+        return 'DSA Uploader'
 
     def load(self,component_prefix:int):
 
@@ -1294,7 +2316,7 @@ class DSAUploader(Tool):
 
         self.get_callbacks()
 
-    def gen_layout(self,session_data:Union[dict,None]):
+    def update_layout(self, session_data:dict, use_prefix:bool):
 
         #TODO: Layout start:
         # Whether the upload is to a specific collection or to a User folder (Public/Private)
@@ -1344,7 +2366,14 @@ class DSAUploader(Tool):
             )
         ],style = {'maxHeight': '90vh','overflow': 'scroll'})
 
-        self.blueprint.layout = layout
+        if use_prefix:
+            PrefixIdTransform(prefix=self.component_prefix).transform_layout(layout)
+
+        return layout
+
+    def gen_layout(self,session_data:Union[dict,None]):
+
+        self.blueprint.layout = self.update_layout(session_data,use_prefix=False)
         
     def get_callbacks(self):
 
@@ -1376,7 +2405,6 @@ class DSAPluginRunner(Tool):
     def get_callbacks(self):
         pass
 
-
 class DSAPluginProgress(Tool):
     """Handler for DSAPluginProgress component, letting users check the progress of currently running or previously run plugins as well as cancellation of running plugins.
 
@@ -1387,6 +2415,14 @@ class DSAPluginProgress(Tool):
                  dsa_handler: DSAHandler):
         
         self.dsa_handler = dsa_handler
+        self.job_status_key = {
+            '0': 'INACTIVE',
+            '1': 'QUEUED',
+            '2': 'RUNNING',
+            '3': 'SUCCESS',
+            '4': 'ERROR',
+            '5': 'CANCELED'
+        }
     
     def load(self,component_prefix:int):
         
@@ -1449,7 +2485,6 @@ class SurveyType:
         self.question_list = question_list
         self.users = users
         self.storage_folder = storage_folder
-
 
 class DSASurvey(Tool):
     """Handler for DSASurvey component, letting users add a survey questionnaire to a layout (with optional login for targeting specific users).

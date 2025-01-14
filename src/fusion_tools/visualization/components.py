@@ -59,7 +59,7 @@ class Visualization:
                  components: Union[list,dict] = [],
                  header: Union[list,None] = None,
                  app_options: dict = {},
-                 linkage: str = 'row'
+                 linkage: Union[list,str] = 'row'
                  ):
         """Constructor method
 
@@ -95,7 +95,12 @@ class Visualization:
         # row = components in the same row can communicate
         # col = components in the same column can communicate
         # tab = components in the same tab can communicate
-        assert self.linkage in ['page','row','col','tab']
+        if type(self.linkage)==str:
+            assert self.linkage in ['page','row','col','tab']
+        elif type(self.linkage)==list:
+            # Only applies for multi-page layouts
+            assert type(self.components)==dict
+            assert all([i in ['page','row','col','tab'] for i in self.linkage])
 
         self.default_options = {
             'title': 'FUSION',
@@ -111,7 +116,7 @@ class Visualization:
                 dbc.themes.BOOTSTRAP,
                 dbc.icons.BOOTSTRAP,
                 dbc.icons.FONT_AWESOME,
-                dmc.styles.ALL
+                dmc.styles.ALL,
             ],
             'transforms': [
                 MultiplexerTransform()
@@ -151,6 +156,9 @@ class Visualization:
                 Input({'type':'page-button','index': ALL},'n_clicks')
             ],
             [
+                State('anchor-vis-store','data')
+            ],
+            [
                 Output('vis-container','children'),
                 Output('page-url','pathname')
             ],
@@ -169,23 +177,75 @@ class Visualization:
             ]
         )(self.open_navbar)
 
+        self.viewer_app.callback(
+            [
+                Input('header-toggler','n_clicks')
+            ],
+            [
+                Output('header-collapse','is_open')
+            ],
+            [
+                State('header-collapse','is_open')
+            ]
+        )(self.open_header)
+
+        self.viewer_app.callback(
+            [
+                Input({'type': 'header-button','index': ALL},'n_clicks')
+            ],
+            [
+                Output('header-modal','is_open'),
+                Output('header-modal','children')
+            ],
+            [
+                State('anchor-vis-store','data')
+            ]
+        )(self.open_header_component)
+
     def open_navbar(self, clicked, is_open):
 
         if clicked:
             return not is_open
         return is_open
     
-    def update_page(self, pathname, path_button):
+    def open_header(self, clicked, is_open):
+
+        if clicked:
+            return not is_open
+        return is_open
+
+    def open_header_component(self, clicked,session_data):
+
+        print(ctx.triggered)
+        if clicked:
+            session_data = json.loads(session_data)
+            header_open = True
+            header_children = self.header[ctx.triggered_id['index']].update_layout(session_data = session_data, use_prefix = True)
+
+            return header_open, header_children
+        else:
+            raise exceptions.PreventUpdate
+
+    def update_page(self, pathname, path_button, session_data):
         """Updating page in multi-page application
 
         :param pathname: Pathname or suffix of current url which is a key to the page name
         :type pathname: str
         """
 
+        session_data = json.loads(session_data)
         if ctx.triggered_id=='page-url':
             if pathname in self.layout_dict:
                 # If that path is in the layout dict, return that page content
-                return self.layout_dict[pathname], no_update
+
+                # If the page needs to be updated based on changes in anchor-vis-data
+                page_content = self.update_page_layout(
+                    page_components_list = self.components[pathname.replace('/app/','').replace('-',' ')],
+                    use_prefix = True,
+                    session_data=session_data
+                )
+
+                return page_content, no_update
             else:
                 # Otherwise, return a list of clickable links for valid pages
                 not_found_page = html.Div([
@@ -199,12 +259,22 @@ class Visualization:
                 return not_found_page, pathname
         elif ctx.triggered_id['type']=='page-button':
             new_pathname = list(self.layout_dict.keys())[ctx.triggered_id['index']]
-            return self.layout_dict[new_pathname], new_pathname 
+            # If the page needs to be updated based on changes in anchor-vis-data
+            page_content = self.update_page_layout(
+                page_components_list = self.components[new_pathname.replace('/app/','').replace('-',' ')],
+                use_prefix = True,
+                session_data=session_data
+            )
+
+            return page_content, new_pathname
     
     def initialize_stores(self):
 
         # This should be all the information necessary to reproduce the tileservers and annotations for each image
-        slide_store = []
+        slide_store = {
+            "current": [],
+            "local": []
+        }
         s_idx = 0
         t_idx = 0
         if not self.local_slides is None:
@@ -230,7 +300,7 @@ class Visualization:
                     )
 
                     slide_dict = {
-                        'start_idx': s_idx,
+                        #'start_idx': s_idx,
                         'name': s.split(os.sep)[-1],
                         'tiles_url': self.local_tile_server.get_name_tiles_url(s.split(os.sep)[-1]),
                         'regions_url': self.local_tile_server.get_name_regions_url(s.split(os.sep)[-1]),
@@ -238,7 +308,8 @@ class Visualization:
                         'annotations_url': self.local_tile_server.get_name_annotations_url(s.split(os.sep)[-1])
                     }
 
-                slide_store.append(slide_dict)
+                slide_store['current'].append(slide_dict)
+                slide_store['local'].append(slide_dict)
 
         else:
             self.local_tile_server = None
@@ -249,9 +320,9 @@ class Visualization:
             
             for t_idx,t in enumerate(self.tileservers):
                 if type(t)==LocalTileServer:
-                    slide_store.extend([
+                    slide_store['current'].extend([
                         {
-                            'start_idx': (s_idx+t_idx+1),
+                            #'start_idx': (s_idx+t_idx+1),
                             'name': j,
                             'tiles_url': t.get_name_tiles_url(j),
                             'regions_url': t.get_name_regions_url(j),
@@ -260,9 +331,21 @@ class Visualization:
                         }
                         for j in t['names']
                     ])
+                    slide_store['local'].extend([
+                        {
+                            #'start_idx': (s_idx+t_idx+1),
+                            'name': j,
+                            'tiles_url': t.get_name_tiles_url(j),
+                            'regions_url': t.get_name_regions_url(j),
+                            'metadata_url': t.get_name_metadata_url(j),
+                            'annotations_url': t.get_name_annotations_url(j)
+                        }
+                        for j in t['names']
+                    ])
+
                 elif type(t)==DSATileServer:
-                    slide_store.append({
-                        'start_idx': (s_idx+t_idx+1),
+                    slide_store['current'].append({
+                        #'start_idx': (s_idx+t_idx+1),
                         'name': t.name,
                         'api_url': t.base_url,
                         'tiles_url': t.tiles_url,
@@ -271,8 +354,8 @@ class Visualization:
                         'annotations_url': t.annotations_url
                     })
                 elif type(t)==CustomTileServer:
-                    slide_store.append({
-                        'start_idx': (s_idx+t_idx+t),
+                    slide_store['current'].append({
+                        #'start_idx': (s_idx+t_idx+t),
                         'name': t.name,
                         'tiles_url': t.tiles_url,
                         'regions_url': t.regions_url if hasattr(t,'regions_url') else None,
@@ -290,7 +373,7 @@ class Visualization:
         """
         self.get_layout_children()
 
-        header = dbc.Navbar(
+        title_nav_bar = dbc.Navbar(
             dbc.Container([
                 dcc.Location(id='page-url',refresh=False),
                 dbc.Row([
@@ -366,6 +449,11 @@ class Visualization:
             )   
         )
 
+        if len(self.header)>0:
+            header_components = self.gen_header_components()
+        else:
+            header_components = html.Div()
+
         layout = dmc.MantineProvider(
             children = [
                 vis_data,
@@ -373,7 +461,7 @@ class Visualization:
                     dbc.Container(
                         id = 'full-vis-container',
                         fluid = True,
-                        children = [header] + [html.Div(id = 'vis-container',children = [])]
+                        children = [title_nav_bar] + [header_components]+ [html.Div(id = 'vis-container',children = [])]
                     ),
                     style = self.app_options['app_style'] if 'app_style' in self.app_options else {}
                 )
@@ -382,6 +470,107 @@ class Visualization:
 
 
         return layout
+
+    def update_page_layout(self, page_components_list:list, use_prefix:bool, session_data:Union[list,dict]):
+        
+        page_children = []
+        for row_idx,row in enumerate(page_components_list):
+            row_children = []
+            if type(row)==list:
+                for col_idx, col in enumerate(row):
+                    if not type(col)==list:
+                        # If this component needs to be updated with new session data, call that method here
+                        if col.session_update:
+                            col_layout = col.update_layout(
+                                session_data = session_data, 
+                                use_prefix = use_prefix
+                            )
+                        else:
+                            # If it doesn't need to be updated, get the layout as is
+                            col_layout = col.blueprint.layout
+
+                        row_children.append(
+                            dbc.Col(
+                                dbc.Card([
+                                    dbc.CardHeader(
+                                        col.title
+                                    ),
+                                    dbc.CardBody(
+                                        col_layout
+                                    )
+                                ]),
+                                width = True
+                            )
+                        )
+
+                    else:
+                        tabs_children = []
+                        for tab_idx, tab in enumerate(col):
+                            if tab.session_update:
+                                tab_layout = tab.update_layout(
+                                    session_data = session_data,
+                                    use_prefix = use_prefix
+                                )
+                            else:
+                                tab_layout = tab.blueprint.layout
+
+                            tabs_children.append(
+                                dbc.Tab(
+                                    dbc.Card(
+                                        dbc.CardBody(
+                                            tab_layout
+                                        )
+                                    ),
+                                    label = tab.title,
+                                    tab_id = tab.title.lower().replace(' ','-')
+                                )
+                            )
+
+                        row_children.append(
+                            dbc.Col(
+                                dbc.Card([
+                                    dbc.CardHeader('Tools'),
+                                    dbc.CardBody(
+                                        dbc.Tabs(
+                                            tabs_children,
+                                            id = {'type': 'vis-layout-tabs','index': np.random.randint(0,1000)},
+                                            active_tab = col[0].title.lower().replace(' ','-')
+                                        )
+                                    )
+                                ]),
+                                width = True
+                            )
+                        )
+
+            else:
+                
+                if row.session_update:
+                    row_layout = row.update_layout(
+                        session_data = session_data,
+                        use_prefix = use_prefix
+                    )
+                else:
+                    row_layout = row.blueprint.layout
+
+                row_children.append(
+                    dbc.Col(
+                        dbc.Card([
+                            dbc.CardHeader(row.title),
+                            dbc.CardBody(
+                                row_layout
+                            )
+                        ]),
+                        width = True
+                    )
+                )
+            
+            page_children.append(
+                dbc.Row(
+                    row_children
+                )
+            )
+
+        return page_children
 
     def get_layout_children(self):
         """Generating layout of embedded components from structure of components list
@@ -432,21 +621,35 @@ class Visualization:
         # Iterating through each named page
         for page_idx,page in enumerate(list(self.components.keys())):
             page_children = []
-            if self.linkage=='page':
-                component_prefix = page_idx
+            
+            if type(self.linkage)==str:
+                if self.linkage=='page':
+                    component_prefix = page_idx
+            elif type(self.linkage)==list:
+                if self.linkage[page_idx]=='page':
+                    component_prefix = page_idx
 
             row_components = []
             for row_idx,row in enumerate(self.components[page]):
                 
-                if self.linkage=='row':
-                    component_prefix = row_idx
+                if type(self.linkage)==str:
+                    if self.linkage=='row':
+                        component_prefix = row_idx
+                elif type(self.linkage)==list:
+                    if self.linkage[page_idx]=='row':
+                        component_prefix = row_idx
 
                 row_children = []
                 if type(row)==list:
                     col_components = []
                     for col_idx,col in enumerate(row):
-                        if self.linkage=='col':
-                            component_prefix = col_idx
+
+                        if type(self.linkage)==str:
+                            if self.linkage=='col':
+                                component_prefix = col_idx
+                        elif type(self.linkage)==list:
+                            if self.linkage[page_idx]=='col':
+                                component_prefix = col_idx
 
                         if not type(col)==list:
                             col.load(component_prefix = component_prefix)
@@ -470,8 +673,13 @@ class Visualization:
                             tab_components = []
                             tabs_children = []
                             for tab_idx,tab in enumerate(col):
-                                if self.linkage=='tab': 
-                                    component_prefix = tab_idx
+
+                                if type(self.linkage)==str:
+                                    if self.linkage=='tab':
+                                        component_prefix = tab_idx
+                                elif type(self.linkage)==list:
+                                    if self.linkage[page_idx]=='tab':
+                                        component_prefix = tab_idx
                                 
                                 tab.load(component_prefix = component_prefix)
                                 tab.gen_layout(session_data = self.vis_store_content)
@@ -533,6 +741,50 @@ class Visualization:
 
             page_components.append(row_components)
             self.layout_dict['/app/'+page.lower().replace(" ","-")] = page_children
+
+    def gen_header_components(self):
+        
+        for h_idx, h in enumerate(self.header):
+            h.load(h_idx)
+
+        header_components = html.Div([
+            html.Hr(),
+            dbc.Modal(
+                id = 'header-modal',
+                centered = True,
+                is_open = False,
+                size = 'lg',
+                children = [
+                    h.blueprint.embed(self.viewer_app)
+                    for h_idx,h in enumerate(self.header)
+                ]
+            ),
+            dbc.Row([
+                dbc.Col([
+                    dbc.NavbarToggler(id = 'header-toggler'),
+                    dbc.Collapse(
+                        dbc.Nav([
+                            dbc.NavItem(
+                                dbc.Button(
+                                    h.title,
+                                    id = {'type': 'header-button','index': h_idx},
+                                    outline = True,
+                                    color = 'primary',
+                                    style = {'textTransform':'none'}
+                                )
+                            )
+                            for h_idx,h in enumerate(self.header)
+                        ],navbar=False),
+                        id = 'header-collapse',
+                        navbar=False,
+                        is_open = True
+                    )
+                ])
+            ]),
+            html.Hr()
+        ])
+
+        return header_components
 
     def start(self):
         """Starting visualization session based on provided app_options

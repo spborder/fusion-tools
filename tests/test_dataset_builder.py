@@ -37,6 +37,7 @@ def main():
 
     dsa_tileservers = [dsa_handler.get_tile_server(i) for i in dsa_items_list]
     dsa_dataset_builder = dsa_handler.create_dataset_builder()
+    dsa_login = dsa_handler.create_login_component()
 
 
     vis_sess = Visualization(
@@ -45,19 +46,17 @@ def main():
         tileservers = dsa_tileservers,
         linkage = 'page',
         components = {
-             "Visualization": [
+             "vis": [
                 [
                     SlideMap(),
-                    [
-                        OverlayOptions(ignore_list = ['_id','_index','barcode']),
-                        PropertyPlotter(ignore_list = ['_id','_index','barcode'])
-                    ]    
-                ]       
+                    OverlayOptions()
+                ]   
             ],
-            "Dataset Builder": [
+            "dataset builder": [
                 dsa_dataset_builder
             ]
         },
+        header = [dsa_login],
         app_options={'port': 8050}
     )
 

@@ -41,7 +41,12 @@ class MapComponent:
         For more information see dash-leaflet: https://www.dash-leaflet.com/
 
     """
-    pass
+    def __init__(self):
+        # Property referring to how the layout is updated with a change in the 
+        # visualization session
+        self.session_update = False
+    
+
 
 class SlideMap(MapComponent):
     """This is a general high-resolution tiled image component. 
@@ -53,6 +58,10 @@ class SlideMap(MapComponent):
     def __init__(self):
         """Constructor method
         """
+
+        # Property referring to how the layout is updated with a change in the visualization session
+        self.session_update = True
+
         # Add Namespace functions here:
         self.assets_folder = os.getcwd()+'/.fusion_assets/'
         self.get_namespace()
@@ -179,7 +188,7 @@ class SlideMap(MapComponent):
 
         return image_overlay_popup
 
-    def gen_layout(self, session_data:dict):
+    def update_layout(self, session_data:dict, use_prefix: bool):
         """Generating SlideMap layout
 
         :return: Div object containing interactive components for the SlideMap object.
@@ -192,7 +201,7 @@ class SlideMap(MapComponent):
                 placeholder = 'Select a slide to view',
                 options = [
                     {'label': i['name'],'value': idx}
-                    for idx,i in enumerate(session_data)
+                    for idx,i in enumerate(session_data['current'])
                 ],
                 value = [],
                 multi = False,
@@ -311,7 +320,14 @@ class SlideMap(MapComponent):
             )
         ])
 
-        self.blueprint.layout = layout
+        if use_prefix:
+            PrefixIdTransform(prefix = self.component_prefix).transform_layout(layout)
+
+        return layout
+    
+    def gen_layout(self, session_data:dict):
+
+        self.blueprint.layout = self.update_layout(session_data,use_prefix=False)
 
     def get_namespace(self):
         """Adding JavaScript functions to the SlideMap Namespace
@@ -486,6 +502,16 @@ class SlideMap(MapComponent):
         Adding these callbacks to the DashBlueprint() object enable embedding into other layouts.
         """
         
+        # Updating based on modifications to current visualization session
+        self.blueprint.callback(
+            [
+                Input('anchor-vis-store','data')
+            ],
+            [
+                Output({'type':'slide-select-drop','index': ALL},'options')
+            ]
+        )(self.update_vis_session)
+
         # Updating current slide and annotations
         self.blueprint.callback(
             [
@@ -613,6 +639,26 @@ class SlideMap(MapComponent):
             ]
         )(self.upload_shape)
 
+    def update_vis_session(self, new_vis_data):
+        """Updating slide dropdown options based on current visualization session
+
+        :param new_vis_data: Visualization session data containing information on selectable slides
+        :type new_vis_data: str
+        :return: New options for slide dropdown
+        :rtype: list
+        """
+        new_vis_data = json.loads(new_vis_data)
+
+        new_slide_options = [
+            {
+                'label': i['name'],
+                'value': idx
+            }
+            for idx, i in enumerate(new_vis_data['current'])
+        ]
+
+        return [new_slide_options]
+
     def update_slide(self, slide_selected, vis_data):
         
         if not any([i['value'] or i['value']==0 for i in ctx.triggered]):
@@ -620,7 +666,7 @@ class SlideMap(MapComponent):
 
         vis_data = json.loads(vis_data)
 
-        new_slide = vis_data[get_pattern_matching_value(slide_selected)]
+        new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
 
         # Getting data from the tileservers:
         new_url = new_slide['tiles_url']
@@ -1527,6 +1573,8 @@ class SlideImageOverlay(MapComponent):
         :param image_crs: Top-left coordinates (x,y) for the image, defaults to [0,0]
         :type image_crs: list, optional
         """
+
+        super().__init__()
         self.image_path = image_path
         self.image_crs = image_crs
         self.image_properties = image_properties
@@ -1562,7 +1610,7 @@ class ChannelMixer(MapComponent):
         :param tiles_url: URL to refer to for accessing tiles (contains /{z}/{x}/{y}). Allows for "style" parameter to be passed. See large-image documentation: https://girder.github.io/large_image/getting_started.html#styles-changing-colors-scales-and-other-properties
         :type tiles_url: str
         """
-
+        super().__init__()
     def load(self, component_prefix: int):
 
         self.component_prefix = component_prefix
@@ -1703,7 +1751,7 @@ class ChannelMixer(MapComponent):
             raise exceptions.PreventUpdate
         
         vis_data = json.loads(vis_data)
-        new_slide = vis_data[get_pattern_matching_value(selected_slide)]
+        new_slide = vis_data['current'][get_pattern_matching_value(selected_slide)]
 
         new_metadata = requests.get(new_slide['metadata_url']).json()
 
