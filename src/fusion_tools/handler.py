@@ -38,6 +38,9 @@ from fusion_tools.components import Tool
 from fusion_tools.utils.shapes import load_annotations, detect_histomics
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 
+from upload_component import UploadComponent
+
+
 class Handler:
     pass
 
@@ -85,7 +88,7 @@ class DSAHandler(Handler):
         except girder_client.AuthenticationError:
             return f'Error logging in with username: {username}'
 
-    def get_image_region(self, item_id: str, coords_list: list, style: Union[dict,None] = None)->np.ndarray:
+    def get_image_region(self, item_id: str, coords_list: list, style: Union[dict,None] = None, user_token:Union[str,None]=None)->np.ndarray:
         """
         Grabbing image region from list of bounding box coordinates
         """
@@ -105,13 +108,19 @@ class DSAHandler(Handler):
 
         image_array = np.zeros((256,256))
 
+        if user_token is None or user_token=='':
+            request_string = self.gc.urlBase+f'/item/{item_id}/tiles/region?left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}'
+        else:
+            request_string = self.gc.urlBase+f'/item/{item_id}/tiles/region?token={user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}'
+
+
         if style is None:
             image_array = np.uint8(
                 np.array(
                     Image.open(
                         BytesIO(
                             requests.get(
-                                self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}'
+                                request_string
                             ).content
                         )
                     )
@@ -124,19 +133,29 @@ class DSAHandler(Handler):
 
         return image_array
 
-    def get_image_thumbnail(self, item_id:str)->np.ndarray:
+    def get_image_thumbnail(self, item_id:str, user_token:Union[str,None]=None)->np.ndarray:
 
-        image_array = np.uint8(
-            np.array(
-                Image.open(
-                    BytesIO(
-                        requests.get(
-                            self.gc.urlBase+f'/item/{item_id}/tiles/thumbnail?token={self.user_token}'
-                        ).content
+
+        if user_token is None or user_token=='':
+            request_string = self.gc.urlBase+f'/item/{item_id}/tiles/thumbnail'
+        else:
+            request_string = self.gc.urlBase+f'/item/{item_id}/tiles/thumbnail?token={user_token}'
+
+        try:
+            image_array = np.uint8(
+                np.array(
+                    Image.open(
+                        BytesIO(
+                            requests.get(
+                                request_string
+                            ).content
+                        )
                     )
                 )
             )
-        )
+        except:
+            print(f'Thumbnail exception encountered for item: {item_id}')
+            image_array = np.zeros((256,256,3)).astype(np.uint8)
 
         return image_array
 
@@ -170,7 +189,7 @@ class DSAHandler(Handler):
 
         return boundary_mask
 
-    def query_annotation_count(self, item:Union[str,list]) -> pd.DataFrame:
+    def query_annotation_count(self, item:Union[str,list], user_token:Union[str,None]=None) -> pd.DataFrame:
         """Get count of structures in an item
 
         :param item: Girder item Id for image of interest
@@ -223,10 +242,13 @@ class DSAHandler(Handler):
                 resource_find = resource_find | self.gc.get(f'/collection/{resource_find["_id"]}/details')
             elif resource_find['_modelType']=='folder':
                 resource_find = resource_find | self.gc.get(f'/folder/{resource_find["_id"]}/details')
+            elif resource_find['_modelType']=='user':
+                resource_find = resource_find | self.gc.get(f'/user/{resource_find["_id"]}/details')
 
             return resource_find
         except girder_client.HttpError:
             #TODO: Make this error handling a little better (return some error type)
+            print(f'path: {path} not found')
             return 'Resource not found'
     
     def get_folder_info(self, folder_id:str)->dict:
@@ -517,9 +539,12 @@ class DSAHandler(Handler):
         :type upload_types: list
         """
 
-        #TODO: 
+        dsa_uploader = DSAUploader(
+            handler= self,
+            dsa_upload_types=upload_types
+        )
 
-        pass
+        return dsa_uploader
 
     def create_dataset_builder(self,include:Union[list,None]=None):
         """Table view allowing parsing of dataset/slide-level metadata and adding remote/local slides to current session.
@@ -632,27 +657,16 @@ class DSAHandler(Handler):
             put_responses.append(put_response)
         return put_responses
         
-    def create_user_folder(self, parent_path, folder_name, metadata = None):
+    def create_user_folder(self, parent_path, folder_name, user_token, description = ''):
         """
         Creating a folder in user's public folder
         """
-        public_folder_path = parent_path
-        public_folder_id = self.gc.get('/resource/lookup',parameters={'path':public_folder_path})['_id']
+        parent_folder_id = self.gc.get('/resource/lookup',parameters={'path':parent_path})['_id']
 
         # Creating folder
-        if not metadata is None:
-            new_folder = self.gc.loadOrCreateFolder(
-                folderName = folder_name,
-                parentId = public_folder_id,
-                parentType = 'folder',
-                metadata = metadata
-            )
-        else:
-            new_folder = self.gc.loadOrCreateFolder(
-                folderName = folder_name,
-                parentId = public_folder_id,
-                parentType = 'folder'
-            )
+        new_folder = requests.post(
+            self.gc.urlBase + f'/folder?token={user_token}&parentType=folder&parentId={parent_folder_id}&name={folder_name}&description={description}'
+        )
 
         return new_folder
     
@@ -744,11 +758,26 @@ class DSAHandler(Handler):
         return login_component
 
 
-class DSALoginComponent(Tool):
-    """Handler for DSALoginComponent, enabling login to the running DSA instance
+class DSATool(Tool):
+    """A sub-class of Tool specific to DSA components. 
+    The only difference is that these components always update relative to the session data.
 
     :param Tool: General class for components that perform visualization and analysis of data.
     :type Tool: None
+    """
+    def __init__(self):
+
+        super().__init__()
+        self.session_update = True
+
+
+
+
+class DSALoginComponent(DSATool):
+    """Handler for DSALoginComponent, enabling login to the running DSA instance
+
+    :param DSATool: Sub-class of Tool specific to DSA components. Updates with session data by default.
+    :type DSATool: None
 
     """
     def __init__(self,
@@ -808,7 +837,7 @@ class DSALoginComponent(Tool):
                         ),
                         dbc.Tooltip(
                             'Create an account in order to upload slides to the DSA instance, to access user surveys, or to share data!',
-                            target = {'type': 'dsa-create-account-button','index': 0},
+                            target = {'type': 'dsa-login-create-account-button','index': 0},
                             placement='top'
                         )
                     ],direction='horizontal',gap=2)
@@ -1141,7 +1170,6 @@ class DSALoginComponent(Tool):
                 username = username_input,
                 password= password_input
             )
-            print(new_login_output)
             if not type(new_login_output)==str:
                 session_data['current_user'] = new_login_output
                 current_user = f"Welcome, {new_login_output['login']}"
@@ -1213,11 +1241,11 @@ class DSALoginComponent(Tool):
         
 
 
-class DatasetBuilder(Tool):
+class DatasetBuilder(DSATool):
     """Handler for DatasetBuilder component, enabling selection/deselection of folders and slides to add to current visualization session.
 
-    :param Tool: General class for components that perform visualization and analysis of data.
-    :type Tool: None
+    :param DSATool: Sub-class of Tool specific to DSA components. Updates with session data by default.
+    :type DSATool: None
     """
     def __init__(self,
                  handler: Union[DSAHandler,list] = [],
@@ -1225,15 +1253,8 @@ class DatasetBuilder(Tool):
                 ):
         
         super().__init__()
-
-        # Although this is a "Tool", it does update it's layout based on the "current" Visualization Session
-        self.session_update = True
-
         self.include_only = include_only
         self.handler = handler
-
-        #TODO: Make this part update-able, just not every time the layout is updated (main slowdown is getting the slide count due to large metadata)
-        self.collections_df = self.gen_collections_dataframe()
 
     def __str__(self):
         return 'Dataset Builder'
@@ -1252,26 +1273,30 @@ class DatasetBuilder(Tool):
 
         self.get_callbacks()
 
-    def gen_collections_dataframe(self):
+    def gen_collections_dataframe(self,session_data:dict):
 
         collections_info = []
-        if type(self.handler)==list:
-            #TODO: Get this working for stringing together multiple DSA instances
-            # Just have to find a way to link back to the right DSAHandler instance
-            collections = [] 
-        else:
-            collections = self.handler.get_collections()
-            for c in collections:
-                slide_count = self.handler.get_collection_slide_count(collection_name = c['name'])
-                folder_count = self.handler.get_path_info(path = f'/collection/{c["name"]}')
-                if slide_count>0:
-                    collections_info.append({
-                        'Collection Name': c['name'],
-                        'Collection ID': c['_id'],
-                        'Number of Slides': slide_count,
-                        'Number of Folders': folder_count['nFolders']
-                    } | c['meta'])
+        collections = self.handler.get_collections()
+        for c in collections:
+            #slide_count = self.handler.get_collection_slide_count(collection_name = c['name'])
+            folder_count = self.handler.get_path_info(path = f'/collection/{c["name"]}')
+            #if slide_count>0:
+            collections_info.append({
+                'Collection Name': c['name'],
+                'Collection ID': c['_id'],
+                #'Number of Slides': slide_count,
+                'Number of Folders': folder_count['nFolders'],
+                'Last Updated': folder_count['updated']
+            } | c['meta'])
 
+        if 'current_user' in session_data:
+            collections_info.append({
+                'Collection Name': f'User: {session_data["current_user"]["login"]}',
+                'Collection ID': session_data["current_user"]['_id'],
+                'Number of Folder': 2,
+                'Last Updated': '-'
+            })
+            
         collections_df = pd.DataFrame.from_records(collections_info)
 
         return collections_df
@@ -1296,7 +1321,8 @@ class DatasetBuilder(Tool):
                     starting_slides_components.append(
                         self.make_selected_slide(
                             slide_id = slide_id,
-                            idx = starting_slide_idx
+                            idx = starting_slide_idx,
+                            use_prefix= not use_prefix
                         )
                     )
                     starting_slide_idx += 1
@@ -1308,10 +1334,14 @@ class DatasetBuilder(Tool):
                     self.make_selected_slide(
                         slide_id = thumbnail_address,
                         idx = starting_slide_idx,
-                        local_slide=True
+                        local_slide=True,
+                        use_prefix = not use_prefix
                     )
                 )
                 starting_slide_idx+=1
+
+        
+        collections_df = self.gen_collections_dataframe(session_data)
 
         layout = html.Div([
             dbc.Card(
@@ -1328,7 +1358,7 @@ class DatasetBuilder(Tool):
                         dcc.Store(
                             id = {'type':'dataset-builder-data-store','index': 0},
                             storage_type='memory',
-                            data = json.dumps({'selected_slides':starting_slides, 'selected_collections': [], 'available_collections': self.collections_df.to_dict("records")})
+                            data = json.dumps({'selected_slides':starting_slides, 'selected_collections': [], 'available_collections': collections_df.to_dict("records")})
                         )
                     ),
                     dbc.Row([
@@ -1357,7 +1387,7 @@ class DatasetBuilder(Tool):
                             id = {'type': 'dataset-builder-collection-div','index': 0},
                             children = [
                                 self.make_selectable_dash_table(
-                                    dataframe = self.collections_df,
+                                    dataframe = collections_df,
                                     id = {'type': 'dataset-builder-collections-table','index': 0},
                                     multi_row = True
                                 )
@@ -1549,59 +1579,81 @@ class DatasetBuilder(Tool):
         folder_slides = []
 
         # Starting with slides (which will report parent folderId but not that parent's folderId (if applicable))
-        all_folder_slides = self.handler.get_folder_slides(
-            folder_path = folder_info['_id'],
-            folder_type = folder_info['_modelType'],
-            ignore_histoqc=ignore_histoqc
-        )
+        if folder_info['_modelType'] in ['folder','collection']:
+            all_folder_slides = self.handler.get_folder_slides(
+                folder_path = folder_info['_id'],
+                folder_type = folder_info['_modelType'],
+                ignore_histoqc=ignore_histoqc
+            )
 
-        folder_slides_folders = [i['folderId'] for i in all_folder_slides]
-        unique_folders = list(set(folder_slides_folders))
-        folders_in_folder = []
-        for u in unique_folders:
-            if not u==folder_info['_id'] and not u in folders_in_folder:
-                # This is for all folders in this folder
-                # This grabs parent folders of this folder
-                u_folder_info = self.handler.get_folder_info(folder_id=u)
-                u_folder_rootpath = self.handler.get_folder_rootpath(u)
-                # Folders in order from collection-->child folder-->etc.
-                folder_ids = [i['object']['_id'] for i in u_folder_rootpath]
+            folder_slides_folders = [i['folderId'] for i in all_folder_slides]
+            unique_folders = list(set(folder_slides_folders))
+            folders_in_folder = []
+            for u in unique_folders:
+                if not u==folder_info['_id'] and not u in folders_in_folder:
+                    # This is for all folders in this folder
+                    # This grabs parent folders of this folder
+                    u_folder_info = self.handler.get_folder_info(folder_id=u)
+                    u_folder_rootpath = self.handler.get_folder_rootpath(u)
+                    # Folders in order from collection-->child folder-->etc.
+                    folder_ids = [i['object']['_id'] for i in u_folder_rootpath]
 
-                if folder_ids[-1]==folder_info['_id']:
-                    child_folder_path = '/collection/'+'/'.join([i['object']['name'] for i in u_folder_rootpath]+[u_folder_info['name']])
-                else:
-                    # Folder that is immediate child of current folder:
-                    child_folder_idx = folder_ids.index(folder_info['_id'])
-                    child_folder_path = '/collection/'+'/'.join([i['object']['name'] for i in u_folder_rootpath[:child_folder_idx+2]])
+                    if any([i['object']['_modelType']=='collection' for i in u_folder_rootpath]):
+                        base_model = 'collection'
+                    else:
+                        base_model = 'user'
 
-                child_folder_path_info = self.handler.get_path_info(
-                    path = child_folder_path
+                    if folder_ids[-1]==folder_info['_id']:
+                        child_folder_path = f'/{base_model}/'+'/'.join([i['object']['name'] if i['object']['_modelType'] in ['folder','collection'] else i['object']['login'] for i in u_folder_rootpath]+[u_folder_info['name']])
+                    else:
+                        # Folder that is immediate child of current folder:
+                        child_folder_idx = folder_ids.index(folder_info['_id'])
+                        child_folder_path = f'/{base_model}/'+'/'.join([i['object']['name'] if i['object']['_modelType'] in ['folder','collection'] else i['object']['login'] for i in u_folder_rootpath[:child_folder_idx+2]])
+
+
+                    child_folder_path_info = self.handler.get_path_info(
+                        path = child_folder_path
+                    )
+                    if not child_folder_path_info['_id'] in folders_in_folder:
+                        folders_in_folder.append(child_folder_path_info['_id'])
+                        
+                        # Adding folder to list if the number of items is above zero or show_empty is True
+                        folder_folders.append({
+                            'Folder Name': child_folder_path_info['name'],
+                            'Folder ID': child_folder_path_info['_id'],
+                            'Number of Folders': child_folder_path_info['nFolders'],
+                            'Number of Slides': child_folder_path_info['nItems'],
+                            'Last Updated': child_folder_path_info['updated']
+                        } | child_folder_path_info['meta'])
+
+                elif u==folder_info['_id']:
+                    # This means that there are some slides that are direct children (not in a sub-folder) in this folder. 
+                    # This adds them all at once
+                    for i in all_folder_slides:
+                        if i['folderId']==folder_info['_id']:
+                            folder_slides.append(
+                                {
+                                    'Slide Name': i['name'],
+                                    'Slide ID': i['_id'],
+                                    'Last Updated':i['updated']
+                                } | {k:v for k,v in i['meta'].items() if type(v)==str}
+                            )
+
+        else:
+            
+            user_folders = ['Private','Public']
+            for u_f in user_folders:
+                user_folder_info = self.handler.get_path_info(
+                    path = f'/user/{folder_info["login"]}/{u_f}'
                 )
-                if not child_folder_path_info['_id'] in folders_in_folder:
-                    folders_in_folder.append(child_folder_path_info['_id'])
-                    
-                    # Adding folder to list if the number of items is above zero or show_empty is True
-                    folder_folders.append({
-                        'Folder Name': child_folder_path_info['name'],
-                        'Folder ID': child_folder_path_info['_id'],
-                        'Number of Folders': child_folder_path_info['nFolders'],
-                        'Number of Slides': child_folder_path_info['nItems'],
-                        'Last Updated': child_folder_path_info['updated']
-                    } | child_folder_path_info['meta'])
 
-
-            elif u==folder_info['_id']:
-                # This means that there are some slides that are direct children (not in a sub-folder) in this folder. 
-                # This adds them all at once
-                for i in all_folder_slides:
-                    if i['folderId']==folder_info['_id']:
-                        folder_slides.append(
-                            {
-                                'Slide Name': i['name'],
-                                'Slide ID': i['_id'],
-                                'Last Updated':i['updated']
-                            } | {k:v for k,v in i['meta'].items() if type(v)==str}
-                        )
+                folder_folders.append({
+                    'Folder Name': user_folder_info['name'],
+                    'Folder ID': user_folder_info['_id'],
+                    'Number of Folders': user_folder_info['nFolders'],
+                    'Number of Slides': user_folder_info['nItems'],
+                    'Last Updated': user_folder_info['updated']
+                })
 
         if show_empty:
             # This is how you get all the empty folders within a folder (does not get child empty folders)
@@ -1626,11 +1678,15 @@ class DatasetBuilder(Tool):
 
         return folder_slides, folder_folders
 
-    def make_selected_slide(self, slide_id:str,idx:int,local_slide = False):
+    def make_selected_slide(self, slide_id:str,idx:int,local_slide:bool = False, use_prefix:bool = True):
         """Creating a visualization session component for a selected slide
 
         :param slide_id: Girder Id for the slide to be added
         :type slide_id: str
+        :param local_slide: Whether or not the slide is from the LocalTileServer or if it's in the cloud
+        :type local_slide: bool
+        :param use_prefix: Whether or not to add the component prefix (initially don't add, when updating the layout do add)
+        :param use_prefix: bool
         """
         
         if not local_slide:
@@ -1666,7 +1722,7 @@ class DatasetBuilder(Tool):
                         ),
                         html.A(
                             html.I(
-                                id = {'type': f'{self.component_prefix}-dataset-builder-slide-remove-icon','index': idx},
+                                id = {'type': f'{self.component_prefix}-dataset-builder-slide-remove-icon','index': idx} if use_prefix else {'type': 'dataset-builder-slide-remove-icon','index': idx},
                                 n_clicks = 0,
                                 className = 'bi bi-x-circle-fill fa-2x',
                                 style = {'color': 'rgb(255,0,0)','marginRight':'2px'}
@@ -1708,9 +1764,14 @@ class DatasetBuilder(Tool):
 
         def add_collection_card(collection_info,idx):
             # For each collection, grab all items and unique folders (as well as those that are not nested in a folder)
-            folder_slides, folder_folders = self.organize_folder_contents(
-                folder_info = self.handler.get_path_info(f'/collection/{collection_info["Collection Name"]}')
-            )
+            if not 'User: ' in collection_info["Collection Name"]:
+                folder_slides, folder_folders = self.organize_folder_contents(
+                    folder_info = self.handler.get_path_info(f'/collection/{collection_info["Collection Name"]}')
+                )
+            else:
+                folder_slides, folder_folders = self.organize_folder_contents(
+                    folder_info=self.handler.get_path_info(f'/user/{collection_info["Collection Name"].replace("User: ","")}')
+                )
 
             if len(folder_slides)>0:
 
@@ -1748,9 +1809,9 @@ class DatasetBuilder(Tool):
                         html.H6(
                             children = [
                                 dbc.Stack([
-                                    html.A('/collection'),
+                                    html.A('/collection' if not 'User: ' in collection_info['Collection Name'] else '/user'),
                                     html.A(
-                                        f'/{collection_info["Collection Name"]}/',
+                                        f'/{collection_info["Collection Name"].replace("User: ","")}/',
                                         id = {'type': f'{self.component_prefix}-dataset-builder-collection-folder-crumb','index': idx},
                                         style = {'color': 'rgb(0,0,255)'}
                                     )
@@ -2273,30 +2334,42 @@ class DSAUploadType:
 
         :param name: Name for this upload type (appears in dropdown menu in DSAUploader component)
         :type name: str
-        :param input_files: List of dictionaries containing the following keys: name:str, description: str, accepted_types: Union[list,None], preprocessing_plugins: Union[list,None]
+        :param input_files: List of dictionaries containing the following keys: name:str, description: str, accepted_types: Union[list,None], preprocessing_plugins: Union[list,None], main: bool, required: bool
         :type input_files: list
         :param processing_plugins: List of plugins to run after data has been uploaded. Allows for input of plugin-specific arguments after completion of file uploads., defaults to None
         :type processing_plugins: Union[list,None], optional
-        :param required_metadata: List of "keys" which require user input either by uploading a file or by manual addition.
+        :param required_metadata: List of "keys" which require user input either by uploading a file or by manual addition. Can either be a list of strings or a list of dicts with keys 'key':str,'values':list,'required':bool and strings (assumed required=True)
         :type required_metadata: Union[list,None], optional
         """
         
         self.name = name
+
+        # At least one element in input_files must contain 'main': True and 'required': True 
+        # (just to ensure there has to be something uploaded and it has to at least be the main file)
         self.input_files = input_files
         self.processing_plugins = processing_plugins
         self.required_metadata = required_metadata
 
-class DSAUploader(Tool):
+        assert len(self.input_files)>0
+        assert any([i['main'] for i in self.input_files])
+        assert any([i['required'] for i in self.input_files if i['main']])
+
+
+
+
+class DSAUploader(DSATool):
     """Handler for DSAUploader component, handling uploading data to a specific folder, adding metadata, and running sets of preprocessing plugins.
 
-    :param Tool: General class for components that perform visualization and analysis of data.
-    :type Tool: None
+    :param DSATool: Sub-class of Tool specific to DSA components. Updates with session data by default.
+    :type DSATool: None
     """
     def __init__(self,
-                 dsa_handler: Union[DSAHandler,list] = [],
+                 handler: Union[DSAHandler,list] = [],
                  dsa_upload_types: Union[DSAUploadType,list] = []):
         
-        self.dsa_handler = dsa_handler
+
+        super().__init__()
+        self.handler = handler
         self.dsa_upload_types = dsa_upload_types
 
     def __str__(self):
@@ -2324,6 +2397,67 @@ class DSAUploader(Tool):
         # Select which type of upload this is
         # Load upload type format based on DSAUploadType properties
 
+        if not 'current_user' in session_data:
+            uploader_children = html.Div(
+                dbc.Alert(
+                    'Make sure to login first in order to upload!',
+                    color = 'warning'
+                )
+            )
+   
+        else:
+            uploader_children = html.Div([
+                dbc.Row([
+                    html.Div(
+                        id = {'type': 'dsa-uploader-collection-or-user-div','index': 0},
+                        children = [
+                            html.Div(
+                                id = {'type': 'dsa-uploader-folder-nav-parent','index': 0},
+                                children = []
+                            ),
+                            dbc.Stack([
+                                dbc.Button(
+                                    'Collection',
+                                    n_clicks = 0,
+                                    className = 'd-grid col-6 mx-auto',
+                                    color = 'primary',
+                                    id = {'type': 'dsa-uploader-collection-button','index': 0}
+                                ),
+                                dbc.Button(
+                                    'User Folder',
+                                    n_clicks = 0,
+                                    className = 'd-grid col-6 mx-auto',
+                                    color = 'secondary',
+                                    id = {'type': 'dsa-uploader-user-folder-button','index': 0}
+                                )
+                            ],direction = 'horizontal',gap = 3)
+                        ]
+                    ),
+                    html.Div(
+                        id = {'type': 'dsa-uploader-new-folder-div','index': 0},
+                        children = []
+                    ),
+                    html.Div(
+                        id = {'type': 'dsa-uploader-new-folder-error-div','index': 0},
+                        children = []
+                    )
+                ]),
+                html.Hr(),
+                dbc.Row([
+                    html.Div(
+                        id = {'type': 'dsa-uploader-upload-type-div','index': 0},
+                        children = []
+                    )
+                ]),
+                html.Hr(),
+                dbc.Row([
+                    html.Div(
+                        id = {'type': 'dsa-uploader-processing-plugins-div','index': 0},
+                        children = []
+                    )
+                ])
+            ])
+
         layout = html.Div([
             dbc.Card(
                 dbc.CardBody([
@@ -2335,33 +2469,7 @@ class DSAUploader(Tool):
                         'Uploading slides and associated files to a particular folder on attached DSA instance. Access pre-processing plugins.'
                     ),
                     html.Hr(),
-                    dbc.Row([
-                        html.Div(
-                            id = {'type': 'dsa-uploader-collection-or-user-div','index': 0},
-                            children = []
-                        )
-                    ]),
-                    html.Hr(),
-                    dbc.Row([
-                        html.Div(
-                            id = {'type': 'dsa-uploader-folder-in-div','index': 0},
-                            children = []
-                        )
-                    ]),
-                    html.Hr(),
-                    dbc.Row([
-                        html.Div(
-                            id = {'type': 'dsa-uploader-upload-type-div','index': 0},
-                            children = []
-                        )
-                    ]),
-                    html.Hr(),
-                    dbc.Row([
-                        html.Div(
-                            id = {'type': 'dsa-uploader-processing-plugins-div','index': 0},
-                            children = []
-                        )
-                    ])
+                    uploader_children
                 ])
             )
         ],style = {'maxHeight': '90vh','overflow': 'scroll'})
@@ -2377,12 +2485,933 @@ class DSAUploader(Tool):
         
     def get_callbacks(self):
 
-        # Callback for selecting whether to upload to public/private collection or user public/private folder
-        # Callback for selecting folder to upload to based on previous selection
-        # Callback for populating with DSAUploadType specifications
         # Callback for running processing plugin with inputs
 
-        pass
+        # Callback for selecting whether to upload to public/private collection or user public/private folder
+        self.blueprint.callback(
+            [
+                Input({'type': 'dsa-uploader-collection-button','index': ALL},'n_clicks'),
+                Input({'type': 'dsa-uploader-user-folder-button','index': ALL},'n_clicks'),
+                Input({'type': 'dsa-uploader-folder-table','index': ALL},'selected_rows'),
+                Input({'type': 'dsa-uploader-folder-crumb','index': ALL},'n_clicks'),
+                Input({'type': 'dsa-uploader-folder-back-icon','index': ALL},'n_clicks')
+            ],
+            [
+                State({'type': 'dsa-uploader-folder-table','index': ALL},'data'),
+                State({'type': 'dsa-uploader-folder-nav-parent','index': ALL},'children'),
+                State('anchor-vis-store','data')
+            ],
+            [
+                Output({'type': 'dsa-uploader-collection-or-user-div','index': ALL},'children'),
+                Output({'type': 'dsa-uploader-folder-nav-parent','index': ALL},'children'),
+                Output({'type': 'dsa-uploader-new-folder-div','index': ALL},'children')
+            ],
+            prevent_initial_call = True
+        )(self.populate_folder_div)
+
+        # Callback for creating a new folder at a specific location
+        self.blueprint.callback(
+            [
+                Input({'type': 'dsa-uploader-new-folder-button','index': ALL},'n_clicks'),
+                Input({'type': 'dsa-uploader-new-folder-submit-button','index': ALL},'n_clicks'),
+                Input({'type': 'dsa-uploader-new-folder-cancel-button','index': ALL},'n_clicks')
+            ],
+            [
+                State({'type': 'dsa-uploader-new-folder-input','index': ALL},'value'),
+                State({'type': 'dsa-uploader-folder-nav-parent','index': ALL},'children'),
+                State('anchor-vis-store','data')
+            ],
+            [
+                Output({'type': 'dsa-uploader-new-folder-div','index': ALL},'children'),
+                Output({'type': 'dsa-uploader-new-folder-error-div','index': ALL},'children'),
+                Output({'type': 'dsa-uploader-folder-div','index': ALL},'children'),
+                Output({'type': 'dsa-uploader-folder-nav-parent','index': ALL},'children'),
+                Output({'type': 'dsa-uploader-new-folder-button','index': ALL},'disabled')
+            ],
+            prevent_initial_call = True
+        )(self.populate_new_folder)
+
+        # Callback for after selecting a folder to upload to, populating dropdown menu with provided upload types
+        self.blueprint.callback(
+            [
+                Input({'type': 'dsa-uploader-select-folder','index': ALL},'n_clicks')
+            ],
+            [
+                Output({'type': 'dsa-uploader-upload-type-div','index': ALL},'children')
+            ],
+            prevent_initial_call = True
+        )(self.populate_upload_type)
+
+
+        # Callback for populating with DSAUploadType specifications
+        self.blueprint.callback(
+            [
+                Input({'type': 'dsa-uploader-upload-type-drop','index': ALL},'value')
+            ],
+            [
+                Output({'type': 'dsa-uploader-upload-type-upload-files-div','index': ALL},'children')
+            ]
+        )(self.make_file_uploads)
+
+
+    def make_selectable_dash_table(self, dataframe:pd.DataFrame, id:dict, multi_row:bool = True, selected_rows: list = []):
+        """Generate a selectable DataTable to add to the layout
+
+        :param dataframe: Pandas DataFrame containing columns/rows of interest
+        :type dataframe: pd.DataFrame
+        :param id: Dictionary containing "type" and "index" keys for interactivity
+        :type id: dict
+        :param multi_row: Whether to allow selection of multiple rows in the table or just single, defaults to True
+        :type multi_row: bool, optional
+        :return: dash_table.DataTable component to be added to layout
+        :rtype: dash_table.DataTable
+        """
+
+        #Optional: Can hide "ID" columns by adding any column containing "ID" to a list of "hidden_columns"
+
+        dataframe = pd.json_normalize(dataframe.to_dict('records'))
+        selectable_table = dash_table.DataTable(
+            id = id,
+            columns = [{'name':i,'id':i,'deletable':False} for i in dataframe.columns],
+            data = dataframe.to_dict('records'),
+            editable = False,
+            filter_action='native',
+            sort_action = 'native',
+            sort_mode = 'multi',
+            column_selectable = 'single',
+            row_selectable = 'multi' if multi_row else 'single',
+            row_deletable = False,
+            selected_rows = selected_rows,
+            page_action='native',
+            page_current=0,
+            page_size=10,
+            style_cell = {
+                'overflow':'hidden',
+                'textOverflow':'ellipsis',
+                'maxWidth':0                
+            },
+            tooltip_data = [
+                {
+                    column: {'value':str(value),'type':'markdown'}
+                    for column, value in row.items()
+                } for row in dataframe.to_dict('records')
+            ],
+            tooltip_duration = None
+        )
+
+        return selectable_table
+
+    def organize_folder_contents(self, folder_info:dict, show_empty:bool=True, ignore_histoqc:bool=True)->list:
+        """For a given folder selection, return a list of slides(0th) and folders (1th)
+
+        :param folder_info: Folder info dict returned by self.handler.get_path_info(path)
+        :type folder_info: dict
+        :param show_empty: Whether or not to display folders which contain 0 slides, defaults to False
+        :type show_empty: bool, optional
+        :return: List of slides within the current folder as well as folders within that folder
+        :rtype: list
+        """
+
+        folder_folders = []
+        folder_slides = []
+
+        # Starting with slides (which will report parent folderId but not that parent's folderId (if applicable))
+        if folder_info['_modelType'] in ['folder','collection']:
+            all_folder_slides = self.handler.get_folder_slides(
+                folder_path = folder_info['_id'],
+                folder_type = folder_info['_modelType'],
+                ignore_histoqc=ignore_histoqc
+            )
+
+            folder_slides_folders = [i['folderId'] for i in all_folder_slides]
+            unique_folders = list(set(folder_slides_folders))
+            folders_in_folder = []
+            for u in unique_folders:
+                if not u==folder_info['_id'] and not u in folders_in_folder:
+                    # This is for all folders in this folder
+                    # This grabs parent folders of this folder
+                    u_folder_info = self.handler.get_folder_info(folder_id=u)
+                    u_folder_rootpath = self.handler.get_folder_rootpath(u)
+                    # Folders in order from collection-->child folder-->etc.
+                    folder_ids = [i['object']['_id'] for i in u_folder_rootpath]
+
+                    if any([i['object']['_modelType']=='collection' for i in u_folder_rootpath]):
+                        base_model = 'collection'
+                    else:
+                        base_model = 'user'
+
+                    if folder_ids[-1]==folder_info['_id']:
+                        child_folder_path = f'/{base_model}/'+'/'.join([i['object']['name'] if i['object']['_modelType'] in ['folder','collection'] else i['object']['login'] for i in u_folder_rootpath]+[u_folder_info['name']])
+                    else:
+                        # Folder that is immediate child of current folder:
+                        child_folder_idx = folder_ids.index(folder_info['_id'])
+                        child_folder_path = f'/{base_model}/'+'/'.join([i['object']['name'] if i['object']['_modelType'] in ['folder','collection'] else i['object']['login'] for i in u_folder_rootpath[:child_folder_idx+2]])
+
+
+                    child_folder_path_info = self.handler.get_path_info(
+                        path = child_folder_path
+                    )
+                    if not child_folder_path_info['_id'] in folders_in_folder:
+                        folders_in_folder.append(child_folder_path_info['_id'])
+                        
+                        # Adding folder to list if the number of items is above zero or show_empty is True
+                        folder_folders.append({
+                            'Name': child_folder_path_info['name'],
+                            'Folder ID': child_folder_path_info['_id'],
+                            'Number of Folders': child_folder_path_info['nFolders'],
+                            'Number of Slides': child_folder_path_info['nItems'],
+                            'Last Updated': child_folder_path_info['updated']
+                        } | child_folder_path_info['meta'])
+
+                elif u==folder_info['_id']:
+                    # This means that there are some slides that are direct children (not in a sub-folder) in this folder. 
+                    # This adds them all at once
+                    for i in all_folder_slides:
+                        if i['folderId']==folder_info['_id']:
+                            folder_slides.append(
+                                {
+                                    'Slide Name': i['name'],
+                                    'Slide ID': i['_id'],
+                                    'Last Updated':i['updated']
+                                } | {k:v for k,v in i['meta'].items() if type(v)==str}
+                            )
+
+        else:
+            
+            user_folders = ['Private','Public']
+            for u_f in user_folders:
+                user_folder_info = self.handler.get_path_info(
+                    path = f'/user/{folder_info["login"]}/{u_f}'
+                )
+
+                folder_folders.append({
+                    'Name': user_folder_info['name'],
+                    'Folder ID': user_folder_info['_id'],
+                    'Number of Folders': user_folder_info['nFolders'],
+                    'Number of Slides': user_folder_info['nItems'],
+                    'Last Updated': user_folder_info['updated']
+                })
+
+        if show_empty:
+            # This is how you get all the empty folders within a folder (does not get child empty folders)
+            empty_folders = self.handler.get_folder_folders(
+                folder_id = folder_info['_id'],
+                folder_type = folder_info['_modelType']
+            )
+            
+            for f in empty_folders:
+                if not f['_id'] in folders_in_folder and not f['_id'] in unique_folders:
+                    folder_info = self.handler.gc.get(f'/folder/{f["_id"]}/details')
+                    folder_folders.append(
+                        {
+                            'Name': f['name'],
+                            'Folder ID': f['_id'],
+                            'Number of Folders': folder_info['nFolders'],
+                            'Number of Slides': folder_info['nItems'],
+                            'Last Updated': f['updated']
+                        }
+                    )
+
+
+        return folder_slides, folder_folders
+
+    def gen_collections_dataframe(self):
+        """Generating dataframe containing current collections
+
+        :return: Dataframe with each Collection
+        :rtype: pd.DataFrame
+        """
+        collections_info = []
+        collections = self.handler.get_collections()
+        for c in collections:
+            folder_count = self.handler.get_path_info(path = f'/collection/{c["name"]}')
+            collections_info.append({
+                'Name': c['name'],
+                'ID': c['_id'],
+                'Number of Folders': folder_count['nFolders'],
+                'Last Updated': folder_count['updated']
+            } | c['meta'])
+            
+        collections_df = pd.DataFrame.from_records(collections_info)
+
+        return collections_df
+
+    def extract_path_parts(self, current_parts:Union[list,dict], search_key: list = ['props','children'])->tuple:
+        """Recursively extract pieces of folder paths stored as clickable components.
+
+        :param current_parts: list or dictionary containing html.A or dbc.Stack of html.A components.
+        :type current_parts: Union[list,dict]
+        :param search_key: Property keys to search for in nested dicts, defaults to ['props','children']
+        :type search_key: list, optional
+        :return: Tuple containing all the parts of the folder path
+        :rtype: tuple
+        """
+        path_pieces = ()
+        if type(current_parts)==list:
+            for c in current_parts:
+                if type(c)==dict:
+                    for key,value in c.items():
+                        if key in search_key:
+                            if type(value)==str:
+                                path_pieces += (value,)
+                            elif type(value) in [list,dict]:
+                                path_pieces += self.extract_path_parts(value)
+                elif type(c)==list:
+                    path_pieces += self.extract_path_parts(c)
+        elif type(current_parts)==dict:
+            for key,value in current_parts.items():
+                if key in search_key:
+                    if type(value)==str:
+                        path_pieces += (value,)
+                    elif type(value) in [list,dict]:
+                        path_pieces += self.extract_path_parts(value)
+
+        return path_pieces
+
+    def get_clicked_part(self, current_parts: Union[list,dict])->list:
+        """Get the "n_clicks" value for components which have "id". If they have "id" but not "n_clicks", assign 0
+
+        :param current_parts: Either a list or dictionary containing components
+        :type current_parts: Union[list,dict]
+        :return: List of values corresponding to "n_clicks" 
+        :rtype: list
+        """
+        
+        n_clicks_list = []
+        if type(current_parts)==list:
+            for c in current_parts:
+                if type(c)==dict:
+                    if 'id' in list(c.keys()):
+                        if 'n_clicks' in list(c.keys()):
+                            n_clicks_list.append(c['n_clicks'])
+                        else:
+                            n_clicks_list.append(0)
+                    else:
+                        for key,value in c.items():
+                            if key=='props':
+                                n_clicks_list += self.get_clicked_part(value)
+                            elif key=='n_clicks':
+                                n_clicks_list.append(value)
+                elif type(c)==list:
+                    n_clicks_list += self.get_clicked_part(c)
+        elif type(current_parts)==dict:
+            if 'id' in list(current_parts.keys()):
+                if 'n_clicks' in list(current_parts.keys()):
+                    n_clicks_list.append(current_parts['n_clicks'])
+                else:
+                    n_clicks_list.append(0)
+            else:
+                for key,value in current_parts.items():
+                    if type(value)==dict:
+                        if key=='props':
+                            n_clicks_list += self.get_clicked_part(value)
+                        elif key=='n_clicks':
+                            n_clicks_list.append(value)
+                    elif type(value)==list:
+                        n_clicks_list += self.get_clicked_part(value)
+
+        return n_clicks_list
+
+    def populate_folder_div(self, collection_clicked, user_clicked, folder_table_rows, folder_crumb, back_clicked, folder_table_data, folder_crumb_parent,session_data):
+        """Generate the collection/user folder div.
+
+        :param collection_clicked: Whether "Collection" was clicked
+        :type collection_clicked: list
+        :param user_clicked: Whether "User" was clicked
+        :type user_clicked: list
+        :param folder_table_rows: Which rows in the folder table were clicked (all set to multi_row=False).
+        :type folder_table_rows: list
+        :param folder_crumb: Whether a part of the file path was clicked.
+        :type folder_crumb: list
+        :param back_clicked: Whether the back arrow as clicked.
+        :type back_clicked: list
+        :param folder_table_data: The current row data in the folder table.
+        :type folder_table_data: list
+        :param folder_crumb_parent: The parent container of all the folder path parts.
+        :type folder_crumb_parent: list
+        :param session_data: Current visualization session data
+        :type session_data: list
+        """
+
+        path_parts = list(self.extract_path_parts(get_pattern_matching_value(folder_crumb_parent)))
+        session_data = json.loads(session_data)
+        folder_table_rows = get_pattern_matching_value(folder_table_rows)
+        folder_table_data = get_pattern_matching_value(folder_table_data)
+
+        if 'dsa-uploader-collection-button' in ctx.triggered_id['type']:
+            
+            if not any([i['value'] for i in ctx.triggered]):
+                raise exceptions.PreventUpdate
+
+            collection_df = self.gen_collections_dataframe()
+            folder_table_div = html.Div([
+                html.Div(
+                    children = self.make_selectable_dash_table(
+                        dataframe = collection_df,
+                        id = {'type': f'{self.component_prefix}-dsa-uploader-folder-table','index': 0},
+                        multi_row = False,
+                        selected_rows = []
+                    ),
+                    id = {'type': f'{self.component_prefix}-dsa-uploader-folder-div','index': 0}
+                )
+            ])
+
+            path_parts = ['/collection/']
+        
+        elif 'dsa-uploader-user-folder-button' in ctx.triggered_id['type']:
+            if not any([i['value'] for i in ctx.triggered]):
+                raise exceptions.PreventUpdate
+            
+            user_folder_df = pd.DataFrame.from_records([
+                {
+                    'Name': i
+                }
+                for i in ['Private','Public']
+            ])
+            folder_table_div = html.Div([
+                html.Div(
+                    children = self.make_selectable_dash_table(
+                        dataframe=user_folder_df,
+                        id = {'type': f'{self.component_prefix}-dsa-uploader-folder-table','index': 0},
+                        multi_row = False,
+                        selected_rows = []
+                    ),
+                    id = {'type': f'{self.component_prefix}-dsa-uploader-folder-div','index': 0}
+                )
+            ])
+
+            path_parts = ['/user/',f'{session_data["current_user"]["login"]}/']
+
+        elif 'dsa-uploader-folder-table' in ctx.triggered_id['type']:
+            
+            if not any([i['value'] for i in ctx.triggered]):
+                raise exceptions.PreventUpdate
+            
+            path_parts = path_parts+[folder_table_data[folder_table_rows[0]]['Name']+'/']
+
+            folder_info = self.handler.get_path_info(
+                    path = ''.join(path_parts)[:-1]
+                )
+
+            # Don't need to know the slides in that folder
+            _, folder_folders = self.organize_folder_contents(
+                folder_info=folder_info
+            )
+
+            if len(folder_folders)>0:
+                folder_table_div = html.Div([
+                    html.Div(
+                        children = self.make_selectable_dash_table(
+                            dataframe = pd.DataFrame.from_records(folder_folders),
+                            id = {'type': f'{self.component_prefix}-dsa-uploader-folder-table','index': 0},
+                            multi_row = False,
+                            selected_rows=[]
+                        ),
+                        id = {'type': f'{self.component_prefix}-dsa-uploader-folder-div','index': 0}
+                    ),
+                    html.Hr(),
+                        dbc.Stack([
+                            dbc.Button(
+                                'Create New Folder',
+                                className = 'd-grid col-6 mx-auto',
+                                color = 'primary',
+                                n_clicks = 0,
+                                id = {'type': f'{self.component_prefix}-dsa-uploader-new-folder-button','index': 0}
+                            ),
+                            dbc.Button(
+                                'Upload to this Folder',
+                                className = 'd-grid col-6 mx-auto',
+                                color = 'success',
+                                n_clicks = 0,
+                                id = {'type': f'{self.component_prefix}-dsa-uploader-select-folder','index': 0}
+                            )
+                        ],direction='horizontal',gap = 1)
+                ])
+            else:
+                folder_table_div = html.Div([
+                    html.Div(
+                        children = dbc.Alert('This folder contains no more folders',color='warning'),
+                        id = {'type': f'{self.component_prefix}-dsa-uploader-folder-div','index': 0}
+                    ),
+                    html.Hr(),
+                        dbc.Stack([
+                            dbc.Button(
+                                'Create New Folder',
+                                className = 'd-grid col-6 mx-auto',
+                                color = 'primary',
+                                n_clicks = 0,
+                                id = {'type': f'{self.component_prefix}-dsa-uploader-new-folder-button','index': 0}
+                            ),
+                            dbc.Button(
+                                'Upload to this Folder',
+                                className = 'd-grid col-6 mx-auto',
+                                color = 'success',
+                                n_clicks = 0,
+                                id = {'type': f'{self.component_prefix}-dsa-uploader-select-folder','index': 0}
+                            )
+                        ],direction='horizontal',gap = 1)
+                ])
+        
+        elif 'dsa-uploader-folder-crumb' in ctx.triggered_id['type']:
+
+            n_clicks = self.get_clicked_part(folder_crumb_parent)
+            n_click_idx = np.argmax(n_clicks)
+
+            if sum(n_clicks)==0:
+                raise exceptions.PreventUpdate
+
+            if n_click_idx==len(path_parts)-1:
+                folder_table_div = html.Div([
+                    html.Div(
+                        children = self.make_selectable_dash_table(
+                            dataframe = pd.DataFrame.from_records(folder_table_data),
+                            id = {'type': f'{self.component_prefix}-dsa-uploader-folder-table','index': 0},
+                            multi_row = False,
+                            selected_rows = []
+                        ),
+                        id = {'type': f'{self.component_prefix}-dsa-uploader-folder-div','index': 0}
+                    ) if not folder_table_data is None else 
+                    html.Div(
+                        children = dbc.Alert('This folder contains no more folders',color='warning'),
+                        id = {'type': f'{self.component_prefix}-dsa-uploader-folder-div','index': 0}
+                    ),
+                    html.Hr(),
+                        dbc.Stack([
+                            dbc.Button(
+                                'Create New Folder',
+                                className = 'd-grid col-6 mx-auto',
+                                color = 'primary',
+                                n_clicks = 0,
+                                id = {'type': f'{self.component_prefix}-dsa-uploader-new-folder-button','index': 0}
+                            ),
+                            dbc.Button(
+                                'Upload to this Folder',
+                                className = 'd-grid col-6 mx-auto',
+                                color = 'success',
+                                n_clicks = 0,
+                                id = {'type': f'{self.component_prefix}-dsa-uploader-select-folder','index': 0}
+                            )
+                        ],direction='horizontal',gap = 1)
+                ])
+
+                path_parts = path_parts[:-1]
+
+            elif n_click_idx>0:
+
+                path_parts = path_parts[:n_click_idx+1]
+                folder_info = self.handler.get_path_info(
+                    path = ''.join(path_parts)[:-1]
+                )
+
+                if not path_parts==['/user/',session_data['current_user']['login']+'/']:
+                    # Don't need to know the slides in that folder
+                    _, folder_folders = self.organize_folder_contents(
+                        folder_info=folder_info
+                    )
+                else:
+                    folder_folders = [
+                        {
+                            'Name': i
+                        }
+                        for i in ['Private','Public']
+                    ]
+
+
+                if len(folder_folders)>0:
+                    folder_table_div = html.Div([
+                        html.Div(
+                            children = self.make_selectable_dash_table(
+                                dataframe = pd.DataFrame.from_records(folder_folders),
+                                id = {'type': f'{self.component_prefix}-dsa-uploader-folder-table','index': 0},
+                                multi_row = False,
+                                selected_rows=[]
+                            ),
+                            id = {'type': f'{self.component_prefix}-dsa-uploader-folder-div','index': 0}
+                        ),
+                        html.Hr(),
+                        dbc.Stack([
+                            dbc.Button(
+                                'Create New Folder',
+                                className = 'd-grid col-6 mx-auto',
+                                color = 'primary',
+                                n_clicks = 0,
+                                id = {'type': f'{self.component_prefix}-dsa-uploader-new-folder-button','index': 0}
+                            ),
+                            dbc.Button(
+                                'Upload to this Folder',
+                                className = 'd-grid col-6 mx-auto',
+                                color = 'success',
+                                n_clicks = 0,
+                                id = {'type': f'{self.component_prefix}-dsa-uploader-select-folder','index': 0}
+                            )
+                        ],direction='horizontal',gap = 1)
+                    ])
+                else:
+                    folder_table_div = html.Div([
+                        html.Div(
+                            children = dbc.Alert('This folder contains no more folders',color='warning'),
+                            id = {'type':f'{self.component_prefix}-dsa-uploader-folder-div','index': 0}
+                        ),
+                        html.Hr(),
+                        dbc.Stack([
+                            dbc.Button(
+                                'Create New Folder',
+                                className = 'd-grid col-6 mx-auto',
+                                color = 'primary',
+                                n_clicks = 0,
+                                id = {'type': f'{self.component_prefix}-dsa-uploader-new-folder-button','index': 0}
+                            ),
+                            dbc.Button(
+                                'Upload to this Folder',
+                                className = 'd-grid col-6 mx-auto',
+                                color = 'success',
+                                n_clicks = 0,
+                                id = {'type': f'{self.component_prefix}-dsa-uploader-select-folder','index': 0}
+                            )
+                        ],direction='horizontal',gap = 1)
+                    ])
+
+            elif n_click_idx==0:
+                path_parts = path_parts[0]
+
+                if path_parts == '/collection/':
+                    folder_folders = self.gen_collections_dataframe().to_dict('records')
+                elif path_parts =='/user/':
+                    folder_folders = [
+                        {
+                            'Name': i['login']
+                        }
+                        for i in self.handler.gc.get(f'/user?token={session_data["current_user"]["token"]}')
+                    ]
+
+                if len(folder_folders)>0:
+                    folder_table_div = html.Div([
+                        html.Div(
+                            children = self.make_selectable_dash_table(
+                                dataframe = pd.DataFrame.from_records(folder_folders),
+                                id = {'type': f'{self.component_prefix}-dsa-uploader-folder-table','index': 0},
+                                multi_row = False,
+                                selected_rows=[]
+                            ),
+                            id = {'type': f'{self.component_prefix}-dsa-uploader-folder-div','index': 0}
+                        ),
+                        html.Hr(),
+                        dbc.Stack([
+                            dbc.Button(
+                                'Create New Folder',
+                                className = 'd-grid col-6 mx-auto',
+                                color = 'primary',
+                                n_clicks = 0,
+                                id = {'type': f'{self.component_prefix}-dsa-uploader-new-folder-button','index': 0}
+                            ),
+                            dbc.Button(
+                                'Upload to this Folder',
+                                className = 'd-grid col-6 mx-auto',
+                                color = 'success',
+                                n_clicks = 0,
+                                id = {'type': f'{self.component_prefix}-dsa-uploader-select-folder','index': 0}
+                            )
+                        ],direction='horizontal',gap = 1)
+                    ])
+                else:
+                    folder_table_div = html.Div([
+                        html.Div(
+                            children = dbc.Alert('This folder contains no more folders',color='warning'),
+                            id = {'type': f'{self.component_prefix}-dsa-uploader-folder-div','index': 0}
+                        ),
+                        html.Hr(),
+                        dbc.Stack([
+                            dbc.Button(
+                                'Create New Folder',
+                                className = 'd-grid col-6 mx-auto',
+                                color = 'primary',
+                                n_clicks = 0,
+                                id = {'type': f'{self.component_prefix}-dsa-uploader-new-folder-button','index': 0}
+                            ),
+                            dbc.Button(
+                                'Upload to this Folder',
+                                className = 'd-grid col-6 mx-auto',
+                                color = 'success',
+                                n_clicks = 0,
+                                id = {'type': f'{self.component_prefix}-dsa-uploader-select-folder','index': 0}
+                            )
+                        ],direction='horizontal',gap = 1)
+                    ])
+
+        elif 'dsa-uploader-folder-back-icon' in ctx.triggered_id['type']:
+
+            collection_or_user_div_children = [
+                html.Div(
+                    id = {'type': f'{self.component_prefix}-dsa-uploader-folder-nav-parent','index': 0},
+                    children = []
+                ),
+                dbc.Stack([
+                    dbc.Button(
+                        'Collection',
+                        n_clicks = 0,
+                        className = 'd-grid col-6 mx-auto',
+                        color = 'primary',
+                        id = {'type': f'{self.component_prefix}-dsa-uploader-collection-button','index': 0}
+                    ),
+                    dbc.Button(
+                        'User Folder',
+                        n_clicks = 0,
+                        className = 'd-grid col-6 mx-auto',
+                        color = 'secondary',
+                        id = {'type': f'{self.component_prefix}-dsa-uploader-user-folder-button','index': 0}
+                    )
+                ],direction = 'horizontal',gap = 3)
+            ]
+
+            return [collection_or_user_div_children], [html.Div()], [html.Div()]
+
+        new_crumbs = []
+        for i in path_parts:
+            new_crumbs.append(
+                html.A(
+                    i,
+                    id = {'type': f'{self.component_prefix}-dsa-uploader-folder-crumb','index': 0},
+                    style = {'color': 'rgb(0,0,255)'}
+                )
+            )
+
+        collection_or_user_div_children = html.Div([
+            html.A(
+                children = dbc.Stack([
+                    html.P(
+                        html.I(
+                            className = 'fa-solid fa-arrow-left',
+                            style = {'marginRight': '2px'}
+                        )
+                    ),
+                    html.P(
+                        'Back'
+                    )
+                ],direction = 'horizontal'),
+                n_clicks = 0,
+                id = {'type': f'{self.component_prefix}-dsa-uploader-folder-back-icon','index': 0}
+            ),
+            html.H5(
+                children = [
+                    dbc.Stack(new_crumbs,direction='horizontal',gap=1)
+                ],
+                id = {'type': f'{self.component_prefix}-dsa-uploader-folder-nav-parent','index': 0},
+                style = {'textTransform': 'none','display': 'inline'}
+            ),
+            html.Hr(),
+            folder_table_div
+        ])
+
+        # Clearing the new folder div
+        new_folder_div = html.Div()
+
+        return [collection_or_user_div_children], [new_crumbs], [new_folder_div]
+    
+    def populate_new_folder(self, create_clicked, submit_clicked, cancel_clicked, new_folder_name, parent_path, session_data):
+        """Callback for creating a new folder at a specific location.
+
+        :param create_clicked: Whether Create Folder was clicked
+        :type create_clicked: list
+        :param submit_clicked: Whether Submit folder was clicked
+        :type submit_clicked: list 
+        :param cancel_clicked: Whether Cancel was clicked
+        :type cancel_clicked: list                 
+        :param new_folder_name: Name of new folder
+        :type new_folder_name: list
+        :param parent_path: Parent of folder path parts
+        :type parent_path: list
+        :param session_data: Current Visualization Session data
+        :type session_data: list
+        """
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        session_data = json.loads(session_data)
+
+        if 'dsa-uploader-new-folder-button' in ctx.triggered_id['type']:
+
+            folder_table_div = no_update
+            new_path_parts = no_update
+            new_folder_disable = True
+
+            new_folder_div = html.Div([
+                dbc.InputGroup([
+                    dbc.InputGroupText(
+                        'Folder Name: '
+                    ),
+                    dbc.Input(
+                        id = {'type': f'{self.component_prefix}-dsa-uploader-new-folder-input','index': 0},
+                        placeholder = 'fusion-tools Upload',
+                        type = 'text',
+                        required = True,
+                        value = [],
+                        maxLength = 1000,
+                    ),
+                    dbc.Button(
+                        'Create Folder!',
+                        color = 'primary',
+                        n_clicks = 0,
+                        id = {'type': f'{self.component_prefix}-dsa-uploader-new-folder-submit-button','index': 0}
+                    ),
+                    dbc.Button(
+                        'Cancel',
+                        color = 'danger',
+                        n_clicks = 0,
+                        id = {'type': f'{self.component_prefix}-dsa-uploader-new-folder-cancel-button','index': 0}
+                    )
+                ])
+            ],style = {'marginTop':'10px'})
+
+            error_div = []
+
+        elif 'dsa-uploader-new-folder-submit-button' in ctx.triggered_id['type']:
+
+            folder_path = list(self.extract_path_parts(get_pattern_matching_value(parent_path)))
+            folder_name = get_pattern_matching_value(new_folder_name)
+
+            try:
+                new_folder_info = self.handler.create_user_folder(
+                    parent_path = ''.join(folder_path)[:-1],
+                    folder_name = folder_name,
+                    user_token=session_data['current_user']['token']
+                )
+            except Exception as e:
+                print('Some error encountered in creating the folder')
+                print(f'Status Code: {e.status_code}')
+                print(e.json())
+                new_folder_info = {'ok':False}
+                error_div = dbc.Alert(f'Error creating folder at: {"".join(folder_path)+folder_name}',color='danger')
+
+            if new_folder_info.ok and new_folder_info.status_code==200:
+                error_div = dbc.Alert(f'Success!',color = 'success')
+                new_folder_disable = False
+
+                new_path_parts = []
+                for i in folder_path+[folder_name]:
+                    new_path_parts.append(
+                        html.A(
+                            i,
+                            id = {'type': f'{self.component_prefix}-dsa-uploader-folder-crumb','index': 0},
+                            style = {'color': 'rgb(0,0,255)'}
+                        )
+                    )
+
+                new_path_parts = dbc.Stack(new_path_parts,direction='horizontal',gap=1)
+
+                new_folder_div = html.Div([
+                    dbc.InputGroup([
+                        dbc.InputGroupText(
+                            'Folder Name: '
+                        ),
+                        dbc.Input(
+                            id = {'type': f'{self.component_prefix}-dsa-uploader-new-folder-input','index': 0},
+                            placeholder = 'fusion-tools Upload',
+                            type = 'text',
+                            required = True,
+                            value = folder_name,
+                            maxLength = 1000,
+                            disabled=True
+                        ),
+                        dbc.Button(
+                            'Create Folder!',
+                            color = 'success',
+                            disabled = True,
+                            n_clicks = 0,
+                            id = {'type': f'{self.component_prefix}-dsa-uploader-new-folder-submit-button','index': 0}
+                        ),
+                        dbc.Button(
+                            'Cancel',
+                            color = 'danger',
+                            disabled = True,
+                            n_clicks = 0,
+                            id = {'type': f'{self.component_prefix}-dsa-uploader-new-folder-cancel-button','index': 0}
+                        )
+                    ])
+                ],style = {'marginTop':'10px'})
+
+                folder_table_div = html.Div([
+                    dbc.Alert('This folder contains no more folders',color = 'warning')
+                ])
+
+            else:
+                new_path_parts = no_update
+                new_folder_div = no_update
+                folder_table_div = no_update
+                new_folder_disable = True
+
+                error_div = dbc.Alert(f'Error creating folder at: {"".join(folder_path)+folder_name}',color='danger')
+
+        elif 'dsa-uploader-new-folder-cancel-button' in ctx.triggered_id['type']:
+            new_folder_div = html.Div()
+            error_div = []
+            folder_table_div = no_update
+            new_path_parts = no_update
+            new_folder_disable = False
+
+
+        return [new_folder_div], [error_div], [folder_table_div], [new_path_parts], [new_folder_disable]
+
+    def populate_upload_type(self, select_clicked):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        upload_div_contents = html.Div([
+            dbc.Row([
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardHeader('Available Upload Types'),
+                        dbc.CardBody([
+                            html.Div([
+                                html.H6('Different data types require different sets and types of files in order to have sufficient information for visualization and analysis'),
+                                html.B(),
+                                html.H5('Select the type of data you would like to upload from the menu below'),
+                                html.Hr(),
+                                dcc.Dropdown(
+                                    options = [
+                                        {
+                                            'label': i.name, 'value': i.name
+                                        }
+                                        for i in self.dsa_upload_types
+                                    ],
+                                    value = [],
+                                    placeholder='Selected Upload Type',
+                                    id = {'type': f'{self.component_prefix}-dsa-uploader-upload-type-drop','index': 0}
+                                ),
+                                html.B(),
+                                html.Div(
+                                    id = {'type': f'{self.component_prefix}-dsa-uploader-upload-type-description-div','index': 0},
+                                    children = []
+                                )
+                            ],style = {'maxHeight': '40vh','overflow': 'scroll'})
+                        ])
+                    ])
+                ],md = 4),
+                dbc.Col([
+                    dbc.Card([
+                        dbc.CardHeader('Upload Files'),
+                        dbc.CardBody([
+                            html.Div(
+                                id = {'type': f'{self.component_prefix}-dsa-uploader-upload-type-upload-files-div','index': 0},
+                                children = [],
+                                style = {'maxHeight': '40vh','overflow': 'scroll'}
+                            )
+                        ])
+                    ])
+                ])
+            ])
+        ])
+
+        return [upload_div_contents]
+
+    def make_file_uploads(self, upload_type_value):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        raise exceptions.PreventUpdate
+
 
 
 class DSAPluginRunner(Tool):

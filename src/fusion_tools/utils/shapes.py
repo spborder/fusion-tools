@@ -470,7 +470,7 @@ def convert_histomics(json_anns: Union[list,dict]):
                             el['points']
                         ]
                     },
-                    'properties': el['user'] | {'name': f'{ann["annotation"]["name"]}', '_id': uuid.uuid4().hex[:24],'_index': el_idx} if 'user' in el else {'name': f'{ann["annotation"]["name"]}_{el_idx}', '_id': ann['annotation']['_id'], '_index': el_idx}
+                    'properties': el['user'] | {'name': f'{ann["annotation"]["name"]}', '_id': uuid.uuid4().hex[:24],'_index': el_idx} if 'user' in el else {'name': f'{ann["annotation"]["name"]}_{el_idx}', '_id': uuid.uuid4().hex[:24], '_index': el_idx}
                 }
                 for el_idx,el in enumerate(ann['annotation']['elements'])
             ]

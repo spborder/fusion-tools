@@ -216,7 +216,6 @@ class Visualization:
 
     def open_header_component(self, clicked,session_data):
 
-        print(ctx.triggered)
         if clicked:
             session_data = json.loads(session_data)
             header_open = True
@@ -445,7 +444,8 @@ class Visualization:
         vis_data = html.Div(
             dcc.Store(
                 id = 'anchor-vis-store',
-                data = json.dumps(self.vis_store_content)
+                data = json.dumps(self.vis_store_content),
+                storage_type = 'session'
             )   
         )
 
@@ -740,7 +740,7 @@ class Visualization:
                 )
 
             page_components.append(row_components)
-            self.layout_dict['/app/'+page.lower().replace(" ","-")] = page_children
+            self.layout_dict['/app/'+page.replace(" ","-")] = page_children
 
     def gen_header_components(self):
         
