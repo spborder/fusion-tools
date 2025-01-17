@@ -13,22 +13,25 @@ from fusion_tools.handler import DSAHandler, DSAUploadType, SurveyType
 # This is an example upload type for an image and a file
 simple_upload_type = DSAUploadType(
     name = 'Basic Upload',
+    description = 'This is a test upload type consisting of an image and an associated file',
     input_files = [
         {
             'name': 'Image',
             'description': 'This is any image you would like to upload to the DSA instance',
-            'accepted_types': ['.png','.jpg','.svs','.tiff','.tif'],
+            'accepted_types': ['png','jpg','svs','tiff','tif'],
             'preprocessing_plugins': None,
             'main': True,
-            'required': True 
+            'required': True,
+            'annotation': False 
         },
         {
             'name': 'Associated File',
             'description': 'This is any other file type that you want added to the "files" of the uploaded image.',
-            'accepted_types': ['.png','.csv','.xlsx','.txt'],
+            'accepted_types': ['png','csv','xlsx','txt'],
             'preprocessing_plugins': None,
             'main': False,
-            'required': False
+            'required': False,
+            'annotation': False
         }
     ],
     processing_plugins = [
@@ -39,12 +42,12 @@ simple_upload_type = DSAUploadType(
     ],
     required_metadata = [
         {
-            'key': 'Image Type',
+            'name': 'Image Type',
             'values': ['Histology','Fluorescence','Unknown'],
             'required': True
         },
         {
-            'key': 'Image Label',
+            'name': 'Image Label',
             'values': ['Label 1','Label 2','Label 3'],
             'required': False
         },
