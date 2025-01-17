@@ -623,11 +623,11 @@ class DSAHandler(Handler):
         except:
             return False
 
-    def list_plugins(self):
+    def list_plugins(self, user_token:str):
         """List all of the plugins/CLIs available for the current DSA instance
         """
         
-        return self.gc.get('/slicer_cli_web/cli')
+        return self.gc.get(f'/slicer_cli_web/cli?token={user_token}')
 
     def add_plugin(self, image_name:Union[str,list]):
         """Add a plugin/CLI to the current DSA instance by name of the Docker image (requires admin login)
@@ -2674,6 +2674,23 @@ class DSAUploader(DSATool):
             prevent_initial_call = True
         )(self.submit_metadata)
 
+        # Callback for running plugin
+        self.blueprint.callback(
+            [
+                Input({'type': 'dsa-plugin-runner-submit-button','index': MATCH},'n_clicks')
+            ],
+            [
+                State({'type': 'dsa-plugin-runner-input','index': ALL},'value'),
+                State('anchor-vis-store','data')
+            ],
+            [
+                Output({'type': 'dsa-plugin-runner-submit-status-div','index': MATCH},'children'),
+                Output({'type': 'dsa-plugin-runner-submit-button','index': MATCH},'disabled')
+            ]
+        )(self.submit_plugin)
+
+        # Callback for checking that all plugins have been submitted successfully
+
 
     def make_selectable_dash_table(self, dataframe:pd.DataFrame, id:dict, multi_row:bool = True, selected_rows: list = []):
         """Generate a selectable DataTable to add to the layout
@@ -3794,6 +3811,22 @@ class DSAUploader(DSATool):
         any_required = [i for i in selected_upload_type.required_metadata if type(i)==dict]
         any_required = any([i['required'] for i in any_required if 'required' in i])
 
+        # Getting input components for the processing plugins
+        plugin_components = []
+        plugin_handler = DSAPluginRunner(
+            handler = self.handler
+        )
+        for p_idx,p in enumerate(selected_upload_type.processing_plugins):
+            p_component = plugin_handler.load_plugin(
+                plugin_dict = p,
+                session_data = session_data,
+                component_index = p_idx
+            )
+            PrefixIdTransform(prefix = self.component_prefix).transform_layout(p_component)
+
+            plugin_components.append(p_component)
+
+
         processing_plugin_div = html.Div([
             dbc.Row([
                 dbc.Col([
@@ -3824,9 +3857,25 @@ class DSAUploader(DSATool):
                         dbc.CardHeader('Processing Plugins'),
                         dbc.CardBody([
                             html.Div(
-                                json.dumps(i,indent=4)
+                                dmc.Accordion(
+                                    id = {'type': f'{self.component_prefix}-dsa-uploader-plugin-accordion','index': 0},
+                                    children = [
+                                        dmc.AccordionItem([
+                                            dmc.AccordionControl(p_name['name']),
+                                            dmc.AccordionPanel(
+                                                dbc.Stack([
+                                                    p_component,
+                                                    html.Div(
+                                                        id = {'type': f'{self.component_prefix}-dsa-plugin-runner-submit-status-div','index': p_idx},
+                                                        children = []
+                                                    )
+                                                ])
+                                            )
+                                        ],value = f'dsa-uploader-plugin-{p_idx}')
+                                        for p_idx,(p_name,p_component) in enumerate(zip(selected_upload_type.processing_plugins,plugin_components))
+                                    ]
+                                )
                             )
-                            for i in selected_upload_type.processing_plugins
                         ])
                     ])
                 ],md = 6)
@@ -3897,6 +3946,45 @@ class DSAUploader(DSATool):
 
         return [status_div]
 
+    def submit_plugin(self, clicked, docker_select, cli_select, plugin_inputs,session_data):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        plugin_list = self.handler.list_plugins()
+        docker_select = get_pattern_matching_value(docker_select)
+        included_cli = [i for i in plugin_list if i['image']==docker_select]
+
+        cli_select = get_pattern_matching_value(cli_select)
+        selected_plugin = [i for i in included_cli if i['name']==cli_select][0]
+
+        session_data = json.loads(session_data)
+
+        plugin_cli_dict = self.get_executable_dict(selected_plugin,session_data)
+        plugin_input_infos = []
+        for p in plugin_cli_dict['parameters']:
+            plugin_input_infos.extend(p['input_list'])
+
+        input_dict = {}
+        for input_info, input_value in zip(plugin_input_infos,plugin_inputs):
+            input_dict[input_info['name']] = input_value
+
+        submit_request = self.run_plugin_request(
+            plugin_id = selected_plugin['_id'],
+            session_data=session_data,
+            input_params_dict = input_dict
+        )
+
+        if submit_request.status_code==200:
+            status_div = dbc.Alert('Plugin successfully submitted!',color='success')
+            button_disable = True
+        else:
+            status_div = dbc.Alert(f'Error submitting plugin: {selected_plugin["_id"]}',color = 'danger')
+            button_disable = False
+
+        return status_div, button_disable
+
+
 
 
 class DSAPluginRunner(Tool):
@@ -3906,13 +3994,10 @@ class DSAPluginRunner(Tool):
     :type Tool: None
     """
     def __init__(self,
-                 handler: DSAHandler,
-                 plugin: Union[list,dict] = []):
+                 handler: DSAHandler):
         
+        super().__init__()
         self.handler = handler
-        self.plugin = plugin
-
-        self.plugin_list = self.handler.list_plugins()
         self.parameter_tags = ['integer','float','double','boolean','string','integer-vector','float-vector','double-vector','string-vector',
                         'integer-enumeration','float-enumeration','double-enumeration','string-enumeration','file','directory','image',
                         'geometry','point','pointfile','region','table','transform']
@@ -3935,16 +4020,17 @@ class DSAPluginRunner(Tool):
         
         exe_dict = None
         plugin_cli = None
-        for p in self.plugin_lsit:
+        plugin_list = self.handler.list_plugins(user_token=session_data['current_user']['token'])
+
+        for p in plugin_list:
             if p['image']==plugin_info['image'] and p['name']==plugin_info['name']:
                 plugin_cli = p
                 break
 
         if plugin_cli:
-            plugin_xml_req = self.handler.gc.get(
-                f'slicer_cli_web/cli/{plugin_cli["_id"]}/xml?token={session_data["current_user"]["token"]}'
+            plugin_xml_req = requests.get(
+                self.handler.gc.urlBase+f'slicer_cli_web/cli/{plugin_cli["_id"]}/xml?token={session_data["current_user"]["token"]}'
             )
-
             if plugin_xml_req.status_code==200:
                 plugin_xml = ET.fromstring(plugin_xml_req.content)
                 exe_dict = self.parse_executable(plugin_xml)
@@ -3957,107 +4043,89 @@ class DSAPluginRunner(Tool):
         # 'name' and 'image' are used to identify the CLI
         # 'input_args' is a list of either strings or dictionaries limiting which arguments the user can adjust
 
-        # Getting the CLI
-        plugin_cli = None
-        for p in self.plugin_list:
-            if p['image']==plugin_dict['image'] and p['name']==plugin_dict['name']:
-                plugin_cli = p
-                break
-        
-        # Now have the "_id" for that plugin
-        if plugin_cli:
-            # Getting plugin xml (have to be logged in to get)
-            plugin_xml_req = self.handler.gc.get(
-                f'slicer_cli_web/cli/{plugin_cli["_id"]}/xml?token={session_data["current_user"]["token"]}'
-            )
+        # Getting plugin xml (have to be logged in to get)
+        cli_dict = self.get_executable_dict(plugin_dict,session_data)
+        if cli_dict is None:
+            return dbc.Alert(f'Error loading plugin: {plugin_dict}',color = 'danger')
 
-            if not plugin_xml_req.status_code==200:
-                return dbc.Alert(f'Error grabbing plugin information: {plugin_cli["_id"]}')
+        if 'input_args' in plugin_dict:
+            # Parsing through the provided input_args and pulling them out of the plugin parameters
+            inputs_list = []
+            for in_arg in plugin_dict['input_args']:
+                if type(in_arg)==str:
+                    # Looking for the input with this name and setting default from input (if specified)
+                    exe_input = self.find_executable_input(cli_dict, in_arg)
 
-            plugin_xml = ET.fromstring(plugin_xml_req.content)
-            cli_dict = self.parse_executable(plugin_xml)
+                elif type(in_arg)==dict:
+                    # Looking for the input with in_arg['name'] and setting default from in_arg
+                    exe_input = self.find_executable_input(cli_dict,in_arg['name'])
+                    if 'default' in in_arg:
+                        exe_input['default'] = in_arg['default']
 
-            if 'input_args' in plugin_dict:
-                # Parsing through the provided input_args and pulling them out of the plugin parameters
-                inputs_list = []
-                for in_arg in plugin_dict['input_args']:
-                    if type(in_arg)==str:
-                        # Looking for the input with this name and setting default from input (if specified)
-                        exe_input = self.find_executable_input(cli_dict, in_arg)
-
-                    elif type(in_arg)==dict:
-                        # Looking for the input with in_arg['name'] and setting default from in_arg
-                        exe_input = self.find_executable_input(cli_dict,in_arg['name'])
-                        if 'default' in in_arg:
-                            exe_input['default'] = in_arg['default']
-
-                    else:
-                        raise TypeError
-                    
-                    inputs_list.append(exe_input)
-            else:
-                inputs_list = []
-                for p in cli_dict['parameters']:
-                    inputs_list.extend(p['inputs'])
-
-            # Now creating the interactive component (without component-prefix, (can transform later))
-            plugin_component = html.Div([
-                dbc.Row([
-                    html.H5(html.A(cli_dict['title'],target='_blank',href=cli_dict['documentation']))
-                ]),
-                html.Hr(),
-                dbc.Row([
-                    cli_dict['description']
-                ]),
-                dbc.Row([
-                    dmc.AvatarGroup(
-                        children = [
-                            dmc.Tooltip(
-                                dmc.Avatar(
-                                    ''.join([n[0] for n in author.split() if not n[0] in ['(',')']]),
-                                    size = 'lg',
-                                    radius = 'xl',
-                                    color = f'rgb({np.random.randint(0,255)},{np.random.randint(0,255)},{np.random.randint(0,255)})'
-                                ),
-                                label = author,
-                                position = 'bottom'
-                            )
-                            for author in cli_dict['author'].split(',')
-                        ]
-                    )
-                ]),
-                html.Hr(),
-                html.Div(
-                    dbc.Stack([
-                        self.make_input_component(inp)
-                        for inp in inputs_list
-                        ],
-                        direction='vertical',gap=2
-                    ),
-                    style = {'maxHeight': '80vh','overflow': 'scroll'}
-                ),
-                dbc.Button(
-                    'Submit Plugin',
-                    className = 'd-grid col-12 mx-auto',
-                    color = 'success',
-                    disabled = True,
-                    id = {'type': 'dsa-plugin-runner-submit-button','index': component_index}
-                )
-            ])
-
-            return plugin_component
+                else:
+                    raise TypeError
+                
+                inputs_list.append(exe_input)
         else:
-            return dbc.Alert('Error retrieving plugin',color='danger')
+            inputs_list = []
+            for p in cli_dict['parameters']:
+                inputs_list.extend(p['inputs'])
+
+        # Now creating the interactive component (without component-prefix, (can transform later))
+        plugin_component = html.Div([
+            dbc.Row([
+                html.H5(html.A(cli_dict['title'],target='_blank',href=cli_dict['documentation']))
+            ]),
+            html.Hr(),
+            dbc.Row([
+                cli_dict['description']
+            ]),
+            dbc.Row([
+                dmc.AvatarGroup(
+                    children = [
+                        dmc.Tooltip(
+                            dmc.Avatar(
+                                ''.join([n[0] for n in author.split() if not n[0] in ['(',')']]),
+                                size = 'lg',
+                                radius = 'xl',
+                                color = f'rgb({np.random.randint(0,255)},{np.random.randint(0,255)},{np.random.randint(0,255)})'
+                            ),
+                            label = author,
+                            position = 'bottom'
+                        )
+                        for author in cli_dict['author'].split(',')
+                    ]
+                )
+            ]),
+            html.Hr(),
+            html.Div(
+                dbc.Stack([
+                    self.make_input_component(inp,inp_idx)
+                    for inp_idx,inp in enumerate(inputs_list)
+                    ],
+                    direction='vertical',gap=2
+                ),
+                style = {'maxHeight': '80vh','overflow': 'scroll'}
+            ),
+            dbc.Button(
+                'Submit Plugin',
+                className = 'd-grid col-12 mx-auto',
+                color = 'success',
+                disabled = True,
+                id = {'type': 'dsa-plugin-runner-submit-button','index': component_index}
+            )
+        ])
+
+        return plugin_component
 
     def make_input_component(self, input_dict, input_index):
 
         # Input components will either be an Input, a Dropdown, a Slider, or a region selector (custom)
-        if 'enumeration' in input_dict['tag']:
+        if 'enumeration' in input_dict['type']:
             input_component = html.Div([
                 dbc.Row([
                     dbc.Col([
                         dbc.Row(html.H6(input_dict['label'])),
-                        html.Hr(),
                         dbc.Row(input_dict['description'])
                     ],md=5),
                     dbc.Col([
@@ -4068,43 +4136,44 @@ class DSAPluginRunner(Tool):
                             ],
                             multi = False,
                             value = input_dict['default'] if not input_dict['default'] is None else [],
-                            id = {'type': 'dsa-plugin-runner-input','index': input_index}
+                            id = {'type': 'dsa-plugin-runner-input','index': input_index},
+                            style = {'width': '100%'}
                         )
                     ],md=7)
-                ])
+                ]),
+                html.Hr()
             ])
-        elif input_dict['tag'] in ['region','geometry','point']:
+        elif input_dict['type'] in ['region','geometry','point']:
             input_component = html.Div([
                 dbc.Row([
                     dbc.Col([
                         dbc.Row(html.H6(input_dict['label'])),
-                        html.Hr(),
                         dbc.Row(input_dict['description'])
                     ],md=5),
                     dbc.Col([
                         'This component is still in progress'
                     ],md=7)
-                ])
+                ]),
+                html.Hr()
             ])
-        elif input_dict['tag'] in ['file','directory','image']:
+        elif input_dict['type'] in ['file','directory','image']:
             input_component = html.Div([
                 dbc.Row([
                     dbc.Col([
                         dbc.Row(html.H6(input_dict['label'])),
-                        html.Hr(),
                         dbc.Row(input_dict['description'])
                     ],md=5),
                     dbc.Col([
                         'This component is still in progress'
                     ],md=7)
-                ])
+                ]),
+                html.Hr()
             ])
-        elif input_dict['tag']=='boolean':
+        elif input_dict['type']=='boolean':
             input_component = html.Div([
                 dbc.Row([
                     dbc.Col([
                         dbc.Row(html.H6(input_dict['label'])),
-                        html.Hr(),
                         dbc.Row(input_dict['description'])
                     ],md = 5),
                     dbc.Col([
@@ -4117,28 +4186,30 @@ class DSAPluginRunner(Tool):
                             id = {'type': 'dsa-plugin-runner-input','index': input_index}
                         )
                     ],md=7)
-                ])
+                ]),
+                html.Hr()
             ])
-        elif input_dict['tag'] in ['integer','float','string','double'] or 'vector' in input_dict['tag']:
+        elif input_dict['type'] in ['integer','float','string','double'] or 'vector' in input_dict['type']:
             input_component = html.Div([
                 dbc.Row([
                     dbc.Col([
                         dbc.Row(html.H6(input_dict['label'])),
-                        html.Hr(),
                         dbc.Row(input_dict['description'])
                     ],md=5),
                     dbc.Col([
                         dcc.Input(
-                            type = 'text' if input_dict['tag']=='string' else 'number',
+                            type = 'text' if input_dict['type']=='string' else 'number',
                             value = input_dict['default'] if not input_dict['default'] is None else [],
                             maxLength = 1000,
-                            min = input_dict['constraints']['min'] if 'constraints' in input_dict else [],
-                            max = input_dict['constraints']['max'] if 'constraints' in input_dict else [],
-                            step = input_dict['constraints']['step'] if 'constraints' in input_dict else [],
-                            id = {'type': 'dsa-plugin-runner-input','index': input_index}
+                            min = input_dict['constraints']['min'] if not input_dict['constraints'] is None else [],
+                            max = input_dict['constraints']['max'] if not input_dict['constraints'] is None else [],
+                            #step = input_dict['constraints']['step'] if not input_dict['constraints'] is None else [],
+                            id = {'type': 'dsa-plugin-runner-input','index': input_index},
+                            style = {'width': '100%'}
                         )
                     ],md=7)
-                ])
+                ]),
+                html.Hr()
             ])
 
         return input_component
@@ -4168,9 +4239,9 @@ class DSAPluginRunner(Tool):
             param_dict = {
                 'advanced': param.get('advanced',default=False)
             }
-            if param.find('label'):
+            if param.find('label') is not None:
                 param_dict['label'] = param.find('label').text
-            if param.find('description'):
+            if param.find('description') is not None:
                 param_dict['description'] = param.find('description').text
 
             input_list = []
@@ -4191,12 +4262,12 @@ class DSAPluginRunner(Tool):
                     if 'enumeration' in sub_el.tag:
                         options_list = []
                         for opt in sub_el.iterfind('element'):
-                            options_list.append(opt)
+                            options_list.append(opt.text)
                         
                         input_dict['options'] = options_list
                     else:
                         constraints = sub_el.get('constraints',default=None)
-                        if constraints:
+                        if constraints is not None:
                             # Have to see if the constraints need the "text" attrib
                             constraints_dict = {
                                 'min': constraints.get('min').text,
@@ -4215,6 +4286,8 @@ class DSAPluginRunner(Tool):
 
         executable_dict['parameters'] = parameters_list
 
+        return executable_dict
+
     def run_plugin_request(self, plugin_id, session_data, input_params_dict):
 
         request_output = requests.post(
@@ -4229,6 +4302,8 @@ class DSAPluginRunner(Tool):
 
     def update_layout(self, session_data:dict, use_prefix: bool):
         
+        plugin_list = self.handler.list_plugins(user_token = session_data['current_user']['token'])
+
         layout = html.Div([
             dbc.Card([
                 dbc.CardBody([
@@ -4243,7 +4318,7 @@ class DSAPluginRunner(Tool):
                     dcc.Dropdown(
                         options = [
                             {'label': i['image'], 'value': i['image']}
-                            for i in self.plugin_list
+                            for i in plugin_list
                         ],
                         value = [],
                         multi = False,
@@ -4288,6 +4363,9 @@ class DSAPluginRunner(Tool):
                 Input({'type': 'dsa-plugin-runner-docker-drop','index': ALL},'value')
             ],
             [
+                State('anchor-vis-store','data')
+            ],
+            [
                 Output({'type': 'dsa-plugin-runner-cli-drop','index': ALL},'options')
             ]
         )(self.update_cli_options)
@@ -4322,14 +4400,15 @@ class DSAPluginRunner(Tool):
             ]
         )(self.submit_plugin)
 
-    def update_cli_options(self, docker_select):
+    def update_cli_options(self, docker_select,session_data):
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
         docker_select = get_pattern_matching_value(docker_select)
-
-        included_cli = [i['name'] for i in self.plugin_list if i['image']==docker_select]
+        session_data = json.loads(session_data)
+        plugin_list = self.handler.list_plugins(user_token=session_data['current_user']['token'])
+        included_cli = [i['name'] for i in plugin_list if i['image']==docker_select]
 
         return [included_cli]
     
@@ -4339,9 +4418,9 @@ class DSAPluginRunner(Tool):
             raise exceptions.PreventUpdate
         
         session_data = json.loads(session_data)
-
+        plugin_list = self.handler.list_plugins(user_token = session_data['current_user']['token'])
         docker_select = get_pattern_matching_value(docker_select)
-        included_cli = [i for i in self.plugin_list if i['image']==docker_select]
+        included_cli = [i for i in plugin_list if i['image']==docker_select]
 
         cli_select = get_pattern_matching_value(cli_select)
         selected_plugin = [i for i in included_cli if i['name']==cli_select]
@@ -4365,14 +4444,15 @@ class DSAPluginRunner(Tool):
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
-        
+        session_data = json.loads(session_data)
+        plugin_list = self.handler.list_plugins(user_token = session_data['current_user']['token'])
+
         docker_select = get_pattern_matching_value(docker_select)
-        included_cli = [i for i in self.plugin_list if i['image']==docker_select]
+        included_cli = [i for i in plugin_list if i['image']==docker_select]
 
         cli_select = get_pattern_matching_value(cli_select)
         selected_plugin = [i for i in included_cli if i['name']==cli_select][0]
 
-        session_data = json.loads(session_data)
 
         plugin_cli_dict = self.get_executable_dict(selected_plugin,session_data)
         plugin_input_infos = []

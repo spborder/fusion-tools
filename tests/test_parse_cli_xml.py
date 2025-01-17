@@ -24,7 +24,7 @@ def main():
 
     api_url = 'http://ec2-3-230-122-132.compute-1.amazonaws.com:8080/api/v1/'
     plugin_id = '63e6bc1da00b00eade3047c1'
-    girder_token = 'qgtpJlQ3aWFybk54SDhesc07nXVGCzxA2W98lp9Cu4K0EUYv4WlaQ5dl4yCm8l4z'
+    girder_token = ''
     xml_req = requests.get(
         api_url+f'slicer_cli_web/cli/{plugin_id}/xml?token={girder_token}'
     )
