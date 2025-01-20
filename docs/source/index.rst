@@ -190,6 +190,9 @@ Table of contents
 
 .. toctree::
    :maxdepth: 6
-   :caption: Contents:
 
-   modules
+   fusion_tools
+   fusion_tools.visualization
+   fusion_tools.utils
+   fusion_tools.components
+   
