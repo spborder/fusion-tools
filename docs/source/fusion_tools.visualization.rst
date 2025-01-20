@@ -1,9 +1,6 @@
 fusion\_tools.visualization package
 ===================================
 
-Submodules
-----------
-
 fusion\_tools.visualization.components module
 ---------------------------------------------
 
@@ -19,9 +16,6 @@ fusion\_tools.visualization.vis\_utils module
    :members:
    :undoc-members:
    :show-inheritance:
-
-Module contents
----------------
 
 .. automodule:: fusion_tools.visualization
    :members:

@@ -1,8 +1,6 @@
 fusion\_tools.utils package
 ===========================
 
-Submodules
-----------
 
 fusion\_tools.utils.shapes module
 ---------------------------------
@@ -11,9 +9,6 @@ fusion\_tools.utils.shapes module
    :members:
    :undoc-members:
    :show-inheritance:
-
-Module contents
----------------
 
 .. automodule:: fusion_tools.utils
    :members:
