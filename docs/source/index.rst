@@ -7,7 +7,7 @@
 ==========================
 
 .. image:: ../images/slide-annotations-layout.PNG
-   :width: 400
+   :width: 800
    :alt: fusion-tools layout
 
 What is *fusion-tools*?
@@ -25,14 +25,14 @@ plugins.
 * *Backend Details*
    *Dash*
    ---------------
-   `*Dash* <https://dash.plotly.com/>`_ is a low-code framework for building applications in Python. A minimal example 
+   `Dash <https://dash.plotly.com/>`_ is a low-code framework for building applications in Python. A minimal example 
    of a *Dash* application include a *layout* featuring various organizational, data storage, and interactive components 
    as well as *callbacks* which codify responses to user interaction with specific components.
 
    Basic inputs into a *Dash* *callback* include one or more *Input* and *Output* component properties and can also include 
    one or more *State* component properties.
 
-   An example simple *Dash* application is provided below (curtesy of `the *Dash* website <https://dash.plotly.com/minimal-app>`_):
+   An example simple *Dash* application is provided below (curtesy of `the Dash website <https://dash.plotly.com/minimal-app>`_):
    
    .. code-block:: python
 
@@ -78,8 +78,8 @@ plugins.
          app.run(debug=True)
 
 
-   *fusion-tools* components are written as `*DashBlueprint*<https://www.dash-extensions.com/sections/enrich>`_ 
-   objects. Similar to `Flask Blueprints<https://flask.palletsprojects.com/en/stable/blueprints/>`_, 
+   *fusion-tools* components are written as `DashBlueprint <https://www.dash-extensions.com/sections/enrich>`_ 
+   objects. Similar to `Flask Blueprints <https://flask.palletsprojects.com/en/stable/blueprints/>`_, 
    *DashBlueprint*s enable piecewise construction of full applications by embedding functional components into 
    a single unified layout. 
 
@@ -171,8 +171,8 @@ plugins.
 
    *Digital Slide Archive (DSA)*
    ---------------
-   `*Digital Slide Archive (DSA)*<https://github.com/DigitalSlideArchive/digital_slide_archive>`_ is an open-source 
-   resource for organization of large whole slide images (WSIs) as well as providing an interface (`*HistomicsUI*<https://github.com/DigitalSlideArchive/HistomicsUI>`_)
+   `Digital Slide Archive (DSA) <https://github.com/DigitalSlideArchive/digital_slide_archive>`_ is an open-source 
+   resource for organization of large whole slide images (WSIs) as well as providing an interface (`HistomicsUI <https://github.com/DigitalSlideArchive/HistomicsUI>`_)
    for image annotation and running computational analyses. It provides a RESTful API which enables programmatic 
    access of data that is stored on a given *DSA* instance as well as handling POST, GET, PUT, etc. requests.
 
