@@ -2,6 +2,6 @@ src
 ===
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 6
 
    fusion_tools

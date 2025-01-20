@@ -189,7 +189,7 @@ Table of contents
 ---------------
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 6
    :caption: Contents:
 
    modules
