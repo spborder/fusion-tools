@@ -39,7 +39,6 @@ from fusion_tools.components import Tool
 from fusion_tools.utils.shapes import load_annotations, detect_histomics
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 
-from upload_component import UploadComponent
 
 
 class Handler:
@@ -2685,11 +2684,11 @@ class DSAUploader(DSATool):
             ],
             [
                 Output({'type': 'dsa-plugin-runner-submit-status-div','index': MATCH},'children'),
-                Output({'type': 'dsa-plugin-runner-submit-button','index': MATCH},'disabled')
-            ]
+                Output({'type': 'dsa-plugin-runner-submit-button','index': MATCH},'disabled'),
+                #Output({'type': 'dsa-uploader-all-plugins-run-status','index': ALL},'children')
+            ],
+            prevent_initial_call = True
         )(self.submit_plugin)
-
-        # Callback for checking that all plugins have been submitted successfully
 
 
     def make_selectable_dash_table(self, dataframe:pd.DataFrame, id:dict, multi_row:bool = True, selected_rows: list = []):
@@ -3875,6 +3874,10 @@ class DSAUploader(DSATool):
                                         for p_idx,(p_name,p_component) in enumerate(zip(selected_upload_type.processing_plugins,plugin_components))
                                     ]
                                 )
+                            ),
+                            html.Div(
+                                id = {'type': f'{self.component_prefix}-dsa-uploader-all-plugins-run-status','index': 0},
+                                children = []
                             )
                         ])
                     ])
@@ -3969,6 +3972,8 @@ class DSAUploader(DSATool):
         for input_info, input_value in zip(plugin_input_infos,plugin_inputs):
             input_dict[input_info['name']] = input_value
 
+        print(json.dumps(input_dict,indent=4))
+
         submit_request = self.run_plugin_request(
             plugin_id = selected_plugin['_id'],
             session_data=session_data,
@@ -4055,12 +4060,26 @@ class DSAPluginRunner(Tool):
                 if type(in_arg)==str:
                     # Looking for the input with this name and setting default from input (if specified)
                     exe_input = self.find_executable_input(cli_dict, in_arg)
-
                 elif type(in_arg)==dict:
                     # Looking for the input with in_arg['name'] and setting default from in_arg
                     exe_input = self.find_executable_input(cli_dict,in_arg['name'])
                     if 'default' in in_arg:
-                        exe_input['default'] = in_arg['default']
+                        if type(in_arg['default']) in [int,float,str]:
+                            exe_input['default'] = in_arg['default']
+                        elif type(in_arg['default'])==dict:
+                            # Defining input from uploaded file item/file ID (#TODO: Define input from previous plugin output)
+                            if in_arg['default']['type']=='input_file':
+                                input_file_arg = in_arg['default']['name']
+                                input_file_arg_idx = [i['name'] for i in plugin_dict['input_files']].index(input_file_arg)
+
+                            elif in_arg['default']['type']=='input_annotation':
+                                pass
+
+                            elif in_arg['default']['type']=='output_file':
+                                pass
+
+                            elif in_arg['default']['type']=='output_annotation':
+                                pass
 
                 else:
                     raise TypeError
@@ -4126,7 +4145,7 @@ class DSAPluginRunner(Tool):
                 dbc.Row([
                     dbc.Col([
                         dbc.Row(html.H6(input_dict['label'])),
-                        dbc.Row(input_dict['description'])
+                        dbc.Row(html.P(input_dict['description']))
                     ],md=5),
                     dbc.Col([
                         dcc.Dropdown(
@@ -4148,7 +4167,7 @@ class DSAPluginRunner(Tool):
                 dbc.Row([
                     dbc.Col([
                         dbc.Row(html.H6(input_dict['label'])),
-                        dbc.Row(input_dict['description'])
+                        dbc.Row(html.P(input_dict['description']))
                     ],md=5),
                     dbc.Col([
                         'This component is still in progress'
@@ -4161,7 +4180,7 @@ class DSAPluginRunner(Tool):
                 dbc.Row([
                     dbc.Col([
                         dbc.Row(html.H6(input_dict['label'])),
-                        dbc.Row(input_dict['description'])
+                        dbc.Row(html.P(input_dict['description']))
                     ],md=5),
                     dbc.Col([
                         'This component is still in progress'
@@ -4174,7 +4193,7 @@ class DSAPluginRunner(Tool):
                 dbc.Row([
                     dbc.Col([
                         dbc.Row(html.H6(input_dict['label'])),
-                        dbc.Row(input_dict['description'])
+                        dbc.Row(html.P(input_dict['description']))
                     ],md = 5),
                     dbc.Col([
                         dcc.RadioItems(
@@ -4194,7 +4213,7 @@ class DSAPluginRunner(Tool):
                 dbc.Row([
                     dbc.Col([
                         dbc.Row(html.H6(input_dict['label'])),
-                        dbc.Row(input_dict['description'])
+                        dbc.Row(html.P(input_dict['description']))
                     ],md=5),
                     dbc.Col([
                         dcc.Input(
@@ -4224,6 +4243,9 @@ class DSAPluginRunner(Tool):
                     break
         
         return exe_input
+    
+    def find_upload_resource_id(self, ):
+        pass
 
     def parse_executable(self, exe_xml)->dict:
 
@@ -4367,7 +4389,8 @@ class DSAPluginRunner(Tool):
             ],
             [
                 Output({'type': 'dsa-plugin-runner-cli-drop','index': ALL},'options')
-            ]
+            ],
+            prevent_initial_call = True
         )(self.update_cli_options)
 
         # Callback to load plugin input components from CLI selection
@@ -4381,7 +4404,8 @@ class DSAPluginRunner(Tool):
             ],
             [
                 Output({'type': 'dsa-plugin-runner-plugin-inputs-div','index': ALL},'children')
-            ]
+            ],
+            prevent_initial_call=True
         )(self.populate_plugin_inputs)
 
         # Callback for running plugin
@@ -4397,7 +4421,8 @@ class DSAPluginRunner(Tool):
             ],
             [
                 Output({'type': 'dsa-plugin-runner-submit-status-div','index': ALL},'children')
-            ]
+            ],
+            prevent_initial_call = True
         )(self.submit_plugin)
 
     def update_cli_options(self, docker_select,session_data):

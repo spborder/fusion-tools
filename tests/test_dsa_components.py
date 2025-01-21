@@ -38,6 +38,20 @@ simple_upload_type = DSAUploadType(
         {
             'name': 'NucleiDetection',
             'image': 'dsarchive/histomicstk:latest',
+            'input_args': [
+                {
+                    'name': 'inputImageFile',
+                    'default': {
+                        'type': 'input_file',
+                        'name': 'Image'
+                    },
+                    'disabled': True
+                },
+                'nuclei_annotation_format',
+                'min_nucleus_area',
+                'ignore_border_nuclei',
+                'ImageInversionForm'
+            ]
         }
     ],
     required_metadata = [
