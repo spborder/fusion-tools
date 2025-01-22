@@ -1709,7 +1709,6 @@ class DSAUploader(DSATool):
 
         # Getting the filenames (json.dumps(post_response))
         current_filenames = get_pattern_matching_value(current_filenames)
-        print(current_filenames)
         completed_filenames = []
         for c in current_filenames:
             if not c is None:
@@ -1720,8 +1719,6 @@ class DSAUploader(DSATool):
                 elif type(c)==list:
                     completed_filenames.append(json.loads(c[0]))
 
-        print('----------------------')
-        print(f'completed_filenames: {completed_filenames}')
         upload_file_data['uploaded_files'].extend(completed_filenames)
         input_file_types = [i['fusion_upload_name'] for i in completed_filenames][0]
 
@@ -1752,7 +1749,6 @@ class DSAUploader(DSATool):
             upload_div_children[ctx.triggered_id['index']] = dbc.Alert(f'Success! {completed_filenames[0]["name"]}', color = 'success')
         elif 'n_annotations' in completed_filenames[0]:
             upload_div_children[ctx.triggered_id['index']] = dbc.Alert(f'Success! {completed_filenames[0]["n_annotations"]} Annotations Added!',color = 'success')
-
 
         # Checking if all required uploads are done:
         required_files = [i['name'] for i in selected_upload_type.input_files if i['required']]
@@ -1929,14 +1925,15 @@ class DSAUploader(DSATool):
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
-        plugin_list = self.handler.list_plugins()
+
+        session_data = json.loads(session_data)
+
+        plugin_list = self.handler.list_plugins(session_data['current_user']['token'])
         docker_select = get_pattern_matching_value(docker_select)
         included_cli = [i for i in plugin_list if i['image']==docker_select]
 
         cli_select = get_pattern_matching_value(cli_select)
         selected_plugin = [i for i in included_cli if i['name']==cli_select][0]
-
-        session_data = json.loads(session_data)
 
         plugin_cli_dict = self.get_executable_dict(selected_plugin,session_data)
         plugin_input_infos = []

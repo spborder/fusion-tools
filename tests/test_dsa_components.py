@@ -50,17 +50,17 @@ simple_upload_type = DSAUploadType(
             'image': 'dsarchive/histomicstk:latest',
             'input_args': [
                 {
-                    'name': 'inputImageFile',
+                    'name': 'Input Image',
                     'default': {
                         'type': 'input_file',
                         'name': 'Image'
                     },
                     'disabled': True
                 },
-                'nuclei_annotation_format',
-                'min_nucleus_area',
-                'ignore_border_nuclei',
-                'ImageInversionForm'
+                'Nuclei annotation format',
+                'Minimum Nucleus Area',
+                'Ignore Border Nuclei',
+                'Invert Image'
             ]
         }
     ],

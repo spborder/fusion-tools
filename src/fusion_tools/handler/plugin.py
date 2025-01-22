@@ -101,6 +101,7 @@ class DSAPluginRunner(DSATool):
                         elif type(in_arg['default'])==dict:
                             # Defining input from uploaded file item/file ID (#TODO: Define input from previous plugin output)
                             # This one isn't used in the default DSAPluginRunner but is accessed from DSAUploader
+                            print(uploaded_files_data)
                             if in_arg['default']['type']=='input_file':
                                 input_file_arg = in_arg['default']['name']
                                 input_file_arg_idx = [i['fusion_upload_name'] for i in uploaded_files_data['uploaded_files']].index(input_file_arg)
@@ -185,7 +186,7 @@ class DSAPluginRunner(DSATool):
             input_component = html.Div([
                 dbc.Row([
                     dbc.Col([
-                        dbc.Row(html.H6(input_dict['label'])),
+                        dbc.Row(html.H6(input_dict['name'])),
                         dbc.Row(html.P(input_dict['description']))
                     ],md=5),
                     dbc.Col([
@@ -207,7 +208,7 @@ class DSAPluginRunner(DSATool):
             input_component = html.Div([
                 dbc.Row([
                     dbc.Col([
-                        dbc.Row(html.H6(input_dict['label'])),
+                        dbc.Row(html.H6(input_dict['name'])),
                         dbc.Row(html.P(input_dict['description']))
                     ],md=5),
                     dbc.Col([
@@ -220,7 +221,7 @@ class DSAPluginRunner(DSATool):
             input_component = html.Div([
                 dbc.Row([
                     dbc.Col([
-                        dbc.Row(html.H6(input_dict['label'])),
+                        dbc.Row(html.H6(input_dict['name'])),
                         dbc.Row(html.P(input_dict['description']))
                     ],md=5),
                     dbc.Col([
@@ -233,7 +234,7 @@ class DSAPluginRunner(DSATool):
             input_component = html.Div([
                 dbc.Row([
                     dbc.Col([
-                        dbc.Row(html.H6(input_dict['label'])),
+                        dbc.Row(html.H6(input_dict['name'])),
                         dbc.Row(html.P(input_dict['description']))
                     ],md = 5),
                     dbc.Col([
@@ -253,7 +254,7 @@ class DSAPluginRunner(DSATool):
             input_component = html.Div([
                 dbc.Row([
                     dbc.Col([
-                        dbc.Row(html.H6(input_dict['label'])),
+                        dbc.Row(html.H6(input_dict['name'])),
                         dbc.Row(html.P(input_dict['description']))
                     ],md=5),
                     dbc.Col([
