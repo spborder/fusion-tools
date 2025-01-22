@@ -9,11 +9,10 @@ from typing_extensions import Union
 import dash
 dash._dash_renderer._set_react_version('18.2.0')
 from dash import callback, ctx, ALL, MATCH, exceptions, no_update
-
+import dash_bootstrap_components as dbc
 from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform
 
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
-
 from fusion_tools.handler import DSATool
 
 
@@ -25,7 +24,7 @@ class DSALoginComponent(DSATool):
 
     """
     def __init__(self,
-                 handler: DSAHandler,
+                 handler,
                  default_user: Union[dict,None] = None
                 ):
         self.handler = handler

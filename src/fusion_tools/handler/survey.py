@@ -34,7 +34,6 @@ from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 from fusion_tools.handler import DSATool
 
 
-
 class SurveyType:
     def __init__(self,
                  question_list:list = [],
@@ -63,7 +62,7 @@ class DSASurvey(DSATool):
     :type Tool: None
     """
     def __init__(self,
-                 dsa_handler: DSAHandler,
+                 dsa_handler,
                  survey: SurveyType):
         
         self.dsa_handler = dsa_handler

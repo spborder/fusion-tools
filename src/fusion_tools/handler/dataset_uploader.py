@@ -21,7 +21,7 @@ import dash_uploader as du
 
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 
-from fusion_tools.handler import DSAHandler, DSATool
+from fusion_tools.handler import DSATool
 from fusion_tools.handler.plugin import DSAPluginRunner
 
 # Maximum allowed size of uploads (Mb)
@@ -226,7 +226,7 @@ class DSAUploader(DSATool):
     :type DSATool: None
     """
     def __init__(self,
-                 handler: Union[DSAHandler,list] = [],
+                 handler,
                  dsa_upload_types: Union[DSAUploadType,list] = []):
         
 
@@ -1557,7 +1557,7 @@ class DSAUploader(DSATool):
                     html.H5(f'{f["name"]}, ({",".join(f["accepted_types"])})'),
                     html.Div(
                         self.create_upload_component(
-                            file_info = f | {'parentId': folder_info["_id"]} if f['type']=='item' else f,
+                            file_info = f | {'parentId': folder_info["_id"]} if f['type']=='item' else f | {'parentId': ''},
                             user_info = session_data['current_user'],
                             idx = f_idx
                         ),

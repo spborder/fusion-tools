@@ -32,7 +32,7 @@ class DatasetBuilder(DSATool):
     :type DSATool: None
     """
     def __init__(self,
-                 handler: Union[DSAHandler,list] = [],
+                 handler,
                  include_only: Union[list,None] = None
                 ):
         

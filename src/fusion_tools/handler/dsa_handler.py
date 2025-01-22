@@ -21,14 +21,11 @@ from fusion_tools.utils.shapes import load_annotations, detect_histomics
 from fusion_tools.handler.login import DSALoginComponent
 from fusion_tools.handler.dataset_uploader import DSAUploader
 from fusion_tools.handler.dataset_builder import DatasetBuilder
-
+from fusion_tools.handler import Handler
 
 #TODO: Consider making a function decorator for authentication just to clean up all the 
 # self.gc.setToken and +f'?token={user_token}' lines
 
-
-class Handler:
-    pass
 
 class DSAHandler(Handler):
     """Handler for DSA (digital slide archive) instance
@@ -758,19 +755,6 @@ class DSAHandler(Handler):
         )
 
         return login_component
-
-
-class DSATool(Tool):
-    """A sub-class of Tool specific to DSA components. 
-    The only difference is that these components always update relative to the session data.
-
-    :param Tool: General class for components that perform visualization and analysis of data.
-    :type Tool: None
-    """
-    def __init__(self):
-
-        super().__init__()
-        self.session_update = True
 
 
 

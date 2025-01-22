@@ -7,7 +7,7 @@ sys.path.append('./src/')
 
 from fusion_tools import Visualization
 from fusion_tools.components import SlideMap, OverlayOptions
-from fusion_tools.handler import DSAHandler
+from fusion_tools.handler.dsa_handler import DSAHandler
 from fusion_tools.handler.dataset_uploader import DSAUploadType
 from fusion_tools.handler.survey import SurveyType
 

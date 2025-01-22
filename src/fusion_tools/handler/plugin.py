@@ -23,8 +23,6 @@ from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 
 from fusion_tools.handler import DSATool
 
-
-
 class DSAPluginRunner(DSATool):
     """Handler for DSAPluginRunner component, letting users specify input arguments to plugins to run on connected DSA instance.
 
@@ -32,7 +30,8 @@ class DSAPluginRunner(DSATool):
     :type Tool: None
     """
     def __init__(self,
-                 handler: DSAHandler):
+                 handler: None
+                 ):
         
         super().__init__()
         self.handler = handler
@@ -545,7 +544,7 @@ class DSAPluginProgress(DSATool):
     :type Tool: None
     """
     def __init__(self,
-                 handler: DSAHandler):
+                 handler):
         
         super().__init__()
         self.handler = handler
