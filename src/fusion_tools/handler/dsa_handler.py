@@ -172,6 +172,17 @@ class DSAHandler(Handler):
 
         return boundary_mask
 
+    def get_annotation_names(self, item:str, user_token: Union[str,None]=None):
+
+        if not user_token is None:
+            self.gc.setToken(user_token)
+
+        annotation_info = self.gc.get('/annotation',parameters={'itemId': item})
+
+        annotation_names = [i['annotation']['name'] for i in annotation_info]
+
+        return annotation_names
+
     def query_annotation_count(self, item:Union[str,list], user_token:Union[str,None]=None) -> pd.DataFrame:
         """Get count of structures in an item
 
@@ -241,6 +252,24 @@ class DSAHandler(Handler):
             print(f'path: {path} not found')
             return 'Resource not found'
     
+    def get_file_info(self, fileId:str, user_token: Union[str,None]=None)->dict:
+        """Getting information for a given file (specifically what item it's attached to).
+
+        :param fileId: Girder Id of a file
+        :type fileId: str
+        :param user_token: User session token, defaults to None
+        :type user_token: Union[str,None], optional
+        :return: Information on file
+        :rtype: dict
+        """
+
+        if not user_token is None:
+            self.gc.setToken(user_token)
+
+        file_info = self.gc.get(f'file/{fileId}')
+
+        return file_info
+
     def get_folder_info(self, folder_id:str, user_token:Union[str,None]=None)->dict:
         """Getting folder info from ID
 
@@ -596,7 +625,7 @@ class DSAHandler(Handler):
         
         if all([detect_histomics(a) for a in annotations]):
             self.gc.post(
-                f'/annotation/{item}/item?token={self.user_token}',
+                f'/annotation/item/{item}?token={self.user_token}',
                 data = json.dumps(annotations),
                 headers = {
                     'X-HTTP-Method': 'POST',
@@ -606,7 +635,7 @@ class DSAHandler(Handler):
         else:
             # Default format is GeoJSON (#TODO: Have to verify that lists of GeoJSONs are acceptable)
             self.gc.post(
-                f'/annotation/{item}/item?token={self.user_token}',
+                f'/annotation/item/{item}?token={self.user_token}',
                 data = json.dumps(annotations),
                 headers = {
                     'X-HTTP-Method': 'POST',

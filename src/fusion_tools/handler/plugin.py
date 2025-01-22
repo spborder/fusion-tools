@@ -74,7 +74,7 @@ class DSAPluginRunner(DSATool):
 
         return exe_dict
 
-    def load_plugin(self, plugin_dict, session_data, component_index):
+    def load_plugin(self, plugin_dict, session_data, uploaded_files_data, component_index):
 
         # Each plugin_dict will have 'name', 'image', and 'input_args'
         # 'name' and 'image' are used to identify the CLI
@@ -100,12 +100,21 @@ class DSAPluginRunner(DSATool):
                             exe_input['default'] = in_arg['default']
                         elif type(in_arg['default'])==dict:
                             # Defining input from uploaded file item/file ID (#TODO: Define input from previous plugin output)
+                            # This one isn't used in the default DSAPluginRunner but is accessed from DSAUploader
                             if in_arg['default']['type']=='input_file':
                                 input_file_arg = in_arg['default']['name']
-                                input_file_arg_idx = [i['name'] for i in plugin_dict['input_files']].index(input_file_arg)
+                                input_file_arg_idx = [i['fusion_upload_name'] for i in uploaded_files_data['uploaded_files']].index(input_file_arg)
+                                exe_input['default'] = uploaded_files_data['uploaded_files'][input_file_arg_idx]['name']
 
                             elif in_arg['default']['type']=='input_annotation':
-                                pass
+                                input_annotation_arg = in_arg['default']['name']
+                                input_file_arg_idx = [i['fusion_upload_name'] for i in uploaded_files_data['uploaded_files']].index(input_annotation_arg)
+                                item_id = uploaded_files_data['uploaded_files'][input_file_arg_idx]['parentId']
+                                annotation_names = self.handler.get_annotation_names(
+                                    item = item_id,
+                                    user_token = session_data['current_user']['token']
+                                )
+                                exe_input['default'] = ','.join(annotation_names)
 
                             elif in_arg['default']['type']=='output_file':
                                 pass
@@ -303,7 +312,7 @@ class DSAPluginRunner(DSATool):
                 if sub_el.tag in self.parameter_tags:
                     input_dict = {
                         'type': sub_el.tag,
-                        'label': sub_el.find('label').text,
+                        'name': sub_el.find('label').text,
                         'description': sub_el.find('description').text
                     }
 
@@ -486,6 +495,7 @@ class DSAPluginRunner(DSATool):
             plugin_components = self.load_plugin(
                 plugin_dict = selected_plugin,
                 session_data = session_data,
+                uploaded_files_data=None,
                 component_index = 0
             )
 

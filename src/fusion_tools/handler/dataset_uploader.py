@@ -1,5 +1,8 @@
 """DSAUploader component and UploadType 
 """
+import os
+import time
+import shutil
 
 import json
 import numpy as np
@@ -20,9 +23,12 @@ from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, Pr
 import dash_uploader as du
 
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
+from fusion_tools.utils.shapes import load_annotations
 
 from fusion_tools.handler import DSATool
 from fusion_tools.handler.plugin import DSAPluginRunner
+
+
 
 # Maximum allowed size of uploads (Mb)
 MAX_UPLOAD_SIZE = 1e4
@@ -158,27 +164,29 @@ class DSAUploadHandler:
 
     def post_before(self,req_data):
         # Creating item to upload to
-        print(f'Creating item: {req_data.filename}')
-
         upload_info = json.loads(req_data.upload_id)
 
-        post_response = requests.post(
-            upload_info['api_url']+'file',
-            params = {
-                'token': upload_info['token'],
-                'parentType': 'folder',
-                'parentId': upload_info['folderId'],
-                'name': req_data.filename,
-                'size': req_data.total_size
-            }
-        )
+        if upload_info['fusion_upload_type'] in ['item','file']:
+            print(f'Creating file: {req_data.filename}')
+            post_response = requests.post(
+                upload_info['api_url']+'/file',
+                params = {
+                    'token': upload_info['token'],
+                    'parentType': upload_info['parentType'],
+                    'parentId': upload_info['parentId'],
+                    'name': req_data.filename,
+                    'size': req_data.total_size
+                }
+            )
 
-        self.current_upload = post_response.json()
+            self.current_upload = post_response.json()
+        else:
+            self.current_upload = []
 
     def post_file_chunk(self,api_url,token,parentId,chunk,offset):
 
         post_response = requests.post(
-            api_url+f'file/chunk',
+            api_url+f'/file/chunk',
             params={
                 'token': token,
                 'uploadId': parentId,
@@ -188,6 +196,76 @@ class DSAUploadHandler:
         )
         return post_response.json()
 
+    def remove_file(self,path):
+        os.unlink(path)
+    
+    def save_annotation_chunk(self):
+
+        r = RequestData(request)
+
+        # Getting temporary directory containing chunks
+        tmp_chunk_path = self.upload_folder / r.unique_identifier
+        if not tmp_chunk_path.exists():
+            tmp_chunk_path.mkdir(parents=True)
+
+        chunk_name = f'{r.filename}_{r.chunk_number}'
+        chunk_file = tmp_chunk_path / chunk_name
+
+        # Making a lock file
+        lock_file_path = tmp_chunk_path / f'.lock_{r.chunk_number}'
+
+        with open(lock_file_path,'a'):
+            os.utime(lock_file_path,None)
+
+        # Save the chunk, delete the lock
+        r.chunk_data.save(chunk_file)
+        self.remove_file(lock_file_path)
+
+        # Check if all chunks are present
+        upload_complete = all([os.path.exists(os.path.join(tmp_chunk_path,f'{r.filename}_{i}')) for i in range(1,r.n_chunks_total+1)])
+
+        # Reassembling if the upload is complete
+        if upload_complete:
+            # Wait until all the lock files are removed
+            wait = 0
+            while any([os.path.isfile(os.path.join(tmp_chunk_path,f'.lock_{i}')) for i in range(1,r.n_chunks_total+1)]):
+                wait +=1
+                if wait>=5:
+                    raise Exception(
+                        f"Error uploading files to {tmp_chunk_path}"
+                    )
+                time.sleep(1)
+            
+            target_file_path = os.path.join(self.upload_folder,r.filename)
+            if os.path.exists(target_file_path):
+                # dash-uploader implements a retry() callback for this if it doesn't go through the first time
+                self.remove_file(target_file_path)
+            
+            with open(target_file_path,'ab') as target_file:
+                chunk_paths = [os.path.join(tmp_chunk_path,f'{r.filename}_{i}') for i in range(1,r.n_chunks_total+1)]
+                for p in chunk_paths:
+                    with open(p,'rb') as stored_chunk:
+                        target_file.write(stored_chunk.read())
+            
+            shutil.rmtree(tmp_chunk_path)
+
+    def post_annotations(self, upload_info):
+
+        r = RequestData(request)
+        processed_annotations = load_annotations(os.path.join(self.upload_folder,r.filename))
+        self.remove_file(os.path.join(self.upload_folder,r.filename))
+
+        response = requests.post(
+            upload_info['api_url']+f'/annotation/item/{upload_info["parentId"]}?token={upload_info["token"]}',
+            data = json.dumps(processed_annotations),
+            headers = {
+                'X-HTTP-Method': 'POST',
+                'Content-Type': 'application/json'
+            }
+        )
+
+        return response.json()
+
     def post(self):
 
         r = RequestData(request)
@@ -196,15 +274,29 @@ class DSAUploadHandler:
         if r.chunk_number==1:
             self.post_before(r)
 
-        post_response = self.post_file_chunk(
-            api_url=upload_info['api_url'],
-            token = upload_info['token'],
-            parentId=self.current_upload['_id'],
-            chunk = r.chunk_data.read(),
-            offset = r.chunk_number-1
-        )
+        if upload_info['fusion_upload_type'] in ['item','file']:
+            post_response = self.post_file_chunk(
+                api_url=upload_info['api_url'],
+                token = upload_info['token'],
+                parentId=self.current_upload['_id'],
+                chunk = r.chunk_data.read(),
+                offset = r.chunk_number-1
+            )
+        else:
 
-        return r.filename
+            self.save_annotation_chunk()
+
+            if r.chunk_number==r.n_chunks_total:
+                post_response = self.post_annotations(
+                    upload_info
+                )
+                post_response = {
+                    'n_annotations': post_response
+                }
+            else:
+                post_response = r.filename
+
+        return json.dumps(post_response | upload_info)
 
     def get_before(self):
         pass
@@ -419,31 +511,25 @@ class DSAUploader(DSATool):
             [
                 Output({'type': 'dsa-uploader-upload-type-description-div','index': ALL},'children'),
                 Output({'type': 'dsa-uploader-upload-type-upload-files-div','index': ALL},'children')
-            ]
+            ],
+            prevent_initial_call = True
         )(self.make_file_uploads)
 
-        # Callback for incorrect type of file in upload component
+        # Callback for enabling "Done" button when all required files are uploaded and enabling child uploads of items
         self.blueprint.callback(
             [
-                Input({'type': 'dsa-uploader-file-upload','index': MATCH},'fileTypeFlag')
+                Input({'type': 'dsa-uploader-file-upload','index': ALL},'isCompleted')
             ],
             [
-                Output({'type': 'dsa-uploader-file-upload-status-div','index': MATCH},'children')
-            ]
-        )(self.wrong_file_type)
-
-        # Callback for enabling "Done" button when all required files are uploaded
-        self.blueprint.callback(
-            [
-                Input({'type': 'dsa-uploader-file-upload','index': ALL},'uploadComplete')
+                State({'type': 'dsa-uploader-upload-type-drop','index': ALL},'value'),
+                State({'type': 'dsa-uploader-file-upload','index': ALL},'fileNames'),
+                State('anchor-vis-store','data'),
+                State({'type': 'dsa-uploader-upload-files-store','index': ALL},'data')
             ],
             [
-                State({'type': 'dsa-uploader-upload-type-drop','index': ALL},'value')
-            ],
-            [
-                Output({'type': 'dsa-uploader-file-upload-div','index': ALL},'style'),
-                Output({'type': 'dsa-uploader-file-upload-status-div','index': ALL},'children'),
-                Output({'type': 'dsa-uploader-file-upload-done-button','index': ALL},'disabled')
+                Output({'type': 'dsa-uploader-file-upload-div','index': ALL},'children'),
+                Output({'type': 'dsa-uploader-file-upload-done-button','index': ALL},'disabled'),
+                Output({'type': 'dsa-uploader-upload-files-store','index': ALL},'data')
             ],
             prevent_initial_call = True
         )(self.enable_upload_done)
@@ -456,6 +542,7 @@ class DSAUploader(DSATool):
             [
                 State({'type': 'dsa-uploader-upload-type-drop','index': ALL},'value'),
                 State({'type': 'dsa-uploader-folder-nav-parent','index': ALL},'children'),
+                State({'type':'dsa-uploader-upload-files-store','index': ALL},'data'),
                 State('anchor-vis-store','data')
             ],
             [
@@ -468,6 +555,7 @@ class DSAUploader(DSATool):
         )(self.populate_processing_plugins)
 
         # Callback for checking if required metadata rows are populated
+        #TODO: Submitting metadata depends on if the "item" that the metadata is attached to is uploaded yet
         self.blueprint.callback(
             [
                 Input({'type': 'dsa-uploader-metadata-table','index': ALL},'data')
@@ -477,7 +565,8 @@ class DSAUploader(DSATool):
             ],
             [
                 Output({'type': 'dsa-uploader-metadata-submit-button','index': ALL},'disabled')
-            ]
+            ],
+            prevent_initial_call = True
         )(self.enable_submit_metadata)
 
         # Callback for adding new row to custom metadata table
@@ -490,7 +579,8 @@ class DSAUploader(DSATool):
             ],
             [
                 Output({'type': 'dsa-uploader-metadata-table','index': MATCH},'data')
-            ]
+            ],
+            prevent_initial_call = True
         )(self.add_row_custom_metadata)
 
         # Callback for submitting metadata
@@ -1461,6 +1551,11 @@ class DSAUploader(DSATool):
                     dbc.Card([
                         dbc.CardHeader('Upload Files'),
                         dbc.CardBody([
+                            dcc.Store(
+                                id = {'type': f'{self.component_prefix}-dsa-uploader-upload-files-store','index': 0},
+                                storage_type = 'memory',
+                                data = json.dumps({'uploaded_files': []})
+                            ),
                             html.Div(
                                 id = {'type': f'{self.component_prefix}-dsa-uploader-upload-type-upload-files-div','index': 0},
                                 children = [],
@@ -1511,6 +1606,9 @@ class DSAUploader(DSATool):
         upload_id_dict = {
             'api_url': self.handler.girderApiUrl,
             'token': user_info['token'],
+            'fusion_upload_name': file_info['name'],
+            'fusion_upload_type': file_info['type'],
+            'parentType': file_info['parentType'],
             'parentId': file_info['parentId']
         }
 
@@ -1522,7 +1620,7 @@ class DSAUploader(DSATool):
             cancel_button = True,
             pause_button = True,
             upload_id = json.dumps(upload_id_dict),
-            disabled = file_info['type'] in ['file','annotation']
+            disabled = False
         )
 
         return upload_component
@@ -1554,14 +1652,16 @@ class DSAUploader(DSATool):
         file_uploads = html.Div([
             dbc.Stack([
                 html.Div([
-                    html.H5(f'{f["name"]}, ({",".join(f["accepted_types"])})'),
+                    html.H5(f'{f["name"]}, ({",".join(f["accepted_types"])})',style={'textTransform':'none'}),
                     html.Div(
                         self.create_upload_component(
-                            file_info = f | {'parentId': folder_info["_id"]} if f['type']=='item' else f | {'parentId': ''},
+                            file_info = f | {'parentId': folder_info["_id"],'parentType': 'folder', 'fusion_upload_name': f['name'], 'fusion_upload_type': f['type']},
                             user_info = session_data['current_user'],
                             idx = f_idx
-                        ),
-                        id = {'type': f'{self.component_prefix}-dsa-uploader-file-upload-div','index': f_idx}
+                        ) if f['type']=='item' else 
+                        dbc.Alert(f'This uploaded will be created when: {f["parent"]} is uploaded',color='warning'),
+                        id = {'type': f'{self.component_prefix}-dsa-uploader-file-upload-div','index': f_idx},
+                        style = {'width': '100%'}
                     ),
                     html.Div(
                         id = {'type': f'{self.component_prefix}-dsa-uploader-file-upload-status-div','index': f_idx},
@@ -1591,20 +1691,7 @@ class DSAUploader(DSATool):
 
         return [upload_type_description], [file_uploads]
 
-    def wrong_file_type(self, wrong_file_flag):
-        """Callback triggered if an attempt is made to upload a file that is not in the accepted types list
-
-        :param wrong_file_flag: Wrong file type is triggered
-        :type wrong_file_flag: bool
-        """
-        if not any([i['value'] for i in ctx.triggered]):
-            raise exceptions.PreventUpdate
-        
-        wrong_file_alert = dbc.Alert('Incorrect file type!',color = 'danger')
-
-        return wrong_file_alert
-
-    def enable_upload_done(self, uploads_complete, upload_type):
+    def enable_upload_done(self, uploads_complete, upload_type, current_filenames,session_data,upload_file_data):
         """Enabling the "Done" button when all required uploads are uploaded
 
         :param uploads_complete: Current uploadComplete flags from active UploadComponents
@@ -1615,39 +1702,70 @@ class DSAUploader(DSATool):
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
+        session_data = json.loads(session_data)
+        upload_file_data = json.loads(get_pattern_matching_value(upload_file_data))
         upload_type = get_pattern_matching_value(upload_type)
         selected_upload_type = self.dsa_upload_types[[i.name for i in self.dsa_upload_types].index(upload_type)]
 
-        success_divs = []
-        upload_div_style = []
-        for u in uploads_complete:
-            if u:
-                success_divs.append(
-                    dbc.Alert('Success!',color = 'success')
-                )
-                upload_div_style.append(
-                    {'display': 'none'}
-                )
-            else:
-                success_divs.append(no_update)
-                upload_div_style.append(no_update)
+        # Getting the filenames (json.dumps(post_response))
+        current_filenames = get_pattern_matching_value(current_filenames)
+        print(current_filenames)
+        completed_filenames = []
+        for c in current_filenames:
+            if not c is None:
+                #TODO: "fileNames" is a list of files by default so in theory this could be expanded to accept multiple
+                # uploads to the same container
+                if type(c)==str:
+                    completed_filenames.append(json.loads(c))
+                elif type(c)==list:
+                    completed_filenames.append(json.loads(c[0]))
 
-        required_uploads_done = []
-        for idx,i in enumerate(selected_upload_type.input_files):
-            if i['required']:
-                if uploads_complete[idx]:
-                    required_uploads_done.append(True)
-                else:
-                    required_uploads_done.append(False)
-            else:
-                required_uploads_done.append(True)
+        print('----------------------')
+        print(f'completed_filenames: {completed_filenames}')
+        upload_file_data['uploaded_files'].extend(completed_filenames)
+        input_file_types = [i['fusion_upload_name'] for i in completed_filenames][0]
 
-        if all(required_uploads_done):
-            return upload_div_style,success_divs,[False]
-        else:
-            return upload_div_style,success_divs,[True]
+        completed_upload_file = selected_upload_type.input_files[[i['name'] for i in selected_upload_type.input_files].index(input_file_types)]
+        child_files = [
+            [idx,i] for idx,i in enumerate(selected_upload_type.input_files) if i['parent']==input_file_types
+        ]
+
+        upload_div_children = [no_update]*len(ctx.outputs_list[0])
+        for c in child_files:
+            
+            file_info = {
+                'api_url': self.handler.girderApiUrl,
+                'token': session_data['current_user']['token'],
+                'fusion_upload_name': c[1]['name'],
+                'fusion_upload_type': c[1]['type'],
+                'parentType': 'item',
+                'parentId': completed_filenames[0]['itemId']
+            }
+
+            upload_div_children[c[0]] = self.create_upload_component(
+                file_info = c[1] | file_info,
+                user_info = session_data['current_user'],
+                idx = c[0]
+            )
+
+        if 'name' in completed_filenames[0]:
+            upload_div_children[ctx.triggered_id['index']] = dbc.Alert(f'Success! {completed_filenames[0]["name"]}', color = 'success')
+        elif 'n_annotations' in completed_filenames[0]:
+            upload_div_children[ctx.triggered_id['index']] = dbc.Alert(f'Success! {completed_filenames[0]["n_annotations"]} Annotations Added!',color = 'success')
+
+
+        # Checking if all required uploads are done:
+        required_files = [i['name'] for i in selected_upload_type.input_files if i['required']]
+        uploaded_files = [i['fusion_upload_name'] for i in upload_file_data['uploaded_files']]
         
-    def populate_processing_plugins(self, done_clicked,upload_type,path_parts,session_data):
+        if len(set(required_files).difference(uploaded_files))==0:
+            done_disabled = [False]
+        else:
+            done_disabled = [True]
+
+        return upload_div_children, done_disabled, [json.dumps(upload_file_data)]
+
+    def populate_processing_plugins(self, done_clicked,upload_type,path_parts,upload_files_data, session_data):
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
@@ -1660,6 +1778,7 @@ class DSAUploader(DSATool):
             path = ''.join(path_parts)[:-1]
         )
         session_data = json.loads(session_data)
+        upload_files_data = json.loads(get_pattern_matching_value(upload_files_data))
 
         metadata_table_list = self.gen_metadata_table(selected_upload_type.required_metadata)
         any_required = [i for i in selected_upload_type.required_metadata if type(i)==dict]
@@ -1674,6 +1793,7 @@ class DSAUploader(DSATool):
             p_component = plugin_handler.load_plugin(
                 plugin_dict = p,
                 session_data = session_data,
+                uploaded_files_data= upload_files_data,
                 component_index = p_idx
             )
             PrefixIdTransform(prefix = self.component_prefix).transform_layout(p_component)

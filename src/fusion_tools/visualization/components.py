@@ -610,6 +610,8 @@ class Visualization:
 
         elif type(self.components)==dict:
             for page in self.components:
+                n_cols = 1
+                n_tabs = 0
                 n_rows = len(self.components[page])
                 if any([type(i)==list for i in self.components[page]]):
                     n_cols = max([len(i) for i in self.components[page] if type(i)==list])
@@ -745,14 +747,25 @@ class Visualization:
             page_components.append(row_components)
             self.layout_dict['/app/'+page.replace(" ","-")] = page_children
 
-        if any(['DSAUploader' in i for i in page_components]):
+        upload_check = self.check_for_uploader(page_components)
+        if upload_check:
             du.configure_upload(
                 self.viewer_app, 
                 Path(self.assets_folder+'/tmp/uploads'),
-                upload_appi = '/upload',
+                upload_api = '/upload',
                 http_request_handler = DSAUploadHandler
             )
 
+    def check_for_uploader(self, components):
+        check = False
+        for c in components:
+            if type(c)==list:
+                check = check | self.check_for_uploader(c)
+            elif type(c)==str:
+                if c=='DSA Uploader':
+                    check = True
+        
+        return check
 
     def gen_header_components(self):
         
