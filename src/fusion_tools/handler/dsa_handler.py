@@ -22,6 +22,11 @@ from fusion_tools.handler.login import DSALoginComponent
 from fusion_tools.handler.dataset_uploader import DSAUploader
 from fusion_tools.handler.dataset_builder import DatasetBuilder
 
+
+#TODO: Consider making a function decorator for authentication just to clean up all the 
+# self.gc.setToken and +f'?token={user_token}' lines
+
+
 class Handler:
     pass
 
@@ -182,6 +187,9 @@ class DSAHandler(Handler):
         if type(item)==str:
             item = [item]
 
+        if not user_token is None:
+            self.gc.setToken(user_token)
+
         ann_counts = []
         for it in item:
             item_dict = {}
@@ -207,7 +215,7 @@ class DSAHandler(Handler):
 
         return ann_counts_df
     
-    def get_path_info(self, path: str) -> dict:
+    def get_path_info(self, path: str, user_token:Union[str,None]=None) -> dict:
         """Get information for a given resource path
 
         :param item_path: Path in DSA instance for a given resource
@@ -217,6 +225,10 @@ class DSAHandler(Handler):
         """
         # First searching for the "resource"
         assert any([i in path for i in ['collection','user']])
+
+        if not user_token is None:
+            self.gc.setToken(user_token)
+
         try:
             resource_find = self.gc.get('/resource/lookup',parameters={'path': path})
             if resource_find['_modelType']=='collection':
@@ -232,7 +244,7 @@ class DSAHandler(Handler):
             print(f'path: {path} not found')
             return 'Resource not found'
     
-    def get_folder_info(self, folder_id:str)->dict:
+    def get_folder_info(self, folder_id:str, user_token:Union[str,None]=None)->dict:
         """Getting folder info from ID
 
         :param folder_id: ID assigned to that folder
@@ -240,6 +252,9 @@ class DSAHandler(Handler):
         :return: Dictionary with details like name, parentType, meta, updated, size, etc.
         :rtype: dict
         """
+
+        if not user_token is None:
+            self.gc.setToken(user_token)
 
         try:
             folder_info = self.gc.get(f'/folder/{folder_id}') | self.gc.get(f'/folder/{folder_id}/details')
@@ -249,7 +264,7 @@ class DSAHandler(Handler):
             #TODO: Change up the return here for an error
             return 'Folder not found!'
         
-    def get_folder_rootpath(self, folder_id:str)->list:
+    def get_folder_rootpath(self, folder_id:str, user_token:Union[str,None]=None)->list:
         """Get the rootpath for a given folder Id.
 
         :param folder_id: Girder Id for a folder
@@ -257,6 +272,9 @@ class DSAHandler(Handler):
         :return: List of objects in that folder's path that are parents
         :rtype: list
         """
+
+        if not user_token is None:
+            self.gc.setToken(user_token)
 
         try:
             folder_rootpath = self.gc.get(f'/folder/{folder_id}/rootpath')
@@ -266,7 +284,7 @@ class DSAHandler(Handler):
             #TODO: Change up the return here for error
             return 'Folder not found!'
     
-    def get_collection_slide_count(self, collection_name, ignore_histoqc = True) -> int:
+    def get_collection_slide_count(self, collection_name, ignore_histoqc = True, user_token:Union[str,None]=None) -> int:
         """Get a count of all of the slides in a given collection across all child folders
 
         :param collection_name: Name of collection ('/collection/{}')
@@ -277,12 +295,12 @@ class DSAHandler(Handler):
         :rtype: int
         """
         
-        collection_info = self.get_path_info(f'/collection/{collection_name}')
-        collection_slides = self.get_folder_slides(collection_info['_id'], folder_type = 'collection', ignore_histoqc = True)
+        collection_info = self.get_path_info(f'/collection/{collection_name}',user_token)
+        collection_slides = self.get_folder_slides(collection_info['_id'], folder_type = 'collection', ignore_histoqc = True, user_token = user_token)
 
         return len(collection_slides)
         
-    def get_folder_folders(self, folder_id:str, folder_type:str = 'folder'):
+    def get_folder_folders(self, folder_id:str, folder_type:str = 'folder', user_token:Union[str,None]=None):
         """Get the folders within a folder
 
         :param folder_id: Girder Id for a folder
@@ -290,6 +308,9 @@ class DSAHandler(Handler):
         :param folder_type: Either "folder" or "collection", defaults to 'folder'
         :type folder_type: str, optional
         """
+
+        if not user_token is None:
+            self.gc.setToken(user_token)
 
         try:
             folder_folders = self.gc.get(
@@ -305,7 +326,7 @@ class DSAHandler(Handler):
             #TODO: Fix error return
             return 'Folder not found!'
         
-    def get_folder_slides(self, folder_path:str, folder_type:str = 'folder', ignore_histoqc:bool = True) -> list:
+    def get_folder_slides(self, folder_path:str, folder_type:str = 'folder', ignore_histoqc:bool = True, user_token:Union[str,None]=None) -> list:
         """Get all slides in a folder
 
         :param folder_path: Path in DSA for a folder
@@ -320,8 +341,11 @@ class DSAHandler(Handler):
 
         assert folder_type in ['folder','collection']
 
+        if not user_token is None:
+            self.gc.setToken(user_token)
+
         if '/' in folder_path:
-            folder_info = self.get_path_info(folder_path)
+            folder_info = self.get_path_info(folder_path,user_token)
         else:
             if folder_type=='folder':
                 folder_info = self.gc.get(f'/folder/{folder_path}')
@@ -357,7 +381,7 @@ class DSAHandler(Handler):
 
         return folder_image_items
 
-    def get_annotations(self, item:str, annotation_id: Union[str,list,None]=None, format: Union[str,None]='geojson'):
+    def get_annotations(self, item:str, annotation_id: Union[str,list,None]=None, format: Union[str,None]='geojson',user_token:Union[str,None]=None):
         """Get annotations for an item in DSA
 
         :param item: Girder item Id for desired image
@@ -372,6 +396,9 @@ class DSAHandler(Handler):
         :rtype: list
         """
         assert format in [None, 'geojson','histomics']
+
+        if not user_token is None:
+            self.gc.setToken(user_token)
 
         if annotation_id is None:
             # Grab all annotations for that item
@@ -490,12 +517,14 @@ class DSAHandler(Handler):
 
         return DSATileServer(api_url = self.girderApiUrl, item_id = item)
 
-    def get_collections(self)->list:
+    def get_collections(self, user_token:Union[str,None]=None)->list:
         """Get list of all available collections in DSA instance.
 
         :return: List of available collections info.
         :rtype: list
         """
+        if not user_token is None:
+            self.gc.setToken(user_token)
 
         collections = self.gc.get('/collection')
 
@@ -551,7 +580,7 @@ class DSAHandler(Handler):
         """
         pass
 
-    def post_annotations(self, item:str, annotations: Union[str,list,dict,None] = None):
+    def post_annotations(self, item:str, annotations: Union[str,list,dict,None] = None, user_token:Union[str,None]=None):
         """Add annotations to an item in Girder.
 
         :param item: ID for the item that is receiving the annotations
@@ -559,6 +588,8 @@ class DSAHandler(Handler):
         :param annotations: Formatted dictionary, path, or list of dictionaries/paths with the annotations., defaults to None
         :type annotations: Union[str,list,dict,None], optional
         """
+        if not user_token is None:
+            self.gc.setToken(user_token)
 
         if type(annotations)==str:
             annotations = load_annotations(annotations)
@@ -587,7 +618,7 @@ class DSAHandler(Handler):
             )
         return True
         
-    def add_metadata(self, item:str, metadata:dict):
+    def add_metadata(self, item:str, metadata:dict, user_token:Union[str,None]=None):
         """Add metadata key/value to a specific item
 
         :param item: ID for item that is receiving the metadata
@@ -595,6 +626,10 @@ class DSAHandler(Handler):
         :param metadata: Metadata key/value combination (can contain multiple keys and values (JSON formatted))
         :type metadata: dict
         """
+
+        if not user_token is None:
+            self.gc.setToken(user_token)
+
         try:
             # Adding item-level metadata
             self.gc.put(f'/item/{item}/metadata',parameters={'metadata':json.dumps(metadata)})
@@ -609,7 +644,7 @@ class DSAHandler(Handler):
         
         return self.gc.get(f'/slicer_cli_web/cli?token={user_token}')
 
-    def add_plugin(self, image_name:Union[str,list]):
+    def add_plugin(self, image_name:Union[str,list], user_token:Union[str,None]=None):
         """Add a plugin/CLI to the current DSA instance by name of the Docker image (requires admin login)
 
         :param image_name: Name of Docker image on Docker Hub
@@ -617,8 +652,11 @@ class DSAHandler(Handler):
         """
         if type(image_name)==str:
             image_name = [image_name]
+
+        if not user_token is None:
+            self.gc.setToken(user_token)
         
-        current_cli = self.list_plugins()
+        current_cli = self.list_plugins(user_token)
         cli_names = [i['image'] for i in current_cli]
         put_responses = []
         for i in image_name:
@@ -687,23 +725,6 @@ class DSAHandler(Handler):
             print('Make sure you are using a unique email address!')
 
             return False
-
-    def create_plugin_inputs(self, plugin_id:str):
-        """Creates formatted input component for the specified plugin/CLI ID.
-
-        :param plugin_id: ID for plugin to create input component for.
-        :type plugin_id: str
-        """
-
-        #TODO: Process:
-        # 1) Get XML for plugin
-        # 2) Read <parameters> and <parameters advanced=True> tags separate out
-        # 3) Create inputs for basic types of inputs (string, integer, float, and string-enumeration)
-        # 4) Create inputs for more difficult types of inputs (region, image, file, folder)
-        # 5) Create a "Run" button (if "test" option is available create a "Test" button as well)
-        # 6) Check progress in PluginProgress component
-        # 7) Create some kinda popup or something indicating that the plugin is currently running and to check back later for results
-        pass
 
     def run_plugin(self, plugin_id:str, arguments:dict):
         """Run a plugin given a set of input arguments

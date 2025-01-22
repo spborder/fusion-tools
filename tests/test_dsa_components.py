@@ -6,8 +6,10 @@ import sys
 sys.path.append('./src/')
 
 from fusion_tools import Visualization
-from fusion_tools.components import SlideMap, OverlayOptions, PropertyPlotter
-from fusion_tools.handler import DSAHandler, DSAUploadType, SurveyType
+from fusion_tools.components import SlideMap, OverlayOptions
+from fusion_tools.handler import DSAHandler
+from fusion_tools.handler.dataset_uploader import DSAUploadType
+from fusion_tools.handler.survey import SurveyType
 
 
 # This is an example upload type for an image and a file
@@ -20,18 +22,26 @@ simple_upload_type = DSAUploadType(
             'description': 'This is any image you would like to upload to the DSA instance',
             'accepted_types': ['png','jpg','svs','tiff','tif'],
             'preprocessing_plugins': None,
-            'main': True,
+            'type': 'item',
             'required': True,
-            'annotation': False 
         },
         {
             'name': 'Associated File',
             'description': 'This is any other file type that you want added to the "files" of the uploaded image.',
-            'accepted_types': ['png','csv','xlsx','txt'],
+            'accepted_types': ['csv','xlsx','txt'],
             'preprocessing_plugins': None,
-            'main': False,
+            'type': 'file',
+            'parent': 'Image',
             'required': False,
-            'annotation': False
+        },
+        {
+            'name': 'Annotation',
+            'description': 'This is an annotation file that is processed and added to the uploaded image',
+            'accepted_types': ['xml','json','geojson'],
+            'preprocessing_plugins': None,
+            'type': 'annotation',
+            'parent': 'Image',
+            'required': False
         }
     ],
     processing_plugins = [

@@ -13,7 +13,7 @@ from dash_extensions.enrich import DashProxy, html, MultiplexerTransform, Prefix
 
 from typing_extensions import Union
 from fusion_tools.tileserver import TileServer, DSATileServer, LocalTileServer, CustomTileServer
-from fusion_tools.visualization.vis_utils import get_pattern_matching_value
+from fusion_tools.handler.dataset_uploader import DSAUploadHandler
 import threading
 
 import uvicorn
@@ -21,6 +21,9 @@ from fastapi import FastAPI
 from fastapi.middleware.wsgi import WSGIMiddleware
 import asyncio
 import nest_asyncio
+
+from pathlib import Path
+import dash_uploader as du
 
 class Visualization:
     """General holder class used for initialization. Components added after initialization.
@@ -741,6 +744,15 @@ class Visualization:
 
             page_components.append(row_components)
             self.layout_dict['/app/'+page.replace(" ","-")] = page_children
+
+        if any(['DSAUploader' in i for i in page_components]):
+            du.configure_upload(
+                self.viewer_app, 
+                Path(self.assets_folder+'/tmp/uploads'),
+                upload_appi = '/upload',
+                http_request_handler = DSAUploadHandler
+            )
+
 
     def gen_header_components(self):
         

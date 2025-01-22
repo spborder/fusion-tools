@@ -4,6 +4,8 @@
 import json
 import numpy as np
 import pandas as pd
+import requests
+from flask import request
 
 from typing_extensions import Union
 
@@ -15,11 +17,17 @@ import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import dash_treeview_antd as dta
 from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform
+import dash_uploader as du
 
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 
+from fusion_tools.handler import DSAHandler, DSATool
+from fusion_tools.handler.plugin import DSAPluginRunner
 
-from fusion_tools.handler import DSATool
+# Maximum allowed size of uploads (Mb)
+MAX_UPLOAD_SIZE = 1e4
+# Minimum chunk size (Mb)
+MIN_UPLOAD_SIZE = 6
 
 
 class DSAUploadType:
@@ -52,11 +60,41 @@ class DSAUploadType:
         self.processing_plugins = processing_plugins
         self.required_metadata = required_metadata
 
-        # At a minimum, input files just has to contain at least one element, at least one "main" element (kept as individual item), and at least one "required" element
-        # Other acceptable keys include "description", "accepted_types", "annotation", and "parent"
+        # At a minimum, input files just has to contain at least one element and at least one "required" element
+        # Other acceptable keys include "type", "description", "accepted_types", and "parent"
         assert len(self.input_files)>0
-        assert any([i['main'] for i in self.input_files])
-        assert any([i['required'] for i in self.input_files if i['main']])
+        assert all([type(i) in [dict,str] for i in self.input_files])
+
+        default_vals = {
+            'accepted_types': None,
+            'preprocessing_plugins': None,
+            'type': 'item',
+            'parent': None,
+            'required': True
+        }
+
+        # Checking the input file types
+        files = [i for i in self.input_files if type(i)==dict]        
+        assert all(['name' in i for i in files])
+        files = [i for i in self.input_files if 'type' in files]
+        assert all([i['type'] in ['item','file','annotation'] for i in files])
+
+        # Checking that all the file and annotation types have a "parent"
+        files = [i for i in files if i['type'] in ['file','annotation']]
+        assert all(['parent' in i for i in files])
+
+        for idx,i in enumerate(self.input_files):
+            if type(i)==dict:
+                if not all([j in i for j in default_vals]):
+                    for key,val in default_vals.items():
+                        if not key in i:
+                            i[key] = val
+            elif type(i)==str:
+                i_dict = {
+                    'name': i
+                } | default_vals
+                self.input_files.insert(idx,i_dict)
+        
         
         # Checking format of required_metadata (if it's a dictionary it has to have 'name'and 'required')
         if not self.required_metadata is None:
@@ -77,6 +115,108 @@ class DSAUploadType:
         # All processing_plugins have to have a "dict" type
         assert all([isinstance(i,dict) for i in self.processing_plugins])
 
+
+# RequestData is from the documentation for dash-uploader with the keys modified from "flow" to "resumable" (there must have been some update that they didn't account for initially)
+class RequestData:
+    # A helper class that contains data from the request
+    # parsed into handier form.
+
+    def __init__(self, request):
+        """
+        Parameters
+        ----------
+        request: flask.request
+            The Flask request object
+        """
+        # Available fields: https://github.com/flowjs/flow.js
+        self.n_chunks_total = request.form.get("resumableTotalChunks", type=int)
+        self.chunk_number = request.form.get("resumableChunkNumber", default=1, type=int)
+        self.filename = request.form.get("resumableFilename", default="error", type=str)
+        self.total_size = request.form.get('resumableTotalSize',default=0,type=int)
+        # 'unique' identifier for the file that is being uploaded.
+        # Made of the file size and file name (with relative path, if available)
+        self.unique_identifier = request.form.get(
+            "resumableIdentifier", default="error", type=str
+        )
+        # flowRelativePath is the flowFilename with the directory structure included
+        # the path is relative to the chosen folder.
+        self.relative_path = request.form.get("resumableRelativePath", default="", type=str)
+        if not self.relative_path:
+            self.relative_path = self.filename
+
+        # Get the chunk data.
+        # Type of `chunk_data`: werkzeug.datastructures.FileStorage
+        self.chunk_data = request.files["file"]
+
+        self.upload_id = request.form.get("upload_id", default="", type=str)
+
+class DSAUploadHandler:
+    def __init__(self,server,upload_folder,use_upload_id):
+        self.server = server
+        self.upload_folder = upload_folder
+        self.use_upload_id = use_upload_id
+
+    def post_before(self,req_data):
+        # Creating item to upload to
+        print(f'Creating item: {req_data.filename}')
+
+        upload_info = json.loads(req_data.upload_id)
+
+        post_response = requests.post(
+            upload_info['api_url']+'file',
+            params = {
+                'token': upload_info['token'],
+                'parentType': 'folder',
+                'parentId': upload_info['folderId'],
+                'name': req_data.filename,
+                'size': req_data.total_size
+            }
+        )
+
+        self.current_upload = post_response.json()
+
+    def post_file_chunk(self,api_url,token,parentId,chunk,offset):
+
+        post_response = requests.post(
+            api_url+f'file/chunk',
+            params={
+                'token': token,
+                'uploadId': parentId,
+                'offset': offset
+            },
+            data = chunk
+        )
+        return post_response.json()
+
+    def post(self):
+
+        r = RequestData(request)
+        upload_info = json.loads(r.upload_id)
+
+        if r.chunk_number==1:
+            self.post_before(r)
+
+        post_response = self.post_file_chunk(
+            api_url=upload_info['api_url'],
+            token = upload_info['token'],
+            parentId=self.current_upload['_id'],
+            chunk = r.chunk_data.read(),
+            offset = r.chunk_number-1
+        )
+
+        return r.filename
+
+    def get_before(self):
+        pass
+
+    def get(self):
+        return 200
+
+    def get_after(self):
+        pass
+
+    def post_after(self):
+        pass
 
 
 class DSAUploader(DSATool):
@@ -112,12 +252,6 @@ class DSAUploader(DSATool):
         self.get_callbacks()
 
     def update_layout(self, session_data:dict, use_prefix:bool):
-
-        #TODO: Layout start:
-        # Whether the upload is to a specific collection or to a User folder (Public/Private)
-        # Selecting folder to upload to based on previous selection
-        # Select which type of upload this is
-        # Load upload type format based on DSAUploadType properties
 
         if not 'current_user' in session_data:
             uploader_children = html.Div(
@@ -389,7 +523,6 @@ class DSAUploader(DSATool):
             ],
             prevent_initial_call = True
         )(self.submit_plugin)
-
 
     def make_selectable_dash_table(self, dataframe:pd.DataFrame, id:dict, multi_row:bool = True, selected_rows: list = []):
         """Generate a selectable DataTable to add to the layout
@@ -1369,6 +1502,31 @@ class DSAUploader(DSATool):
 
         return [upload_div_contents], [disabled_path_parts], [new_folder_disable], [select_folder_disable], [back_icon_children]
 
+    def create_upload_component(self, file_info, user_info, idx):
+        
+        # "item" type uploads have a parentId = the Id of the folder they are being uploaded to
+        # "file" and "annotation" type uploads have a parentId = the item that they are being added to
+        # if the parent "item" for a "file" or "annotation" does not exist yet, then the uploader should be disabled
+
+        upload_id_dict = {
+            'api_url': self.handler.girderApiUrl,
+            'token': user_info['token'],
+            'parentId': file_info['parentId']
+        }
+
+        upload_component = du.Upload(
+            id = {'type': f'{self.component_prefix}-dsa-uploader-file-upload','index': idx},
+            max_file_size = MAX_UPLOAD_SIZE,
+            chunk_size = MIN_UPLOAD_SIZE,
+            filetypes = file_info['accepted_types'],
+            cancel_button = True,
+            pause_button = True,
+            upload_id = json.dumps(upload_id_dict),
+            disabled = file_info['type'] in ['file','annotation']
+        )
+
+        return upload_component
+
     def make_file_uploads(self, upload_type_value, upload_folder_path, session_data):
         """Making the file upload components for the selected UploadType
 
@@ -1398,13 +1556,10 @@ class DSAUploader(DSATool):
                 html.Div([
                     html.H5(f'{f["name"]}, ({",".join(f["accepted_types"])})'),
                     html.Div(
-                        UploadComponent(
-                            id = {'type': f'{self.component_prefix}-dsa-uploader-file-upload','index': f_idx},
-                            uploadComplete=False,
-                            baseurl=self.handler.gc.urlBase,
-                            girderToken= session_data['current_user']['token'],
-                            parentId = folder_info['_id'],
-                            filetypes = f['accepted_types'] if 'accepted_types' in f else []
+                        self.create_upload_component(
+                            file_info = f | {'parentId': folder_info["_id"]} if f['type']=='item' else f,
+                            user_info = session_data['current_user'],
+                            idx = f_idx
                         ),
                         id = {'type': f'{self.component_prefix}-dsa-uploader-file-upload-div','index': f_idx}
                     ),

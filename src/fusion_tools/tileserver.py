@@ -314,7 +314,8 @@ class DSATileServer(TileServer):
     """
     def __init__(self,
                  api_url: str,
-                 item_id: str
+                 item_id: str,
+                 user_token: Union[str,None] = None
                  ):
         """Constructor method
 
@@ -326,7 +327,9 @@ class DSATileServer(TileServer):
 
         self.base_url = api_url
         self.item_id = item_id
+        self.user_token = user_token
 
+        #TODO: Add some method for appending the user_token to these URLs
         self.name = requests.get(
             f'{api_url}/item/{item_id}'
         ).json()['name']

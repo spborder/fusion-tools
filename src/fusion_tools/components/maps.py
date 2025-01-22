@@ -669,9 +669,15 @@ class SlideMap(MapComponent):
         new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
 
         # Getting data from the tileservers:
-        new_url = new_slide['tiles_url']
-        new_annotations = requests.get(new_slide['annotations_url']).json()
-        new_metadata = requests.get(new_slide['metadata_url']).json()
+        if not 'current_user' in vis_data:
+            new_url = new_slide['tiles_url']
+            new_annotations = requests.get(new_slide['annotations_url']).json()
+            new_metadata = requests.get(new_slide['metadata_url']).json()
+        else:
+            new_url = new_slide['tiles_url']+f'?token={vis_data["current_user"]["token"]}'
+            new_annotations = requests.get(new_slide['annotations_url']+f'?token={vis_data["current_user"]["token"]}').json()
+            new_metadata = requests.get(new_slide['metadata_url']+f'?token={vis_data["current_user"]["token"]}').json()
+
         new_tile_size = new_metadata['tileHeight']
 
         if type(new_annotations)==dict:
@@ -1753,7 +1759,10 @@ class ChannelMixer(MapComponent):
         vis_data = json.loads(vis_data)
         new_slide = vis_data['current'][get_pattern_matching_value(selected_slide)]
 
-        new_metadata = requests.get(new_slide['metadata_url']).json()
+        if not 'current_user' in vis_data:
+            new_metadata = requests.get(new_slide['metadata_url']).json()
+        else:
+            new_metadata = requests.get(new_slide['metadata_url']+f'?token={vis_data["current_user"]["token"]}').json()
 
         new_frame_list = self.process_frames(new_metadata)
         new_color_selector_children = []
