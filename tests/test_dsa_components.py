@@ -50,17 +50,17 @@ simple_upload_type = DSAUploadType(
             'image': 'dsarchive/histomicstk:latest',
             'input_args': [
                 {
-                    'name': 'Input Image',
+                    'name': 'inputImageFile',
                     'default': {
                         'type': 'input_file',
                         'name': 'Image'
                     },
                     'disabled': True
                 },
-                'Nuclei annotation format',
-                'Minimum Nucleus Area',
-                'Ignore Border Nuclei',
-                'Invert Image'
+                'nuclei_annotation_format',
+                'min_nucleus_area',
+                'ignore_border_nuclei',
+                'ImageInversionForm'
             ]
         }
     ],
@@ -68,14 +68,20 @@ simple_upload_type = DSAUploadType(
         {
             'name': 'Image Type',
             'values': ['Histology','Fluorescence','Unknown'],
-            'required': True
+            'required': True,
+            'item': 'Image'
         },
         {
             'name': 'Image Label',
             'values': ['Label 1','Label 2','Label 3'],
-            'required': False
+            'required': False,
+            'item': 'Image'
         },
-        'Extra Metadata'
+        {
+            'name':'Extra Metadata',
+            'required': False,
+            'item': 'Image'
+        }
     ]
 )
 

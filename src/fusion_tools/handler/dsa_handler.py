@@ -661,7 +661,7 @@ class DSAHandler(Handler):
             self.gc.put(f'/item/{item}/metadata',parameters={'metadata':json.dumps(metadata)})
 
             return True
-        except:
+        except Exception as e:
             return False
 
     def list_plugins(self, user_token:str):

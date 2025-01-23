@@ -72,7 +72,7 @@ class DSAPluginRunner(DSATool):
                 plugin_xml = ET.fromstring(plugin_xml_req.content)
                 exe_dict = self.parse_executable(plugin_xml)
 
-        return exe_dict
+        return exe_dict, plugin_cli
 
     def load_plugin(self, plugin_dict, session_data, uploaded_files_data, component_index):
 
@@ -81,7 +81,7 @@ class DSAPluginRunner(DSATool):
         # 'input_args' is a list of either strings or dictionaries limiting which arguments the user can adjust
 
         # Getting plugin xml (have to be logged in to get)
-        cli_dict = self.get_executable_dict(plugin_dict,session_data)
+        cli_dict, plugin_info = self.get_executable_dict(plugin_dict,session_data)
         if cli_dict is None:
             return dbc.Alert(f'Error loading plugin: {plugin_dict}',color = 'danger')
 
@@ -92,20 +92,24 @@ class DSAPluginRunner(DSATool):
                 if type(in_arg)==str:
                     # Looking for the input with this name and setting default from input (if specified)
                     exe_input = self.find_executable_input(cli_dict, in_arg)
+                    exe_input['disabled'] = False
                 elif type(in_arg)==dict:
                     # Looking for the input with in_arg['name'] and setting default from in_arg
                     exe_input = self.find_executable_input(cli_dict,in_arg['name'])
+                    exe_input['disabled'] = in_arg['disabled'] if 'disabled' in in_arg else False
                     if 'default' in in_arg:
                         if type(in_arg['default']) in [int,float,str]:
                             exe_input['default'] = in_arg['default']
                         elif type(in_arg['default'])==dict:
                             # Defining input from uploaded file item/file ID (#TODO: Define input from previous plugin output)
                             # This one isn't used in the default DSAPluginRunner but is accessed from DSAUploader
-                            print(uploaded_files_data)
                             if in_arg['default']['type']=='input_file':
                                 input_file_arg = in_arg['default']['name']
                                 input_file_arg_idx = [i['fusion_upload_name'] for i in uploaded_files_data['uploaded_files']].index(input_file_arg)
-                                exe_input['default'] = uploaded_files_data['uploaded_files'][input_file_arg_idx]['name']
+                                exe_input['default'] = {
+                                    'name': uploaded_files_data['uploaded_files'][input_file_arg_idx]['name'],
+                                    '_id': uploaded_files_data['uploaded_files'][input_file_arg_idx]['_id']
+                                }
 
                             elif in_arg['default']['type']=='input_annotation':
                                 input_annotation_arg = in_arg['default']['name']
@@ -130,10 +134,15 @@ class DSAPluginRunner(DSATool):
         else:
             inputs_list = []
             for p in cli_dict['parameters']:
-                inputs_list.extend(p['inputs'])
+                inputs_list.extend([j | {'disabled': False} for j in p['inputs']])
 
         # Now creating the interactive component (without component-prefix, (can transform later))
         plugin_component = html.Div([
+            dcc.Store(
+                id = {'type': 'dsa-plugin-runner-plugin-info-store','index': component_index},
+                data = json.dumps(plugin_info),
+                storage_type='memory'
+            ),
             dbc.Row([
                 html.H5(html.A(cli_dict['title'],target='_blank',href=cli_dict['documentation']))
             ]),
@@ -172,23 +181,71 @@ class DSAPluginRunner(DSATool):
                 'Submit Plugin',
                 className = 'd-grid col-12 mx-auto',
                 color = 'success',
-                disabled = True,
+                disabled = False,
                 id = {'type': 'dsa-plugin-runner-submit-button','index': component_index}
             )
         ])
 
         return plugin_component
 
+    def make_file_component(self,select_type:str, value: Union[list,str], component_index:int, disabled: bool):
+        #TODO: Modal containing interactive components for selecting folders/files
+
+        file_component = html.Div([
+            dbc.Modal(
+                id = {'type': 'dsa-plugin-runner-file-selector-modal','index':component_index},
+                children = [
+                    html.Div(
+                        id = {'type': 'dsa-plugin-runner-file-selector-div','index':component_index},
+                        children = []
+                    )
+                ],
+                is_open = False
+            ),
+            dbc.InputGroup([
+                dbc.InputGroupText(
+                    f'{select_type}: '
+                ),
+                dbc.Input(
+                    id = {'type': 'dsa-plugin-runner-file-selector-input','index': component_index},
+                    placeholder = select_type,
+                    type = 'text',
+                    required = True,
+                    value = value['name'] if type(value)==dict else [],
+                    maxLength = 1000,
+                    disabled=True
+                ),
+                dbc.Input(
+                    id = {'type': 'dsa-plugin-runner-input','index': component_index},
+                    value = value['_id'] if type(value)==dict else [],
+                    style = {'display': 'none'}
+                ),
+                dbc.Button(
+                    children = [
+                        html.I(
+                            className = 'fa-solid fa-file'
+                        )
+                    ],
+                    id = {'type': 'dsa-plugin-runner-file-selector-open-modal','index': component_index},
+                    disabled = disabled
+                )
+            ])
+        ])
+
+        return file_component
+
     def make_input_component(self, input_dict, input_index):
 
         # Input components will either be an Input, a Dropdown, a Slider, or a region selector (custom)
+        input_desc_column = [
+            dbc.Row(html.H6(input_dict['name'])),
+            dbc.Row(html.P(input_dict['description']))
+        ]
+        
         if 'enumeration' in input_dict['type']:
             input_component = html.Div([
                 dbc.Row([
-                    dbc.Col([
-                        dbc.Row(html.H6(input_dict['name'])),
-                        dbc.Row(html.P(input_dict['description']))
-                    ],md=5),
+                    dbc.Col(input_desc_column,md=5),
                     dbc.Col([
                         dcc.Dropdown(
                             options = [
@@ -196,6 +253,7 @@ class DSAPluginRunner(DSATool):
                                 for i in input_dict['options']
                             ],
                             multi = False,
+                            disabled = input_dict['disabled'],
                             value = input_dict['default'] if not input_dict['default'] is None else [],
                             id = {'type': 'dsa-plugin-runner-input','index': input_index},
                             style = {'width': '100%'}
@@ -207,10 +265,7 @@ class DSAPluginRunner(DSATool):
         elif input_dict['type'] in ['region','geometry','point']:
             input_component = html.Div([
                 dbc.Row([
-                    dbc.Col([
-                        dbc.Row(html.H6(input_dict['name'])),
-                        dbc.Row(html.P(input_dict['description']))
-                    ],md=5),
+                    dbc.Col(input_desc_column,md=5),
                     dbc.Col([
                         'This component is still in progress'
                     ],md=7)
@@ -220,23 +275,23 @@ class DSAPluginRunner(DSATool):
         elif input_dict['type'] in ['file','directory','image']:
             input_component = html.Div([
                 dbc.Row([
+                    dbc.Col(input_desc_column,md=5),
                     dbc.Col([
-                        dbc.Row(html.H6(input_dict['name'])),
-                        dbc.Row(html.P(input_dict['description']))
-                    ],md=5),
-                    dbc.Col([
-                        'This component is still in progress'
+                        self.make_file_component(
+                            select_type=input_dict['type'],
+                            value = input_dict['default'] if 'default' in input_dict else [],
+                            component_index=input_index,
+                            disabled = input_dict['disabled']
+                        )
                     ],md=7)
                 ]),
                 html.Hr()
             ])
         elif input_dict['type']=='boolean':
+            # This input type cannot be disabled
             input_component = html.Div([
                 dbc.Row([
-                    dbc.Col([
-                        dbc.Row(html.H6(input_dict['name'])),
-                        dbc.Row(html.P(input_dict['description']))
-                    ],md = 5),
+                    dbc.Col(input_desc_column,md = 5),
                     dbc.Col([
                         dcc.RadioItems(
                             options = [
@@ -253,15 +308,13 @@ class DSAPluginRunner(DSATool):
         elif input_dict['type'] in ['integer','float','string','double'] or 'vector' in input_dict['type']:
             input_component = html.Div([
                 dbc.Row([
-                    dbc.Col([
-                        dbc.Row(html.H6(input_dict['name'])),
-                        dbc.Row(html.P(input_dict['description']))
-                    ],md=5),
+                    dbc.Col(input_desc_column,md=5),
                     dbc.Col([
                         dcc.Input(
                             type = 'text' if input_dict['type']=='string' else 'number',
                             value = input_dict['default'] if not input_dict['default'] is None else [],
                             maxLength = 1000,
+                            disabled = input_dict['disabled'],
                             min = input_dict['constraints']['min'] if not input_dict['constraints'] is None else [],
                             max = input_dict['constraints']['max'] if not input_dict['constraints'] is None else [],
                             #step = input_dict['constraints']['step'] if not input_dict['constraints'] is None else [],
@@ -313,7 +366,8 @@ class DSAPluginRunner(DSATool):
                 if sub_el.tag in self.parameter_tags:
                     input_dict = {
                         'type': sub_el.tag,
-                        'name': sub_el.find('label').text,
+                        'label': sub_el.find('label').text,
+                        'name': sub_el.find('name').text,
                         'description': sub_el.find('description').text
                     }
 
@@ -353,9 +407,9 @@ class DSAPluginRunner(DSATool):
         return executable_dict
 
     def run_plugin_request(self, plugin_id, session_data, input_params_dict):
-
+        
         request_output = requests.post(
-            url = self.handler.gc.urlBase + f'slicer_cli_web/{plugin_id}/run?token={session_data["current_user"]["token"]}',
+            url = self.handler.gc.urlBase + f'slicer_cli_web/cli/{plugin_id}/run?token={session_data["current_user"]["token"]}',
             params = {
                 'girderApiUrl': self.handler.gc.urlBase,
                 'girderToken': session_data['current_user']['token']
@@ -522,7 +576,7 @@ class DSAPluginRunner(DSATool):
         selected_plugin = [i for i in included_cli if i['name']==cli_select][0]
 
 
-        plugin_cli_dict = self.get_executable_dict(selected_plugin,session_data)
+        plugin_cli_dict, plugin_info = self.get_executable_dict(selected_plugin,session_data)
         plugin_input_infos = []
         for p in plugin_cli_dict['parameters']:
             plugin_input_infos.extend(p['input_list'])
