@@ -96,6 +96,16 @@ class DSAPluginRunner(DSATool):
                 elif type(in_arg)==dict:
                     # Looking for the input with in_arg['name'] and setting default from in_arg
                     exe_input = self.find_executable_input(cli_dict,in_arg['name'])
+                    if exe_input is None:
+                        # For "output" channel files, {parameter_name}_folder is also needed but won't be specified in the XML
+                        if '_folder' in in_arg['name']:
+                            exe_input = {
+                                'name': in_arg['name'],
+                                'label': in_arg['name'],
+                                'description': 'Output file folder',
+                                'type': 'directory'
+                            }
+
                     exe_input['disabled'] = in_arg['disabled'] if 'disabled' in in_arg else False
                     if 'default' in in_arg:
                         if type(in_arg['default']) in [int,float,str]:
@@ -103,7 +113,22 @@ class DSAPluginRunner(DSATool):
                         elif type(in_arg['default'])==dict:
                             # Defining input from uploaded file item/file ID (#TODO: Define input from previous plugin output)
                             # This one isn't used in the default DSAPluginRunner but is accessed from DSAUploader
-                            if in_arg['default']['type']=='input_file':
+                            if 'value' in in_arg['default']:
+                                exe_input['default'] = in_arg['default']
+
+                            elif in_arg['default']['type']=='upload_folder':
+                                # Find uploaded item:
+                                ex_item = [i for i in uploaded_files_data['uploaded_files'] if 'itemId' in i][0]
+                                ex_itemId = ex_item['itemId'] if 'itemId' in ex_item else ex_item['_id']
+
+                                ex_item_info = self.handler.get_item_info(ex_itemId, session_data['current_user']['token'])
+                                folder_info = self.handler.get_folder_info(ex_item_info['folderId'],session_data['current_user']['token'])
+                                exe_input['default'] = {
+                                    'name': folder_info['name'],
+                                    '_id': folder_info['_id']
+                                }
+                            
+                            elif in_arg['default']['type']=='input_file':
                                 input_file_arg = in_arg['default']['name']
                                 input_file_arg_idx = [i['fusion_upload_name'] for i in uploaded_files_data['uploaded_files']].index(input_file_arg)
                                 exe_input['default'] = {
@@ -188,8 +213,22 @@ class DSAPluginRunner(DSATool):
 
         return plugin_component
 
-    def make_file_component(self,select_type:str, value: Union[list,str], component_index:int, disabled: bool):
+    def make_file_component(self,select_type:str, value: Union[str,dict], component_index:int, disabled: bool):
         #TODO: Modal containing interactive components for selecting folders/files
+        #TODO: if this component is for a parameter in the with "channel" = "output" then it needs two parameters:
+        # The file name (str) and the folder _id with an additional parameter "{parameter_name}_folder"
+        
+        if type(value)==dict:
+            if all([i in value for i in ['name','_id']]):
+                selector_value = value['name']
+                input_value = value['_id']
+            elif 'value' in value:
+                selector_value = value['value']
+                input_value = value['value']
+        else:
+            selector_value = value
+            input_value = value
+
 
         file_component = html.Div([
             dbc.Modal(
@@ -211,13 +250,13 @@ class DSAPluginRunner(DSATool):
                     placeholder = select_type,
                     type = 'text',
                     required = True,
-                    value = value['name'] if type(value)==dict else [],
+                    value = selector_value,
                     maxLength = 1000,
                     disabled=True
                 ),
                 dbc.Input(
                     id = {'type': 'dsa-plugin-runner-input','index': component_index},
-                    value = value['_id'] if type(value)==dict else [],
+                    value = input_value,
                     style = {'display': 'none'}
                 ),
                 dbc.Button(
@@ -238,7 +277,7 @@ class DSAPluginRunner(DSATool):
 
         # Input components will either be an Input, a Dropdown, a Slider, or a region selector (custom)
         input_desc_column = [
-            dbc.Row(html.H6(input_dict['name'])),
+            dbc.Row(html.H6(input_dict['label'])),
             dbc.Row(html.P(input_dict['description']))
         ]
         
@@ -273,13 +312,14 @@ class DSAPluginRunner(DSATool):
                 html.Hr()
             ])
         elif input_dict['type'] in ['file','directory','image']:
+
             input_component = html.Div([
                 dbc.Row([
                     dbc.Col(input_desc_column,md=5),
                     dbc.Col([
                         self.make_file_component(
                             select_type=input_dict['type'],
-                            value = input_dict['default'] if 'default' in input_dict else [],
+                            value = input_dict['default'] if 'default' in input_dict else "",
                             component_index=input_index,
                             disabled = input_dict['disabled']
                         )
@@ -338,9 +378,6 @@ class DSAPluginRunner(DSATool):
                     break
         
         return exe_input
-    
-    def find_upload_resource_id(self, ):
-        pass
 
     def parse_executable(self, exe_xml)->dict:
 
@@ -368,6 +405,7 @@ class DSAPluginRunner(DSATool):
                         'type': sub_el.tag,
                         'label': sub_el.find('label').text,
                         'name': sub_el.find('name').text,
+                        'channel': sub_el.find('channel').text if not sub_el.find('channel') is None else None,
                         'description': sub_el.find('description').text
                     }
 
@@ -621,10 +659,25 @@ class DSAPluginProgress(DSATool):
             '4': 'ERROR',
             '5': 'CANCELED'
         }
+        self.job_status_color_key = {
+            '0': 'rgb(176,184,178)',
+            '1': 'rgb(219,224,67)',
+            '2': 'rgb(67,172,224)',
+            '3': 'rgb(50,168,82)',
+            '4': 'rgb(224,27,27)',
+            '5': 'rgb(227,27,154)'
+        }
     
+        self.modal_className = 'mw-100 p-5'
+
+    def __str__(self):
+        return 'DSA Plugin Progress'
+
     def load(self,component_prefix:int):
         
         self.component_prefix = component_prefix
+
+        self.title = 'DSA Plugin Progress'
 
         self.blueprint = DashBlueprint(
             transforms=[
@@ -635,9 +688,125 @@ class DSAPluginProgress(DSATool):
 
         self.get_callbacks()
 
+    def generate_plugin_table(self, session_data:dict, offset:int, limit: int, next_clicks:int, prev_clicks:int, use_prefix:bool):
+
+        # Getting all jobs for this user:
+        user_jobs = self.handler.get_user_jobs(
+            user_id = session_data['current_user']['_id'],
+            user_token = session_data['current_user']['token'],
+            offset = offset,
+            limit = limit
+        )
+
+        job_properties = ['title','type','updated','when','status','_id']
+        
+        table_head = dmc.TableThead(
+            dmc.TableTr(
+                [
+                    dmc.TableTh(i)
+                    for i in job_properties
+                ]
+            )
+        )
+
+        if len(user_jobs)>0:
+            table_rows = []
+            for job_idx,job in enumerate(user_jobs):
+                job_row = []
+                for prop in job_properties:
+                    if not prop=='status':
+                        job_row.append(
+                            dmc.TableTd(job[prop])
+                        )
+                    else:
+                        job_row.append(
+                            dmc.TableTd(self.job_status_key[str(job[prop])],style = {'background': self.job_status_color_key[str(job[prop])]})
+                        )
+
+                # Adding logs/cancel buttons
+                job_row.append(
+                    dmc.TableTd(
+                        dbc.Button(
+                            'Logs',
+                            color = 'warning',
+                            id = {'type': 'dsa-plugin-progress-get-logs','index': job_idx},
+                            n_clicks = 0
+                        )
+                    )
+                )
+
+                job_row.append(
+                    dmc.TableTd(
+                        dbc.Button(
+                            'Cancel',
+                            color = 'danger',
+                            id = {'type': 'dsa-plugin-progress-cancel-job','index': job_idx},
+                            n_clicks = 0
+                        )
+                    )
+                )
+
+                table_rows.append(
+                    dmc.TableTr(job_row, id = {'type': 'dsa-plugin-progress-table-row','index': job_idx})
+                )
+
+        else:
+            if next_clicks>0:
+                table_rows.append(
+                    dmc.Tr([
+                        'You have exceed all of the jobs for this user!'
+                    ])
+                )
+            else:
+                table_rows.append(
+                    dmc.Tr([
+                        'You have not run any jobs yet!'
+                    ])
+                )
+
+        table_caption = dmc.TableCaption([
+            dbc.Stack([
+                dbc.Button(
+                    'Load Previous 5 jobs',
+                    color = 'secondary',
+                    n_clicks = prev_clicks,
+                    className = 'd-grid col-6 mx-auto',
+                    id = {'type': 'dsa-plugin-progress-load-prev-jobs','index': 0}
+                ),
+                dbc.Button(
+                    'Load Next 5 jobs',
+                    color = 'primary',
+                    n_clicks = next_clicks,
+                    className = 'd-grid col-6 mx-auto',
+                    id = {'type': 'dsa-plugin-progress-load-next-jobs','index': 0}
+                )
+            ],direction = 'horizontal',gap=2)
+        ])
+
+        table_body = dmc.TableTbody(table_rows)
+
+        if use_prefix:
+            PrefixIdTransform(prefix = f'{self.component_prefix}').transform_layout(table_head)
+            PrefixIdTransform(prefix = f'{self.component_prefix}').transform_layout(table_body)
+            PrefixIdTransform(prefix = f'{self.component_prefix}').transform_layout(table_caption)
+
+        return [table_head, table_body, table_caption]
+
     def update_layout(self, session_data:dict, use_prefix:bool):
         
-        
+        if 'current_user' in session_data:
+            running_plugins = self.generate_plugin_table(session_data, 0, 5, 0, 0, False)
+            running_plugins = dmc.Table(
+                running_plugins,
+                id = {'type': 'dsa-plugin-progress-table-content','index': 0}
+            )
+
+        else:
+            running_plugins = dbc.Alert(
+                'You must be logged in to view running plugins!',
+                color = 'warning'
+            )
+
         layout = html.Div([
             dbc.Card(
                 dbc.CardBody([
@@ -648,6 +817,18 @@ class DSAPluginProgress(DSATool):
                     dbc.Row(
                         'Monitor the progress of currently running plugins.'
                     ),
+                    dbc.Row(
+                        html.Div(
+                            running_plugins,
+                            style = {'maxHeight': '40vh','overflow': 'scroll'}
+                        )
+                    ),
+                    dbc.Row(
+                        html.Div(
+                            id = {'type': 'dsa-plugin-progress-logs-content','index': 0},
+                            children = []
+                        )
+                    )
                 ])
             )
         ])
@@ -663,14 +844,105 @@ class DSAPluginProgress(DSATool):
 
     def get_callbacks(self):
 
-        # Callback for getting latest logs for plugin
-        # Callback for cancelling plugin
+        # Callback for loading next/prev jobs
+        self.blueprint.callback(
+            [
+                Input({'type': 'dsa-plugin-progress-load-next-jobs','index': ALL},'n_clicks'),
+                Input({'type': 'dsa-plugin-progress-load-prev-jobs','index': ALL},'n_clicks')
+            ],
+            [
+                State('anchor-vis-store','data')
+            ],
+            [
+                Output({'type': 'dsa-plugin-progress-table-content','index':ALL},'children')
+            ],
+            prevent_initial_call = True
+        )(self.load_new_jobs)
 
-        pass
+        # Callback for cancelling plugin/loading logs
+        self.blueprint.callback(
+            [
+                Input({'type': 'dsa-plugin-progress-get-logs','index': ALL},'n_clicks'),
+                Input({'type': 'dsa-plugin-progress-cancel-job','index': ALL},'n_clicks')
+            ],
+            [
+                State({'type': 'dsa-plugin-progress-table-row','index': ALL},'children'),
+                State('anchor-vis-store','data')
+            ],
+            [
+                Output({'type': 'dsa-plugin-progress-logs-content','index': ALL},'children')
+            ],
+            prevent_initial_call = True
+        )(self.get_logs_or_cancel)
+
+    def load_new_jobs(self, next_clicked, prev_clicked, session_data):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        next_clicked = get_pattern_matching_value(next_clicked)
+        prev_clicked = get_pattern_matching_value(prev_clicked)
+        if prev_clicked>next_clicked:
+            next_clicked = 0
+            prev_clicked = 0
+            offset = 0
+        
+        else:
+            offset = next_clicked - prev_clicked
+       
+        session_data = json.loads(session_data)
+        new_table_content = self.generate_plugin_table(
+                                session_data = session_data,
+                                offset = offset,
+                                limit = 5,
+                                next_clicks = next_clicked,
+                                prev_clicks = prev_clicked,
+                                use_prefix = True
+                            )
 
 
+        return [new_table_content]
+
+    def get_logs_or_cancel(self, logs_clicked, cancel_clicked, table_rows, session_data):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        session_data = json.loads(session_data)
+
+        if 'dsa-plugin-progress-get-logs' in ctx.triggered_id['type']:
+            row_clicked = ctx.triggered_id['index']
+            job_id = table_rows[row_clicked][5]['props']['children']
+
+            job_logs = self.handler.get_specific_job(
+                job_id = job_id,
+                user_token = session_data['current_user']['token']
+            )
+
+            job_logs_div = html.Div(
+                [
+                    html.Div([html.P(i) for i in line.split('\n')])
+                    for line in job_logs['log']
+                ],
+                style = {'maxHeight': '20vh','overflow': 'scroll'}
+            )
+
+        elif 'dsa-plugin-progress-cancel-job' in ctx.triggered_id['type']:
+            row_clicked = ctx.triggered_id['index']
+            job_id = table_rows[row_clicked][5]['props']['children']
+
+            cancel_response = self.handler.cancel_job(
+                job_id = job_id,
+                user_token = session_data['current_user']['token']
+            )
+
+            job_logs_div = html.Div(
+                'Cancel request sent! Close and re-open to see updated status'
+            )
 
 
+        return [job_logs_div]
+    
 
 
 

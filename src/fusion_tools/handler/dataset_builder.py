@@ -5,6 +5,8 @@ import json
 import numpy as np
 import pandas as pd
 
+import girder_client
+
 from typing_extensions import Union
 
 from skimage.draw import polygon
@@ -474,12 +476,16 @@ class DatasetBuilder(DSATool):
         """
         
         if not local_slide:
-            item_info = self.handler.gc.get(f'/item/{slide_id}')
-            item_thumbnail = self.handler.get_image_thumbnail(slide_id)
-            folder_info = self.handler.get_folder_info(item_info['folderId'])
-            slide_info = {
-                k:v for k,v in item_info.items() if type(v) in [int,float,str]
-            }
+            try:
+                item_info = self.handler.gc.get(f'/item/{slide_id}')
+                item_thumbnail = self.handler.get_image_thumbnail(slide_id)
+                folder_info = self.handler.get_folder_info(item_info['folderId'])
+                slide_info = {
+                    k:v for k,v in item_info.items() if type(v) in [int,float,str]
+                }
+            except girder_client.HttpError:
+                print(f'Item not found! {slide_id}')
+                return html.Div()
         else:
             # For local slides, "slide_id" is the request for getting the slide thumbnail
             item_idx = int(slide_id.split('/')[-3])

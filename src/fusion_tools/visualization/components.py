@@ -198,6 +198,9 @@ class Visualization:
             ],
             [
                 Output('header-modal','is_open'),
+                Output('header-modal','size'),
+                Output('header-modal','fullscreen'),
+                Output('header-modal','className'),
                 Output('header-modal','children')
             ],
             [
@@ -223,8 +226,23 @@ class Visualization:
             session_data = json.loads(session_data)
             header_open = True
             header_children = self.header[ctx.triggered_id['index']].update_layout(session_data = session_data, use_prefix = True)
+            if hasattr(self.header[ctx.triggered_id['index']],'modal_size'):
+                header_size = self.header[ctx.triggered_id['index']].modal_size
+            else:
+                header_size = 'lg'
+            
+            if hasattr(self.header[ctx.triggered_id['index']],'fullscreen'):
+                header_fullscreen = self.header[ctx.triggered_id['index']].fullscreen
+            else:
+                header_fullscreen = False
 
-            return header_open, header_children
+            if hasattr(self.header[ctx.triggered_id['index']],'modal_className'):
+                header_className = self.header[ctx.triggered_id['index']].modal_className
+            else:
+                header_className = None
+
+
+            return header_open, header_size, header_fullscreen, header_className, header_children
         else:
             raise exceptions.PreventUpdate
 
@@ -778,7 +796,8 @@ class Visualization:
                 id = 'header-modal',
                 centered = True,
                 is_open = False,
-                size = 'lg',
+                size = 'xl',
+                className = None,
                 children = [
                     h.blueprint.embed(self.viewer_app)
                     for h_idx,h in enumerate(self.header)

@@ -21,6 +21,7 @@ from fusion_tools.utils.shapes import load_annotations, detect_histomics
 from fusion_tools.handler.login import DSALoginComponent
 from fusion_tools.handler.dataset_uploader import DSAUploader
 from fusion_tools.handler.dataset_builder import DatasetBuilder
+from fusion_tools.handler.plugin import DSAPluginProgress, DSAPluginRunner
 from fusion_tools.handler import Handler
 
 #TODO: Consider making a function decorator for authentication just to clean up all the 
@@ -269,6 +270,15 @@ class DSAHandler(Handler):
         file_info = self.gc.get(f'file/{fileId}')
 
         return file_info
+    
+    def get_item_info(self, itemId:str, user_token: Union[str,None]=None):
+
+        if not user_token is None:
+            self.gc.setToken(user_token)
+        
+        item_info = self.gc.get(f'item/{itemId}')
+
+        return item_info
 
     def get_folder_info(self, folder_id:str, user_token:Union[str,None]=None)->dict:
         """Getting folder info from ID
@@ -752,7 +762,40 @@ class DSAHandler(Handler):
 
             return False
 
-    def run_plugin(self, plugin_id:str, arguments:dict):
+    def get_user_jobs(self, user_id:str, user_token: str, offset: int = 0, limit: int = 0):
+
+
+        self.gc.setToken(user_token)
+        request_response = self.gc.get(
+            f'/job',
+            parameters={
+                'userId': user_id,
+                'limit': limit,
+                'offset': offset
+            }
+        )
+
+        return request_response
+    
+    def get_specific_job(self, job_id:str, user_token:str):
+
+        self.gc.setToken(user_token)
+        request_response = self.gc.get(
+            f'/job/{job_id}'
+        )
+
+        return request_response
+    
+    def cancel_job(self, job_id:str, user_token:str):
+
+        self.gc.setToken(user_token)
+        request_response = self.gc.put(
+            f'/job/{job_id}/cancel'
+        )
+
+        return request_response
+
+    def run_plugin(self, plugin_id:str, arguments:dict, user_token:str):
         """Run a plugin given a set of input arguments
 
         :param plugin_id: ID for plugin to run.
@@ -760,16 +803,27 @@ class DSAHandler(Handler):
         :param arguments: Dictionary containing keys/values for each input argument to a plugin
         :type arguments: dict
         """
-        #TODO: Process:
-        # 1) Parse arguments
-        # 2) Submit plugin run request
-        # 3) Return job info 
-        pass
+        
+        # Make sure that the arguments are formatted correctly
+        request_output = requests.post(
+            url = self.handler.gc.urlBase + f'slicer_cli_web/cli/{plugin_id}/run?token={user_token}',
+            params = {
+                'girderApiUrl': self.handler.girderApiUrl,
+                'girderToken': user_token
+            } | arguments
+        )
+
+        return request_output
 
     def create_plugin_progress(self):
         """Creates component that monitors current and past job logs.
         """
-        pass
+
+        plugin_progress = DSAPluginProgress(
+            handler = self
+        )
+
+        return plugin_progress        
 
     def create_login_component(self):
         """Creates login button for multiple DSA users to use the same fusion-tools instance

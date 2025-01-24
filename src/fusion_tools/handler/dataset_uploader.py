@@ -2003,6 +2003,12 @@ class DSAUploader(DSATool):
 
         input_dict = {}
         for p in plugin_input_infos:
+            if p['channel']=='output':
+                if p['type']=='file':
+                    # For output files, need a name for the output file and a folder Id for the _folder
+                    input_dict[p['name']] = plugin_inputs[input_arg_list.index(p['name'])]
+                    input_dict[p['name']+'_folder'] = plugin_inputs[input_arg_list.index(p['name']+'_folder')]
+
             if p['name'] in input_arg_list:
                 if 'vector' in p['type'] or p['type']=='region':
                     if not p['type']=='string-vector':
@@ -2021,15 +2027,11 @@ class DSAUploader(DSATool):
                     else:
                         input_dict[p['name']] = p['default']
 
-        print(json.dumps(input_dict,indent=4))
-
         submit_request = plugin_handler.run_plugin_request(
             plugin_id = plugin_info['_id'],
             session_data=session_data,
             input_params_dict = input_dict
         )
-
-        print(json.dumps(submit_request.json(),indent=4))
 
         if submit_request.status_code==200:
             status_div = dbc.Alert('Plugin successfully submitted!',color='success')

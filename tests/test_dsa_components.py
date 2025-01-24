@@ -9,6 +9,7 @@ from fusion_tools import Visualization
 from fusion_tools.components import SlideMap, OverlayOptions
 from fusion_tools.handler.dsa_handler import DSAHandler
 from fusion_tools.handler.dataset_uploader import DSAUploadType
+from fusion_tools.handler.plugin import DSAPluginProgress
 from fusion_tools.handler.survey import SurveyType
 
 
@@ -54,6 +55,20 @@ simple_upload_type = DSAUploadType(
                     'default': {
                         'type': 'input_file',
                         'name': 'Image'
+                    },
+                    'disabled': True
+                },
+                {
+                    'name': 'outputNucleiAnnotationFile_folder',
+                    'default': {
+                        'type': 'upload_folder'
+                    },
+                    'disabled': True
+                },
+                {
+                    'name': 'outputNucleiAnnotationFile',
+                    'default': {
+                        'value': 'nuclei_annotations.annot'
                     },
                     'disabled': True
                 },
@@ -114,6 +129,7 @@ def main():
     dsa_tileservers = [dsa_handler.get_tile_server(i) for i in dsa_items_list]
     dsa_dataset_builder = dsa_handler.create_dataset_builder()
     dsa_login = dsa_handler.create_login_component()
+    dsa_plugin_progress = dsa_handler.create_plugin_progress()
     dsa_uploader = dsa_handler.create_uploader(
         upload_types = [
             simple_upload_type
@@ -140,7 +156,8 @@ def main():
             ]
         },
         header = [
-            dsa_login
+            dsa_login,
+            dsa_plugin_progress
         ],
         app_options={
             'port': 8050

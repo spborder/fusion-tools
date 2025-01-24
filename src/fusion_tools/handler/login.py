@@ -27,10 +27,12 @@ class DSALoginComponent(DSATool):
                  handler,
                  default_user: Union[dict,None] = None
                 ):
+        
+        super().__init__()
         self.handler = handler
         self.default_user = default_user
 
-        self.session_update = True
+        self.modal_size = 'lg'
 
     def load(self,component_prefix:int):
 
