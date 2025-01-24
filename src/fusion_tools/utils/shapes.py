@@ -457,24 +457,56 @@ def convert_histomics(json_anns: Union[list,dict]):
 
     geojson_list = []
     for ann in json_anns:
-
         geojson_anns = {
             'type': 'FeatureCollection',
-            'properties': {'name': ann['annotation']['name'], '_id': uuid.uuid4().hex[:24]},
-            'features': [
-                {
-                    'type':'Feature',
-                    'geometry': {
-                        'type': 'Polygon',
-                        'coordinates': [
-                            el['points']
-                        ]
-                    },
-                    'properties': el['user'] | {'name': f'{ann["annotation"]["name"]}', '_id': uuid.uuid4().hex[:24],'_index': el_idx} if 'user' in el else {'name': f'{ann["annotation"]["name"]}_{el_idx}', '_id': uuid.uuid4().hex[:24], '_index': el_idx}
-                }
-                for el_idx,el in enumerate(ann['annotation']['elements'])
-            ]
+            'properties': {
+                'name': ann['annotation']['name'],
+                '_id': uuid.uuid4().hex[:24] if not '_id' in ann['annotation'] else ann['annotation']['_id']
+            },
+            'features': []
         }
+
+        for el_idx, el in enumerate(ann['annotation']['elements']):
+            if el['type']=='polyline':
+                coords = [el['points']]
+            elif el['type']=='rectangle':
+                coords = [[
+                    [
+                        el['center'][0] - el['width'], el['center'][1] - el['height']
+                    ],
+                    [
+                        el['center'][0] + el['width'], el['center'][1] - el['height']
+                    ],
+                    [
+                        el['center'][0] + el['width'], el['center'][1] + el['height']
+                    ],
+                    [
+                        el['center'][0] - el['width'], el['center'][1] + el['height']
+                    ],
+                    [
+                        el['center'][0] - el['width'], el['center'][1] + el['height']
+                    ]
+                ]]
+            else:
+                continue
+                
+            props_dict = {
+                'name': ann['annotation']['name'],
+                '_id': uuid.uuid4().hex[:24],
+                '_index': el_idx
+            }
+
+            if 'user' in el:
+                props_dict = el['user'] | props_dict
+
+            geojson_anns['features'].append({
+                'type': 'Feature',
+                'geometry': {
+                    'type': 'Polygon',
+                    'coordinates': coords
+                },
+                'properties': props_dict
+            })
 
         geojson_list.append(geojson_anns)
 
