@@ -29,9 +29,12 @@ plugins.
 Table of contents
 -------------------
 
-background
-intro_dash
-dsa
-visualization
-components_overview
-non_interactive
+.. tocree::
+   :maxdepth: 2
+   
+   background
+   intro_dash
+   dsa
+   visualization
+   components_overview
+   non_interactive
