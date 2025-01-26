@@ -158,21 +158,19 @@ property. The "id" can consist of either a *str* (e.g.: "component-1") or a dict
 with keys: "type" and "index" as below:
 
 .. code-block:: python
-    
+
     example_div = html.Div(
         id = 'example-str-component',
         children = [
             "This component is defined just with a string id"
         ]
     )
-
     example_div2 = html.Div(
         id = {'type': 'example-pattern-matching-component', 'index': 0},
         children = [
             "This is a component of the type: 'example-pattern-matching-component' with the index 0"
         ]
     )
-
     example_div3 = html.Div(
         id = {'type': 'example-pattern-matching-component', 'index': 1},
         children = [
