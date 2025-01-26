@@ -69,7 +69,7 @@ happy to help!
 Happy Fusing!
 
 .. image:: ../images/fusey-hardhat.png
-   :width: 800
+   :width: 200
    :alt: fusey hard hat
 
 
