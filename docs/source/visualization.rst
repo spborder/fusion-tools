@@ -102,10 +102,3 @@ In custom components, you can change this property by setting "session_update" t
 *True* or *False*.
 
 
-
-
-
-
-
-
-
