@@ -26,11 +26,9 @@ plugins.
 Table of contents
 ---------------
 
-.. toctree::
-   :maxdepth: 6
-
-   fusion_tools
-   fusion_tools.visualization
-   fusion_tools.utils
-   fusion_tools.components
-   
+background
+intro_dash
+dsa
+visualization
+components_overview
+non_interactive
