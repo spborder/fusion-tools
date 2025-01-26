@@ -29,9 +29,9 @@ plugins.
 Table of contents
 -------------------
 
-.. tocree::
+.. toctree::
    :maxdepth: 2
-   
+
    background
    intro_dash
    dsa
