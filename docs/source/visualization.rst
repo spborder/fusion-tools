@@ -11,7 +11,7 @@ You can also specify the layout and combinations of components to use in your da
 using the following hierarchy: Rows-->Columns-->Tabs
 
 .. code-block:: python
-    
+
     # This layout consists of one row of one component:
     example_row_layout = [
         SlideMap()
@@ -104,3 +104,10 @@ In custom components, you can change this property by setting "session_update" t
 *True* or *False*.
 
 
+fusion\_tools.visualization module
+---------------------------------
+
+.. automodule:: fusion_tools.visualization
+   :members:
+   :undoc-members:
+   :show-inheritance:
