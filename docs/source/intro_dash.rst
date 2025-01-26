@@ -158,6 +158,7 @@ property. The "id" can consist of either a *str* (e.g.: "component-1") or a dict
 with keys: "type" and "index" as below:
 
 .. code-block:: python
+    
     example_div = html.Div(
         id = 'example-str-component',
         children = [

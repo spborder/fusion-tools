@@ -1,7 +1,7 @@
 Background
 ===============
 
-.. image:: ../images/background-flowchart.PNG
+.. image:: ../images/background-flowchart.png
    :width: 800
    :alt: background flowchart
 
@@ -68,7 +68,7 @@ happy to help!
 
 Happy Fusing!
 
-.. image:: ../images/fusey-hardhat.PNG
+.. image:: ../images/fusey-hardhat.png
    :width: 800
    :alt: fusey hard hat
 

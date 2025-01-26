@@ -27,8 +27,8 @@ import dash_uploader as du
 
 class Visualization:
     """General holder class used for initialization. Components added after initialization.
-
     To initialize a new visualization session, you can use the following syntax:
+
     .. code-block:: python
 
         # This is for a slide stored on the same computer you're running the fusion-tools instance from.
@@ -51,7 +51,7 @@ class Visualization:
             components = components
         )
         vis_session.start()
-
+        
     """
     
     def __init__(self,
