@@ -29,3 +29,20 @@ fusion\_tools.tileserver module
    :members:
    :undoc-members:
    :show-inheritance:
+
+fusion\_tools.dataset module
+-----------------------------
+
+.. automodule:: fusion_tools.dataset
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+fusion\_tools.feature_extraction module
+----------------------------------------
+
+.. automodule:: fusion_tools.feature_extraction
+   :members:
+   :undoc-members:
+   :show-inheritance:
+

@@ -105,7 +105,7 @@ In custom components, you can change this property by setting "session_update" t
 
 
 fusion\_tools.visualization module
----------------------------------
+------------------------------------
 
 .. automodule:: fusion_tools.visualization
    :members:
