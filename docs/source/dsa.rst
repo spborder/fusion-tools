@@ -1,5 +1,6 @@
 *Digital Slide Archive (DSA)*
-=================
+================================
+
 `Digital Slide Archive (DSA) <https://github.com/DigitalSlideArchive/digital_slide_archive>`_ is an open-source 
 resource for organization of large whole slide images (WSIs) as well as providing an interface (`HistomicsUI <https://github.com/DigitalSlideArchive/HistomicsUI>`_)
 for image annotation and running computational analyses. It provides a RESTful API which enables programmatic 

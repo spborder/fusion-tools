@@ -1,5 +1,5 @@
 Visualization class
-===============
+====================
 
 The *Visualization* class is used to initialize any *fusion-tools* instance. This class 
 is where you can add locally stored data to your visualization session as well as any 
@@ -84,7 +84,7 @@ different pages. (e.g.: access "page 1" by going to "{host}:{port}/app/page-1" a
    :show-inheritance:
 
 The Visualization Session
-----------------
+-------------------------
 
 The "Visualization Session" refers to all of the information that is currently used by 
 interactive components. This includes:

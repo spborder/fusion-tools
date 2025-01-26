@@ -6,7 +6,7 @@ Background
    :alt: background flowchart
 
 How did *fusion-tools* start?
----------------
+-------------------------------
 
 *fusion-tools* was designed in collaboration with pathologists and cell biologists 
 to streamline communication and facilitate interactive analysis on whole slide images (WSIs). 
@@ -21,7 +21,7 @@ and other techniques can enable this information to be quantitatively captured a
 a basis for comparison across many individual samples. 
 
 What makes *fusion-tools* different from __________?
----------------
+------------------------------------------------------
 
 Many similar tools are emerging these days which also facilitate visualization of WSI and overlaid 
 annotations. Of course, whichever tool you are already most familiar with you will probably 
@@ -58,7 +58,7 @@ into *Dash* components <https://dash.plotly.com/plugins>`.
 
 
 Where should I start!?
----------------
+------------------------
 
 Start by taking a look at the documentation for the *Visualization* class and go over how to create custom 
 layouts with multiple components and pre-loading your session with locally stored data. Then go over the 

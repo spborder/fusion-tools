@@ -3,15 +3,18 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-*fusion-tools*: Modular creation of dashboards for visualization and analysis of histology data
-==========================
+*fusion-tools*
+=================================================================================================
+
+Modular creation of dashboards for visualization and analysis of histology data
+
 
 .. image:: ../images/slide-annotations-layout.PNG
    :width: 800
    :alt: fusion-tools layout
 
 What is *fusion-tools*?
----------------
+-------------------------
 
 *fusion-tools* was designed as a flexible way for users to generate
 interactive components which focus on **histological images**. It was 
@@ -24,7 +27,7 @@ plugins.
 
 
 Table of contents
----------------
+-------------------
 
 background
 intro_dash
