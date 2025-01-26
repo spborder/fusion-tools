@@ -11,6 +11,7 @@ You can also specify the layout and combinations of components to use in your da
 using the following hierarchy: Rows-->Columns-->Tabs
 
 .. code-block:: python
+    
     # This layout consists of one row of one component:
     example_row_layout = [
         SlideMap()
@@ -60,6 +61,7 @@ Alternatively, you can also define multiple pages with content by specifying a d
 with different page layouts.
 
 .. code-block:: python
+
     example_page_layout = {
         "page 1": [
             SlideMap()
