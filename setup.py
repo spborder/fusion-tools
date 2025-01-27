@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="fusion-tools",
-    version="3.0.0",
+    version="3.0.1",
     author="Sam Border",
     author_email="sam.border2256@gmail.com",
     description="Modular visualization and analysis dashboard creation for high-resolution microscopy images",
@@ -27,7 +27,7 @@ setuptools.setup(
         "uuid>=1.30",
         "scikit-image",
         "umap-learn>=0.5.6",
-        "statsmodels>=0.14.2",
+        "statsmodels>=0.14.0",
         "typing-extensions>=4.8.0"
     ],
     extras_require = {

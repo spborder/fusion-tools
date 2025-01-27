@@ -12,7 +12,6 @@ from skimage import exposure
 from skimage.color import rgb2hsv
 import scipy.ndimage as ndi
 from skimage.morphology import remove_small_holes, remove_small_objects
-from skimage.measure import label, find_contours
 from skimage.feature import peak_local_max
 from skimage.transform import rescale
 
