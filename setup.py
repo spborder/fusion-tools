@@ -35,7 +35,7 @@ setuptools.setup(
             "dash-leaflet[all]>=1.0.15",
             "dash>=2.18.1",
             "dash-extensions>=1.0.18",
-            "dash-uploader>=0.7.0",
+            "dash-uploader==0.7.0",
             "dash_mantine_components>=0.14.4",
             "dash-bootstrap-components>=1.6.0",
             "dash_treeview_antd>=0.0.1",
