@@ -1349,12 +1349,15 @@ class MultiFrameSlideMap(SlideMap):
     
     def __str__(self):
         return 'Multi-Frame Slide Map'
+    
+    def update_layout(self, session_data: dict, use_prefix:bool):
+        """Updating layout of MultiFramSlideMap component
 
-    def gen_layout(self, session_data: dict):
-        """Generating layout for MultiFrameSlideMap
-
-        :return: Layout added to DashBlueprint object to be embedded in larger layout.
-        :rtype: dash.html.Div.Div
+        :param session_data: Data relating to current visualization session
+        :type session_data: dict
+        :param use_prefix: Whether or not this is the initial loading of the component
+        :type use_prefix: bool
+        :return: Component layout
         """
         layout = html.Div([
             dcc.Dropdown(
@@ -1465,7 +1468,16 @@ class MultiFrameSlideMap(SlideMap):
             )
         ])
 
-        self.blueprint.layout = layout
+        if use_prefix:
+            PrefixIdTransform(prefix=f'{self.component_prefix}').transform_layout(layout)
+
+        return layout
+
+    def gen_layout(self, session_data: dict):
+        """Generating layout for MultiFrameSlideMap
+        """
+
+        self.blueprint.layout = self.update_layout(session_data,use_prefix = True)
 
     def process_frames(self,image_metadata,tiles_url):
         """Create BaseLayer and TileLayer components for each of the different frames present in a multi-frame image
@@ -1602,6 +1614,9 @@ class SlideImageOverlay(MapComponent):
     def to_dict(self):
         return {'image_path': self.image_path, 'image_crs': self.image_crs, 'image_properties': self.image_properties,'image_bounds': self.image_bounds}
 
+
+
+
 class ChannelMixer(MapComponent):
     """ChannelMixer component that allows users to select various frames from their image to overlay at the same time with different color (styles) applied.
 
@@ -1617,6 +1632,10 @@ class ChannelMixer(MapComponent):
         :type tiles_url: str
         """
         super().__init__()
+
+    def __str__(self):
+        return 'Channel Mixer'
+
     def load(self, component_prefix: int):
 
         self.component_prefix = component_prefix
@@ -1643,12 +1662,16 @@ class ChannelMixer(MapComponent):
         
         return frame_names
 
-    def gen_layout(self, session_data:dict):
-        """Generating layout for ChannelMixer component
+    def updat_layout(self, session_data: dict, use_prefix: bool):
+        """Updating layout of ChannelMixer component
 
-        :return: Interactive components for ChannelMixer component
-        :rtype: dash.html.Div.Div
+        :param session_data: Current data relating to visualization session
+        :type session_data: dict
+        :param use_prefix: Whether or not this is the initial load of the component
+        :type use_prefix: bool
+        :return: ChannelMixer component
         """
+        
         layout = html.Div([
             dbc.Card([
                 dbc.CardBody([
@@ -1693,7 +1716,15 @@ class ChannelMixer(MapComponent):
             ])
         ])
 
-        self.blueprint.layout = layout
+        if use_prefix:
+            PrefixIdTransform(prefix = f'{self.component_prefix}').transform_layout(layout)
+
+        return layout
+
+    def gen_layout(self, session_data:dict):
+        """Generating layout for ChannelMixer component
+        """
+        self.blueprint.layout = self.update_layout(session_data, use_prefix=True)
 
     def get_callbacks(self):
         """Initializing callbacks and adding to DashBlueprint
@@ -1752,6 +1783,13 @@ class ChannelMixer(MapComponent):
         )(self.update_channel_mix)
 
     def update_slide(self, selected_slide, vis_data):
+        """Updating component data when a new slide is selected
+
+        :param selected_slide: New slide
+        :type selected_slide: list
+        :param vis_data: Data relating to current visualization session
+        :type vis_data: str
+        """
 
         if not any([i['value'] or i['value']==0 for i in ctx.triggered]):
             raise exceptions.PreventUpdate

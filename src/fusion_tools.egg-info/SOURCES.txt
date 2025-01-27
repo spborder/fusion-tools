@@ -5,7 +5,6 @@ setup.py
 src/fusion_tools/__init__.py
 src/fusion_tools/dataset.py
 src/fusion_tools/feature_extraction.py
-src/fusion_tools/handler.py
 src/fusion_tools/tileserver.py
 src/fusion_tools.egg-info/PKG-INFO
 src/fusion_tools.egg-info/SOURCES.txt
@@ -20,6 +19,13 @@ src/fusion_tools/fusion/__init__.py
 src/fusion_tools/fusion/data_types.py
 src/fusion_tools/fusion/surveys.py
 src/fusion_tools/fusion/vis.py
+src/fusion_tools/handler/__init__.py
+src/fusion_tools/handler/dataset_builder.py
+src/fusion_tools/handler/dataset_uploader.py
+src/fusion_tools/handler/dsa_handler.py
+src/fusion_tools/handler/login.py
+src/fusion_tools/handler/plugin.py
+src/fusion_tools/handler/survey.py
 src/fusion_tools/utils/__init__.py
 src/fusion_tools/utils/images.py
 src/fusion_tools/utils/omics.py

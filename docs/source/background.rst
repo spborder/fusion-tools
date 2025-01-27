@@ -29,6 +29,7 @@ find easier to use than any new tool. However, there are several functionalities
 would argue are easier to accomplish in *fusion-tools* than in other tools.
 
 These include:
+
 1. Multiple levels of interactive analysis and annotation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -57,7 +58,7 @@ embedding of key structural identification properties.
 
 Using Dash as the main framework enables users to embed custom components in the form of DashBlueprint objects 
 with interactive callbacks that can extend across built-in components. Furthermore, developers more familiar with 
-JavaScript can take advantage of *clientside\_callback*s in custom components or they can even `convert React components 
+JavaScript can take advantage of *clientside_callback*\ s in custom components or they can even `convert React components 
 into Dash components <https://dash.plotly.com/plugins>`_\ .
 
 

@@ -1,6 +1,6 @@
-Metadata-Version: 2.1
+Metadata-Version: 2.2
 Name: fusion-tools
-Version: 2.6.0
+Version: 3.0.0
 Summary: Modular visualization and analysis dashboard creation for high-resolution microscopy images
 Home-page: https://github.com/spborder/fusion-tools
 Author: Sam Border
@@ -36,6 +36,16 @@ Requires-Dist: dash-bootstrap-components>=1.6.0; extra == "interactive"
 Requires-Dist: dash_treeview_antd>=0.0.1; extra == "interactive"
 Requires-Dist: fastapi>=0.103.2; extra == "interactive"
 Requires-Dist: uvicorn>=0.30.6; extra == "interactive"
+Dynamic: author
+Dynamic: author-email
+Dynamic: classifier
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: provides-extra
+Dynamic: requires-dist
+Dynamic: requires-python
+Dynamic: summary
 
 # *fusion-tools*
 Modular visualization and analysis dashboard creation for high-resolution microscopy images.
