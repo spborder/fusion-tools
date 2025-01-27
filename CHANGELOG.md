@@ -1,7 +1,19 @@
 # Changelog
 
 <!--next-version-placeholder-->
+## v3.0.0 (01/2025)
 
+### Features
+- DSA Components added!
+    - This includes `DSALogin`, `DatasetBuilder`, `DatasetUploader`, `DSAPluginRunner`, `DSAPluginProgress`, and `DSASurvey`
+
+## v2.1.0 -> v2.5.5 (11/2024)
+
+### Features
+- Expanded feature extraction options
+    - `sub_mask` option enabling extraction of regions within images to calculate features on.
+- Expanded functionality for `BulkLabels` component
+    - Combine multiple queries using *NOT*, *AND*, and *OR* to refine structure selection.
 
 ## v2.1.0 (11/07/2024)
 

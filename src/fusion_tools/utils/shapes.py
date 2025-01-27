@@ -414,6 +414,42 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
 
     return spot_annotations
 
+def detect_histomics(query_annotations:Union[list,dict]):
+    """Check whether a list/dict of annotations are in histomics format
+
+    :param query_annotations: Input query annotation
+    :type query_annotations: Union[list,dict]
+    """
+
+    if type(query_annotations)==dict:
+        query_annotations = [query_annotations]
+    
+    result = False
+    for q in query_annotations:
+        if type(q)==dict:
+            if 'annotation' in q:
+                result = True
+    
+    return result
+
+def detect_geojson(query_annotations:Union[list,dict]):
+    """Check whether a list/dict of annotations are in GeoJSON format
+
+    :param query_annotations: Input query annotation
+    :type query_annotations: Union[list,dict]
+    """
+    if type(query_annotations)==dict:
+        query_annotations = [query_annotations]
+    
+    result = False
+    for q in query_annotations:
+        if type(q)==dict:
+            if 'type' in q:
+                if q['type']=='FeatureCollection':
+                    result = True
+    
+    return result
+
 def convert_histomics(json_anns: Union[list,dict]):
     
     if type(json_anns)==dict:
@@ -421,24 +457,56 @@ def convert_histomics(json_anns: Union[list,dict]):
 
     geojson_list = []
     for ann in json_anns:
-
         geojson_anns = {
             'type': 'FeatureCollection',
-            'properties': {'name': ann['annotation']['name'], '_id': uuid.uuid4().hex[:24]},
-            'features': [
-                {
-                    'type':'Feature',
-                    'geometry': {
-                        'type': 'Polygon',
-                        'coordinates': [
-                            el['points']
-                        ]
-                    },
-                    'properties': el['user'] | {'name': f'{ann["annotation"]["name"]}', '_id': uuid.uuid4().hex[:24],'_index': el_idx} if 'user' in el else {'name': f'{ann["annotation"]["name"]}_{el_idx}', '_id': ann['annotation']['_id'], '_index': el_idx}
-                }
-                for el_idx,el in enumerate(ann['annotation']['elements'])
-            ]
+            'properties': {
+                'name': ann['annotation']['name'],
+                '_id': uuid.uuid4().hex[:24] if not '_id' in ann['annotation'] else ann['annotation']['_id']
+            },
+            'features': []
         }
+
+        for el_idx, el in enumerate(ann['annotation']['elements']):
+            if el['type']=='polyline':
+                coords = [el['points']]
+            elif el['type']=='rectangle':
+                coords = [[
+                    [
+                        el['center'][0] - el['width'], el['center'][1] - el['height']
+                    ],
+                    [
+                        el['center'][0] + el['width'], el['center'][1] - el['height']
+                    ],
+                    [
+                        el['center'][0] + el['width'], el['center'][1] + el['height']
+                    ],
+                    [
+                        el['center'][0] - el['width'], el['center'][1] + el['height']
+                    ],
+                    [
+                        el['center'][0] - el['width'], el['center'][1] + el['height']
+                    ]
+                ]]
+            else:
+                continue
+                
+            props_dict = {
+                'name': ann['annotation']['name'],
+                '_id': uuid.uuid4().hex[:24],
+                '_index': el_idx
+            }
+
+            if 'user' in el:
+                props_dict = el['user'] | props_dict
+
+            geojson_anns['features'].append({
+                'type': 'Feature',
+                'geometry': {
+                    'type': 'Polygon',
+                    'coordinates': coords
+                },
+                'properties': props_dict
+            })
 
         geojson_list.append(geojson_anns)
 
@@ -1306,7 +1374,6 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                         include = i
                     else:
                         include = not i
-            print(include)
 
             if include:
                 filtered_geojson['features'].append(feat)

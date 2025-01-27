@@ -7,7 +7,7 @@ sys.path.append('./src/')
 import uuid
 
 from fusion_tools.utils.shapes import spatially_aggregate
-from fusion_tools.handler import DSAHandler
+from fusion_tools.handler.dsa_handler import DSAHandler
 
 def main():
 

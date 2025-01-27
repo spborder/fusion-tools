@@ -1,9 +1,6 @@
 fusion\_tools.components package
 ================================
 
-Submodules
-----------
-
 fusion\_tools.components.maps module
 ------------------------------------
 
@@ -19,9 +16,6 @@ fusion\_tools.components.tools module
    :members:
    :undoc-members:
    :show-inheritance:
-
-Module contents
----------------
 
 .. automodule:: fusion_tools.components
    :members:

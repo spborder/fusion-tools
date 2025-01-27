@@ -48,12 +48,14 @@ class LocalTileServer(TileServer):
         self.tiles_metadatas = [i.getMetadata() for i in self.tile_sources]
         self.annotations = self.load_annotations()
 
+        self.app = FastAPI()
         self.router = APIRouter()
         self.router.add_api_route('/',self.root,methods=["GET"])
         self.router.add_api_route('/names',self.get_names,methods=["GET"])
         self.router.add_api_route('/{image}/tiles/{z}/{x}/{y}',self.get_tile,methods=["GET"])
         self.router.add_api_route('/{image}/metadata',self.get_metadata,methods=["GET"])
         self.router.add_api_route('/{image}/tiles/region',self.get_region,methods=["GET"])
+        self.router.add_api_route('/{image}/tiles/thumbnail',self.get_thumbnail,methods=["GET"])
         self.router.add_api_route('/{image}/annotations',self.get_annotations,methods=["GET"])
 
     def load_annotations(self):
@@ -99,7 +101,7 @@ class LocalTileServer(TileServer):
 
         self.tile_sources.append(new_tile_source)
         if not new_metadata is None:
-            self.tiles_metadata.append(new_tiles_metadata | new_metadata)
+            self.tiles_metadata.append(new_tiles_metadata | {'user': new_metadata})
         else:
             self.tiles_metadatas.append(new_tiles_metadata)
 
@@ -277,10 +279,25 @@ class LocalTileServer(TileServer):
         else:
             return Response(content = 'invalid image index', media_type = 'application/json')
 
+    def get_thumbnail(self, image:int):
+        """Grabbing an image thumbnail
+
+        :param image: _description_
+        :type image: int
+        """
+
+        if image<len(self.names) and image>=0:
+            thumbnail,mime_type = large_image.open(self.local_image_paths[image]).getThumbnail(encoding='PNG')
+            return Response(content = thumbnail, media_type = 'image/png')
+        else:
+            return Response(content = 'invalid image index', media_type = 'application/json')
+
     def get_annotations(self,image:int):
 
         if image<len(self.names) and image>=0:
             return Response(content = json.dumps(self.annotations[image]),media_type='application/json')
+        else:
+            return Response(content = 'invalid image index', media_type = 'application/json')
 
     def start(self):
         """Starting tile server instance on a provided port
@@ -288,9 +305,8 @@ class LocalTileServer(TileServer):
         :param port: Tile server port from which tiles are accessed, defaults to '8050'
         :type port: str, optional
         """
-        app = FastAPI()
-        app.include_router(self.router)
-        uvicorn.run(app,host=self.host,port=self.tile_server_port)
+        self.app.include_router(self.router)
+        uvicorn.run(self.app,host=self.host,port=self.tile_server_port)
 
 class DSATileServer(TileServer):
     """Use for linking visualization with remote tiles API (DSA server)
@@ -298,7 +314,8 @@ class DSATileServer(TileServer):
     """
     def __init__(self,
                  api_url: str,
-                 item_id: str
+                 item_id: str,
+                 user_token: Union[str,None] = None
                  ):
         """Constructor method
 
@@ -310,7 +327,9 @@ class DSATileServer(TileServer):
 
         self.base_url = api_url
         self.item_id = item_id
+        self.user_token = user_token
 
+        #TODO: Add some method for appending the user_token to these URLs
         self.name = requests.get(
             f'{api_url}/item/{item_id}'
         ).json()['name']

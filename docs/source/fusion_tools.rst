@@ -1,9 +1,6 @@
 fusion\_tools package
 =====================
 
-Subpackages
------------
-
 .. toctree::
    :maxdepth: 4
 
@@ -11,8 +8,6 @@ Subpackages
    fusion_tools.utils
    fusion_tools.visualization
 
-Submodules
-----------
 
 fusion\_tools.handler module
 ----------------------------
@@ -30,10 +25,24 @@ fusion\_tools.tileserver module
    :undoc-members:
    :show-inheritance:
 
-Module contents
----------------
-
 .. automodule:: fusion_tools
    :members:
    :undoc-members:
    :show-inheritance:
+
+fusion\_tools.dataset module
+-----------------------------
+
+.. automodule:: fusion_tools.dataset
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+fusion\_tools.feature_extraction module
+----------------------------------------
+
+.. automodule:: fusion_tools.feature_extraction
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
