@@ -17,7 +17,7 @@ from skimage.feature import peak_local_max
 from skimage.transform import rescale
 
 
-from fusion_tools.handler import DSAHandler
+from fusion_tools.handler.dsa_handler import DSAHandler
 from fusion_tools.tileserver import DSATileServer 
 from fusion_tools.feature_extraction import ParallelFeatureExtractor
 

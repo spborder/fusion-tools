@@ -6,7 +6,6 @@ import sys
 import threading
 sys.path.append('./src/')
 from fusion_tools import Visualization
-from fusion_tools.tileserver import LocalTileServer
 from fusion_tools.components import SlideMap, SlideImageOverlay
 
 

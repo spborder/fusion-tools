@@ -22,9 +22,9 @@ from sklearn.cluster import DBSCAN
 from shapely.geometry import box, shape
 from umap import UMAP
 
-from fusion_tools import Visualization, DSAHandler
-from fusion_tools.components import SlideMap
-from fusion_tools.tileserver import DSATileServer
+from fusion_tools import Visualization
+from fusion_tools.handler.dsa_handler import DSAHandler
+from fusion_tools.components import SlideMap, Tool
 
 
 def gen_clusters(feature_data, feature_cols, eps = 0.3, min_samples = 10):
@@ -52,13 +52,17 @@ def gen_clusters(feature_data, feature_cols, eps = 0.3, min_samples = 10):
 
     return string_labels
 
-class ClusterComponent:
+class ClusterComponent(Tool):
     """Find intersecting structures in a map, extract features, cluster, and display cluster labels
     """
     def __init__(self):
         """You can initialize data to the component here, or get data as the result of a callback.
         """
-        pass
+        
+        super().__init__()
+
+    def __str__(self):
+        return 'Cluster Component'
 
     def load(self, component_prefix:int):
 

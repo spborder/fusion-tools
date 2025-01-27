@@ -1,6 +1,12 @@
 # Changelog
 
 <!--next-version-placeholder-->
+## v3.0.0 (01/2025)
+
+### Features
+- DSA Components added!
+    - This includes `DSALogin`, `DatasetBuilder`, `DatasetUploader`, `DSAPluginRunner`, `DSAPluginProgress`, and `DSASurvey`
+
 ## v2.1.0 -> v2.5.5 (11/2024)
 
 ### Features
