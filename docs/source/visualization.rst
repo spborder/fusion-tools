@@ -81,7 +81,8 @@ By default this will create a page selector in the *Navbar* at the top of the ap
 different pages. (e.g.: access "page 1" by going to "{host}:{port}/app/page-1" and "page 2" by going to "{host}:{port}/app/page-2")
 
 .. toctree::
-    :max-depth: 2
+    :maxdepth: 2
+    
     fusion_tools.visualization
 
 The Visualization Session
