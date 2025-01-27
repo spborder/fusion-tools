@@ -80,10 +80,9 @@ with different page layouts.
 By default this will create a page selector in the *Navbar* at the top of the application, or you can change the url to access 
 different pages. (e.g.: access "page 1" by going to "{host}:{port}/app/page-1" and "page 2" by going to "{host}:{port}/app/page-2")
 
-.. automodule:: fusion_tools.visualization
-   :members:
-   :undoc-members:
-   :show-inheritance:
+.. toctree::
+    :max-depth: 2
+    fusion_tools.visualization
 
 The Visualization Session
 -------------------------
@@ -91,8 +90,8 @@ The Visualization Session
 The "Visualization Session" refers to all of the information that is currently used by 
 interactive components. This includes:
 
-1. Current user details (if any DSA components or *TileServer*s are in use)
-2. Local slides (if any *LocalTileServer*s are in use)
+1. Current user details (if any DSA components or *TileServer*\ s are in use)
+2. Local slides (if any *LocalTileServer*\ s are in use)
 3. Current slides (combination of local slides + cloud slides selected from *DatasetBuilder*)
 
 By default, objects that inherit from the *Tool* class do not need to update 
