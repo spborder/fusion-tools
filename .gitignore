@@ -4,3 +4,4 @@ update_instructions.md
 .vscode/*
 tests/Test_Annotations/*
 tests/outputs/*
+__pycache__/*

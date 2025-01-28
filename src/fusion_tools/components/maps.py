@@ -1368,7 +1368,7 @@ class MultiFrameSlideMap(SlideMap):
                         'label': i['name'],
                         'value': idx
                     }
-                    for idx, i in enumerate(session_data)
+                    for idx, i in enumerate(session_data['current'])
                 ]
             ),
             html.Div(
@@ -1662,7 +1662,7 @@ class ChannelMixer(MapComponent):
         
         return frame_names
 
-    def updat_layout(self, session_data: dict, use_prefix: bool):
+    def update_layout(self, session_data: dict, use_prefix: bool):
         """Updating layout of ChannelMixer component
 
         :param session_data: Current data relating to visualization session
@@ -1724,7 +1724,7 @@ class ChannelMixer(MapComponent):
     def gen_layout(self, session_data:dict):
         """Generating layout for ChannelMixer component
         """
-        self.blueprint.layout = self.update_layout(session_data, use_prefix=True)
+        self.blueprint.layout = self.update_layout(session_data, use_prefix=False)
 
     def get_callbacks(self):
         """Initializing callbacks and adding to DashBlueprint
@@ -1819,53 +1819,52 @@ class ChannelMixer(MapComponent):
         """
 
         channel_mix_values = get_pattern_matching_value(channel_mix_values)
-        if channel_mix_values is None:
-            raise exceptions.PreventUpdate
-        
         if current_channels is None:
             current_channels = []
         
         channel_mix_tabs = []
-        for c_idx, c in enumerate(channel_mix_values):
-            if not c in current_channels:
-                channel_tab = dbc.Tab(
-                    id = {'type': f'{self.component_prefix}-channel-mixer-tab','index': c_idx},
-                    tab_id = c.lower().replace(' ','-'),
-                    label = c,
-                    activeTabClassName='fw-bold fst-italic',
-                    label_style = {'color': 'rgb(0,0,0,255)'},
-                    children = [
-                        dmc.ColorPicker(
-                            id = {'type': f'{self.component_prefix}-channel-mixer-color','index': c_idx},
-                            format = 'rgba',
-                            value = 'rgba(255,255,255,255)',
-                            fullWidth=True
-                        )
-                    ]
-                )
-            else:
-                channel_tab = dbc.Tab(
-                    id = {'type': f'{self.component_prefix}-channel-mixer-tab','index': c_idx},
-                    tab_id = c.lower().replace(' ','-'),
-                    label = c,
-                    activeTabClassName='fw-bold fst-italic',
-                    label_style = current_colors[c_idx],
-                    children = [
-                        dmc.ColorPicker(
-                            id = {'type': f'{self.component_prefix}-channel-mixer-color','index': c_idx},
-                            format='rgba',
-                            value = current_colors[c_idx]['color'],
-                            fullWidth = True
-                        )
-                    ]
-                )
+        c = None
+        if not channel_mix_values is None:
+            for c_idx, c in enumerate(channel_mix_values):
+                if not c in current_channels:
+                    channel_tab = dbc.Tab(
+                        id = {'type': f'{self.component_prefix}-channel-mixer-tab','index': c_idx},
+                        tab_id = c.lower().replace(' ','-'),
+                        label = c,
+                        activeTabClassName='fw-bold fst-italic',
+                        label_style = {'color': 'rgb(0,0,0,255)'},
+                        children = [
+                            dmc.ColorPicker(
+                                id = {'type': f'{self.component_prefix}-channel-mixer-color','index': c_idx},
+                                format = 'rgba',
+                                value = 'rgba(255,255,255,255)',
+                                fullWidth=True
+                            )
+                        ]
+                    )
+                else:
+                    channel_tab = dbc.Tab(
+                        id = {'type': f'{self.component_prefix}-channel-mixer-tab','index': c_idx},
+                        tab_id = c.lower().replace(' ','-'),
+                        label = c,
+                        activeTabClassName='fw-bold fst-italic',
+                        label_style = current_colors[c_idx],
+                        children = [
+                            dmc.ColorPicker(
+                                id = {'type': f'{self.component_prefix}-channel-mixer-color','index': c_idx},
+                                format='rgba',
+                                value = current_colors[c_idx]['color'],
+                                fullWidth = True
+                            )
+                        ]
+                    )
 
-            channel_mix_tabs.append(channel_tab)
+                channel_mix_tabs.append(channel_tab)
 
         channel_tabs = dbc.Tabs(
             id = {'type': f'{self.component_prefix}-channel-mixer-tabs','index': 0},
             children = channel_mix_tabs,
-            active_tab = c.lower().replace(' ','-')
+            active_tab = c.lower().replace(' ','-') if not c is None else []
         )
 
         return [channel_tabs]

@@ -1218,6 +1218,7 @@ class PropertyViewer(Tool):
 
         update_viewer = get_pattern_matching_value(update_viewer)
         active_tab = get_pattern_matching_value(active_tab)
+
         if not active_tab is None:
             if not active_tab=='property-viewer':
                 raise exceptions.PreventUpdate

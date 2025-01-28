@@ -60,7 +60,7 @@ class Visualization:
                  slide_metadata: Union[list,dict,None] = None,
                  tileservers: Union[list,TileServer,None] = None,
                  components: Union[list,dict] = [],
-                 header: Union[list,None] = None,
+                 header: list = [],
                  app_options: dict = {},
                  linkage: Union[list,str] = 'row'
                  ):
@@ -297,6 +297,7 @@ class Visualization:
         }
         s_idx = 0
         t_idx = 0
+
         if not self.local_slides is None:
             if self.local_annotations is None:
                 self.local_annotations = [None]*len(self.local_slides)
@@ -333,6 +334,7 @@ class Visualization:
 
         else:
             self.local_tile_server = None
+
 
         if not self.tileservers is None:
             if isinstance(self.tileservers,TileServer):
@@ -382,6 +384,7 @@ class Visualization:
                         'metadata_url': t.metadata_url if hasattr(t,'metadata_url') else None,
                         'annotations_url': t.annotations_url if hasattr(t,'annotations_url') else None
                     })
+
 
         return slide_store
 
@@ -554,7 +557,7 @@ class Visualization:
                                     dbc.CardBody(
                                         dbc.Tabs(
                                             tabs_children,
-                                            id = {'type': 'vis-layout-tabs','index': np.random.randint(0,1000)},
+                                            id = {'type': f'{col[0].component_prefix}-vis-layout-tabs','index': np.random.randint(0,1000)},
                                             active_tab = col[0].title.lower().replace(' ','-')
                                         )
                                     )
@@ -728,7 +731,7 @@ class Visualization:
                                         dbc.CardBody(
                                             dbc.Tabs(
                                                 tabs_children,
-                                                id = {'type': f'{component_prefix}-vis-layout-tabs','index': np.random.randint(0,1000)},
+                                                id = {'type': f'vis-layout-tabs','index': np.random.randint(0,1000)},
                                                 active_tab=col[0].title.lower().replace(' ','-')
                                             )
                                         )
