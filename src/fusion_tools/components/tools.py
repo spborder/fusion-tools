@@ -1313,7 +1313,6 @@ class PropertyViewer(Tool):
                     n_levels = max(list(set([len(i.split(' --> ')) for i in child_properties])))
 
                     view_subtype_value = [view_subtype_value[i] if i <= ctx.triggered_id['index'] else [] for i in range(len(view_subtype_value))]
-
                     prev_value = view_type_value
                     for sub_idx, sub in enumerate(view_subtype_value):
                         if type(sub)==str:
@@ -1405,7 +1404,7 @@ class PropertyViewer(Tool):
                         id = {'type': f'{self.component_prefix}-property-view-subtype-parent','index': 0},
                         children = [
                             current_subtype_children
-                        ]
+                        ] if not type(current_subtype_children)==list else current_subtype_children
                     )
                 )
             ]),
@@ -2562,6 +2561,7 @@ class PropertyPlotter(Tool):
                 unique_labels = data_df[label_col].unique().tolist()
                 if len(unique_labels)>1:
                     if any([i>1 for i in list(data_df[label_col].value_counts().to_dict().values())]):
+
                         p_value, results = get_label_statistics(
                             data_df = data_df.loc[:,[i for i in data_df if not i in customdata_cols]],
                             label_col=label_col
@@ -2601,7 +2601,7 @@ class PropertyPlotter(Tool):
                                                 } for row in results.to_dict('records')
                                             ],
                                             tooltip_duration = None
-                                        )
+                                        ) if type(results)==pd.DataFrame else []
                                     )
                                 ])
                         
@@ -2693,6 +2693,12 @@ class PropertyPlotter(Tool):
                                         )
                                     )
                                 ])
+
+                            else:
+
+                                label_stats_children.append(
+                                    dbc.Alert('Only one unique label present!',color = 'warning')
+                                )
 
                         elif len(property_cols)==2:
                             if any([i<0.05 for i in p_value]):

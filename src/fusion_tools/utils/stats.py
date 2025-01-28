@@ -24,6 +24,10 @@ def get_label_statistics(data_df:pd.DataFrame, label_col:str):
 
     unique_labels = [u for u,count in unique_labels_count.items() if count>1]
 
+    p_value = None
+    results = None
+    print(data_df.shape)
+
     if data_df.shape[1]==2:
         # This means there is one property and the label column
         if len(unique_labels)==2:
@@ -83,6 +87,10 @@ def get_label_statistics(data_df:pd.DataFrame, label_col:str):
                 'anova': anova_df,
                 'tukey': tukey_df
             }
+
+        else:
+            p_value = np.inf
+            results = {}
 
     elif data_df.shape[1]>2:
         if data_df.shape[1]==3:
