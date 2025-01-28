@@ -407,7 +407,8 @@ class FeatureAnnotation(Tool):
                 State({'type': 'feature-annotation-figure','index': ALL},'relayoutData'),
                 State({'type': 'feature-annotation-class-drop','index': ALL},'options'),
                 State({'type': 'feature-annotation-current-structures','index': ALL},'data'),
-                State({'type': 'feature-annotation-structure-drop','index': ALL},'value')
+                State({'type': 'feature-annotation-structure-drop','index': ALL},'value'),
+                State({'type':'feature-annotation-slide-information','index':ALL},'data')
             ]
         )(self.save_annotation)
 
@@ -417,7 +418,7 @@ class FeatureAnnotation(Tool):
             raise exceptions.PreventUpdate
         
         vis_data = json.loads(vis_data)
-        slide_data = vis_data[get_pattern_matching_value(slide_selection)]
+        slide_data = vis_data['current'][get_pattern_matching_value(slide_selection)]
         new_slide_data = {}
         new_slide_data['regions_url'] = slide_data['regions_url']
         new_metadata = requests.get(slide_data['metadata_url']).json()
@@ -544,7 +545,7 @@ class FeatureAnnotation(Tool):
                 formatted_mask+=combined_mask[:,:,c_idx]
 
         # Pulling image region from slide:
-        slide_image_region = self.get_structure_region(image_bbox, False, slide_information)
+        slide_image_region = self.get_structure_region(image_bbox, slide_information, False)
         # Saving annotation mask:
         save_path = f'{self.storage_path}/Annotations/'
         if not os.path.exists(save_path):
@@ -1740,16 +1741,16 @@ class BulkLabels(Tool):
             for div in add_property_parent:
                 div_children = div['props']['children']
                 filter_mod = div_children[0]['props']['children'][0]['props']['children'][0]['props']['value']
-                print(f'filter_mod: {filter_mod}')
+                #print(f'filter_mod: {filter_mod}')
                 filter_name = div_children[0]['props']['children'][1]['props']['children'][0]['props']['value']
-                print(f'filter_name: {filter_name}')
+                #print(f'filter_name: {filter_name}')
                 if 'props' in div_children[1]['props']['children']:
                     if 'value' in div_children[1]['props']['children']['props']:
                         filter_value = div_children[1]['props']['children']['props']['value']
                     else:
                         filter_value = div_children[1]['props']['children']['props']['children']['props']['value']
                     
-                    print(f'filter_value: {filter_value}')
+                    #print(f'filter_value: {filter_value}')
 
                     if not any([i is None for i in [filter_mod,filter_name,filter_value]]):
                         processed_filters.append({
@@ -2298,7 +2299,7 @@ class BulkLabels(Tool):
             if len(id_intersect)>0:
                 for id in id_intersect:
                     feature_label = current_labels['labels'][label_ids.index(id)]
-                    print(feature_label)
+                    #print(feature_label)
                     c['features'][feature_ids.index(id)]['properties'] = c['features'][feature_ids.index(id)]['properties'] | current_labels['labels'][label_ids.index(id)]
 
         updated_annotations = json.dumps(current_annotations)

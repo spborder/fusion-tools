@@ -26,7 +26,6 @@ def get_label_statistics(data_df:pd.DataFrame, label_col:str):
 
     p_value = None
     results = None
-    print(data_df.shape)
 
     if data_df.shape[1]==2:
         # This means there is one property and the label column
