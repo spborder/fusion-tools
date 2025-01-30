@@ -2299,8 +2299,7 @@ class BulkLabels(Tool):
             if len(id_intersect)>0:
                 for id in id_intersect:
                     feature_label = current_labels['labels'][label_ids.index(id)]
-                    #print(feature_label)
-                    c['features'][feature_ids.index(id)]['properties'] = c['features'][feature_ids.index(id)]['properties'] | current_labels['labels'][label_ids.index(id)]
+                    c['features'][feature_ids.index(id)]['properties'] = c['features'][feature_ids.index(id)]['properties'] | feature_label
 
         updated_annotations = json.dumps(current_annotations)
 

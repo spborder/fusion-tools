@@ -312,10 +312,10 @@ def load_label_mask(label_mask: np.ndarray, name: str) -> dict:
     return full_geo
 
 def load_visium(visium_path:str, include_var_names:list = [], include_obs: list = [], mpp:Union[float,None]=None):
-    """Loading 10x Visium Spot annotations from an h5ad file. Adds any of the variables
-    listed in var_names and also the barcodes associated with each spot.
+    """Loading 10x Visium Spot annotations from an h5ad file or csv file containing spot center coordinates. Adds any of the variables
+    listed in var_names and also the barcodes associated with each spot (if the path is an h5ad file).
 
-    :param visium_path: Path to the h5ad (anndata) formatted Visium data
+    :param visium_path: Path to the h5ad (anndata) formatted Visium data or csv file containing "imagerow" and "imagecol" columns
     :type visium_path: str
     :param include_var_names: List of additional variables to add to the generated annotations (barcode is added by default), defaults to []
     :type include_var_names: list, optional
@@ -325,23 +325,27 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
 
     assert os.path.exists(visium_path)
 
-    anndata_object = ad.read_h5ad(visium_path)
+    if 'h5ad' in visium_path:
+        anndata_object = ad.read_h5ad(visium_path)
 
-    if 'spatial' in anndata_object.obsm_keys():
+        if 'spatial' in anndata_object.obsm_keys():
 
-        spot_coords = pd.DataFrame(
-            data = anndata_object.obsm['spatial'],
-            index = anndata_object.obs_names,
-            columns = ['imagecol','imagerow']
-        )
-    elif all([i in anndata_object.obs_keys() for i in ['imagecol','imagerow']]):
-        spot_coords = pd.DataFrame(
-            data = {
-                'imagecol': anndata_object.obs['imagecol'],
-                'imagerow': anndata_object.obs['imagerow']
-            },
-            index = anndata_object.obs_names
-        )
+            spot_coords = pd.DataFrame(
+                data = anndata_object.obsm['spatial'],
+                index = anndata_object.obs_names,
+                columns = ['imagecol','imagerow']
+            )
+        elif all([i in anndata_object.obs_keys() for i in ['imagecol','imagerow']]):
+            spot_coords = pd.DataFrame(
+                data = {
+                    'imagecol': anndata_object.obs['imagecol'],
+                    'imagerow': anndata_object.obs['imagerow']
+                },
+                index = anndata_object.obs_names
+            )
+    elif 'csv' in visium_path:
+        spot_coords = pd.read_csv(visium_path)
+
 
     # Quick way to calculate how large the radius of each spot should be (minimum distance will be 100um between adjacent spot centroids )
     if mpp is None:
@@ -370,16 +374,20 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
         }
     }
 
-    if len(include_var_names)>0:
-        include_vars = [i for i in include_var_names if i in anndata_object.var_names]
-    else:
-        include_vars = []
+    if 'h5ad' in visium_path:
+        if len(include_var_names)>0:
+            include_vars = [i for i in include_var_names if i in anndata_object.var_names]
+        else:
+            include_vars = []
 
-    if len(include_obs)>0:
-        include_obs = [i for i in include_obs if i in anndata_object.obs_keys()]
+        if len(include_obs)>0:
+            include_obs = [i for i in include_obs if i in anndata_object.obs_keys()]
+        else:
+            include_obs = []
     else:
         include_obs = []
-    
+        include_vars = []
+        
 
     barcodes = list(spot_coords.index)
     for idx in range(spot_coords.shape[0]):

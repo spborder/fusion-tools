@@ -1439,6 +1439,12 @@ class MultiFrameSlideMap(SlideMap):
                             'click': self.js_namespace('centerMap')
                         }
                     ),
+                    dl.EasyButton(
+                        icon = 'fa-solid fa-upload',
+                        title = 'Upload Shapes',
+                        id = {'type': 'upload-shape','index': 0},
+                        position = 'top-left'
+                    ),
                     html.Div(
                         id = {'type': 'map-marker-div','index': 0},
                         children = []
@@ -1571,6 +1577,58 @@ class MultiFrameSlideMap(SlideMap):
             raise TypeError("Missing 'frames' key in image metadata")
         
         return frame_layers
+
+
+class LargeSlideMap(SlideMap):
+    """This is a subclass of SlideMap used for LARGE amounts of annotations (>50k)
+
+    :param SlideMap: _description_
+    :type SlideMap: _type_
+    """
+    def __init__(self,
+                 max_load:int,
+                 max_zoom:int,
+                 ):
+        super().__init__()
+
+        self.max_load = max_load
+        self.max_zoom = max_zoom
+
+    def __str__(self):
+        return "Large Slide Map"
+    
+    def get_namespace(self):
+        pass
+
+    def update_layout(self, session_data:dict, use_prefix:bool):
+        pass
+    
+
+class LargeMultiFrameSlideMap(MultiFrameSlideMap):
+    """This is a sub-class of MultiFrameSlideMap used for LARGE amounts of annotations (>50k)
+
+    :param MultiFrameSlideMap: _description_
+    :type MultiFrameSlideMap: _type_
+    """
+    def __init__(self,
+                 max_load:int,
+                 max_zoom:int):
+        
+        super().__init__()
+        self.max_load = max_load
+        self.max_zoom = max_zoom
+
+    def __str__(self):
+        return "Large Multi Frame Slide Map"
+
+    def get_namespace(self):
+        pass
+
+    def update_layout(self, session_data:dict, use_prefix:bool):
+        pass
+    
+
+
 
 
 class SlideImageOverlay(MapComponent):
