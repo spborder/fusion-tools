@@ -126,6 +126,7 @@ class Visualization:
             ],
             'external_scripts': [
                 'https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.1.0/chroma.min.js',
+                "https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js"
             ]
         }
 
@@ -326,7 +327,9 @@ class Visualization:
                         'tiles_url': self.local_tile_server.get_name_tiles_url(s.split(os.sep)[-1]),
                         'regions_url': self.local_tile_server.get_name_regions_url(s.split(os.sep)[-1]),
                         'metadata_url': self.local_tile_server.get_name_metadata_url(s.split(os.sep)[-1]),
-                        'annotations_url': self.local_tile_server.get_name_annotations_url(s.split(os.sep)[-1])
+                        'annotations_url': self.local_tile_server.get_name_annotations_url(s.split(os.sep)[-1]),
+                        'annotations_metadata_url': self.local_tile_server.get_name_annotations_metadata_url(s.split(os.sep)[-1]),
+                        'annotations_region_url': self.local_tile_server.get_name_annotations_url(s.split(os.sep)[-1])
                     }
 
                 slide_store['current'].append(slide_dict)
@@ -349,7 +352,9 @@ class Visualization:
                             'tiles_url': t.get_name_tiles_url(j),
                             'regions_url': t.get_name_regions_url(j),
                             'metadata_url': t.get_name_metadata_url(j),
-                            'annotations_url': t.get_name_annotations_url(j)
+                            'annotations_url': t.get_name_annotations_url(j),
+                            'annotations_metadata_url': t.get_name_annotations_metadata_url(j),
+                            'annotations_region_url': t.get_name_annotations_url(j)
                         }
                         for j in t['names']
                     ])
@@ -360,7 +365,9 @@ class Visualization:
                             'tiles_url': t.get_name_tiles_url(j),
                             'regions_url': t.get_name_regions_url(j),
                             'metadata_url': t.get_name_metadata_url(j),
-                            'annotations_url': t.get_name_annotations_url(j)
+                            'annotations_url': t.get_name_annotations_url(j),
+                            'annotations_metadata_url': t.get_name_annotations_metadata_url(j),
+                            'annotations_region_url': t.get_name_annotations_url(j)
                         }
                         for j in t['names']
                     ])
@@ -373,7 +380,9 @@ class Visualization:
                         'tiles_url': t.tiles_url,
                         'regions_url': t.regions_url,
                         'metadata_url': t.metadata_url,
-                        'annotations_url': t.annotations_url
+                        'annotations_url': t.annotations_url,
+                        'annotations_metadata_url':t.annotations_metadata_url,
+                        'annotations_region_url': t.annotations_region_url
                     })
                 elif type(t)==CustomTileServer:
                     slide_store['current'].append({
@@ -382,7 +391,9 @@ class Visualization:
                         'tiles_url': t.tiles_url,
                         'regions_url': t.regions_url if hasattr(t,'regions_url') else None,
                         'metadata_url': t.metadata_url if hasattr(t,'metadata_url') else None,
-                        'annotations_url': t.annotations_url if hasattr(t,'annotations_url') else None
+                        'annotations_url': t.annotations_url if hasattr(t,'annotations_url') else None,
+                        'annotations_metadata_url': t.annotations_metadata_url if hasattr(t,'annotations_metadata_url') else None,
+                        'annotations_region_url': t.annotations_regions_url if hasattr(t,'annotations_regions_url') else None
                     })
 
 

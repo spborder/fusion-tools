@@ -36,11 +36,15 @@ def load_annotations(file_path: str, name:Union[str,None]=None,**kwargs) -> dict
     try:
         if file_extension=='xml':
             annotations = load_aperio(file_path)
-        elif file_extension=='json':
+        elif file_extension in ['json','geojson']:
             try:
                 annotations = load_geojson(file_path,name)
             except:
                 annotations = load_histomics(file_path)
+
+        elif file_extension=='parquet':
+            annotations = load_parquet(file_path)
+        
         elif file_extension=='csv':
             annotations = load_polygon_csv(file_path,name,**kwargs)
         elif file_extension in ['tif','png','jpg','tiff']:
@@ -54,6 +58,18 @@ def load_annotations(file_path: str, name:Union[str,None]=None,**kwargs) -> dict
         annotations = None
 
     return annotations
+
+def load_parquet(parquet_path:str, geometry_cols:Union[list,None]=None):
+
+    parquet_anns = gpd.read_parquet(parquet_path,columns = geometry_cols)
+    geojson_anns = json.loads(parquet_anns.to_geo_dict(show_bbox=True))
+
+    geojson_anns['properties'] = {
+        'name': parquet_path.split(os.sep)[-1],
+        '_id': uuid.uuid4().hex[:24]
+    }
+
+    return geojson_anns
 
 def load_geojson(geojson_path: str, name:Union[str,None]=None) -> dict:
     """Load GeoJSON annotations from file path. Optionally add names for GeoJSON FeatureCollections
@@ -456,6 +472,20 @@ def detect_geojson(query_annotations:Union[list,dict]):
                 if q['type']=='FeatureCollection':
                     result = True
     
+    return result
+
+def detect_image_overlay(query_annotations:Union[list,dict]):
+    """Checking whether a list/dict of annotations contain an image overlay"""
+    if type(query_annotations)==dict:
+        query_annotations=[query_annotations]
+    
+    result = False
+
+    for q in query_annotations:
+        if type(q)==dict:
+            if 'image_bounds' in q:
+                result = True
+
     return result
 
 def convert_histomics(json_anns: Union[list,dict]):
@@ -1102,6 +1132,13 @@ def extract_geojson_properties(geo_list: list, reference_object: Union[str,None]
     geojson_properties = sorted(geojson_properties)
 
     return geojson_properties, feature_names, property_info
+
+def structures_within_poly(original:dict, query:Polygon):
+
+    og_geo = gpd.GeoDataFrame.from_features(original['features'])
+    result_geo = json.loads(og_geo[og_geo.intersects(query)].to_json())
+
+    return result_geo
 
 def process_filters_queries(filter_list:list, spatial_list:list, structures:list, all_geo_list:list):
     """Filter GeoJSON list based on lists of both spatial and property filters.
