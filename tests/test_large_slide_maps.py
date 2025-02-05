@@ -43,8 +43,8 @@ def main():
         tileservers = dsa_tileserver,
         components = [
             [
-                SlideMap(
-                #    min_zoom = 4
+                LargeSlideMap(
+                    min_zoom = 4
                 ),
                 [
                     OverlayOptions()

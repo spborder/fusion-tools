@@ -1609,151 +1609,6 @@ class LargeSlideMap(SlideMap):
     def __str__(self):
         return "Large Slide Map"
     
-    def update_layout(self, session_data:dict, use_prefix:bool):
-        """Generating LargeSlideMap layout
-
-        :return: Div object containing interactive components for the LargeSlideMap object.
-        :rtype: dash.html.Div.Div
-        """
-
-        layout = html.Div([
-            dcc.Dropdown(
-                id = {'type': 'slide-select-drop','index': 0},
-                placeholder = 'Select a slide to view',
-                options = [
-                    {'label': i['name'],'value': idx}
-                    for idx,i in enumerate(session_data['current'])
-                ],
-                value = [],
-                multi = False,
-                style = {'marginBottom': '10px'}
-            ),
-            html.Div(
-                dcc.Store(
-                    id = {'type': 'map-slide-information','index': 0},
-                    storage_type='memory',
-                    data = json.dumps({})
-                )
-            ),
-            html.Hr(),
-            dl.Map(
-                id = {'type': 'slide-map','index': 0},
-                crs = 'Simple',
-                center = [-120,120],
-                zoom = 0,
-                zoomDelta = 0.25,
-                style = {'height': '90vh','width': '100%','margin': 'auto','display': 'inline-block'},
-                children = [
-                    html.Div(
-                        id = {'type': 'map-tile-layer-holder','index': 0},
-                        children = [
-                            dl.TileLayer(
-                                id = {'type': 'map-tile-layer','index': 0},
-                                url = '',
-                                tileSize=240,
-                                maxNativeZoom=5,
-                                minZoom = 0
-                            )
-                        ]
-                    ),
-                    dl.FullScreenControl(
-                        position = 'upper-left'
-                    ),
-                    dl.FeatureGroup(
-                        id = {'type': 'edit-feature-group','index': 0},
-                        children = [
-                            dl.EditControl(
-                                id = {'type': 'edit-control','index': 0},
-                                draw = dict(polyline=False, line=False, circle = False, circlemarker=False, marker = False),
-                                position='topleft'
-                            )
-                        ]
-                    ),
-                    html.Div(
-                        id = {'type': 'map-colorbar-div','index': 0},
-                        children = []
-                    ),
-                    html.Div(
-                        dcc.Store(
-                            id = {'type': 'map-annotations-store','index': 0},
-                            data = json.dumps({}),
-                            storage_type = 'memory'
-                        )
-                    ),
-                    dl.LayersControl(
-                        id = {'type': 'map-layers-control','index': 0},
-                        children = [
-                            html.Div(
-                                id = {'type': 'map-initial-annotations','index': 0},
-                                children = []
-                            ),
-                            html.Div(
-                                id = {'type': 'map-manual-rois','index': 0},
-                                children = []
-                            ),
-                            html.Div(
-                                id = {'type': 'map-generated-rois','index': 0},
-                                children = []
-                            )
-                        ]
-                    ),
-                    dl.EasyButton(
-                        icon = 'fa-solid fa-arrows-to-dot',
-                        title = 'Re-Center Map',
-                        id = {'type': 'center-map','index': 0},
-                        position = 'top-left',
-                        eventHandlers = {
-                            'click': self.js_namespace('centerMap')
-                        }
-                    ),
-                    dl.EasyButton(
-                        icon = 'fa-solid fa-upload',
-                        title = 'Upload Shapes',
-                        id = {'type': 'upload-shape','index': 0},
-                        position = 'top-left'
-                    ),
-                    html.Div(
-                        id = {'type': 'map-marker-div','index': 0},
-                        children = []
-                    ),
-                ]
-            ),
-            html.Div(
-                id = {'type': 'map-large-options-div','index': 0},
-                children = []
-            ),
-            dbc.Modal(
-                id = {'type': 'upload-shape-modal','index': 0},
-                is_open = False,
-                children = [
-                    html.Div(
-                        dcc.Upload(
-                            children = [
-                                'Drag and Drop or ',
-                                html.A('Select a File')
-                            ], 
-                            id = {'type': 'upload-shape-data','index': 0},
-                            style={'width': '100%','height': '60px','lineHeight': '60px','borderWidth': '1px','borderStyle': 'dashed','borderRadius': '5px','textAlign': 'center'}
-                        )
-                    )
-                ]
-            ),
-            dbc.Modal(
-                id = {'type': 'load-annotations-modal','index': 0},
-                is_open = False,
-                children = []
-            )
-        ])
-
-        if use_prefix:
-            PrefixIdTransform(prefix = self.component_prefix).transform_layout(layout)
-
-        return layout
-
-    def gen_layout(self, session_data: dict):
-
-        self.blueprint.layout = self.update_layout(session_data, use_prefix = False)
-
     def get_namespace(self):
 
         self.js_namespace = Namespace(
@@ -2244,28 +2099,509 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
     :type MultiFrameSlideMap: _type_
     """
     def __init__(self,
-                 max_load:int,
-                 max_zoom:int):
+                 min_zoom:int):
         
         super().__init__()
-        self.max_load = max_load
-        self.max_zoom = max_zoom
+        
+        self.min_zoom = min_zoom
 
     def __str__(self):
         return "Large Multi Frame Slide Map"
 
     def get_namespace(self):
-        pass
+        
+        self.js_namespace = Namespace(
+            "fusionTools","largeSlideMap"
+        )
 
-    def update_layout(self, session_data:dict, use_prefix:bool):
-        pass
+        self.js_namespace.add(
+            src = 'function(e,ctx){ctx.map.flyTo([-120,120],1);}',
+            name = "centerMap"
+        )
 
-    def gen_layout(self, session_data: dict):
+        self.js_namespace.add(
+            src = """
+                function(feature,context){
+                var {overlayBounds, overlayProp, fillOpacity, lineColor, filterVals, lineWidth, colorMap} = context.hideout;
+                var style = {};
+                if (Object.keys(chroma.brewer).includes(colorMap)){
+                    colorMap = colorMap;
+                } else {
+                    colorMap = colorMap.split("->");
+                }
 
-        self.blueprint.layout = self.update_layout(session_data, use_prefix = False)
+                if ("min" in overlayBounds) {
+                    var csc = chroma.scale(colorMap).domain([overlayBounds.min,overlayBounds.max]);
+                } else if ("unique" in overlayBounds) {
+                    var class_indices = overlayBounds.unique.map(str => overlayBounds.unique.indexOf(str));
+                    var csc = chroma.scale(colorMap).colors(class_indices.length);
+                } else {
+                    style.fillColor = 'white';
+                    style.fillOpacity = fillOpacity;
+                    if ('name' in feature.properties) {
+                        style.color = lineColor[feature.properties.name];
+                    } else {
+                        style.color = 'white';
+                    }
 
+                    return style;
+                }
 
+                var overlayVal = Number.Nan;
+                if (overlayProp) {
+                    if (overlayProp.name) {
+                        //TODO: Update this for different types of nested props (--+ = list, --# = external reference object)
+                        var overlaySubProps = overlayProp.name.split(" --> ");
+                        var prop_dict = feature.properties;
+                        for (let i = 0; i < overlaySubProps.length; i++) {
+                            if (prop_dict==prop_dict && prop_dict!=null && typeof prop_dict === 'object') {
+                                if (overlaySubProps[i] in prop_dict) {
+                                    var prop_dict = prop_dict[overlaySubProps[i]];
+                                    var overlayVal = prop_dict;
+                                } else {
+                                    prop_dict = Number.Nan;
+                                    var overlayVal = Number.Nan;
+                                }
+                            }
+                        }
+                    } else {
+                        var overlayVal = Number.Nan;
+                    }
+                } else {
+                    var overlayVal = Number.Nan;
+                }
 
+                if (overlayVal==overlayVal && overlayVal!=null) {
+                    if (typeof overlayVal==='number') {
+                        style.fillColor = csc(overlayVal);
+                    } else if ('unique' in overlayBounds) {
+                        overlayVal = overlayBounds.unique.indexOf(overlayVal);
+                        style.fillColor = csc[overlayVal];
+                    } else {
+                        style.fillColor = "f00";
+                    }
+                } else {
+                    style.fillColor = "f00";
+                }
+
+                style.fillOpacity = fillOpacity;
+                if (feature.properties.name in lineColor) {
+                    style.color = lineColor[feature.properties.name];
+                } else {
+                    style.color = 'white';
+                }
+
+                return style;
+                }
+                """,
+            name = 'featureStyle'
+        )
+
+        self.js_namespace.add(
+            src = """
+                function(feature,context){
+                const {overlayBounds, overlayProp, fillOpacity, lineColor, filterVals, lineWidth, colorMap} = context.hideout;
+
+                var returnFeature = true;
+                if (filterVals) {
+                    for (let i = 0; i < filterVals.length; i++) {
+                        // Iterating through filterVals list
+                        var filter = filterVals[i];
+                        if (filter.name) {
+                            //TODO: Update this for different types of nested props (--+ = list, --# = external reference object)
+                            var filterSubProps = filter.name.split(" --> ");
+                            var prop_dict = feature.properties;
+                            for (let j = 0; j < filterSubProps.length; j++) {
+                                if (prop_dict==prop_dict && prop_dict!=null && typeof prop_dict==='object') {
+                                    if (filterSubProps[j] in prop_dict) {
+                                        var prop_dict = prop_dict[filterSubProps[j]];
+                                        var testVal = prop_dict;
+                                    } else {
+                                        prop_dict = Number.Nan;
+                                        returnFeature = returnFeature & false;
+                                    }
+                                }
+                            }
+                        }
+                            
+                        if (filter.range && returnFeature) {
+                            if (typeof filter.range[0]==='number') {
+                                if (testVal < filter.range[0]) {
+                                    returnFeature = returnFeature & false;
+                                }
+                                if (testVal > filter.range[1]) {
+                                    returnFeature = returnFeature & false;
+                                }
+                            } else {
+                                if (filter.range.includes(testVal)) {
+                                    returnFeature = returnFeature & true;
+                                } else {
+                                    returnFeature = returnFeature & false;
+                                }
+                            }
+                        }
+                    }
+                }  else {
+                    return returnFeature;
+                }              
+                return returnFeature;
+                }
+                """,
+            name = 'featureFilter'
+        )
+
+        self.js_namespace.add(
+            src = """
+            function(e,ctx){
+                ctx.setProps({
+                    data: e.latlng
+                });
+            }
+            """,
+            name = 'sendPosition'
+        )
+
+        self.js_namespace.dump(
+            assets_folder = self.assets_folder
+        )
+
+    def load(self,component_prefix:int):
+
+        self.component_prefix = component_prefix
+
+        self.title = 'Large Multi-Frame Slide Map'
+        self.blueprint = DashBlueprint(
+            transforms = [
+                PrefixIdTransform(prefix = f'{self.component_prefix}'),
+                MultiplexerTransform()
+            ]
+        )
+
+        self.get_callbacks()
+
+        self.large_map_callbacks()
+    
+    def large_map_callbacks(self):
+
+        self.blueprint.clientside_callback(
+            """
+            async function(map_bounds,slide_information,current_zoom){
+                // Prevent Update at initialization
+                if (slide_information[0]==undefined){
+                    throw window.dash_clientside.PreventUpdate;
+                } else if (current_zoom[0]==undefined){
+                    throw window.dash_clientside.PreventUpdate;
+                }
+
+                // Run annotation region request, return annotations within that region
+                // Reading in map-slide-information
+                var map_slide_information = JSON.parse(slide_information);
+                var scaled_map_bounds = [
+                    Math.floor(map_bounds[0][1][0] / map_slide_information.y_scale),
+                    Math.floor(map_bounds[0][0][1] / map_slide_information.x_scale),
+                    Math.floor(map_bounds[0][0][0] / map_slide_information.y_scale),
+                    Math.floor(map_bounds[0][1][1] / map_slide_information.x_scale)
+                ];
+
+                // Checking if the maps current zoom level is above the minimum zoom setting
+                if (current_zoom[0] < map_slide_information.minZoom){
+                    throw window.dash_clientside.PreventUpdate;
+                }
+                
+                // This is for DSA slides, annotations are only accessible for regions on an individual basis
+                // and then must be converted to GeoJSON.
+                var annotations_list = [];
+                var annotations_str = [];
+                if ("api_url" in map_slide_information.slide_info){
+                    for (let ann = 0; ann<map_slide_information.annotations_metadata.length; ann++) {
+                        var annotation = map_slide_information.annotations_metadata[ann];
+
+                        try {
+                            let ann_url = map_slide_information.annotations_region_url + annotation._id+"?top="+scaled_map_bounds[0]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[2]+"&right="+scaled_map_bounds[3]
+                            var ann_response = await fetch(
+                                ann_url, {
+                                method: 'GET',
+                                headers: {
+                                    'Content-Type': 'application/json'    
+                                }
+                            });
+
+                            if (!ann_response.ok) {
+                                throw new Error(`Oh no! Error encountered: ${ann_response.status}`)
+                            }
+
+                            // Scaling coordinates of returned annotations
+                            var new_annotations = await ann_response.json();
+                            let new_geojson = {
+                                "type": "FeatureCollection",
+                                "features": [],
+                                "properties": {
+                                    "name": annotation.annotation.name,
+                                    "_id": annotation._id
+                                }
+                            };
+                            for (let i = 0; i<new_annotations.annotation.elements.length; i++){
+                                let new_feature = {
+                                    "type": "Feature",
+                                    "properties": new_annotations.annotation.elements[i].user,
+                                    "geometry": {
+                                        "type": "Polygon",
+                                        "coordinates": [[]]
+                                    }
+                                };
+
+                                new_feature["properties"]["id"] = i;
+                                new_feature["properties"]["cluster"] = false;
+
+                                for (let j = 0; j<new_annotations.annotation.elements[i].points.length;j++){
+                                    let these_coords = new_annotations.annotation.elements[i].points[j];
+                                    new_feature.geometry.coordinates[0].push([these_coords[0] * map_slide_information.x_scale, these_coords[1] * map_slide_information.y_scale]);
+                                }
+                                new_geojson.features.push(new_feature);
+                            }
+
+                            annotations_str.push(new_geojson);
+                            annotations_list.push(new_geojson);
+                        } catch (error) {
+                            console.error(error.message);
+                        }
+                    }
+                } else {
+                    // General case.
+                    try {
+                        let ann_url = map_slide_information.annotations_region_url+"?top="+scaled_map_bounds[0]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[2]+"&right="+scaled_map_bounds[3]
+                        var ann_response = await fetch(
+                            ann_url, {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json'    
+                            }
+                        });
+
+                        if (!ann_response.ok) {
+                            throw new Error(`Oh no! Error encountered: ${ann_response.status}`)
+                        }
+
+                        // Scaling coordinates of returned annotations
+                        var new_annotations = await ann_response.json();
+                        // Thanks Suhas
+                        const scale_geoJSON = (data, name, id, x_scale, y_scale) => {
+                            return {
+                                ...data,
+                                properties: {
+                                    name: name,
+                                    _id: id
+                                },
+                                features: data.features.map(feature => ({
+                                    ...feature,
+                                    geometry: {
+                                        ...feature.geometry,
+                                        coordinates: feature.geometry.coordinates.map(axes => 
+                                            axes.map(([x, y]) => [x * x_scale, y * y_scale])
+                                        )
+                                    }
+                                }))
+                            }
+                        }
+
+                        for (let ann=0; ann<new_annotations.length; ann++){
+                            let annotation = map_slide_information.annotations_metadata[ann];
+                            let new_geojson = scale_geoJSON(new_annotations[ann], annotation.name, annotation._id, map_slide_information.x_scale, map_slide_information.y_scale);
+                            
+                            annotations_str.push(new_geojson);
+                            annotations_list.push(new_geojson);
+                        }
+
+                    } catch (error) {
+                        console.error(error.message);
+                    }                
+                }
+
+                return [annotations_list, [JSON.stringify(annotations_str)]];
+            }
+            """,
+            [
+                Output({'type': 'feature-bounds','index': ALL},'data'),
+                Output({'type': 'map-annotations-store','index':ALL},'data')
+            ],
+            Input({'type': 'slide-map','index': ALL},'bounds'),
+            [
+                State({'type':'map-slide-information','index': ALL},'data'),
+                State({'type': 'slide-map','index': ALL},'zoom')
+            ],
+            prevent_initial_call = True
+        )
+
+    def update_slide(self, slide_selected, vis_data):
+        
+        if not any([i['value'] or i['value']==0 for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        vis_data = json.loads(vis_data)
+        new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
+
+        # Getting data from the tileservers:
+        if not 'current_user' in vis_data or not 'api_url' in new_slide:
+            new_tile_url = new_slide['tiles_url']
+            new_annotations_url = new_slide['annotations_url']
+            new_annotations_region_url = new_slide['annotations_region_url']
+            new_annotations_metadata_url = new_slide['annotations_metadata_url']
+            new_metadata_url = new_slide['metadata_url']
+        else:
+            new_tile_url = new_slide['tiles_url']+f'?token={vis_data["current_user"]["token"]}'
+            new_annotations_url = new_slide['annotations_url']+f'?token={vis_data["current_user"]["token"]}'
+            new_annotations_metadata_url = new_slide['annotations_metadata_url']+f'?token={vis_data["current_user"]["token"]}'
+            new_metadata_url = new_slide['metadata_url']+f'?token={vis_data["current_user"]["token"]}'
+
+        new_metadata = requests.get(new_metadata_url).json()
+        new_annotations_metadata = requests.get(new_annotations_metadata_url).json()
+        new_tile_size = new_metadata['tileHeight']
+        x_scale, y_scale = self.get_scale_factors(new_metadata)
+
+        annotation_names = []
+        image_overlays = []
+        initial_anns = []
+        for a in new_annotations_metadata:
+            if 'annotation' in a:
+                annotation_names.append(a['annotation']['name'])
+                initial_anns.append({
+                    'type': 'FeatureCollection', 
+                    'properties': {'name': a['annotation']['name'], '_id': a['_id']},
+                    'features': []
+                    })
+            elif 'name' in a:
+                annotation_names.append(a['name'])
+                initial_anns.append({
+                    'type': 'FeatureCollection',
+                    'properties': {'name': a['name'],'_id': a['_id']},
+                    'features': []
+                })
+            elif 'image_path' in a:
+                image_overlays.append(a)
+
+        # Creating annotation layers
+        new_layer_children = []
+        for ann_idx, ann in enumerate(annotation_names):
+            new_layer_children.append(
+                dl.Overlay(
+                    dl.LayerGroup(
+                        dl.GeoJSON(
+                            data = {
+                                "type": "FeatureCollection",
+                                "features": []
+                            },
+                            format = 'geojson',
+                            id = {'type': f'{self.component_prefix}-feature-bounds','index': ann_idx},
+                            options = {
+                                'style': self.js_namespace("featureStyle")
+                            },
+                            filter = self.js_namespace("featureFilter"),
+                            hideout = {
+                                'overlayBounds': {},
+                                'overlayProp': {},
+                                'fillOpacity': 0.5,
+                                'lineColor': {
+                                    k: '#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255))
+                                    for k in annotation_names
+                                },
+                                'filterVals': [],
+                                'colorMap': 'blue->red'
+                            },
+                            hoverStyle = arrow_function(
+                                {
+                                    'weight': 5,
+                                    'color': '#9caf00',
+                                    'dashArray':''
+                                }
+                            ),
+                            zoomToBounds = False,
+                            children = [
+                                dl.Popup(
+                                    id = {'type': f'{self.component_prefix}-feature-popup','index': ann_idx},
+                                    autoPan = False,
+                                )
+                            ]
+                        )
+                    ),
+                    name = ann, checked = True, id = {'type':f'{self.component_prefix}-feature-overlay','index':np.random.randint(0,1000)}
+                )
+            )
+
+        # Adding image annotations
+        #TODO: Make these region specific
+        for img_idx, img in enumerate(image_overlays):
+
+            # miny, minx, maxy, maxx (a.k.a. minlat, minlng, maxlat, maxlng)
+            scaled_image_bounds = [
+                [img['image_bounds'][1]*y_scale,
+                 img['image_bounds'][0]*x_scale],
+                [img['image_bounds'][3]*y_scale,
+                 img['image_bounds'][2]*x_scale]
+            ]
+            # Creating data: path for image
+            with open(img['image_path'],'rb') as f:
+                new_image_path = f'data:image/{img["image_path"].split(".")[-1]};base64,{base64.b64encode(f.read()).decode("ascii")}'
+                f.close()
+
+            image_overlay_popup = self.get_image_overlay_popup(img, img_idx)
+
+            new_layer_children.extend([
+                dl.ImageOverlay(
+                    url = new_image_path,
+                    opacity = 0.5,
+                    interactive = True,
+                    bounds = scaled_image_bounds,
+                    id = {'type': f'{self.component_prefix}-image-overlay','index': img_idx},
+                    children = [
+                        image_overlay_popup
+                    ]
+                ),
+                dl.LayerGroup(
+                    id = {'type': f'{self.component_prefix}-image-overlay-mover-layergroup','index': img_idx},
+                    children = []
+                )
+            ])
+
+        # For MultiFrameSlideMap, add frame BaseLayers and RGB layer (if present)
+        if isinstance(self,MultiFrameSlideMap):
+            new_layer_children.extend(self.process_frames(new_metadata, new_tile_url))
+            new_tile_layer = dl.TileLayer(
+                id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
+                url = '',                
+                tileSize=new_tile_size,
+                maxNativeZoom=new_metadata['levels']-2,
+                minZoom = 0
+            )
+        else:
+            new_tile_layer = dl.TileLayer(
+                id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
+                url = new_tile_url,
+                tileSize = new_tile_size,
+                maxNativeZoom=new_metadata['levels']-2,
+                minZoom = 0
+            )
+
+        new_slide_info = {}
+        new_slide_info['x_scale'] = x_scale
+        new_slide_info['y_scale'] = y_scale
+        new_slide_info['image_overlays'] = image_overlays
+        new_slide_info['slide_info'] = new_slide
+        new_slide_info['tiles_url'] = new_tile_url
+        new_slide_info['annotations_url'] = new_annotations_url
+        new_slide_info['annotations_region_url'] = new_annotations_region_url
+        new_slide_info['annotations_metadata'] = new_annotations_metadata
+        new_slide_info['minZoom'] = self.min_zoom
+
+        geo_annotations = json.dumps(initial_anns)
+        new_slide_info = json.dumps(new_slide_info)
+
+        # Updating manual and generated ROIs divs
+        manual_rois = []
+        gen_rois = []
+
+        return new_layer_children, manual_rois, gen_rois, geo_annotations, new_tile_layer, new_slide_info
+
+    
 
 
 class SlideImageOverlay(MapComponent):
