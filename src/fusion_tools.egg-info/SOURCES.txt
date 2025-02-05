@@ -48,6 +48,7 @@ tests/test_get_gene_info.py
 tests/test_global_property_plotter.py
 tests/test_hra_viewer.py
 tests/test_image_overlay.py
+tests/test_large_slide_maps.py
 tests/test_model_train.py
 tests/test_multiframe_rgb.py
 tests/test_multiframeslidemap.py

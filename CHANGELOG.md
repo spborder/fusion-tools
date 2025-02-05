@@ -1,6 +1,15 @@
 # Changelog
 
 <!--next-version-placeholder-->
+## v3.1.0 (02/2025)
+
+### Features:
+- `LargeSlideMap` and `LargeMultiFrameSlideMap` added!
+    - These components use server requests to only render the locations within the current viewport beyond a user-defined minimum zoom level. This is useful for slides with a large number of annotations which would inhibit performance to download and render all at once.
+
+### Fixes:
+- Small bug fix in `SegmentationDataset` and `ClassificationDataset` referring to non-existent property.
+
 ## v3.0.0 (01/2025)
 
 ### Features
