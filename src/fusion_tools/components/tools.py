@@ -483,7 +483,7 @@ class OverlayOptions(Tool):
         )(self.export_layers)
 
     def update_slide(self, new_annotations:list):
-
+        
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
 
@@ -1016,7 +1016,6 @@ class OverlayOptions(Tool):
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
-        #TODO: Re-scale these so that the annotations are in the image CRS
         slide_information = json.loads(get_pattern_matching_value(slide_information))
 
         # Scaling annotations:

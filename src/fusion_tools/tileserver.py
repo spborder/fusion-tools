@@ -13,7 +13,14 @@ from typing_extensions import Union
 import numpy as np
 import uvicorn
 
-from fusion_tools.utils.shapes import load_annotations, convert_histomics
+from shapely.geometry import box, shape
+
+from fusion_tools.utils.shapes import (load_annotations,
+                                       convert_histomics, 
+                                       detect_image_overlay, 
+                                       detect_geojson, 
+                                       detect_histomics,
+                                       structures_within_poly)
 
 class TileServer:
     """Components which pull information from a slide(s)
@@ -46,7 +53,7 @@ class LocalTileServer(TileServer):
    
         self.tile_sources = [large_image.open(i,encoding='PNG') for i in self.local_image_paths]
         self.tiles_metadatas = [i.getMetadata() for i in self.tile_sources]
-        self.annotations = self.load_annotations()
+        self.annotations, self.annotations_metadata = self.load_annotations()
 
         self.app = FastAPI()
         self.router = APIRouter()
@@ -57,18 +64,38 @@ class LocalTileServer(TileServer):
         self.router.add_api_route('/{image}/tiles/region',self.get_region,methods=["GET"])
         self.router.add_api_route('/{image}/tiles/thumbnail',self.get_thumbnail,methods=["GET"])
         self.router.add_api_route('/{image}/annotations',self.get_annotations,methods=["GET"])
+        self.router.add_api_route('/{image}/annotations/metadata',self.get_annotations_metadata,methods=["GET"])
 
     def load_annotations(self):
 
         geojson_annotations = []
+        annotations_metadata = []
         for a in self.local_image_annotations:
             loaded_annotations = load_annotations(a)
             if not loaded_annotations is None:
                 geojson_annotations.append(loaded_annotations)
+                annotations_metadata.append(self.extract_meta_dict(loaded_annotations))
             else:
                 print(f'Invalid annotations format found: {a}')
 
-        return geojson_annotations
+        return geojson_annotations, annotations_metadata
+
+    def extract_meta_dict(self, annotations):
+
+        if type(annotations)==dict:
+            annotations = [annotations]
+
+        ann_metadata = []
+        for a in annotations:
+            if 'properties' in a:
+                ann_metadata.append({
+                    'name': a['properties']['name'],
+                    '_id': a['properties']['_id'] 
+                })
+            elif 'image_path' in a:
+                ann_metadata.append(a)
+
+        return ann_metadata
 
     def __str__(self):
         return f'TileServer class for {self.local_image_path} to {self.host}:{self.tile_server_port}'
@@ -110,12 +137,15 @@ class LocalTileServer(TileServer):
                 new_loaded_annotations = load_annotations(new_annotations)
                 if not new_loaded_annotations is None:
                     self.annotations.append(new_loaded_annotations)
+                    self.annotations_metadata.append(self.extract_meta_dict(new_loaded_annotations))
                 else:
                     print(f'Unrecognized annotation format: {new_annotations}')
                     self.annotations.append([])
+                    self.annotations_metadata.append([])
 
             elif hasattr(new_annotations,"to_dict"):
                 self.annotations.append([new_annotations.to_dict()])
+                self.annotations_metadata.append(self.extract_meta_dict(new_annotations))
 
             elif type(new_annotations)==list:
                 processed_anns = []
@@ -141,15 +171,19 @@ class LocalTileServer(TileServer):
                         print(f'Unknown annotations type found: {n}')
                 
                 self.annotations.append(processed_anns)
+                self.annotations_metadata.append(self.extract_meta_dict(processed_anns))
                     
             elif type(new_annotations)==dict:
                 if 'annotation' in new_annotations:
                     converted_annotations = convert_histomics(new_annotations)
                     self.annotations.append([converted_annotations])
+                    self.annotations_metadata.append(self.extract_meta_dict([converted_annotations]))
                 else:
                     self.annotations.append([new_annotations])
+                    self.annotations_metadata.append(self.extract_meta_dict([new_annotations]))
         else:
             self.annotations.append([])
+            self.annotations_metadata.append([])
 
     def root(self):
         return {'message': "Oh yeah, now we're cooking"}
@@ -191,6 +225,15 @@ class LocalTileServer(TileServer):
             name_index = self.names.index(name)
 
             return f'http://{self.host}:{self.tile_server_port}/{name_index}/annotations'
+        else:
+            return None
+
+    def get_name_annotations_metadata_url(self,name):
+
+        if name in self.names:
+            name_index = self.names.index(name)
+
+            return f'http://{self.host}:{self.tile_server_port}/{name_index}/annotations/metadata'
         else:
             return None
 
@@ -241,7 +284,7 @@ class LocalTileServer(TileServer):
 
             return Response(content = raw_tile, media_type='image/png')
         else:
-            return Response(content = 'invalid image index', media_type='application/json')
+            return Response(content = 'invalid image index', media_type='application/json',status_code=400)
     
     def get_metadata(self,image:int):
         """Getting large-image metadata for image
@@ -252,7 +295,7 @@ class LocalTileServer(TileServer):
         if image<len(self.tiles_metadatas) and image>=0:
             return Response(content = json.dumps(self.tiles_metadatas[image]),media_type = 'application/json')
         else:
-            return Response(content = 'invalid image index',media_type='application/json')
+            return Response(content = 'invalid image index',media_type='application/json', status_code=400)
     
     def get_region(self, image:int, top: int, left: int, bottom:int, right:int,style:str = ''):
         """
@@ -277,7 +320,7 @@ class LocalTileServer(TileServer):
 
             return Response(content = image_region, media_type = 'image/png')
         else:
-            return Response(content = 'invalid image index', media_type = 'application/json')
+            return Response(content = 'invalid image index', media_type = 'application/json', status_code = 400)
 
     def get_thumbnail(self, image:int):
         """Grabbing an image thumbnail
@@ -290,14 +333,61 @@ class LocalTileServer(TileServer):
             thumbnail,mime_type = large_image.open(self.local_image_paths[image]).getThumbnail(encoding='PNG')
             return Response(content = thumbnail, media_type = 'image/png')
         else:
-            return Response(content = 'invalid image index', media_type = 'application/json')
+            return Response(content = 'invalid image index', media_type = 'application/json', status_code=400)
 
-    def get_annotations(self,image:int):
-
+    def get_annotations(self,image:int, top:Union[int,None]=None, left:Union[int,None]=None, bottom: Union[int,None]=None, right: Union[int,None]=None):
+        
+        #TODO: Add region parameters here. Enable grabbing annotations only from certain regions.
         if image<len(self.names) and image>=0:
-            return Response(content = json.dumps(self.annotations[image]),media_type='application/json')
+            if all([i is None for i in [top,left,bottom,right]]):
+                # Returning all annotations by default
+                return Response(content = json.dumps(self.annotations[image]),media_type='application/json')
+            else:
+                # Parsing region of annotations:
+                if all([not i is None for i in [top,left,bottom,right]]):
+                    image_anns = self.annotations[image]
+                    image_region_anns = []
+                    query_poly = box(top,left,bottom,right)
+
+                    if type(image_anns)==dict:
+                        image_anns = [image_anns]
+                    for ann in image_anns:
+                        if detect_image_overlay(ann):
+                            image_bounds_box = box(*ann['image_bounds'])
+                            if image_bounds_box.intersects(query_poly):
+                                image_region_anns.append(ann)
+                                # If it doesn't intersect should it return anything?
+
+                        elif detect_geojson(ann):
+                            
+                            if type(ann)==dict:
+                                filtered_anns = structures_within_poly(
+                                    original = ann,
+                                    query= query_poly
+                                )
+                                if len(filtered_anns['features'])>0:
+                                    image_region_anns.append(filtered_anns)
+                            elif type(ann)==list:
+                                for g in ann:
+                                    filtered_g = structures_within_poly(
+                                        original = g,
+                                        query=query_poly
+                                    )
+                                    if len(filtered_g['features'])>0:
+                                        image_region_anns.append(filtered_g)
+                        else:
+                            print(f'Unrecognized annotation format found for image: {image}, {self.names[image]}')
+                    return Response(content = json.dumps(image_region_anns), media_type='application/json')
+
         else:
-            return Response(content = 'invalid image index', media_type = 'application/json')
+            return Response(content = 'invalid image index', media_type = 'application/json', status_code = 400)
+
+    def get_annotations_metadata(self,image:int):
+        
+        if image<len(self.names) and image>=0:
+            return Response(content = json.dumps(self.annotations_metadata[image]),media_type='application/json')
+        else:
+            return Response(content = 'invalid image index',media_type = 'application/json',status_code = 400)
 
     def start(self):
         """Starting tile server instance on a provided port
@@ -315,8 +405,7 @@ class DSATileServer(TileServer):
     def __init__(self,
                  api_url: str,
                  item_id: str,
-                 user_token: Union[str,None] = None
-                 ):
+                 user_token: Union[str,None]=None):
         """Constructor method
 
         :param api_url: URL for DSA API (ends in /api/v1)
@@ -327,12 +416,20 @@ class DSATileServer(TileServer):
 
         self.base_url = api_url
         self.item_id = item_id
-        self.user_token = user_token
 
-        #TODO: Add some method for appending the user_token to these URLs
-        self.name = requests.get(
-            f'{api_url}/item/{item_id}'
-        ).json()['name']
+        #TODO: Add some method for appending the user_token to these URLs (Might be better to save this on the 
+        # component side so that that property can be dynamic)
+        if user_token is None:
+            item_info = requests.get(
+                f'{api_url}/item/{item_id}'
+            ).json()
+        else:
+            item_info = requests.get(
+                f'{api_url}/item/{item_id}?token={user_token}'
+            ).json()
+
+        self.item_metadata = item_info['meta']
+        self.name = item_info['name']
 
         self.tiles_url = f'{api_url}/item/{item_id}/tiles/zxy/'+'{z}/{x}/{y}'
         self.regions_url = f'{api_url}/item/{item_id}/tiles/region'
@@ -342,7 +439,16 @@ class DSATileServer(TileServer):
             f'{api_url}/item/{item_id}/tiles'
         ).json()
 
+        #TODO: Add some method here for accessing the /annotation/{ann_id}/region endpoint?
         self.annotations_url = f'{api_url}/annotation/item/{item_id}'
+
+        if user_token is None:
+            self.annotations_metadata_url = f'{api_url}/annotation?itemId={item_id}'
+        else:
+            self.annotations_metadata_url = f'{api_url}/annotation?token={user_token}&itemId={item_id}'
+
+        self.annotations_region_url = f'{api_url}/annotation/'
+
 
     def __str__(self):
         return f'DSATileServer for {self.base_url}'

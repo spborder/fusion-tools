@@ -36,11 +36,15 @@ def load_annotations(file_path: str, name:Union[str,None]=None,**kwargs) -> dict
     try:
         if file_extension=='xml':
             annotations = load_aperio(file_path)
-        elif file_extension=='json':
+        elif file_extension in ['json','geojson']:
             try:
                 annotations = load_geojson(file_path,name)
             except:
                 annotations = load_histomics(file_path)
+
+        elif file_extension=='parquet':
+            annotations = load_parquet(file_path)
+        
         elif file_extension=='csv':
             annotations = load_polygon_csv(file_path,name,**kwargs)
         elif file_extension in ['tif','png','jpg','tiff']:
@@ -54,6 +58,18 @@ def load_annotations(file_path: str, name:Union[str,None]=None,**kwargs) -> dict
         annotations = None
 
     return annotations
+
+def load_parquet(parquet_path:str, geometry_cols:Union[list,None]=None):
+
+    parquet_anns = gpd.read_parquet(parquet_path,columns = geometry_cols)
+    geojson_anns = json.loads(parquet_anns.to_geo_dict(show_bbox=True))
+
+    geojson_anns['properties'] = {
+        'name': parquet_path.split(os.sep)[-1],
+        '_id': uuid.uuid4().hex[:24]
+    }
+
+    return geojson_anns
 
 def load_geojson(geojson_path: str, name:Union[str,None]=None) -> dict:
     """Load GeoJSON annotations from file path. Optionally add names for GeoJSON FeatureCollections
@@ -312,10 +328,10 @@ def load_label_mask(label_mask: np.ndarray, name: str) -> dict:
     return full_geo
 
 def load_visium(visium_path:str, include_var_names:list = [], include_obs: list = [], mpp:Union[float,None]=None):
-    """Loading 10x Visium Spot annotations from an h5ad file. Adds any of the variables
-    listed in var_names and also the barcodes associated with each spot.
+    """Loading 10x Visium Spot annotations from an h5ad file or csv file containing spot center coordinates. Adds any of the variables
+    listed in var_names and also the barcodes associated with each spot (if the path is an h5ad file).
 
-    :param visium_path: Path to the h5ad (anndata) formatted Visium data
+    :param visium_path: Path to the h5ad (anndata) formatted Visium data or csv file containing "imagerow" and "imagecol" columns
     :type visium_path: str
     :param include_var_names: List of additional variables to add to the generated annotations (barcode is added by default), defaults to []
     :type include_var_names: list, optional
@@ -325,23 +341,27 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
 
     assert os.path.exists(visium_path)
 
-    anndata_object = ad.read_h5ad(visium_path)
+    if 'h5ad' in visium_path:
+        anndata_object = ad.read_h5ad(visium_path)
 
-    if 'spatial' in anndata_object.obsm_keys():
+        if 'spatial' in anndata_object.obsm_keys():
 
-        spot_coords = pd.DataFrame(
-            data = anndata_object.obsm['spatial'],
-            index = anndata_object.obs_names,
-            columns = ['imagecol','imagerow']
-        )
-    elif all([i in anndata_object.obs_keys() for i in ['imagecol','imagerow']]):
-        spot_coords = pd.DataFrame(
-            data = {
-                'imagecol': anndata_object.obs['imagecol'],
-                'imagerow': anndata_object.obs['imagerow']
-            },
-            index = anndata_object.obs_names
-        )
+            spot_coords = pd.DataFrame(
+                data = anndata_object.obsm['spatial'],
+                index = anndata_object.obs_names,
+                columns = ['imagecol','imagerow']
+            )
+        elif all([i in anndata_object.obs_keys() for i in ['imagecol','imagerow']]):
+            spot_coords = pd.DataFrame(
+                data = {
+                    'imagecol': anndata_object.obs['imagecol'],
+                    'imagerow': anndata_object.obs['imagerow']
+                },
+                index = anndata_object.obs_names
+            )
+    elif 'csv' in visium_path:
+        spot_coords = pd.read_csv(visium_path)
+
 
     # Quick way to calculate how large the radius of each spot should be (minimum distance will be 100um between adjacent spot centroids )
     if mpp is None:
@@ -370,16 +390,20 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
         }
     }
 
-    if len(include_var_names)>0:
-        include_vars = [i for i in include_var_names if i in anndata_object.var_names]
-    else:
-        include_vars = []
+    if 'h5ad' in visium_path:
+        if len(include_var_names)>0:
+            include_vars = [i for i in include_var_names if i in anndata_object.var_names]
+        else:
+            include_vars = []
 
-    if len(include_obs)>0:
-        include_obs = [i for i in include_obs if i in anndata_object.obs_keys()]
+        if len(include_obs)>0:
+            include_obs = [i for i in include_obs if i in anndata_object.obs_keys()]
+        else:
+            include_obs = []
     else:
         include_obs = []
-    
+        include_vars = []
+        
 
     barcodes = list(spot_coords.index)
     for idx in range(spot_coords.shape[0]):
@@ -448,6 +472,20 @@ def detect_geojson(query_annotations:Union[list,dict]):
                 if q['type']=='FeatureCollection':
                     result = True
     
+    return result
+
+def detect_image_overlay(query_annotations:Union[list,dict]):
+    """Checking whether a list/dict of annotations contain an image overlay"""
+    if type(query_annotations)==dict:
+        query_annotations=[query_annotations]
+    
+    result = False
+
+    for q in query_annotations:
+        if type(q)==dict:
+            if 'image_bounds' in q:
+                result = True
+
     return result
 
 def convert_histomics(json_anns: Union[list,dict]):
@@ -1094,6 +1132,13 @@ def extract_geojson_properties(geo_list: list, reference_object: Union[str,None]
     geojson_properties = sorted(geojson_properties)
 
     return geojson_properties, feature_names, property_info
+
+def structures_within_poly(original:dict, query:Polygon):
+
+    og_geo = gpd.GeoDataFrame.from_features(original['features'])
+    result_geo = json.loads(og_geo[og_geo.intersects(query)].to_json())
+
+    return result_geo
 
 def process_filters_queries(filter_list:list, spatial_list:list, structures:list, all_geo_list:list):
     """Filter GeoJSON list based on lists of both spatial and property filters.

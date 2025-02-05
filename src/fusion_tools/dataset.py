@@ -278,11 +278,11 @@ class SegmentationDataset:
                                 'properties': {}
                             }]
                         }
-                elif type(self.patch_regions[s_idx])==dict:
-                    available_regions = self.patch_regions[s_idx]
+                elif type(self.patch_region[s_idx])==dict:
+                    available_regions = self.patch_region[s_idx]
 
-            elif type(self.patch_regions)==dict:
-                available_regions = self.patch_regions
+            elif type(self.patch_region)==dict:
+                available_regions = self.patch_region
 
             single_slide_data['available_regions'] = available_regions
 
@@ -876,11 +876,11 @@ class ClassificationDataset:
                                 'properties': {}
                             }]
                         }
-                elif type(self.patch_regions[s_idx])==dict:
-                    available_regions = self.patch_regions[s_idx]
+                elif type(self.patch_region[s_idx])==dict:
+                    available_regions = self.patch_region[s_idx]
 
-            elif type(self.patch_regions)==dict:
-                available_regions = self.patch_regions
+            elif type(self.patch_region)==dict:
+                available_regions = self.patch_region
 
             single_slide_data['available_regions'] = available_regions
 

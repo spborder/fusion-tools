@@ -974,8 +974,6 @@ class BulkLabels(Tool):
             name = 'removeMarker',
             src = """
                 function(e,ctx){
-                    console.log(ctx);
-                    console.log(e);
                     e.target.removeLayer(e.layer._leaflet_id);
                     ctx.data.features.splice(ctx.data.features.indexOf(e.layer.feature),1);
                 }
@@ -2299,8 +2297,7 @@ class BulkLabels(Tool):
             if len(id_intersect)>0:
                 for id in id_intersect:
                     feature_label = current_labels['labels'][label_ids.index(id)]
-                    #print(feature_label)
-                    c['features'][feature_ids.index(id)]['properties'] = c['features'][feature_ids.index(id)]['properties'] | current_labels['labels'][label_ids.index(id)]
+                    c['features'][feature_ids.index(id)]['properties'] = c['features'][feature_ids.index(id)]['properties'] | feature_label
 
         updated_annotations = json.dumps(current_annotations)
 
