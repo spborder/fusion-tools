@@ -105,7 +105,7 @@ def load_geojson(geojson_path: str, name:Union[str,None]=None) -> dict:
         if not 'properties' in geojson_anns:
             geojson_anns['properties'] = {}
 
-        geo_id = uuid.uuid4().hex[:24] if not '_id' in g['properties'] else geojson_anns['properties']['_id']
+        geo_id = uuid.uuid4().hex[:24] if not '_id' in geojson_anns['properties'] else geojson_anns['properties']['_id']
         geojson_anns['properties'] = geojson_anns['properties'] | {'name': name if not name is None else geo_id, '_id': geo_id}
 
         for f_idx, f in enumerate(geojson_anns['features']):
@@ -550,6 +550,35 @@ def convert_histomics(json_anns: Union[list,dict]):
 
     return geojson_list
 
+def geojson_to_histomics(geojson_anns: Union[list,dict]):
+
+    if type(geojson_anns)==dict:
+        geojson_anns = [geojson_anns]
+    
+    histomics_anns = []
+    for g in geojson_anns:
+        if 'properties' in g:
+            g_name = g['properties']['name']
+        else:
+            g_name = ''
+
+        histomics_ann = {
+            'annotation': {
+                'name': g_name,
+                'elements': [
+                    {
+                        'type': 'polyline',
+                        'user': f['properties'],
+                        'points': [i+[0] for i in f['geometry']['coordinates'][0]]
+                    }
+                    for f in g['features']
+                ]
+            }
+        }
+        histomics_anns.append(histomics_ann)
+    
+    return histomics_anns
+
 def align_object_props(
         geo_ann: dict, 
         prop_df: Union[pd.DataFrame, list],
@@ -818,6 +847,10 @@ def spatially_aggregate(child_geo:dict, parent_geos: list, separate: bool = True
                             proc_c = proc_c | {key:val}
                     
                     agg_props[base_names[b_idx]].append(proc_c)
+
+        if all([len(agg_props[i])==0 for i in agg_props]):
+            # This structure doesn't intersect with anything so skip it
+            continue
 
         if separate:
             for name in list(agg_props.keys()):

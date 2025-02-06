@@ -554,7 +554,8 @@ class SlideMap(MapComponent):
                 State({'type': 'feature-lineColor','index': ALL},'value'),
                 State({'type': 'adv-overlay-colormap','index': ALL},'value'),
                 State({'type': 'manual-roi-separate-switch','index': ALL},'checked'),
-                State({'type': 'manual-roi-summarize-switch','index': ALL},'checked')
+                State({'type': 'manual-roi-summarize-switch','index': ALL},'checked'),
+                State({'type': 'map-slide-information','index': ALL},'data')
             ]
         )(self.add_manual_roi)
 
@@ -813,6 +814,8 @@ class SlideMap(MapComponent):
         manual_rois = []
         gen_rois = []
 
+        #TODO: Add something else to make sure that "Filtered" annotations are removed after loading a new slide
+
         return new_layer_children, manual_rois, gen_rois, geo_annotations, new_tile_layer, new_slide_info
 
     def upload_shape(self, upload_clicked, is_open):
@@ -1028,7 +1031,7 @@ class SlideMap(MapComponent):
 
         return annotation_components
 
-    def add_manual_roi(self,new_geojson:list, uploaded_shape: list, current_annotations:list, frame_layers:list, line_colors:list, colormap:list, separate_switch: list, summarize_switch: list) -> list:
+    def add_manual_roi(self,new_geojson:list, uploaded_shape: list, current_annotations:list, frame_layers:list, line_colors:list, colormap:list, separate_switch: list, summarize_switch: list, map_slide_information:list) -> list:
         """Adding a manual region of interest (ROI) to the SlideMap using dl.EditControl() tools including polygon, rectangle, and markers.
 
         :param new_geojson: Incoming GeoJSON object that is emitted by dl.EditControl() following annotation on SlideMap
@@ -1039,6 +1042,8 @@ class SlideMap(MapComponent):
         :type annotation_names: list
         :param frame_layers: Frame layers for multi-frame visualization
         :type frame_layers: list
+        :param map_slide_information: Current slide image metadata
+        :type map_slide_information: list
         :raises exceptions.PreventUpdate: new_geojson input is None
         :raises exceptions.PreventUpdate: No new features are added, this can occur after deletion of previous manual ROIs.
         :return: List of new children to dl.LayerControl() consisting of overlaid GeoJSON components.
@@ -1051,6 +1056,8 @@ class SlideMap(MapComponent):
         uploaded_shape = get_pattern_matching_value(uploaded_shape)
         new_geojson = get_pattern_matching_value(new_geojson)
         current_annotations = json.loads(get_pattern_matching_value(current_annotations))
+
+        map_slide_information = json.loads(get_pattern_matching_value(map_slide_information))
 
         colormap = get_pattern_matching_value(colormap)
         separate_switch = get_pattern_matching_value(separate_switch)
@@ -1114,33 +1121,40 @@ class SlideMap(MapComponent):
                     added_roi_names.append(new_roi_name)
 
         elif 'upload-shape-data' in ctx.triggered_id['type']:
+
+            x_scale, y_scale = self.get_scale_factors(map_slide_information)
+
             if not uploaded_shape is None:
                 uploaded_roi = json.loads(base64.b64decode(uploaded_shape.split(',')[-1]).decode())
-                uploaded_roi = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*self.x_scale,c[1]*self.y_scale),g),uploaded_roi)
+                if type(uploaded_roi)==dict:
+                    uploaded_roi = [uploaded_roi]
+                
+                for up_idx, up in uploaded_roi:
+                    scaled_upload = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*x_scale,c[1]*y_scale),g),up)
 
-                # Checking if there is a name or _id property:
-                if 'properties' in uploaded_roi:
-                    if 'name' in uploaded_roi['properties']:
-                        if 'Manual' in uploaded_roi['properties']['name']:
-                            uploaded_roi['properties']['name'] = uploaded_roi['properties']['name'].replace('Manual','Upload')
-                    
-                    uploaded_roi['properties']['_id'] = uuid.uuid4().hex[:24]
+                    # Checking if there is a name or _id property:
+                    if 'properties' in scaled_upload:
+                        if 'name' in scaled_upload['properties']:
+                            if 'Manual' in scaled_upload['properties']['name']:
+                                scaled_upload['properties']['name'] = scaled_upload['properties']['name'].replace('Manual','Upload')
+                        
+                        scaled_upload['properties']['_id'] = uuid.uuid4().hex[:24]
 
-                else:
-                    uploaded_roi['properties'] = {
-                        'name': f'Upload {len([i for i in annotation_names if "Upload" in i])+1}',
-                        '_id': uuid.uuid4().hex[:24]
-                    }
+                    else:
+                        scaled_upload['properties'] = {
+                            'name': f'Upload {len([i for i in annotation_names if "Upload" in i])+1}',
+                            '_id': uuid.uuid4().hex[:24]
+                        }
 
-                # Aggregate if any initial annotations are present
-                new_roi_name = uploaded_roi['properties']['name']
-                if len(initial_annotations)>0:
-                    # Spatial aggregation performed just between individual manual ROIs and initial annotations (no manual ROI to manual ROI aggregation)
-                    new_roi = spatially_aggregate(uploaded_roi, initial_annotations,separate=separate_switch,summarize=summarize_switch)
+                    # Aggregate if any initial annotations are present
+                    new_roi_name = scaled_upload['properties']['name']
+                    if len(initial_annotations)>0:
+                        # Spatial aggregation performed just between individual manual ROIs and initial annotations (no manual ROI to manual ROI aggregation)
+                        new_roi = spatially_aggregate(scaled_upload, initial_annotations,separate=separate_switch,summarize=summarize_switch)
 
-                added_rois.append(new_roi)
-                added_roi_names.append(new_roi_name)
-                manual_roi_idxes.append(max(manual_roi_idxes)+1)
+                    added_rois.append(new_roi)
+                    added_roi_names.append(new_roi_name)
+                    manual_roi_idxes.append(max(manual_roi_idxes)+1)
 
         # Checking for deleted manual ROIs
         for m_idx,(m,man_idx) in enumerate(zip(manual_rois,manual_roi_idx)):

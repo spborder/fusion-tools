@@ -3567,9 +3567,10 @@ class GlobalPropertyPlotter(MultiTool):
                     bbox = list(shape(f['geometry']).bounds)
                     bbox_list.append({'min_x':bbox[0],'min_y':bbox[1],'max_x':bbox[2],'max_y':bbox[3]})
 
-                ann_cols = ann_properties.columns.tolist()
-                ann_properties = pd.concat([ann_properties,pd.DataFrame.from_records(bbox_list)],axis=1,ignore_index=True)
-                ann_properties.columns = ann_cols+['min_x','min_y','max_x','max_y']
+                if len(bbox_list)>0:
+                    ann_cols = ann_properties.columns.tolist()
+                    ann_properties = pd.concat([ann_properties,pd.DataFrame.from_records(bbox_list)],axis=1,ignore_index=True)
+                    ann_properties.columns = ann_cols+['min_x','min_y','max_x','max_y']
 
                 if not ann_properties.empty:
                     if slide_properties.empty:
@@ -3698,7 +3699,8 @@ class GlobalPropertyPlotter(MultiTool):
         else:
             return None
 
-    def gen_layout(self, session_data: dict):
+    def update_layout(self, session_data:dict, use_prefix:bool):
+        
         
         if self.preloaded_properties is None:
             self.extract_all_properties(session_data)
@@ -3839,7 +3841,14 @@ class GlobalPropertyPlotter(MultiTool):
             ])
         ],style = {'maxHeight': '100vh','overflow':'scroll'})
 
-        self.blueprint.layout = layout
+        if use_prefix:
+            PrefixIdTransform(prefix=f'{self.component_prefix}').transform_layout(layout)
+
+        return layout
+
+    def gen_layout(self, session_data: dict):
+        
+        self.blueprint.layout = self.update_layout(session_data,use_prefix=False)
 
     def get_callbacks(self):
         
@@ -4429,11 +4438,10 @@ class GlobalPropertyPlotter(MultiTool):
         session_data = json.loads(get_pattern_matching_value(session_data))
         selected_data = get_pattern_matching_value(selected_data)
 
-        session_names = [i['name'] for i in session_data]
+        session_names = [i['name'] for i in session_data['current']]
         selected_image_list = []
         selected_image = go.Figure()
         for s_idx,s in enumerate(selected_data['points']):
-            print(s)
             if type(s['customdata'])==list:
                 s_slide = s['customdata'][0]
                 s_bbox = s['customdata'][1:]
@@ -4442,57 +4450,58 @@ class GlobalPropertyPlotter(MultiTool):
                 s_slide = s_custom[0]
                 s_bbox = s_custom[1:]
 
-            image_region = Image.open(
-                BytesIO(
-                    requests.get(
-                        session_data[session_names.index(s_slide)]['regions_url']+f'?top={s_bbox[1]}&left={s_bbox[0]}&bottom={s_bbox[3]}&right={s_bbox[2]}'
-                    ).content
+            if s_slide in session_names:
+                image_region = Image.open(
+                    BytesIO(
+                        requests.get(
+                            session_data['current'][session_names.index(s_slide)]['regions_url']+f'?top={s_bbox[1]}&left={s_bbox[0]}&bottom={s_bbox[3]}&right={s_bbox[2]}'
+                        ).content
+                    )
                 )
-            )
 
-            selected_image_list.append(image_region)
+                selected_image_list.append(image_region)
 
-            if len(selected_image_list)==1:
-                selected_image = go.Figure(
-                    data = px.imshow(selected_image_list[0]),
-                    layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
+        if len(selected_image_list)==1:
+            selected_image = go.Figure(
+                data = px.imshow(selected_image_list[0]),
+                layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
+                )
+        elif len(selected_image_list)>1:
+            image_dims = [np.array(i).shape for i in selected_image_list]
+            max_height = max([i[0] for i in image_dims])
+            max_width = max([i[1] for i in image_dims])
+
+            modded_images = []
+            for img in selected_image_list:
+                img_width, img_height = img.size
+                delta_width = max_width - img_width
+                delta_height = max_height - img_height
+
+                pad_width = delta_width // 2
+                pad_height = delta_height // 2
+
+                mod_img = np.array(
+                    ImageOps.expand(
+                        img,
+                        border = (
+                            pad_width,
+                            pad_height,
+                            delta_width - pad_width,
+                            delta_height - pad_height
+                        ),
+                        fill=0
                     )
-            elif len(selected_image_list)>1:
-                image_dims = [np.array(i).shape for i in selected_image_list]
-                max_height = max([i[0] for i in image_dims])
-                max_width = max([i[1] for i in image_dims])
+                )
+                modded_images.append(mod_img)
 
-                modded_images = []
-                for img in selected_image_list:
-                    img_width, img_height = img.size
-                    delta_width = max_width - img_width
-                    delta_height = max_height - img_height
-
-                    pad_width = delta_width // 2
-                    pad_height = delta_height // 2
-
-                    mod_img = np.array(
-                        ImageOps.expand(
-                            img,
-                            border = (
-                                pad_width,
-                                pad_height,
-                                delta_width - pad_width,
-                                delta_height - pad_height
-                            ),
-                            fill=0
-                        )
-                    )
-                    modded_images.append(mod_img)
-
-                selected_image = go.Figure(
-                    data = px.imshow(np.stack(modded_images,axis=0),animation_frame=0,binary_string=True),
-                    layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
-                    )
-            else:
-                selected_image = go.Figure()
-                print(f'No images found')
-                print(f'selected:{selected_data}')
+            selected_image = go.Figure(
+                data = px.imshow(np.stack(modded_images,axis=0),animation_frame=0,binary_string=True),
+                layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
+                )
+        else:
+            selected_image = go.Figure()
+            print(f'No images found')
+            print(f'selected:{selected_data}')
 
         return [dcc.Graph(figure = selected_image)]
 

@@ -388,6 +388,7 @@ class DSAHandler(Handler):
             else:
                 folder_info = self.gc.get(f'/collection/{folder_path}')
 
+        #TODO: This specific query is restricted to admins for some really inconvenient reason
         folder_items = self.gc.get(f'/resource/{folder_info["_id"]}/items',
                                                   parameters = {
                                                       'type': folder_type,
