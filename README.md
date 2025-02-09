@@ -4,7 +4,7 @@ Modular visualization and analysis dashboard creation for high-resolution micros
 
 ## Installation
 ```bash
-$ pip install fusion-tools
+$ pip install fusion-tools[interactive]
 ```
 
 ## Usage
