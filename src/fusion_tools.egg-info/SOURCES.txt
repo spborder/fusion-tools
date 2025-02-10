@@ -55,6 +55,7 @@ tests/test_multiframeslidemap.py
 tests/test_multipage_layout.py
 tests/test_parse_cli_xml.py
 tests/test_path_extraction.py
+tests/test_plugins.py
 tests/test_process.py
 tests/test_property_plotter.py
 tests/test_read_anndata.py

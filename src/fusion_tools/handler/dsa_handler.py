@@ -56,8 +56,12 @@ class DSAHandler(Handler):
                 password=self.password
             )
 
-        # Token used for authenticating requests
-        self.user_token = self.gc.get(f'/token/session')['token']
+            # Token used for authenticating requests
+            self.user_token = self.gc.get(f'/token/session')['token']
+            self.gc.setToken(self.user_token)
+        
+        else:
+            self.user_token = None
 
     def authenticate_new(self, username:str, password:str):
 
@@ -92,10 +96,13 @@ class DSAHandler(Handler):
 
         image_array = np.zeros((256,256))
 
-        if user_token is None or user_token=='':
+        if user_token is None or user_token=='' and self.user_token is None:
             request_string = self.gc.urlBase+f'/item/{item_id}/tiles/region?left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}'
         else:
-            request_string = self.gc.urlBase+f'/item/{item_id}/tiles/region?token={user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}'
+            if user_token is None or user_token=='':
+                request_string = self.gc.urlBase+f'/item/{item_id}/tiles/region?token={self.user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}'
+            else:
+                request_string = self.gc.urlBase+f'/item/{item_id}/tiles/region?token={user_token}&left={coords_list[0]}&top={coords_list[1]}&right={coords_list[2]}&bottom={coords_list[3]}'
 
 
         if style is None:
@@ -120,10 +127,14 @@ class DSAHandler(Handler):
     def get_image_thumbnail(self, item_id:str, user_token:Union[str,None]=None)->np.ndarray:
 
 
-        if user_token is None or user_token=='':
+        if user_token is None or user_token=='' and self.user_token is None:
             request_string = self.gc.urlBase+f'/item/{item_id}/tiles/thumbnail'
         else:
-            request_string = self.gc.urlBase+f'/item/{item_id}/tiles/thumbnail?token={user_token}'
+            if not self.user_token is None:
+                request_string = self.gc.urlBase+f'/item/{item_id}/tiles/thumbnail?token={self.user_token}'
+            else:
+                request_string = self.gc.urlBase+f'/item/{item_id}/tiles/thumbnail?token={user_token}'
+
 
         try:
             image_array = np.uint8(
@@ -678,8 +689,9 @@ class DSAHandler(Handler):
     def list_plugins(self, user_token:str):
         """List all of the plugins/CLIs available for the current DSA instance
         """
-        
-        return self.gc.get(f'/slicer_cli_web/cli?token={user_token}')
+        self.gc.setToken(user_token)
+
+        return self.gc.get(f'/slicer_cli_web/cli')
 
     def add_plugin(self, image_name:Union[str,list], user_token:Union[str,None]=None):
         """Add a plugin/CLI to the current DSA instance by name of the Docker image (requires admin login)
@@ -692,6 +704,8 @@ class DSAHandler(Handler):
 
         if not user_token is None:
             self.gc.setToken(user_token)
+        else:
+            user_token = self.user_token
         
         current_cli = self.list_plugins(user_token)
         cli_names = [i['image'] for i in current_cli]
@@ -796,7 +810,7 @@ class DSAHandler(Handler):
 
         return request_response
 
-    def run_plugin(self, plugin_id:str, arguments:dict, user_token:str):
+    def run_plugin(self, plugin_id:str, arguments:dict, user_token:Union[str,None]=None):
         """Run a plugin given a set of input arguments
 
         :param plugin_id: ID for plugin to run.
@@ -804,12 +818,15 @@ class DSAHandler(Handler):
         :param arguments: Dictionary containing keys/values for each input argument to a plugin
         :type arguments: dict
         """
+
+        if user_token is None:
+            user_token = self.user_token
         
         # Make sure that the arguments are formatted correctly
         request_output = requests.post(
-            url = self.handler.gc.urlBase + f'slicer_cli_web/cli/{plugin_id}/run?token={user_token}',
+            url = self.gc.urlBase + f'slicer_cli_web/cli/{plugin_id}/run?token={user_token}',
             params = {
-                'girderApiUrl': self.handler.girderApiUrl,
+                'girderApiUrl': self.girderApiUrl,
                 'girderToken': user_token
             } | arguments
         )
