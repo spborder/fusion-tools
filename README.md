@@ -4,7 +4,7 @@ Modular visualization and analysis dashboard creation for high-resolution micros
 
 ## Installation
 ```bash
-$ pip install fusion-tools
+$ pip install fusion-tools[interactive]
 ```
 
 ## Usage
@@ -81,7 +81,8 @@ You can also access remote tile servers (either through `DSATileServer` or `Cust
 
 ```python
 
-from fusion_tools import Visualization, DSAHandler
+from fusion_tools import Visualization
+from fusion_tools.handler.dsa_handler import DSAHandler
 from fusion_tools.components import SlideMap
 
 # Grabbing first item from demo DSA instance
@@ -125,7 +126,8 @@ You can also use some of `segmentation` components for adding labels and annotat
 
 ```python
 
-from fusion_tools import Visualization, DSAHandler
+from fusion_tools import Visualization
+from fusion_tools.handler.dsa_handler import DSAHandler
 from fusion_tools.components import SlideMap, FeatureAnnotation, BulkLabels
 
 # Grabbing first item from demo DSA instance
@@ -172,7 +174,7 @@ Now you can add multiple slides to a single visualization session and you can ev
 
 from fusion_tools import Visualization
 from fusion_tools.components import SlideMap, OverlayOptions, PropertyViewer, PropertyPlotter
-from fusion_tools.handler import DSAHandler
+from fusion_tools.handler.dsa_handler import DSAHandler
 
 # Mixed types of slides and annotations
 local_slide_list = ['slide1.tif','slide2.ome.tif','slide3.svs']
