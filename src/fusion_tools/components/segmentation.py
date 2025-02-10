@@ -34,7 +34,7 @@ from dash_extensions.javascript import Namespace, assign
 # fusion-tools imports
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 from fusion_tools.utils.shapes import find_intersecting, extract_geojson_properties, path_to_mask, process_filters_queries
-from fusion_tools.components import Tool
+from fusion_tools import Tool
 
 
 class FeatureAnnotation(Tool):

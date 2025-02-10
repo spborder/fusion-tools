@@ -25,7 +25,7 @@ import dash_uploader as du
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 from fusion_tools.utils.shapes import load_annotations
 
-from fusion_tools.handler import DSATool
+from fusion_tools import DSATool
 from fusion_tools.handler.plugin import DSAPluginRunner
 
 

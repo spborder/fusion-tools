@@ -5,13 +5,12 @@ import os
 import sys
 sys.path.append('./src/')
 
-from fusion_tools import Visualization
+from fusion_tools.visualization import Visualization
 from fusion_tools.components import SlideMap, OverlayOptions
 from fusion_tools.handler.dsa_handler import DSAHandler
 from fusion_tools.handler.dataset_uploader import DSAUploadType
 from fusion_tools.handler.plugin import DSAPluginProgress
 from fusion_tools.handler.survey import SurveyType
-
 
 # This is an example upload type for an image and a file
 simple_upload_type = DSAUploadType(

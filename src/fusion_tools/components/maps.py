@@ -31,21 +31,11 @@ from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, Mu
 from dash_extensions.javascript import assign, arrow_function, Namespace
 
 # fusion-tools imports
+from fusion_tools import MapComponent
 from fusion_tools.utils.shapes import find_intersecting, spatially_aggregate, convert_histomics, detect_image_overlay
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 
 
-
-class MapComponent:
-    """General class for components added to SlideMap
-        For more information see dash-leaflet: https://www.dash-leaflet.com/
-
-    """
-    def __init__(self):
-        # Property referring to how the layout is updated with a change in the 
-        # visualization session
-        self.session_update = False
-    
 
 
 class SlideMap(MapComponent):

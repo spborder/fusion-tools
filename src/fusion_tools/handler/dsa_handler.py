@@ -15,14 +15,13 @@ from PIL import Image
 from io import BytesIO
 
 from fusion_tools.tileserver import DSATileServer
-from fusion_tools.components import Tool
 from fusion_tools.utils.shapes import load_annotations, detect_histomics
 
 from fusion_tools.handler.login import DSALoginComponent
 from fusion_tools.handler.dataset_uploader import DSAUploader
 from fusion_tools.handler.dataset_builder import DatasetBuilder
 from fusion_tools.handler.plugin import DSAPluginProgress, DSAPluginRunner
-from fusion_tools.handler import Handler
+from fusion_tools import Handler
 
 #TODO: Consider making a function decorator for authentication just to clean up all the 
 # self.gc.setToken and +f'?token={user_token}' lines

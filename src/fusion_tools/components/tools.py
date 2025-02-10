@@ -49,17 +49,7 @@ from fusion_tools.utils.shapes import (
     convert_histomics
 )
 from fusion_tools.utils.stats import get_label_statistics, run_wilcox_rank_sum
-
-
-
-class Tool:
-    """General class for interactive components that visualize, edit, or perform analyses on data.
-    """
-    def __init__(self):
-        # Property referring to how the layout is updated with a change in the 
-        # visualization session
-        self.session_update = False
-    
+from fusion_tools import Tool, MultiTool
     
 
 class OverlayOptions(Tool):
@@ -3498,14 +3488,6 @@ class HRAViewer(Tool):
 
 
 
-class MultiTool:
-    """General class for a Tool which works on multiple slides at once
-    """
-    def __init__(self):
-        # Property referring to how the layout is updated with a change in the 
-        # visualization session
-        self.session_update = True
-    
 
 
 class GlobalPropertyPlotter(MultiTool):

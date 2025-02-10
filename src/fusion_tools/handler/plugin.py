@@ -20,8 +20,7 @@ import dash_mantine_components as dmc
 from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform
 
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
-
-from fusion_tools.handler import DSATool
+from fusion_tools import DSATool
 
 class DSAPluginRunner(DSATool):
     """Handler for DSAPluginRunner component, letting users specify input arguments to plugins to run on connected DSA instance.
