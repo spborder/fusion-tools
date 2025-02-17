@@ -605,7 +605,7 @@ class SegmentationDataset:
                     },
                     frame = f
                 )
-                image[:,:,f] += image_frame
+                image[:,:,f] += image_frame[:,:,None]
 
 
         if len(features)>0:

@@ -22,6 +22,9 @@ from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, Pr
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 from fusion_tools import DSATool
 
+from girder_job_sequence import Job, Sequence
+from girder_job_sequence.utils import from_list
+
 class DSAPluginRunner(DSATool):
     """Handler for DSAPluginRunner component, letting users specify input arguments to plugins to run on connected DSA instance.
 
@@ -55,32 +58,44 @@ class DSAPluginRunner(DSATool):
     def get_executable_dict(self, plugin_info,session_data):
         
         exe_dict = None
-        plugin_cli = None
-        plugin_list = self.handler.list_plugins(user_token=session_data['current_user']['token'])
+        
+        self.handler.gc.setToken(
+            session_data['current_user']['token']
+        )
 
-        for p in plugin_list:
-            if p['image']==plugin_info['image'] and p['name']==plugin_info['name']:
-                plugin_cli = p
-                break
+        job_obj = Job(
+            self.handler.gc,
+            plugin_id = None,
+            docker_image = plugin_info['image'],
+            cli = plugin_info['name'],
+            input_args = plugin_info['input_args']
+        )
 
-        if plugin_cli:
-            plugin_xml_req = requests.get(
-                self.handler.gc.urlBase+f'slicer_cli_web/cli/{plugin_cli["_id"]}/xml?token={session_data["current_user"]["token"]}'
-            )
-            if plugin_xml_req.status_code==200:
-                plugin_xml = ET.fromstring(plugin_xml_req.content)
-                exe_dict = self.parse_executable(plugin_xml)
+        exe_dict = job_obj.executable_dict
+        if not exe_dict is None:
+            plugin_info = {
+                '_id': job_obj.plugin_id,
+                'executable_dict': exe_dict.copy()
+            }
+        else:
+            plugin_info = None
 
-        return exe_dict, plugin_cli
 
-    def load_plugin(self, plugin_dict, session_data, uploaded_files_data, component_index):
+        return exe_dict, plugin_info
+
+    def load_plugin(self, plugin_dict, session_data, uploaded_files_data, component_index, add_run_button=True):
 
         # Each plugin_dict will have 'name', 'image', and 'input_args'
         # 'name' and 'image' are used to identify the CLI
         # 'input_args' is a list of either strings or dictionaries limiting which arguments the user can adjust
 
         # Getting plugin xml (have to be logged in to get)
-        cli_dict, plugin_info = self.get_executable_dict(plugin_dict,session_data)
+        if not 'executable_dict' in plugin_dict:
+            cli_dict, plugin_info = self.get_executable_dict(plugin_dict,session_data)
+        else:
+            cli_dict = plugin_dict['executable_dict']
+            plugin_info = plugin_dict
+
         if cli_dict is None:
             return dbc.Alert(f'Error loading plugin: {plugin_dict}',color = 'danger')
 
@@ -163,7 +178,7 @@ class DSAPluginRunner(DSATool):
         # Now creating the interactive component (without component-prefix, (can transform later))
         plugin_component = html.Div([
             dcc.Store(
-                id = {'type': 'dsa-plugin-runner-plugin-info-store','index': component_index},
+                id = {'type': 'dsa-plugin-runner-plugin-info-store','index': component_index} if add_run_button else {'type': 'dsa-plugin-runner-sequence-info-store','index': component_index},
                 data = json.dumps(plugin_info),
                 storage_type='memory'
             ),
@@ -194,7 +209,7 @@ class DSAPluginRunner(DSATool):
             html.Hr(),
             html.Div(
                 dbc.Stack([
-                    self.make_input_component(inp,inp_idx)
+                    self.make_input_component(inp,inp_idx, sequence=not add_run_button)
                     for inp_idx,inp in enumerate(inputs_list)
                     ],
                     direction='vertical',gap=2
@@ -207,12 +222,12 @@ class DSAPluginRunner(DSATool):
                 color = 'success',
                 disabled = False,
                 id = {'type': 'dsa-plugin-runner-submit-button','index': component_index}
-            )
+            ) if add_run_button else html.Div()
         ])
 
         return plugin_component
 
-    def make_file_component(self,select_type:str, value: Union[str,dict], component_index:int, disabled: bool):
+    def make_file_component(self,select_type:str, value: Union[str,dict], component_index:int, disabled: bool, sequence: bool = False):
         #TODO: Modal containing interactive components for selecting folders/files
         #TODO: if this component is for a parameter in the with "channel" = "output" then it needs two parameters:
         # The file name (str) and the folder _id with an additional parameter "{parameter_name}_folder"
@@ -254,7 +269,7 @@ class DSAPluginRunner(DSATool):
                     disabled=True
                 ),
                 dbc.Input(
-                    id = {'type': 'dsa-plugin-runner-input','index': component_index},
+                    id = {'type': 'dsa-plugin-runner-input','index': component_index} if not sequence else {'type': 'dsa-plugin-runner-sequence-input','index': component_index},
                     value = input_value,
                     style = {'display': 'none'}
                 ),
@@ -272,7 +287,7 @@ class DSAPluginRunner(DSATool):
 
         return file_component
 
-    def make_input_component(self, input_dict, input_index):
+    def make_input_component(self, input_dict, input_index,sequence=False):
 
         # Input components will either be an Input, a Dropdown, a Slider, or a region selector (custom)
         input_desc_column = [
@@ -293,7 +308,7 @@ class DSAPluginRunner(DSATool):
                             multi = False,
                             disabled = input_dict['disabled'],
                             value = input_dict['default'] if not input_dict['default'] is None else [],
-                            id = {'type': 'dsa-plugin-runner-input','index': input_index},
+                            id = {'type': 'dsa-plugin-runner-input','index': input_index} if not sequence else {'type': 'dsa-plugin-runner-sequence-input','index': input_index},
                             style = {'width': '100%'}
                         )
                     ],md=7)
@@ -320,7 +335,8 @@ class DSAPluginRunner(DSATool):
                             select_type=input_dict['type'],
                             value = input_dict['default'] if 'default' in input_dict else "",
                             component_index=input_index,
-                            disabled = input_dict['disabled']
+                            disabled = input_dict['disabled'],
+                            sequence = sequence
                         )
                     ],md=7)
                 ]),
@@ -328,6 +344,9 @@ class DSAPluginRunner(DSATool):
             ])
         elif input_dict['type']=='boolean':
             # This input type cannot be disabled
+            if input_dict['default'] is None:
+                input_dict['default'] = False
+
             input_component = html.Div([
                 dbc.Row([
                     dbc.Col(input_desc_column,md = 5),
@@ -337,14 +356,17 @@ class DSAPluginRunner(DSATool):
                                 {'label': 'True','value': 1},
                                 {'label': 'False','value': 0}
                             ],
-                            value = input_dict['default'] if not input_dict['default'] is None else [],
-                            id = {'type': 'dsa-plugin-runner-input','index': input_index}
+                            value = 1 if input_dict['default'] else 0,
+                            id = {'type': 'dsa-plugin-runner-input','index': input_index} if not sequence else {'type': 'dsa-plugin-runner-sequence-input','index': input_index},
                         )
                     ],md=7)
                 ]),
                 html.Hr()
             ])
         elif input_dict['type'] in ['integer','float','string','double'] or 'vector' in input_dict['type']:
+            if not 'constraints' in input_dict:
+                input_dict['constraints'] = None
+
             input_component = html.Div([
                 dbc.Row([
                     dbc.Col(input_desc_column,md=5),
@@ -357,7 +379,7 @@ class DSAPluginRunner(DSATool):
                             min = input_dict['constraints']['min'] if not input_dict['constraints'] is None else [],
                             max = input_dict['constraints']['max'] if not input_dict['constraints'] is None else [],
                             #step = input_dict['constraints']['step'] if not input_dict['constraints'] is None else [],
-                            id = {'type': 'dsa-plugin-runner-input','index': input_index},
+                            id = {'type': 'dsa-plugin-runner-input','index': input_index} if not sequence else {'type': 'dsa-plugin-runner-sequence-input','index': input_index},
                             style = {'width': '100%'}
                         )
                     ],md=7)
@@ -377,71 +399,6 @@ class DSAPluginRunner(DSATool):
                     break
         
         return exe_input
-
-    def parse_executable(self, exe_xml)->dict:
-
-        executable_dict = {
-            'title': exe_xml.find('title').text,
-            'description': exe_xml.find('description').text,
-            'author': exe_xml.find('contributor').text,
-            'documentation': exe_xml.find('documentation-url').text,
-        }
-
-        parameters_list = []
-        for param in exe_xml.iterfind('parameters'):
-            param_dict = {
-                'advanced': param.get('advanced',default=False)
-            }
-            if param.find('label') is not None:
-                param_dict['label'] = param.find('label').text
-            if param.find('description') is not None:
-                param_dict['description'] = param.find('description').text
-
-            input_list = []
-            for sub_el in param:
-                if sub_el.tag in self.parameter_tags:
-                    input_dict = {
-                        'type': sub_el.tag,
-                        'label': sub_el.find('label').text,
-                        'name': sub_el.find('name').text,
-                        'channel': sub_el.find('channel').text if not sub_el.find('channel') is None else None,
-                        'description': sub_el.find('description').text
-                    }
-
-                    default_value = sub_el.find('default')
-                    if not default_value is None:
-                        input_dict['default'] = default_value.text
-                    else:
-                        input_dict['default'] = None
-
-                    if 'enumeration' in sub_el.tag:
-                        options_list = []
-                        for opt in sub_el.iterfind('element'):
-                            options_list.append(opt.text)
-                        
-                        input_dict['options'] = options_list
-                    else:
-                        constraints = sub_el.get('constraints',default=None)
-                        if constraints is not None:
-                            # Have to see if the constraints need the "text" attrib
-                            constraints_dict = {
-                                'min': constraints.get('min').text,
-                                'max': constraints.get('max').text,
-                                'step': constraints.get('step').text
-                            }
-                            input_dict['constraints'] = constraints_dict
-                        else:
-                            input_dict['constraints'] = constraints
-
-                    input_list.append(input_dict)
-
-            param_dict['inputs'] = input_list
-
-            parameters_list.append(param_dict)
-
-        executable_dict['parameters'] = parameters_list
-
-        return executable_dict
 
     def run_plugin_request(self, plugin_id, session_data, input_params_dict):
         

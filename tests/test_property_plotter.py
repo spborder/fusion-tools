@@ -1,45 +1,30 @@
-"""
-
+""""
 Testing property plotter using remote slide with rich annotation properties
-
-
 """
-
-import os
 import sys
-import threading
 sys.path.append('./src/')
-from fusion_tools import Visualization
+from fusion_tools.visualization import Visualization
 from fusion_tools.handler.dsa_handler import DSAHandler
-from fusion_tools.components import SlideMap,OverlayOptions, PropertyViewer, PropertyPlotter, HRAViewer
-from fusion_tools.utils.shapes import align_object_props
-
-
-import pandas as pd
+from fusion_tools.components import LargeSlideMap,SlideMap,OverlayOptions, PropertyPlotter, HRAViewer
 
 def main():
 
     # Grabbing first item from demo DSA instance
     base_url = 'http://ec2-3-230-122-132.compute-1.amazonaws.com:8080/api/v1'
-    item_id = '64f545302d82d04be3e39eec'
+    item_id = '67ae1826fcdeba1e292f7057'
 
     # Starting the DSAHandler to grab information:
     dsa_handler = DSAHandler(
         girderApiUrl = base_url
     )
-
-    dsa_tileserver = [
-        dsa_handler.get_tile_server(item_id)
-    ]
     
     vis_session = Visualization(
-        tileservers = dsa_tileserver,
+        tileservers = [dsa_handler.get_tile_server(item_id)],
         components = [
             [
-                SlideMap(),
+                LargeSlideMap(min_zoom=5),
                 [
                     OverlayOptions(),
-                    PropertyViewer(),
                     PropertyPlotter(),
                     HRAViewer()
                 ]

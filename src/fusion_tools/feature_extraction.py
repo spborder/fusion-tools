@@ -149,52 +149,57 @@ class ParallelFeatureExtractor:
 
     def read_image_region(self, coords:list)->np.ndarray:
         
-        bbox = self.get_bbox(coords)
+        image_region = None
+        try:
+            bbox = self.get_bbox(coords)
 
-        if isinstance(self.image_source,TileServer):
-            if 'frames' in self.image_metadata:
-                image_region = np.zeros((int(bbox[3]-bbox[1]),int(bbox[2]-bbox[0]),len(self.image_metadata['frames'])))
-                for i in range(0,len(self.image_metadata['frames'])):
-                    image_region[:,:,i] = np.array(Image.open(
+            if isinstance(self.image_source,TileServer):
+                if 'frames' in self.image_metadata:
+                    image_region = np.zeros((int(bbox[3]-bbox[1]),int(bbox[2]-bbox[0]),len(self.image_metadata['frames'])))
+                    for i in range(0,len(self.image_metadata['frames'])):
+                        image_region[:,:,i] = np.array(Image.open(
+                            BytesIO(
+                                requests.get(
+                                    self.image_source.regions_url+f'?left={bbox[0]}&top={bbox[1]}&right={bbox[2]}&bottom={bbox[3]}&frame={i}'
+                                ).content
+                            )
+                        ))
+                else:
+                    image_region = np.array(Image.open(
                         BytesIO(
                             requests.get(
-                                self.image_source.regions_url+f'?left={bbox[0]}&top={bbox[1]}&right={bbox[2]}&bottom={bbox[3]}&frame={i}'
+                                self.image_source.regions_url+f'?left={bbox[0]}&top={bbox[1]}&right={bbox[2]}&bottom={bbox[3]}'
                             ).content
                         )
                     ))
-            else:
-                image_region = np.array(Image.open(
-                    BytesIO(
-                        requests.get(
-                            self.image_source.regions_url+f'?left={bbox[0]}&top={bbox[1]}&right={bbox[2]}&bottom={bbox[3]}'
-                        ).content
-                    )
-                ))
 
-        else:
-            if 'frames' in self.image_metadata:
-                image_region = np.zeros((int(bbox[3]-bbox[1]),int(bbox[2]-bbox[0]),len(self.image_metadata['frames'])))
-                for i in range(0,len(self.image_metadata['frames'])):
-                    image_region[:,:,i], _ = self.image_source.getRegion(
+            else:
+                if 'frames' in self.image_metadata:
+                    image_region = np.zeros((int(bbox[3]-bbox[1]),int(bbox[2]-bbox[0]),len(self.image_metadata['frames'])))
+                    for i in range(0,len(self.image_metadata['frames'])):
+                        image_region[:,:,i], _ = self.image_source.getRegion(
+                            format = large_image.constants.TILE_FORMAT_NUMPY,
+                            region = {
+                                'left': bbox[0],
+                                'top': bbox[1],
+                                'right': bbox[2],
+                                'bottom': bbox[3]
+                            },
+                            frame = i
+                        )
+                else:
+                    image_region, _ = self.image_source.getRegion(
                         format = large_image.constants.TILE_FORMAT_NUMPY,
                         region = {
                             'left': bbox[0],
                             'top': bbox[1],
                             'right': bbox[2],
                             'bottom': bbox[3]
-                        },
-                        frame = i
+                        }
                     )
-            else:
-                image_region, _ = self.image_source.getRegion(
-                    format = large_image.constants.TILE_FORMAT_NUMPY,
-                    region = {
-                        'left': bbox[0],
-                        'top': bbox[1],
-                        'right': bbox[2],
-                        'bottom': bbox[3]
-                    }
-                )
+
+        except:
+            print('Error reading image region')
 
         return image_region
 
@@ -229,6 +234,19 @@ class ParallelFeatureExtractor:
         coords = region['geometry']['coordinates']
         # Mask returned using bounding box of coordinates
         image_region = self.read_image_region(coords)
+
+        if image_region is None:
+            bbox = self.get_bbox(coords)
+
+            return_dict = {
+                "bbox": {
+                    'min_x': bbox[0],
+                    'min_y': bbox[1],
+                    'max_x': bbox[2],
+                    'max_y': bbox[3]
+                }
+            }
+            return return_dict
 
         # Applying preprocessing function if provided
         if not self.preprocess is None:

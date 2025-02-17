@@ -721,7 +721,7 @@ class DSAHandler(Handler):
                     }
                 )
             
-            put_response = self.gc.put('/slicer_cli_web/docker_image',parameters={'name':i})
+            put_response = self.gc.put('/slicer_cli_web/docker_image',parameters={'name':i,'pull': True})
             print(f'--------Image: {i} successfully added--------------')
             put_responses.append(put_response)
         return put_responses
