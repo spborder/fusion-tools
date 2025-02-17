@@ -2136,8 +2136,6 @@ class DSAUploader(DSATool):
         plugin_input_start_idx = sum([len(i['input_args']) for i in processing_plugins[:plugin_idx]])
         plugin_input_end_idx = plugin_input_start_idx+len(upload_processing_plugin['input_args'])
 
-        print(f'start_idx: {plugin_input_start_idx}, end_idx: {plugin_input_end_idx}')
-
         plugin_inputs = plugin_inputs[plugin_input_start_idx:plugin_input_end_idx]
 
         if len(upload_processing_plugin['input_args'])>len(plugin_inputs):
