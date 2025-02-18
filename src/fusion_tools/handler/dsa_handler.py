@@ -399,11 +399,17 @@ class DSAHandler(Handler):
                 folder_info = self.gc.get(f'/collection/{folder_path}')
 
         #TODO: This specific query is restricted to admins for some really inconvenient reason
-        folder_items = self.gc.get(f'/resource/{folder_info["_id"]}/items',
-                                                  parameters = {
-                                                      'type': folder_type,
-                                                      'limit': 0 
-                                                  })
+        #folder_items = self.gc.get(f'/resource/{folder_info["_id"]}/items',
+        #                                          parameters = {
+        #                                              'type': folder_type,
+        #                                              'limit': 0 
+        #                                          })
+
+        folder_items = self.gc.get(f'/item',
+                                   parameters = {
+                                       'folderId': folder_info["_id"],
+                                       'limit': 0
+                                   })
 
         if len(folder_items)>0:
             if ignore_histoqc:

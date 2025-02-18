@@ -515,6 +515,19 @@ class DSAPluginRunner(DSATool):
             prevent_initial_call = True
         )(self.submit_plugin)
 
+
+    def open_file_select_modal(self, clicked, is_open, session_data):
+
+        print(ctx.triggered)
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        modal_children = []
+
+
+        return not is_open, modal_children
+
+
     def update_cli_options(self, docker_select,session_data):
 
         if not any([i['value'] for i in ctx.triggered]):

@@ -594,6 +594,8 @@ class SegmentationDataset:
             )
         else:
             image = np.zeros((int(bbox[3]-bbox[1]),int(bbox[2]-bbox[0]),len(self.slide_data[slide_idx]['metadata']['frames'])))
+            print(f'base image shape: {image.shape}')
+            
             for f in range(len(self.slide_data[slide_idx]['metadata']['frames'])):
                 image_frame,_ = image_source.getRegion(
                     format = large_image.constants.TILE_FORMAT_NUMPY,
@@ -605,7 +607,8 @@ class SegmentationDataset:
                     },
                     frame = f
                 )
-                image[:,:,f] += image_frame[:,:,None]
+                print(f'image_frame shape: {image_frame.shape}')
+                image[:,:,f] += image_frame
 
 
         if len(features)>0:
