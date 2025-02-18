@@ -991,7 +991,6 @@ class DatasetBuilder(DSATool):
             current_selected_slides.extend(new_slides)
 
             new_rem_slides = list(set(current_selected_slides) & set([i['Slide ID'] for i in not_selected_slides]))
-            print(f'new_rem_slides: {new_rem_slides}')
             for d_idx,d in enumerate(new_rem_slides):
                 del selected_slides[current_selected_slides.index(d)]
                 del current_selected_slides[current_selected_slides.index(d)]           

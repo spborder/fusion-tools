@@ -53,7 +53,7 @@ class DSAResourceSelector(DSATool):
 
         self.get_callbacks()
 
-    def get_collection_table(self, session_data:dict):
+    def get_collection_table(self, session_data:dict, use_prefix:bool, return_data:bool):
         
         # Getting user folders if a user is present
         if "current_user" in session_data:
@@ -74,38 +74,44 @@ class DSAResourceSelector(DSATool):
         if len(user_folders)>0:
             collection_list+=[{'name': 'User Folders','_modelType': 'user', '_id': session_data['current_user']['_id']}]
 
-        collection_table = html.Div(
-            id = {'type': 'dsa-resource-selector-folder-div','index': 0},
-            children = [
-                dbc.Stack([
-                    html.H5(
-                        id = {'type': 'dsa-resource-selector-current-resource-path','index': 0},
-                        children = [
-                            html.A(
-                                'Collections and User Folders',
-                                id = {'type': 'dsa-resource-selector-path-part','index': 0},
-                                style = {'color': 'rgb(0,0,255)'}
-                            )
-                        ]
-                    ),
-                    html.Div(
-                        self.make_selectable_dash_table(
-                            dataframe = pd.DataFrame.from_records([{'Name': i['name'], 'Type': i['_modelType'], '_id': i['_id']} for i in collection_list]),
-                            id = {'type': 'dsa-resource-selector-resource-table','index': 0},
-                            multi_row = False,
-                            selected_rows = []
+        if not return_data:
+            collection_table = html.Div(
+                id = {'type': 'dsa-resource-selector-folder-div','index': 0},
+                children = [
+                    dbc.Stack([
+                        html.H5(
+                            id = {'type': 'dsa-resource-selector-current-resource-path','index': 0},
+                            children = [
+                                html.A(
+                                    'Collections and User Folders',
+                                    id = {'type': 'dsa-resource-selector-path-part','index': 0},
+                                    style = {'color': 'rgb(0,0,255)'}
+                                )
+                            ]
                         ),
-                        id = {'type': 'dsa-resource-selector-resource-table-div','index': 0}
-                    )
-                ])
-            ]
-        )
+                        html.Div(
+                            self.make_selectable_dash_table(
+                                dataframe = pd.DataFrame.from_records([{'Name': i['name'], 'Type': i['_modelType'], '_id': i['_id']} for i in collection_list]),
+                                id = {'type': 'dsa-resource-selector-resource-table','index': 0},
+                                multi_row = False,
+                                selected_rows = []
+                            ),
+                            id = {'type': 'dsa-resource-selector-resource-table-div','index': 0}
+                        )
+                    ])
+                ]
+            )
 
-        return collection_table
+            if use_prefix:
+                PrefixIdTransform(prefix=f'{self.component_prefix}').transform_layout(collection_table)
+
+            return collection_table
+        else:
+            return [{'Name': i['name'], 'Type': i['_modelType'], '_id': i['_id']} for i in collection_list]
 
     def update_layout(self, session_data: dict, use_prefix:bool):
 
-        collection_table = self.get_collection_table(session_data)
+        collection_table = self.get_collection_table(session_data,use_prefix,return_data=False)
 
         layout = html.Div([
             html.H4(
@@ -295,6 +301,27 @@ class DSAResourceSelector(DSATool):
                                 } | {k:v for k,v in i['meta'].items() if type(v)==str}
                             )
 
+            if show_empty:
+                # This is how you get all the empty folders within a folder (does not get child empty folders)
+                empty_folders = self.handler.get_folder_folders(
+                    folder_id = folder_info['_id'],
+                    folder_type = folder_info['_modelType']
+                )
+                
+                for f in empty_folders:
+                    if not f['_id'] in folders_in_folder and not f['_id'] in unique_folders:
+                        folder_info = self.handler.gc.get(f'/folder/{f["_id"]}/details')
+                        folder_folders.append(
+                            {
+                                'Name': f['name'],
+                                '_id': f['_id'],
+                                'Type': f['_modelType'],
+                                'Number of Folders': folder_info['nFolders'],
+                                'Number of Slides': folder_info['nItems'],
+                                'Last Updated': f['updated']
+                            }
+                        )
+
         else:
             
             user_folders = ['Private','Public']
@@ -312,27 +339,6 @@ class DSAResourceSelector(DSATool):
                     'Last Updated': user_folder_info['updated']
                 })
 
-        if show_empty:
-            # This is how you get all the empty folders within a folder (does not get child empty folders)
-            empty_folders = self.handler.get_folder_folders(
-                folder_id = folder_info['_id'],
-                folder_type = folder_info['_modelType']
-            )
-            
-            for f in empty_folders:
-                if not f['_id'] in folders_in_folder and not f['_id'] in unique_folders:
-                    folder_info = self.handler.gc.get(f'/folder/{f["_id"]}/details')
-                    folder_folders.append(
-                        {
-                            'Name': f['name'],
-                            '_id': f['_id'],
-                            'type': f['_modelType'],
-                            'Number of Folders': folder_info['nFolders'],
-                            'Number of Slides': folder_info['nItems'],
-                            'Last Updated': f['updated']
-                        }
-                    )
-
 
         return folder_slides, folder_folders
 
@@ -347,6 +353,7 @@ class DSAResourceSelector(DSATool):
             [
                 State({'type': 'dsa-resource-selector-resource-table','index': ALL},'data'),
                 State({'type': 'dsa-resource-selector-current-resource-path','index': ALL},'children'),
+                State({'type': 'dsa-resource-selector-selected-resources','index': ALL},'data'),
                 State('anchor-vis-store','data')
             ],
             [
@@ -357,86 +364,171 @@ class DSAResourceSelector(DSATool):
             prevent_initial_call = True
         )(self.update_resource_selection)
 
-    def update_resource_selection(self, table_selected_rows, table_path_clicked, table_data, current_path_parts, session_data):
+    def update_resource_selection(self, table_selected_rows, table_path_clicked, table_data, current_path_parts, selected_resource_data, session_data):
 
-        if not any([i['value'] for i in ctx.triggered]):
-            raise exceptions.PreventUpdate
-        
         print(ctx.triggered)
 
-        table_data = get_pattern_matching_value(table_data)
         current_path_parts = list(self.extract_path_parts(get_pattern_matching_value(current_path_parts)))
-
-        table_selected_rows = get_pattern_matching_value(table_selected_rows)
         
         session_data = json.loads(session_data)
+        selected_resource_data = json.loads(get_pattern_matching_value(selected_resource_data))
+        added_resources = []
+        removed_resources = []
+        current_resources = [
+            i['_id'] for i in selected_resource_data['resource_list']
+        ]
 
         if 'dsa-resource-selector-resource-table' in ctx.triggered_id['type']:
             # This is so that it works for multiple selected rows as well
-            selected_resource = [table_data[i] for i in table_selected_rows]
-            print(f'Selected Resource: {selected_resource}')
+            table_selected = ctx.triggered_id['index']
+            selected_resource = [table_data[table_selected][i] for i in table_selected_rows[table_selected]]
             resource_type = [i['Type'] for i in selected_resource]
-            if not all([r==self.selector_type for r  in resource_type]):
-                # This means another table should be added:
-                resource_folders, resource_slides = self.organize_folder_contents(
-                    folder_info = {
-                        '_id': selected_resource[0]['_id'],
-                        '_modelType': selected_resource[0]['Type']
-                    },
-                    show_empty = True,
-                    ignore_histoqc=True
-                )
+            if not len(selected_resource)==0:
+                if not all([r==self.selector_type for r  in resource_type]):
+                    # This means another table should be added:
+                    if not selected_resource[0]['Name']=='User Folders':
+                        resource_slides, resource_folders = self.organize_folder_contents(
+                            folder_info = {
+                                '_id': selected_resource[0]['_id'],
+                                '_modelType': selected_resource[0]['Type']
+                            },
+                            show_empty = True,
+                            ignore_histoqc=True
+                        )
+                    else:
+                        resource_slides, resource_folders = self.organize_folder_contents(
+                            folder_info = {
+                                '_modelType': 'user',
+                                'login': session_data['current_user']['login']
+                            },
+                            show_empty=True,
+                            ignore_histoqc=True
+                        )
 
-                new_crumbs = current_path_parts + [selected_resource[0]['Name']]
+                    if not any([i in current_path_parts for i in ['user','collection']]):
+                        if selected_resource[0]['Type']=='collection':
+                            current_path_parts += ['collection']
+                        elif selected_resource[0]['Type']=='user':
+                            current_path_parts += ['user']
 
+                    if not selected_resource[0]['Name']=='User Folders':
+                        new_crumbs = current_path_parts + [selected_resource[0]['Name']]
+                    else:
+                        new_crumbs = current_path_parts
+                else:
+                    resource_folders = None
+                    resource_slides = None
+
+                    added_resources = [
+                        i for i in selected_resource if not i['_id'] in current_resources
+                    ]
+                    removed_resources = [
+                        i for i in table_data[table_selected] if i['_id'] in current_resources and not i in selected_resource
+                    ]
+            else:
+                removed_resources = selected_resource_data['resource_list']
+                resource_folders = None
+                resource_slides = None
 
         elif 'dsa-resource-selector-path-part' in ctx.triggered_id['type']:
             selected_resource = current_path_parts[ctx.triggered_id['index']]
-            print(f'Selected Resource: {selected_resource}')
             if ctx.triggered_id['index']<len(current_path_parts)-1:
-                if ctx.triggered_id['index']>0:
-                    new_path = '/'.join(current_path_parts[:ctx.triggered_id['index']])
-                    print(f'new path: {new_path}')
-
+                if ctx.triggered_id['index']>1:
+                    new_path = '/'.join(current_path_parts[1:ctx.triggered_id['index']+1])
                     path_info = self.handler.get_path_info(new_path,user_token = session_data['current_user']['token'])
 
-                    resource_folders, resource_slides = self.organize_folder_contents(
+                    resource_slides, resource_folders = self.organize_folder_contents(
                         folder_info = path_info,
                         show_empty = True,
                         ignore_histoqc=True
                     )
 
-                    new_crumbs = current_path_parts[:ctx.triggered_id['index']]
+                    new_crumbs = current_path_parts[:ctx.triggered_id['index']+1]
 
+                elif ctx.triggered_id['index']==1:
+                    if selected_resource=='collection':
+                        resource_folders = self.get_collection_table(session_data,True,return_data=True)
+                        resource_slides = []
+                        new_crumbs = current_path_parts[:ctx.triggered_id['index']+1]
+                    elif selected_resource=='user':
+                        resource_slides, resource_folders = self.organize_folder_contents(
+                            folder_info = {
+                                '_modelType': 'user',
+                                'login': session_data['current_user']['login']
+                            },
+                            show_empty = True,
+                            ignore_histoqc=True
+                        )
+                        new_crumbs = current_path_parts[:ctx.triggered_id['index']+1]
 
-
-                elif ctx.triggered_id==0:
-
-                    resource_folders = self.get_collection_table(session_data)
-                    PrefixIdTransform(prefix=f'{self.component_prefix}').transform_layout(resource_folders)
-                    
+                elif ctx.triggered_id['index']==0:
+                    resource_folders = self.get_collection_table(session_data, True, return_data=True)                   
                     resource_slides = []
+                    new_crumbs = [current_path_parts[0]]
 
-                    new_crumbs = current_path_parts[0]
+                else:
+                    resource_folders = None
+                    resource_slides = None
 
             else:
                 new_crumbs = current_path_parts
+                resource_folders = None
+                resource_slides = None
 
-
-        updated_resource_table = [no_update]
         
-        updated_resource_path = [
-            dbc.Stack([
-                html.A(
-                    c+'/',
-                    n_clicks = 0,
-                    id = {'type': f'{self.component_prefix}-dsa-resource-selector-path-part','index': c_idx},
-                    style = {'color': 'rgb(0,0,255)'}
+        if not all([i is None for i in [resource_folders,resource_slides]]):
+            if all([type(i)==list for i in [resource_folders,resource_slides]]):
+                resource_folder_table = self.make_selectable_dash_table(
+                    dataframe=pd.DataFrame.from_records(resource_folders),
+                    id = {'type': f'{self.component_prefix}-dsa-resource-selector-resource-table','index': 0},
+                    multi_row = False if not self.selector_type=='folder' and self.select_count is None else True,
+                    selected_rows = [idx for idx,i in enumerate(resource_folders) if i['_id'] in current_resources]
                 )
-                for c_idx,c in enumerate(new_crumbs)
-            ],direction='horizontal')
-        ]
-        updated_resource_data = [no_update]
+
+                resource_slides_table = self.make_selectable_dash_table(
+                    dataframe=pd.DataFrame.from_records(resource_slides),
+                    id = {'type': f'{self.component_prefix}-dsa-resource-selector-resource-table','index': 1},
+                    multi_row=False if not self.selector_type=='item' and self.select_count is None else True,
+                    selected_rows=[idx for idx,i in enumerate(resource_slides) if i['_id'] in current_resources]
+                )
+
+                updated_resource_table = [
+                    dbc.Stack([
+                        resource_folder_table,
+                        html.Hr(),
+                        html.H5('Slides in selected resource: '),
+                        resource_slides_table
+                    ])
+                ]
+            else:
+                updated_resource_table = [resource_folders]
+
+            updated_resource_path = [
+                dbc.Stack([
+                    html.A(
+                        c+'/',
+                        n_clicks = 0,
+                        id = {'type': f'{self.component_prefix}-dsa-resource-selector-path-part','index': c_idx},
+                        style = {'color': 'rgb(0,0,255)'}
+                    )
+                    for c_idx,c in enumerate(new_crumbs)
+                ],direction='horizontal')
+            ]
+
+        else:
+            updated_resource_table = [no_update]
+            updated_resource_path = [no_update]
+
+        if len(added_resources)==0 and len(removed_resources)==0:
+            updated_resource_data = [no_update]
+        else:
+            # Updating current selected resources
+            for d in removed_resources:
+                selected_resource_data['resource_list'].remove(d)
+            new_resource_list = {
+                'resource_list': selected_resource_data['resource_list']+added_resources
+            }
+            updated_resource_data = [json.dumps(new_resource_list)]
 
         return updated_resource_table, updated_resource_path, updated_resource_data
 
