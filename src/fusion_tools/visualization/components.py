@@ -139,7 +139,7 @@ class Visualization:
 
         self.viewer_app = DashProxy(
             __name__,
-            requests_pathname_prefix = '/app/' if not self.app_options['jupyter'] else None,
+            url_base_pathname = '/app/' if not self.app_options['jupyter'] else self.app_options.get('url_base_pathname'),
             suppress_callback_exceptions = True,
             external_stylesheets = self.app_options['external_stylesheets'],
             external_scripts = self.app_options['external_scripts'],
