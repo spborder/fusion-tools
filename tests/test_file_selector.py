@@ -322,12 +322,13 @@ class DSAResourceSelector(DSATool):
                             }
                         )
 
-        else:
+        elif folder_info['_modelType']=='user':
             
             user_folders = ['Private','Public']
             for u_f in user_folders:
                 user_folder_info = self.handler.get_path_info(
-                    path = f'/user/{folder_info["login"]}/{u_f}'
+                    path = f'/user/{folder_info["login"]}/{u_f}',
+                    user_token = folder_info['token']
                 )
 
                 folder_folders.append({
@@ -338,6 +339,22 @@ class DSAResourceSelector(DSATool):
                     'Number of Slides': user_folder_info['nItems'],
                     'Last Updated': user_folder_info['updated']
                 })
+
+        elif folder_info['_modelType']=='item':
+            
+            if self.selector_type=='file':
+                item_subs = self.handler.gc.get(f'/item/{folder_info["_id"]}/files')
+            elif self.selector_type=='annotation':
+                item_subs = self.handler.gc.get(f'/annotation',parameters={'itemId': folder_info['_id']})
+
+            folder_slides = [
+                {
+                    'Name': i['name'] if self.selector_type=='file' else i['annotation']['name'],
+                    '_id': i['_id'],
+                    'Type': i['_modelType'],
+                }
+                for i in item_subs
+            ]
 
 
         return folder_slides, folder_folders
@@ -365,8 +382,6 @@ class DSAResourceSelector(DSATool):
         )(self.update_resource_selection)
 
     def update_resource_selection(self, table_selected_rows, table_path_clicked, table_data, current_path_parts, selected_resource_data, session_data):
-
-        print(ctx.triggered)
 
         current_path_parts = list(self.extract_path_parts(get_pattern_matching_value(current_path_parts)))
         
@@ -399,7 +414,8 @@ class DSAResourceSelector(DSATool):
                         resource_slides, resource_folders = self.organize_folder_contents(
                             folder_info = {
                                 '_modelType': 'user',
-                                'login': session_data['current_user']['login']
+                                'login': session_data['current_user']['login'],
+                                'token': session_data['current_user']['token']
                             },
                             show_empty=True,
                             ignore_histoqc=True
@@ -481,14 +497,14 @@ class DSAResourceSelector(DSATool):
                 resource_folder_table = self.make_selectable_dash_table(
                     dataframe=pd.DataFrame.from_records(resource_folders),
                     id = {'type': f'{self.component_prefix}-dsa-resource-selector-resource-table','index': 0},
-                    multi_row = False if not self.selector_type=='folder' and self.select_count is None else True,
+                    multi_row = False if not self.selector_type in ['folder','collection'] and self.select_count is None else True,
                     selected_rows = [idx for idx,i in enumerate(resource_folders) if i['_id'] in current_resources]
                 )
 
                 resource_slides_table = self.make_selectable_dash_table(
                     dataframe=pd.DataFrame.from_records(resource_slides),
                     id = {'type': f'{self.component_prefix}-dsa-resource-selector-resource-table','index': 1},
-                    multi_row=False if not self.selector_type=='item' and self.select_count is None else True,
+                    multi_row=False if not self.selector_type in ['item','file','annotation'] and self.select_count is None else True,
                     selected_rows=[idx for idx,i in enumerate(resource_slides) if i['_id'] in current_resources]
                 )
 
@@ -551,7 +567,7 @@ def main():
 
     resource_selector_component = DSAResourceSelector(
         handler = dsa_handler,
-        selector_type = 'item',
+        selector_type = 'annotation',
         select_count = None
     )
 
