@@ -7,6 +7,7 @@ import numpy as np
 import lxml.etree as ET
 
 from typing_extensions import Union
+import girder_client
 
 from PIL import Image
 from io import BytesIO
@@ -21,15 +22,624 @@ from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, Pr
 
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 from fusion_tools import DSATool
+from fusion_tools.handler.resource_selector import DSAResourceSelector
 
 from girder_job_sequence import Job, Sequence
 from girder_job_sequence.utils import from_list
 
+PARAMETER_TAGS = ['integer','float','double','boolean','string','integer-vector','float-vector','double-vector','string-vector',
+                'integer-enumeration','float-enumeration','double-enumeration','string-enumeration','file','directory','image',
+                'geometry','point','pointfile','region','table','transform']
+
+class DSAPluginGroup(DSATool):
+    """Blueprint object which creates input layout for sets of plugins/sequences of plugins
+
+    :param DSATool: Class for components that integrate with DSA
+    :type DSATool: None
+    """
+    def __init__(self,
+                 handler:None
+                ):
+        
+        super().__init__()
+        self.handler = handler
+
+    def __str__(self):
+        return 'DSA Plugin Group'
+
+    def load(self, component_prefix: int):
+        
+        self.component_prefix = component_prefix
+
+        self.title = 'DSA Plugin Group'
+        self.blueprint = DashBlueprint(
+            transforms=[
+                PrefixIdTransform(prefix=f'{component_prefix}'),
+                MultiplexerTransform()
+            ]
+        )
+
+        self.get_callbacks()
+    
+    def load_plugin(self, plugin_dict:dict, session_data:dict, component_index:int, sequence=False):
+        
+        exe_dict = None
+        self.handler.gc.setToken(
+            session_data['current_user']['token']
+        )
+
+        try:
+            job_obj = Job(
+                self.handler.gc,
+                plugin_id = plugin_dict['_id'] if '_id' in plugin_dict else None,
+                docker_image = plugin_dict['image'] if 'image' in plugin_dict else None,
+                cli = plugin_dict['name'] if 'name' in plugin_dict else None,
+                input_args = plugin_dict['input_args'] if 'input_args' in plugin_dict else []
+            )
+
+            exe_dict = job_obj.executable_dict
+        except girder_client.HttpError:
+            # Error getting this plugin
+            return dbc.Alert(f'Error getting plugin: {plugin_dict}',color='danger')
+
+        if 'input_args' in plugin_dict:
+            # Parsing through the provided input_args and pulling them out of the plugin_parameters
+            inputs_list = []
+            for in_arg in plugin_dict['input_args']:
+                if type(in_arg)==str:
+                    # Looking for the input with this name and setting default from input (if specified)
+                    exe_input = self.find_executable_input(exe_dict,in_arg)
+                    exe_input['disabled'] = False
+                elif type(in_arg)==dict:
+                    # Looking for the input with in_arg['name'] and setting default from in_arg
+                    exe_input = self.find_executable_input(exe_dict, in_arg['name'])
+                    if exe_input is None:
+                        # For "output" channel files, {parameter_name}_folder is also needed but won't be specified in the XML
+                        exe_input = {
+                            'name': in_arg['name'],
+                            'label': in_arg['name'],
+                            'description': 'Output file folder',
+                            'type': 'directory'
+                        }
+                    
+                    exe_input['disabled'] = in_arg['disabled'] if 'disabled' in in_arg else False
+
+                    if 'default' in in_arg:
+                        if type(in_arg['default']) in [int,float,str]:
+                            exe_input['default'] = in_arg['default']
+                        elif type(in_arg['default'])==dict:
+                            # Defining input from uploaded items/file id
+                            if 'value' in in_arg['default']:
+                                exe_input['default'] = in_arg['default']
+                            
+                            elif in_arg['default']['type'] in ['upload_folder','upload_item']:
+                                # Find uploaded_items:
+                                uploaded_items = [i for i in session_data['uploaded_files'] if i['_modelType']=='item']
+                                # Which one matches the default name
+                                uploaded_item_names = [i['name'] for i in uploaded_items]
+                                if in_arg['default']['name'] in uploaded_item_names:
+                                    matching_item = uploaded_items[uploaded_item_names.index(in_arg['default']['name'])]
+
+                                    if in_arg['default']['type']=='upload_folder':
+                                        folder_info = self.handler.get_folder_info(matching_item['folderId'],session_data['current_user']['token'])
+                                        exe_input['default'] = {
+                                            'name': folder_info['name'],
+                                            '_id': folder_info['_id']
+                                        }
+                                    elif in_arg['default']['type']=='upload_item':
+                                        exe_input['default'] = {
+                                            'name': matching_item['name'],
+                                            '_id': matching_item['_id']
+                                        }
+                                    
+                                else:
+                                    exe_input['default'] = None
+                            
+                            elif in_arg['default']['type']=='upload_file':
+                                uploaded_files = [i for i in session_data['uploaded_files'] if i['_modelType']=='file']
+                                uploaded_file_names = [i['name'] for i in uploaded_files]
+                                if in_arg['default']['name'] in uploaded_file_names:
+                                    matching_file = uploaded_files[uploaded_file_names.index(in_arg['default']['name'])]
+                                    exe_input['default'] = {
+                                        'name': matching_file['name'],
+                                        '_id': matching_file['_id']
+                                    }
+                                else:
+                                    exe_input['default'] = None
+
+                            elif in_arg['default']['type']=='upload_annotation':
+                                uploaded_annotations = [i for i in session_data['uploaded_files'] if i['_modelType']=='annotation']
+
+                                if 'fileName' in in_arg['default']:
+                                    uploaded_parent_names = [i['parentName'] for i in uploaded_annotations]
+                                    if in_arg['default']['fileName'] in uploaded_parent_names:
+                                        matching_parent = uploaded_annotations[uploaded_parent_names.index(in_arg['default']['name'])]
+                                        annotation_info = self.handler.get_annotation_names(matching_parent['_id'], user_token = session_data['current_user']['token'])
+
+                                        if 'annotationName' in in_arg['default']:
+                                            annotation_names = [i['annotation']['name'] for i in annotation_info]
+                                            if in_arg['default']['annotationName'] in annotation_names:
+                                                matching_annotation = annotation_info[annotation_names.index(in_arg['default']['annotationName'])]
+                                                exe_input['default'] = {
+                                                    'name': matching_annotation['annotation']['name'],
+                                                    '_id': matching_annotation['_id']
+                                                }
+                                            else:
+                                                exe_input['default'] = None
+                                        elif 'annotationId' in in_arg['default']:
+                                            annotation_ids = [i['_id'] for i in annotation_info]
+                                            if in_arg['default']['annotationId'] in annotation_ids:
+                                                matching_annotation = annotation_info[annotation_ids.index(in_arg['default']['annotationId'])]
+                                                exe_input['default'] = {
+                                                    'name': matching_annotation['annotation']['name'],
+                                                    '_id': matching_annotation['_id']
+                                                }
+                                            else:
+                                                exe_input['default'] = None
+                                    else:
+                                        exe_input['default'] = None
+
+                                elif 'fileId' in in_arg['default']:
+                                    uploaded_parent_ids = [i['_id'] for i in uploaded_annotations]
+                                    if in_arg['default']['fileId'] in uploaded_parent_ids:
+                                        matching_parent = uploaded_annotations[uploaded_parent_ids.index(in_arg['default']['fileId'])]
+                                        annotation_info = self.handler.get_annotation_names(matching_parent['_id'], user_token = session_data['current_user']['token'])
+
+                                        if 'annotationName' in in_arg['default']:
+                                            annotation_names = [i['annotation']['name'] for i in annotation_info]
+                                            if in_arg['default']['annotationName'] in annotation_names:
+                                                matching_annotation = annotation_info[annotation_names.index(in_arg['default']['annotationName'])]
+                                                exe_input['default'] = {
+                                                    'name': matching_annotation['annotation']['name'],
+                                                    '_id': matching_annotation['_id']
+                                                }
+                                            else:
+                                                exe_input['default'] = None
+                                        elif 'annotationId' in in_arg['default']:
+                                            annotation_ids = [i['_id'] for i in annotation_info]
+                                            if in_arg['default']['annotationId'] in annotation_ids:
+                                                matching_annotation = annotation_info[annotation_ids.index(in_arg['default']['annotationId'])]
+                                                exe_input['default'] = {
+                                                    'name': matching_annotation['annotation']['name'],
+                                                    '_id': matching_annotation['_id']
+                                                }
+                                            else:
+                                                exe_input['default'] = None
+                                    else:
+                                        exe_input['default'] = None
+
+                                else:
+                                    exe_input['default'] = None
+
+                            else:
+                                exe_input['default'] = None
+                        else:
+                            exe_input['default'] = None
+                    
+                inputs_list.append(exe_input)
+        else:
+            inputs_list = []
+            for ip in exe_dict['parameters']:
+                # ip = input, ipp = input parameter
+                inputs_list.extend([ipp | {'disabled': False} for ipp in ip['inputs']])
+
+        # Now creating the interactive component (without component-prefix, can transform later)
+        plugin_component = html.Div([
+            dcc.Store(
+                id = {'type': 'dsa-plugin-plugin-info-store','index': component_index},
+                data = json.dumps({
+                    '_id': job_obj.plugin_id,
+                    'exe_dict': exe_dict.copy()
+                }),
+                storage_type = 'memory'
+            ),
+            dbc.Row([
+                html.H5(
+                    html.A(
+                        exe_dict['title'],
+                        target = '_blank',
+                        href = exe_dict['documentation'] if 'documentation' in exe_dict else None
+                    )
+                )
+            ]),
+            html.Hr(),
+            dbc.Row([
+                exe_dict['description']
+            ]),
+            dbc.Row([
+                dmc.AvatarGroup(
+                    children = [
+                        dmc.Tooltip(
+                            dmc.Avatar(
+                                ''.join([n[0] for n in author.split() if not n[0] in ['(',')']]),
+                                size = 'lg',
+                                radius = 'xl',
+                                color = f'rgb({np.random.randint(0,255)},{np.random.randint(0,255)},{np.random.randint(0,255)})'
+                            ),
+                            label = author,
+                            position = 'bottom'
+                        )
+                        for author in exe_dict['author'].split(',')
+                    ]
+                )
+            ]),
+            html.Hr(),
+            html.Div(
+                dbc.Stack([
+                    self.make_input_component(inp,inp_idx, sequence = sequence)
+                    for inp_idx, inp in enumerate(inputs_list)
+                ],direction='vertical',gap=2),
+                style = {'maxHeight': '80vh','overflow':'scroll'}
+            ),
+            dbc.Button(
+                'Submit Plugin',
+                className = 'd-grid col-12 mx-auto',
+                color = 'success',
+                disabled = False,
+                id = {'type': 'dsa-plugin-submit-button','index': component_index}
+            ) if not sequence else html.Div()
+        ])
+
+        return plugin_component
+
+    def find_executable_input(self, executable_dict, input_name)->dict:
+
+        exe_input = None
+        for p in executable_dict['parameters']:
+            for inp in p['inputs']:
+                if inp['name']==input_name:
+                    exe_input = inp
+                    break
+        
+        return exe_input
+
+    def make_input_component(self, input_dict, input_index, sequence):
+        
+        input_desc_column = [
+            dbc.Row(html.H6(input_dict['label'])),
+            dbc.Row(html.P(input_dict['description']))
+        ]
+
+        if 'enumeration' in input_dict['type']:
+            input_component = html.Div([
+                dbc.Row([
+                    dbc.Col(input_desc_column,md=5),
+                    dbc.Col([
+                        dcc.Dropdown(
+                            options = [
+                                {'label': i, 'value': i}
+                                for i in input_dict['options']
+                            ],
+                            multi = False,
+                            disabled = input_dict['disabled'],
+                            value = input_dict['default'] if not input_dict['default'] is None else [],
+                            id = {'type': 'dsa-plugin-input','index': input_index} if not sequence else {'type': 'dsa-plugin-sequence-input','index': input_index},
+                            style = {'width': '100%'}
+                        )
+                    ],md=7)
+                ]),
+                html.Hr()
+            ])
+        elif input_dict['type'] in ['region','geometry','point']:
+            input_component = html.Div([
+                dbc.Row([
+                    dbc.Col(input_desc_column,md=5),
+                    dbc.Col([
+                        'This component is still in progress'
+                    ],md=7)
+                ]),
+                html.Hr()
+            ])
+        elif input_dict['type'] in ['file','directory','image']:
+
+            input_component = html.Div([
+                dbc.Row([
+                    dbc.Col(input_desc_column,md=5),
+                    dbc.Col([
+                        self.make_file_component(
+                            select_type = input_dict['type'],
+                            value = input_dict['default'] if 'default' in input_dict else "",
+                            component_index = input_index,
+                            disabled = input_dict['disabled'],
+                            sequence = sequence
+                        )
+                    ], md = 7)
+                ]),
+                html.Hr()
+            ])      
+        elif input_dict['type']=='boolean':
+            # This input type cannot be disabled
+            if input_dict['default'] is None:
+                input_dict['default'] = False
+
+            input_component = html.Div([
+                dbc.Row([
+                    dbc.Col(input_desc_column,md=5),
+                    dbc.Col([
+                        dcc.RadioItems(
+                            options = [
+                                {'label': 'True', 'value': 1},
+                                {'label': 'False','value': 0}
+                            ],
+                            value = 1 if input_dict['default'] else 0,
+                            id = {'type': 'dsa-plugin-input','index': input_index} if not sequence else {'type': 'dsa-plugin-sequence-input','index': input_index}
+                        )
+                    ],md=7)
+                ]),
+                html.Hr()
+            ])
+        elif input_dict['type'] in ['integer','float','string','double'] or 'vector' in input_dict['type']:
+            if not 'constraints' in input_dict:
+                input_dict['constraints'] = None
+
+            input_component = html.Div([
+                dbc.Row([
+                    dbc.Col(input_desc_column,md=5),
+                    dbc.Col([
+                        dcc.Input(
+                            type = 'text' if input_dict['type']=='string' else 'number',
+                            value = input_dict['default'] if not input_dict['default'] is None else [],
+                            maxLength = 1000,
+                            disabled = input_dict['disabled'],
+                            min = input_dict['constraints']['min'] if not input_dict['constraints'] is None else [],
+                            max = input_dict['constraints']['max'] if not input_dict['constraints'] is None else [],
+                            #step = input_dict['constraints']['step'] if not input_dict['constraints'] is None else [],
+                            id = {'type': 'dsa-plugin-input','index': input_index} if not sequence else {'type': 'dsa-plugin-sequence-input','index': input_index},
+                            style = {'width': '100%'}
+                        )
+                    ],md=7)
+                ]),
+                html.Hr()
+            ])
+
+        return input_component
+
+    def make_file_component(self, select_type: str, value: Union[str,dict], component_index:int,disabled:bool,sequence:bool=False):
+
+        if type(value)==dict:
+            if all([i in value for i in ['name','_id']]):
+                selector_value = value['name']
+                input_value = value['_id']
+            elif 'value' in value:
+                selector_value = value['value']
+                input_value = value['value']
+        else:
+            selector_value = value
+            input_value = value
+
+        file_component = html.Div([
+            dbc.InputGroup([
+                dbc.InputGroupText(
+                    f'{select_type}: '
+                ),
+                dbc.Input(
+                    id = {'type': 'dsa-plugin-resource-selector-input','index': component_index},
+                    placeholder = select_type,
+                    type = 'text',
+                    required = True,
+                    value = selector_value,
+                    maxLength = 1000,
+                    disabled = True
+                ),
+                dbc.Input(
+                    id = {'type': 'dsa-plugin-input','index': component_index} if not sequence else {'type': 'dsa-plugin-sequence-input','index': component_index},
+                    value = input_value,
+                    style = {'display': 'none'}
+                ),
+                dbc.Button(
+                    children = [
+                        html.I(
+                            className = 'fa-solid fa-file'
+                        )
+                    ],
+                    id = {'type': 'dsa-plugin-resource-selector-open-modal','index': component_index} if not sequence else {'type': 'dsa-plugin-sequence-resource-selector-open-modal','index': component_index},
+                    disabled = disabled
+                )
+            ])
+        ])
+
+        return file_component
+
+    def update_layout(self, session_data: dict, use_prefix:bool, plugin_groups: Union[list,dict,None]=None):
+        """Updating layout of the plugin group blueprint, creates accordions for each singular plugin and outlined accordions corresponding to sequences.
+        For more information on plugin sequences, see: https://github.com/spborder/girder-job-sequence
+
+        :param session_data: Current session data, includes current user information ('_id', 'token')
+        :type session_data: dict
+        :param use_prefix: Used to indicate whether or not this is an initialization (False) of the layout or just updating components (True)
+        :type use_prefix: bool
+        :param plugin_groups: Either a list of plugins and sequence(s) or dictionary for single plugin, defaults to None
+        :type plugin_groups: Union[list,dict,None], optional
+        """
+
+        plugin_components = []
+        if not plugin_groups is None:
+            if type(plugin_groups)==dict:
+                plugin_groups = [plugin_groups]
+            
+            plugin_count = 0
+            sequence_plugin_count = 0
+            sequence_count = 0
+            for p_idx, p in enumerate(plugin_groups):
+                if type(p)==dict:
+                    # This is a singular job that can be executed independently of any other processing plugin
+                    p_component = self.load_plugin(
+                        plugin_dict = p,
+                        session_data = session_data,
+                        component_index = plugin_count,
+                        sequence=False
+                    )
+
+                    plugin_components.append(
+                        dmc.AccordionItem([
+                            dmc.AccordionControl(p['name']),
+                            dmc.AccordionPanel(
+                                dbc.Stack([
+                                    p_component,
+                                    html.Div(
+                                        id = {'type': 'dsa-plugin-submit-status-div','index': plugin_count},
+                                        children = []
+                                    )
+                                ])
+                            )
+                        ],value=f'dsa-plugin-{plugin_count}',style={'marginBottom':'10px','marginTop': '10px'})
+                    )
+                    plugin_count += 1
+                elif type(p)==list:
+                    # This is a sequential job where multiple jobs are submitted to a sequence handler at the same time and executed one-by-one
+                    sequence_color = f'rgb({np.random.randint(0,255)},{np.random.randint(0,255)},{np.random.randint(0,255)})'
+                    sequence_components = []
+                    for j_idx,j in enumerate(p):
+                        j_component = self.load_plugin(
+                            plugin_dict = j,
+                            session_data = session_data,
+                            component_index = sequence_plugin_count,
+                            sequence=True
+                        )
+
+                        sequence_components.append(
+                            dmc.AccordionItem([
+                                dmc.AccordionControl(j['name']),
+                                dmc.AccordionPanel(
+                                    dbc.Stack([
+                                        j_component
+                                    ])
+                                )
+                            ],value = f'dsa-plugin-sequence-{sequence_count}-{j_idx}')
+                        )
+                        sequence_plugin_count += 1
+                    
+                    sequence_components.append(
+                        dmc.AccordionItem([
+                            dmc.AccordionControl(f'Submit Sequence {sequence_count+1}'),
+                            dmc.AccordionPanel(
+                                dbc.Stack([
+                                    dbc.Button(
+                                        'Submit Sequence',
+                                        id = {'type': 'dsa-plugin-sequence-submit-button','index': sequence_count},
+                                        className = 'd-grid col-12 mx-auto',
+                                        n_clicks = 0,
+                                        color = 'success',
+                                        disabled = False
+                                    ),
+                                    html.Div(
+                                        id = {'type': 'dsa-plugin-sequence-status-div','index': sequence_count},
+                                        children = []
+                                    )
+                                ])
+                            )
+                        ], value = f'dsa-sequence-{sequence_count}-submit',style={'marginBottom':'10px'})
+                    )
+
+                plugin_components.append(
+                    dbc.Stack(
+                        children = [
+                            html.H5(f'Sequence {sequence_count+1} Plugins'),
+                            dmc.Accordion(
+                                id = {'type': 'dsa-plugin-sequence-accordion','index': sequence_count},
+                                children = sequence_components,
+                            )
+                        ],
+                        style = {
+                            'padding': '10px 10px 10px 10px',
+                            'outline-style':'dashed',
+                            'outline-color': sequence_color
+                        }
+                    )
+                )
+                sequence_count += 1
+
+
+        layout = html.Div([
+            dbc.Card([
+                dbc.CardHeader(self.title),
+                dbc.CardBody([
+                    dbc.Row(
+                        'Below are separate input components for running a desired set of plugins. Individual plugins can be executed independently while plugins that are part of a Sequence are submitted all at once.'
+                    ),
+                    html.Hr(),
+                    html.Div(
+                        id = {'type': 'dsa-plugin-plugin-parent-div','index': 0},
+                        children = plugin_components
+                    )
+                ])
+            ])
+        ],style = {'maxHeight': '90vh','overflow': 'scroll'})
+
+        if use_prefix:
+            PrefixIdTransform(prefix=f'{self.component_prefix}').transform_layout(layout)
+
+        return layout
+
+    def gen_layout(self, session_data:dict):
+        """Initializing layout of blueprint.
+
+        :param session_data: Dictionary containing information from current session
+        :type session_data: dict
+        """
+
+        self.blueprint.layout = self.update_layout(session_data, use_prefix=False)
+
+    def get_callbacks(self):
+        """Registering callbacks with blueprint object.
+        """
+
+        # Callback for running individual plugin
+        self.blueprint.callback(
+            [
+                Input({'type': 'dsa-plugin-submit-button','index': MATCH},'n_clicks'),
+            ],
+            [
+                State({'type': 'dsa-plugin-plugin-info-store','index': ALL},'data'),
+                State({'type': 'dsa-plugin-input','index': ALL},'value'),
+                State('anchor-vis-store','data')
+            ],
+            [
+                Output({'type': 'dsa-plugin-submit-status-div','index': MATCH},'children'),
+                Output({'type': 'dsa-plugin-submit-button','index': MATCH},'disabled'),
+            ],
+            prevent_initial_call = True
+        )(self.submit_plugin)
+
+        # Callback for running sequence
+        self.blueprint.callback(
+            [
+                Input({'type': 'dsa-plugin-sequence-submit-button','index': MATCH},'n_clicks')
+            ],
+            [
+                State({'type': 'dsa-plugin-sequence-info-store','index': ALL},'data'),
+                State({'type': 'dsa-plugin-sequence-input','index': ALL},'value'),
+                State('anchor-vis-store','data')
+            ],
+            [
+                Output({'type': 'dsa-plugin-runner-submit-status-div','index': MATCH},'children'),
+                Output({'type': 'dsa-plugin-runner-submit-button','index': MATCH},'disabled')
+            ],
+            prevent_initial_call = True
+        )(self.submit_sequence)
+
+        # Callback for opening the resource selector modal with information
+
+        # Callback for creating a wildcard input
+
+    def submit_plugin(self):
+        pass
+
+    def submit_sequence(self):
+        pass
+
+    def create_wildcard_input(self):
+        pass
+
+
+
+
+
 class DSAPluginRunner(DSATool):
     """Handler for DSAPluginRunner component, letting users specify input arguments to plugins to run on connected DSA instance.
 
-    :param Tool: General class for components that perform visualization and analysis of data.
-    :type Tool: None
+    :param DSATool: Class for components that integrate with DSA.
+    :type DSATool: None
     """
     def __init__(self,
                  handler: None
@@ -37,9 +647,7 @@ class DSAPluginRunner(DSATool):
         
         super().__init__()
         self.handler = handler
-        self.parameter_tags = ['integer','float','double','boolean','string','integer-vector','float-vector','double-vector','string-vector',
-                        'integer-enumeration','float-enumeration','double-enumeration','string-enumeration','file','directory','image',
-                        'geometry','point','pointfile','region','table','transform']
+
 
     def load(self, component_prefix: int):
         
@@ -125,7 +733,7 @@ class DSAPluginRunner(DSATool):
                         if type(in_arg['default']) in [int,float,str]:
                             exe_input['default'] = in_arg['default']
                         elif type(in_arg['default'])==dict:
-                            # Defining input from uploaded file item/file ID (#TODO: Define input from previous plugin output)
+                            # Defining input from uploaded file item/file ID
                             # This one isn't used in the default DSAPluginRunner but is accessed from DSAUploader
                             if 'value' in in_arg['default']:
                                 exe_input['default'] = in_arg['default']
@@ -515,7 +1123,6 @@ class DSAPluginRunner(DSATool):
             prevent_initial_call = True
         )(self.submit_plugin)
 
-
     def open_file_select_modal(self, clicked, is_open, session_data):
 
         print(ctx.triggered)
@@ -526,7 +1133,6 @@ class DSAPluginRunner(DSATool):
 
 
         return not is_open, modal_children
-
 
     def update_cli_options(self, docker_select,session_data):
 

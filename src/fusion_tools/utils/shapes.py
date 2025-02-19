@@ -360,7 +360,7 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
                 index = anndata_object.obs_names
             )
     elif 'csv' in visium_path:
-        spot_coords = pd.read_csv(visium_path,index_col=0)
+        spot_coords = pd.read_csv(visium_path,index_col=0).loc[:,['imagecol','imagerow']]
 
 
     # Quick way to calculate how large the radius of each spot should be (minimum distance will be 100um between adjacent spot centroids )

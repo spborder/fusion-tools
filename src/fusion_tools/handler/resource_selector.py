@@ -2,23 +2,15 @@
 Creating a file/directory/item selector component
 """
 
-import os
-import sys
-sys.path.append('./src/')
 import json
-
 import pandas as pd
 
-from fusion_tools.handler.dsa_handler import DSAHandler
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 
 # Dash imports
-import dash
-dash._dash_renderer._set_react_version('18.2.0')
-from dash import dcc, callback, ctx, ALL, MATCH, exceptions, Patch, no_update, dash_table
+from dash import dcc, callback, ctx, ALL, MATCH, exceptions, no_update, dash_table
 import dash_bootstrap_components as dbc
-import dash_mantine_components as dmc
-from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform, DashProxy
+from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform
 
 from typing_extensions import Union
 from fusion_tools import DSATool
@@ -26,8 +18,8 @@ from fusion_tools import DSATool
 class DSAResourceSelector(DSATool):
     def __init__(self,
                  handler,
-                 selector_type:str,
-                 select_count: Union[int,None]
+                 selector_type:str = 'item',
+                 select_count: Union[int,None] = None
                  ):
         
         super().__init__()
@@ -557,79 +549,4 @@ class DSAResourceSelector(DSATool):
             updated_resource_data = [json.dumps(new_resource_list)]
 
         return updated_resource_table, updated_resource_path, updated_resource_data
-
-
-
-
-def main():
-
-    base_url = 'http://ec2-3-230-122-132.compute-1.amazonaws.com:8080/api/v1'
-
-    user_name = os.getenv('DSA_USER')
-    p_word = os.getenv('DSA_PWORD')
-
-    # You have to sign in to access the add_plugin() method
-    dsa_handler = DSAHandler(
-        girderApiUrl=base_url,
-        username = user_name,
-        password = p_word
-    )
-
-    resource_selector_component = DSAResourceSelector(
-        handler = dsa_handler,
-        selector_type = 'annotation',
-        select_count = None
-    )
-
-
-    session_data = {
-        'current_user': dsa_handler.authenticate_new(
-            username = user_name,
-            password = p_word
-        )
-    }
-
-    resource_selector_component.load(0)
-    resource_selector_component.gen_layout(session_data)
-
-    main_app = DashProxy(
-        __name__,
-        external_stylesheets = [
-            dbc.themes.LUX,
-            dbc.themes.BOOTSTRAP,
-            dbc.icons.BOOTSTRAP,
-            dbc.icons.FONT_AWESOME,
-            dmc.styles.ALL,
-        ],
-        transforms = [
-            MultiplexerTransform()
-        ]
-    )
-    main_app.layout = html.Div(
-        [
-            dcc.Store(
-                id = 'anchor-vis-store',
-                data = json.dumps(session_data),
-                storage_type='memory'
-            ),
-            dbc.Card([
-                dbc.CardHeader(resource_selector_component.title),
-                dbc.CardBody(
-                    resource_selector_component.blueprint.embed(main_app)
-                )
-            ])
-        ]
-    )
-
-    main_app.run(
-        port = '8050'
-    )
-
-
-
-
-
-if __name__=='__main__':
-    main()
-
 

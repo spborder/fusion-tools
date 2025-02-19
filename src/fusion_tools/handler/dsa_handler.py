@@ -183,16 +183,18 @@ class DSAHandler(Handler):
 
         return boundary_mask
 
-    def get_annotation_names(self, item:str, user_token: Union[str,None]=None):
+    def get_annotation_names(self, item:str, user_token: Union[str,None]=None, return_info:bool=False):
 
         if not user_token is None:
             self.gc.setToken(user_token)
 
         annotation_info = self.gc.get('/annotation',parameters={'itemId': item})
 
-        annotation_names = [i['annotation']['name'] for i in annotation_info]
-
-        return annotation_names
+        if not return_info:
+            annotation_names = [i['annotation']['name'] for i in annotation_info]
+            return annotation_names
+        else:
+            return annotation_info
 
     def query_annotation_count(self, item:Union[str,list], user_token:Union[str,None]=None) -> pd.DataFrame:
         """Get count of structures in an item

@@ -27,6 +27,7 @@ from fusion_tools.utils.shapes import load_annotations
 
 from fusion_tools import DSATool
 from fusion_tools.handler.plugin import DSAPluginRunner
+from fusion_tools.handler.resource_selector import DSAResourceSelector
 
 from girder_job_sequence import Job, Sequence
 from girder_job_sequence.utils import from_list, from_dict
@@ -356,6 +357,13 @@ class DSAUploader(DSATool):
 
         self.get_callbacks()
 
+        # Loading resource selector
+        self.resource_selector = DSAResourceSelector(
+            handler = self.handler
+        )
+
+        self.resource_selector.load(self.component_prefix)
+
     def update_layout(self, session_data:dict, use_prefix:bool):
 
         if not 'current_user' in session_data:
@@ -369,6 +377,16 @@ class DSAUploader(DSATool):
         else:
             uploader_children = html.Div([
                 dbc.Row([
+                    dbc.Modal(
+                        id = {'type': 'dsa-uploader-selector-modal','index': 0},
+                        centered = True,
+                        is_open = False,
+                        size = 'xl',
+                        className = None,
+                        children = [
+                            self.resource_selector.blueprint.embed(self.blueprint)
+                        ]
+                    ),
                     dcc.Loading(
                         html.Div(
                             id = {'type': 'dsa-uploader-collection-or-user-div','index': 0},
