@@ -26,8 +26,8 @@ from fusion_tools import DSATool
 class DSAResourceSelector(DSATool):
     def __init__(self,
                  handler,
-                 selector_type:str,
-                 select_count: Union[int,None]
+                 selector_type:str = 'item',
+                 select_count: Union[int,None] = None
                  ):
         
         super().__init__()
@@ -53,7 +53,7 @@ class DSAResourceSelector(DSATool):
 
         self.get_callbacks()
 
-    def get_collection_table(self, session_data:dict, use_prefix:bool, return_data:bool):
+    def get_collection_table(self, session_data:dict, return_data:bool):
         
         # Getting user folders if a user is present
         if "current_user" in session_data:
@@ -94,16 +94,14 @@ class DSAResourceSelector(DSATool):
                                 dataframe = pd.DataFrame.from_records([{'Name': i['name'], 'Type': i['_modelType'], '_id': i['_id']} for i in collection_list]),
                                 id = {'type': 'dsa-resource-selector-resource-table','index': 0},
                                 multi_row = False,
-                                selected_rows = []
+                                selected_rows = [],
+                                use_prefix=False
                             ),
                             id = {'type': 'dsa-resource-selector-resource-table-div','index': 0}
                         )
                     ])
                 ]
             )
-
-            if use_prefix:
-                PrefixIdTransform(prefix=f'{self.component_prefix}').transform_layout(collection_table)
 
             return collection_table
         else:
@@ -114,30 +112,39 @@ class DSAResourceSelector(DSATool):
 
         self.selector_type = selector_type
         self.select_count = select_count
-        collection_table = self.get_collection_table(session_data,use_prefix,return_data=False)
 
-        layout = html.Div([
-            html.H4(
-                id = {'type': 'dsa-resource-selector-current-user','index': 0},
-                children = [
-                    f'Showing available resources for: {session_data["current_user"]["login"]}' if "current_user" in session_data else "Showing only publically available resources"
-                ]
-            ),
-            html.Hr(),
-            dcc.Store(
-                id = {'type': 'dsa-resource-selector-selected-resources','index': 0},
-                data = json.dumps({'resource_list':[]}),
-                storage_type='memory'
-            ),
-            html.Div(
-                id = {'type': 'dsa-resource-selector-div','index': 0},
-                children = [
-                    dbc.Stack([
-                        collection_table
-                    ])
-                ]
-            )
-        ])
+        if selector_type in ['collection','folder','item','file','annotation']:
+            collection_table = self.get_collection_table(session_data,return_data=False)
+
+            layout = html.Div([
+                html.H4(
+                    id = {'type': 'dsa-resource-selector-current-user','index': 0},
+                    children = [
+                        f'Showing available resources for: {session_data["current_user"]["login"]}' if "current_user" in session_data else "Showing only publically available resources"
+                    ]
+                ),
+                html.Hr(),
+                dcc.Store(
+                    id = {'type': 'dsa-resource-selector-selected-resources','index': 0},
+                    data = json.dumps({'resource_list':[]}),
+                    storage_type='memory'
+                ),
+                html.Div(
+                    id = {'type': 'dsa-resource-selector-div','index': 0},
+                    children = [
+                        dbc.Stack([
+                            collection_table
+                        ])
+                    ]
+                )
+            ])
+        else:
+            layout = html.Div([
+                'Not yet implemented'
+            ])
+
+        if use_prefix:
+            PrefixIdTransform(prefix=f'{self.component_prefix}').transform_layout(layout)
 
         return layout
 
@@ -145,7 +152,7 @@ class DSAResourceSelector(DSATool):
 
         self.blueprint.layout = self.update_layout(session_data,use_prefix=False)
 
-    def make_selectable_dash_table(self, dataframe:pd.DataFrame, id:dict, multi_row:bool = True, selected_rows: list = []):
+    def make_selectable_dash_table(self, dataframe:pd.DataFrame, id:dict, multi_row:bool = True, selected_rows: list = [], use_prefix:bool = True):
         """Generate a selectable DataTable to add to the layout
 
         :param dataframe: Pandas DataFrame containing columns/rows of interest
@@ -189,6 +196,9 @@ class DSAResourceSelector(DSATool):
             ],
             tooltip_duration = None
         )
+
+        if use_prefix:
+            PrefixIdTransform(prefix=f'{self.component_prefix}').transform_layout(selectable_table)
 
         return selectable_table
 
@@ -472,7 +482,7 @@ class DSAResourceSelector(DSATool):
 
                 elif ctx.triggered_id['index']==1:
                     if selected_resource=='collection':
-                        resource_folders = self.get_collection_table(session_data,True,return_data=True)
+                        resource_folders = self.get_collection_table(session_data,return_data=True)
                         resource_slides = []
                         new_crumbs = current_path_parts[:ctx.triggered_id['index']+1]
                     elif selected_resource=='user':
@@ -488,7 +498,7 @@ class DSAResourceSelector(DSATool):
                         new_crumbs = current_path_parts[:ctx.triggered_id['index']+1]
 
                 elif ctx.triggered_id['index']==0:
-                    resource_folders = self.get_collection_table(session_data, True, return_data=True)                   
+                    resource_folders = self.get_collection_table(session_data, return_data=True)                   
                     resource_slides = []
                     new_crumbs = [current_path_parts[0]]
 
@@ -506,16 +516,18 @@ class DSAResourceSelector(DSATool):
             if all([type(i)==list for i in [resource_folders,resource_slides]]):
                 resource_folder_table = self.make_selectable_dash_table(
                     dataframe=pd.DataFrame.from_records(resource_folders),
-                    id = {'type': f'{self.component_prefix}-dsa-resource-selector-resource-table','index': 0},
+                    id = {'type': f'dsa-resource-selector-resource-table','index': 0},
                     multi_row = False if not self.selector_type in ['folder','collection'] and self.select_count is None else True,
-                    selected_rows = [idx for idx,i in enumerate(resource_folders) if i['_id'] in current_resources]
+                    selected_rows = [idx for idx,i in enumerate(resource_folders) if i['_id'] in current_resources],
+                    use_prefix=True
                 )
 
                 resource_slides_table = self.make_selectable_dash_table(
                     dataframe=pd.DataFrame.from_records(resource_slides),
-                    id = {'type': f'{self.component_prefix}-dsa-resource-selector-resource-table','index': 1},
+                    id = {'type': f'dsa-resource-selector-resource-table','index': 1},
                     multi_row=False if not self.selector_type in ['item','file','annotation'] and self.select_count is None else True,
-                    selected_rows=[idx for idx,i in enumerate(resource_slides) if i['_id'] in current_resources]
+                    selected_rows=[idx for idx,i in enumerate(resource_slides) if i['_id'] in current_resources],
+                    use_prefix=True
                 )
 
                 updated_resource_table = [
@@ -534,12 +546,14 @@ class DSAResourceSelector(DSATool):
                     html.A(
                         c+'/',
                         n_clicks = 0,
-                        id = {'type': f'{self.component_prefix}-dsa-resource-selector-path-part','index': c_idx},
+                        id = {'type': f'dsa-resource-selector-path-part','index': c_idx},
                         style = {'color': 'rgb(0,0,255)'}
                     )
                     for c_idx,c in enumerate(new_crumbs)
                 ],direction='horizontal')
             ]
+
+            PrefixIdTransform(prefix=f'{self.component_prefix}').transform_layout(updated_resource_path[0])
 
         else:
             updated_resource_table = [no_update]
@@ -577,7 +591,7 @@ def main():
 
     resource_selector_component = DSAResourceSelector(
         handler = dsa_handler,
-        selector_type = 'annotation',
+        selector_type = 'item',
         select_count = None
     )
 
@@ -622,7 +636,8 @@ def main():
     )
 
     main_app.run(
-        port = '8050'
+        port = '8050',
+        debug=True
     )
 
 
