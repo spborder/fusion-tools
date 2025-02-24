@@ -15,6 +15,7 @@ from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, Pr
 from typing_extensions import Union
 from fusion_tools import DSATool
 
+
 class DSAResourceSelector(DSATool):
     def __init__(self,
                  handler,
@@ -102,10 +103,14 @@ class DSAResourceSelector(DSATool):
         else:
             return [{'Name': i['name'], 'Type': i['_modelType'], '_id': i['_id']} for i in collection_list]
 
-    def update_layout(self, session_data: dict, use_prefix:bool, selector_type:str = 'item', select_count: Union[int,None]=None, source_component_index:int=0):
+    def update_layout(self, session_data: dict, use_prefix:bool, selector_type:str = 'item', select_count: Union[int,None]=None, source_channel: Union[str,None]= None, source_index:Union[int,dict]=0):
 
+
+        if selector_type in ['image','item']:
+            selector_type = 'file'
         self.selector_type = selector_type
         self.select_count = select_count
+        self.selector_channel = source_channel
 
         self.multi_collection = False
         self.multi_folder = False
@@ -142,7 +147,7 @@ class DSAResourceSelector(DSATool):
             html.Hr(),
             dcc.Store(
                 id = {'type': 'anchor-dsa-resource-selector-selected-resources','index': 0},
-                data = json.dumps({'resource_list':[],'source_component_index': source_component_index}),
+                data = json.dumps({'resource_list':[],'source_component_index': source_index}),
                 storage_type='memory'
             ),
             html.Div(
@@ -406,11 +411,13 @@ class DSAResourceSelector(DSATool):
         self.blueprint.callback(
             [
                 Input({'type': 'dsa-resource-selector-resource-table','index': ALL},'selected_rows'),
-                Input({'type': 'dsa-resource-selector-path-part','index': ALL},'n_clicks')
+                Input({'type': 'dsa-resource-selector-path-part','index': ALL},'n_clicks'),
+                Input({'type':'dsa-resource-selector-output-name-button','index': ALL},'n_clicks')
             ],
             [
                 State({'type': 'dsa-resource-selector-resource-table','index': ALL},'data'),
                 State({'type': 'dsa-resource-selector-current-resource-path','index': ALL},'children'),
+                State({'type': 'dsa-resource-selector-output-name-input','index': ALL},'value'),
                 State({'type': 'anchor-dsa-resource-selector-selected-resources','index': ALL},'data'),
                 State('anchor-vis-store','data')
             ],
@@ -422,10 +429,12 @@ class DSAResourceSelector(DSATool):
             prevent_initial_call = True
         )(self.update_resource_selection)
 
-    def update_resource_selection(self, table_selected_rows, table_path_clicked, table_data, current_path_parts, selected_resource_data, session_data):
+    def update_resource_selection(self, table_selected_rows, table_path_clicked, ouput_file_name_clicked, table_data, current_path_parts, output_file_name, selected_resource_data, session_data):
 
         current_path_parts = list(self.extract_path_parts(get_pattern_matching_value(current_path_parts)))
         
+        output_file_name = get_pattern_matching_value(output_file_name)
+
         session_data = json.loads(session_data)
         selected_resource_data = json.loads(get_pattern_matching_value(selected_resource_data))
         added_resources = []
@@ -536,6 +545,26 @@ class DSAResourceSelector(DSATool):
                 resource_folders = None
                 resource_slides = None
 
+        elif 'dsa-resource-selector-output-name-button' in ctx.triggered_id['type']:
+            
+            if not 'user' in current_path_parts:
+                new_path = '/'.join(current_path_parts[1:])
+            else:
+                new_path = f'/user/{session_data["current_user"]["login"]}/'+'/'.join(current_path_parts[2:])
+            path_info = self.handler.get_path_info(new_path,user_token = session_data['current_user']['token'])
+
+            if not output_file_name is None:
+                added_resources = [
+                    {
+                        'folderId': path_info['_id'],
+                        'fileName': output_file_name,
+                        'Name': output_file_name
+                    }
+                ]
+
+            resource_folders = None
+            resource_slides = None
+
         if not all([i is None for i in [resource_folders,resource_slides]]):
             if all([type(i)==list for i in [resource_folders,resource_slides]]):
                 resource_folder_table = self.make_selectable_dash_table(
@@ -552,14 +581,53 @@ class DSAResourceSelector(DSATool):
                     use_prefix=True
                 )
 
-                updated_resource_table = [
-                    dbc.Stack([
-                        resource_folder_table,
-                        html.Hr(),
-                        html.H5('Slides in selected resource: '),
-                        resource_slides_table
-                    ])
-                ]
+                if not self.selector_channel=='output':
+                    updated_resource_table = [
+                        dbc.Stack([
+                            resource_folder_table,
+                            html.Hr(),
+                            html.H5('Slides in selected resource: '),
+                            resource_slides_table
+                        ])
+                    ]
+                else:
+                    # Check that this isn't a user base folder
+                    if not current_path_parts==['Collections and User Folders','user',session_data['current_user']['login']]:
+                        input_component = html.Div([
+                            dbc.InputGroup([
+                                dbc.InputGroupText(
+                                    'Output File Name: '
+                                ),
+                                dbc.Input(
+                                    id = {'type': 'dsa-resource-selector-output-name-input','index': 0},
+                                    placeholder = 'Output File Name',
+                                    type = 'text',
+                                    required = True,
+                                    value = [],
+                                    maxLength = 1000
+                                ),
+                                dbc.Button(
+                                    'Done!',
+                                    color = 'success',
+                                    n_clicks = 0,
+                                    id = {'type': 'dsa-resource-selector-output-name-button','index':0}
+                                )
+                            ])
+                        ],style = {'marginTop':'10px'})
+
+                        PrefixIdTransform(prefix = f'{self.component_prefix}',escape=lambda input_id: self.prefix_escape(input_id)).transform_layout(input_component)
+
+                        updated_resource_table = [
+                            dbc.Stack([
+                                resource_folder_table,
+                                html.Hr(),
+                                input_component,
+                                html.Hr(),
+                                html.H5('Slides in selected resource: '),
+                                resource_slides_table
+                            ])
+                        ]
+
             else:
                 updated_resource_table = [resource_folders]
 

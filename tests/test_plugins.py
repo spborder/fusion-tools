@@ -115,6 +115,10 @@ def main(args):
                             'name': 'input_region',
                             'value': "[1600,1000,2600,2000]"
                         },
+                        {
+                            'name': 'return_segmentation_region',
+                            'value': True
+                        }
                     ]
                 },
                 {
@@ -161,6 +165,18 @@ def main(args):
                         {
                             'name': 'input_files',
                             'value': '67af4e59fcdeba1e293211c0'
+                        },
+                        {
+                            'name': 'use_gene_selection',
+                            'value': True
+                        },
+                        {
+                            'name': 'gene_selection_method',
+                            'value': 'dispersion'
+                        },
+                        {
+                            'name': 'n',
+                            'value': 10
                         }
                     ]
                 }

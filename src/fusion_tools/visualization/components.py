@@ -113,6 +113,7 @@ class Visualization:
             'port': 8080,
             'jupyter': False,
             'host': 'localhost',
+            'debug': False,
             'layout_style': {},
             'external_stylesheets': [
                 dbc.themes.LUX,

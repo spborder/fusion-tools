@@ -117,6 +117,7 @@ class FUSIONDataset:
 
 
 
+
 class SegmentationDataset:
     def __init__(self,
                  slides: list = [],
@@ -594,7 +595,6 @@ class SegmentationDataset:
             )
         else:
             image = np.zeros((int(bbox[3]-bbox[1]),int(bbox[2]-bbox[0]),len(self.slide_data[slide_idx]['metadata']['frames'])))
-            print(f'base image shape: {image.shape}')
             
             for f in range(len(self.slide_data[slide_idx]['metadata']['frames'])):
                 image_frame,_ = image_source.getRegion(
@@ -607,8 +607,7 @@ class SegmentationDataset:
                     },
                     frame = f
                 )
-                print(f'image_frame shape: {image_frame.shape}')
-                image[:,:,f] += image_frame
+                image[:,:,f] += np.squeeze(image_frame)
 
 
         if len(features)>0:

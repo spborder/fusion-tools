@@ -52,7 +52,7 @@ simple_upload_type = DSAUploadType(
                 {
                     'name': 'inputImageFile',
                     'default': {
-                        'type': 'input_file',
+                        'type': 'upload_file',
                         'name': 'Image'
                     },
                     'disabled': True
@@ -121,7 +121,7 @@ sequence_upload_type = DSAUploadType(
                     {
                         'name': 'files',
                         'default': {
-                            'type':'input_file',
+                            'type':'upload_file',
                             'name': 'Image'
                         },
                         'disabled': True
@@ -150,7 +150,7 @@ sequence_upload_type = DSAUploadType(
                     {
                         'name': 'input_image',
                         'default': {
-                            'type': 'input_file',
+                            'type': 'upload_file',
                             'name': 'Image'
                         },
                         'disabled': True
@@ -176,7 +176,7 @@ sequence_upload_type = DSAUploadType(
                 {
                     'name': 'inputImageFile',
                     'default': {
-                        'type': 'input_file',
+                        'type': 'upload_file',
                         'name': 'Image'
                     },
                     'disabled': True
@@ -184,14 +184,22 @@ sequence_upload_type = DSAUploadType(
                 {
                     'name': 'outputNucleiAnnotationFile_folder',
                     'default': {
-                        'type': 'upload_folder'
+                        'type': 'upload_folder',
+                        'name': 'Image'
                     },
                     'disabled': True
                 },
                 {
                     'name': 'outputNucleiAnnotationFile',
                     'default': {
-                        'value': 'nuclei_annotations.annot'
+                        'type': 'output_file',
+                        'fileName': {
+                            'name': 'Image',
+                            'ext': '.annot'
+                        },
+                        'folderId': {
+                            'name': 'Image'
+                        }
                     },
                     'disabled': True
                 },
@@ -269,8 +277,6 @@ def main():
     )
 
     vis_sess.start()
-
-
 
 if __name__=='__main__':
     main()

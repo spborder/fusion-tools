@@ -29,7 +29,7 @@ setuptools.setup(
         "umap-learn>=0.5.6",
         "statsmodels>=0.14.0",
         "typing-extensions>=4.8.0",
-        "girder-job-sequence>=0.2.4"
+        "girder-job-sequence>=0.2.7"
     ],
     extras_require = {
         'interactive': [

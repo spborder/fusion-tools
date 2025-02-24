@@ -26,7 +26,7 @@ from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 from fusion_tools.utils.shapes import load_annotations
 
 from fusion_tools import DSATool
-from fusion_tools.handler.plugin import DSAPluginRunner
+from fusion_tools.handler.plugin import DSAPluginRunner, DSAPluginGroup
 from fusion_tools.handler.resource_selector import DSAResourceSelector
 
 from girder_job_sequence import Job, Sequence
@@ -350,7 +350,7 @@ class DSAUploader(DSATool):
         self.title = 'Dataset Uploader'
         self.blueprint = DashBlueprint(
             transforms=[
-                PrefixIdTransform(prefix=f'{component_prefix}'),
+                PrefixIdTransform(prefix=f'{component_prefix}',escape = lambda input_id: self.prefix_escape(input_id)),
                 MultiplexerTransform()
             ]
         )
@@ -358,11 +358,17 @@ class DSAUploader(DSATool):
         self.get_callbacks()
 
         # Loading resource selector
-        self.resource_selector = DSAResourceSelector(
+        #self.resource_selector = DSAResourceSelector(
+        #    handler = self.handler
+        #)
+
+        #self.resource_selector.load(self.component_prefix)
+
+        self.plugin_inputs_handler = DSAPluginGroup(
             handler = self.handler
         )
-
-        self.resource_selector.load(self.component_prefix)
+        self.plugin_inputs_handler.load(self.component_prefix)
+        self.plugin_inputs_handler.gen_layout({})
 
     def update_layout(self, session_data:dict, use_prefix:bool):
 
@@ -375,18 +381,19 @@ class DSAUploader(DSATool):
             )
    
         else:
+            self.plugin_inputs_handler.update_layout(session_data,use_prefix=use_prefix)
             uploader_children = html.Div([
                 dbc.Row([
-                    dbc.Modal(
-                        id = {'type': 'dsa-uploader-selector-modal','index': 0},
-                        centered = True,
-                        is_open = False,
-                        size = 'xl',
-                        className = None,
-                        children = [
-                            self.resource_selector.blueprint.embed(self.blueprint)
-                        ]
-                    ),
+                    #dbc.Modal(
+                    #    id = {'type': 'dsa-uploader-selector-modal','index': 0},
+                    #    centered = True,
+                    #    is_open = False,
+                    #    size = 'xl',
+                    #    className = None,
+                    #    children = [
+                    #        self.resource_selector.blueprint.embed(self.blueprint)
+                    #    ]
+                    #),
                     dcc.Loading(
                         html.Div(
                             id = {'type': 'dsa-uploader-collection-or-user-div','index': 0},
@@ -450,13 +457,17 @@ class DSAUploader(DSATool):
                         'Uploading slides and associated files to a particular folder on attached DSA instance. Access pre-processing plugins.'
                     ),
                     html.Hr(),
+                    html.Div(
+                        self.plugin_inputs_handler.blueprint.embed(self.blueprint),
+                        style = {'display':'none'}
+                    ),
                     uploader_children
                 ])
             )
         ],style = {'maxHeight': '90vh','overflow': 'scroll'})
 
         if use_prefix:
-            PrefixIdTransform(prefix=self.component_prefix).transform_layout(layout)
+            PrefixIdTransform(prefix=self.component_prefix,escape = lambda input_id: self.prefix_escape(input_id)).transform_layout(layout)
 
         return layout
 
@@ -630,41 +641,6 @@ class DSAUploader(DSATool):
             ],
             prevent_initial_call = True
         )(self.submit_metadata)
-
-        # Callback for running plugin
-        self.blueprint.callback(
-            [
-                Input({'type': 'dsa-plugin-runner-submit-button','index': MATCH},'n_clicks'),
-            ],
-            [
-                State({'type': 'dsa-plugin-runner-plugin-info-store','index': ALL},'data'),
-                State({'type': 'dsa-plugin-runner-input','index': ALL},'value'),
-                State({'type': 'dsa-uploader-upload-type-drop','index':ALL},'value'),
-                State('anchor-vis-store','data')
-            ],
-            [
-                Output({'type': 'dsa-plugin-runner-submit-status-div','index': MATCH},'children'),
-                Output({'type': 'dsa-plugin-runner-submit-button','index': MATCH},'disabled'),
-            ],
-            prevent_initial_call = True
-        )(self.submit_plugin)
-       
-        self.blueprint.callback(
-            [
-                Input({'type': 'dsa-plugin-runner-sequence-submit-button','index': MATCH},'n_clicks')
-            ],
-            [
-                State({'type': 'dsa-plugin-runner-sequence-info-store','index': ALL},'data'),
-                State({'type': 'dsa-plugin-runner-sequence-input','index': ALL},'value'),
-                State({'type': 'dsa-uploader-upload-type-drop','index': ALL},'value'),
-                State('anchor-vis-store','data')
-            ],
-            [
-                Output({'type': 'dsa-plugin-runner-sequence-submit-status-div','index': MATCH},'children'),
-                Output({'type': 'dsa-plugin-runner-sequence-submit-button','index': MATCH},'disabled')
-            ],
-            prevent_initial_call = True
-        )(self.submit_sequence)
 
     def make_selectable_dash_table(self, dataframe:pd.DataFrame, id:dict, multi_row:bool = True, selected_rows: list = []):
         """Generate a selectable DataTable to add to the layout
@@ -1820,7 +1796,6 @@ class DSAUploader(DSATool):
 
         upload_div_children = [no_update]*len(ctx.outputs_list[0])
         for c in child_files:
-            
             file_info = {
                 'api_url': self.handler.girderApiUrl,
                 'token': session_data['current_user']['token'],
@@ -1865,6 +1840,8 @@ class DSAUploader(DSATool):
 
         session_data = json.loads(session_data)
         upload_files_data = json.loads(get_pattern_matching_value(upload_files_data))
+        # Modifying session data to include information on uploaded files (used by plugin inputs handler)
+        session_data['uploaded_files'] = upload_files_data['uploaded_files']
 
         uploaded_items = [i['name'] for i in selected_upload_type.input_files if i['type']=='item']
         metadata_table_list = self.gen_metadata_table(selected_upload_type.required_metadata, uploaded_items)
@@ -1872,107 +1849,11 @@ class DSAUploader(DSATool):
         any_required = any([i['required'] for i in any_required if 'required' in i])
 
         # Getting input components for the processing plugins
-        plugin_handler = DSAPluginRunner(
-            handler = self.handler
+        processing_plugin_children = self.plugin_inputs_handler.update_layout(
+            session_data=session_data,
+            use_prefix=True,
+            plugin_groups=selected_upload_type.processing_plugins
         )
-
-        processing_plugin_children = []
-        plugin_count = 0
-        sequence_plugin_count = 0
-        sequence_count = 0
-
-        for p_idx,p in enumerate(selected_upload_type.processing_plugins):
-            if type(p)==dict:
-                # This is a singular job that can be executed independently of any other processing plugin
-                p_component = plugin_handler.load_plugin(
-                    plugin_dict = p,
-                    session_data = session_data,
-                    uploaded_files_data=upload_files_data,
-                    component_index=plugin_count,
-                    add_run_button=True
-                )
-                PrefixIdTransform(prefix = f'{self.component_prefix}').transform_layout(p_component)
-
-                # Adding to processing_plugin_children (includes run-plugin button)
-                processing_plugin_children.append(
-                    dmc.AccordionItem([
-                        dmc.AccordionControl(p['name']),
-                        dmc.AccordionPanel(
-                            dbc.Stack([
-                                p_component,
-                                html.Div(
-                                    id = {'type': f'{self.component_prefix}-dsa-plugin-runner-submit-status-div','index': plugin_count},
-                                    children = []
-                                )
-                            ])
-                        )
-                    ],value = f'dsa-uploader-plugin-{plugin_count}',style = {'marginBottom':'10px'})
-                )
-                plugin_count+=1
-
-            elif type(p)==list:
-                # This is a sequential job where multiple jobs are submitted to a sequence handler at the same time and executed one-by-one
-                sequence_color = f'rgb({np.random.randint(0,255)},{np.random.randint(0,255)},{np.random.randint(0,255)})'
-                sequence_components = []
-                for j_idx, j in enumerate(p):
-                    j_component = plugin_handler.load_plugin(
-                        plugin_dict = j,
-                        session_data = session_data,
-                        uploaded_files_data=upload_files_data,
-                        component_index=sequence_plugin_count,
-                        add_run_button=False
-                    )
-
-                    PrefixIdTransform(prefix = f'{self.component_prefix}').transform_layout(j_component)
-
-                    sequence_components.append(
-                        dmc.AccordionItem([
-                            dmc.AccordionControl(j['name']),
-                            dmc.AccordionPanel(
-                                dbc.Stack([
-                                    j_component
-                                ])
-                            )
-                        ],value = f'dsa-uploader-sequence-{sequence_count}-{j_idx}')
-                    )
-
-                    sequence_plugin_count += 1
-                
-                sequence_components.append(
-                    dmc.AccordionItem([
-                        dmc.AccordionControl(f'Submit Sequence {sequence_count+1}'),
-                        dmc.AccordionPanel(
-                            dbc.Stack([
-                                dbc.Button(
-                                    'Submit Sequence',
-                                    id = {'type': f'{self.component_prefix}-dsa-plugin-runner-sequence-submit-button','index': sequence_count},
-                                    className = 'd-grid col-12 mx-auto',
-                                    n_clicks = 0,
-                                    color = 'success',
-                                    disabled = False
-                                ),
-                                html.Div(
-                                    id = {'type': f'{self.component_prefix}-dsa-plugin-runner-sequence-submit-status-div','index': sequence_count},
-                                    children = []
-                                )
-                            ])
-                        )
-                    ], value = f'dsa-uploader-sequence-{sequence_count}-submit',style={'marginBottom':'10px'})
-                )
-                
-                processing_plugin_children.append(
-                    dbc.Stack(
-                        [
-                            html.H5(f'Sequence {sequence_count+1} Plugins'),
-                            dmc.Accordion(
-                                id = {'type': f'{self.component_prefix}-dsa-uploader-sequence-accordion','index': sequence_count},
-                                children = sequence_components,
-                            )
-                        ],
-                        style = {'padding': '10px 10px 10px 10px','outline-style':'dashed','outline-color':sequence_color}
-                    )
-                )
-                sequence_count += 1
 
         processing_plugin_div = html.Div([
             dbc.Row([
@@ -2004,10 +1885,7 @@ class DSAUploader(DSATool):
                         dbc.CardHeader('Processing Plugins'),
                         dbc.CardBody([
                             html.Div(
-                                dmc.Accordion(
-                                    id = {'type': f'{self.component_prefix}-dsa-uploader-plugin-accordion','index': 0},
-                                    children = processing_plugin_children
-                                )
+                                children = processing_plugin_children
                             ),
                             html.Div(
                                 id = {'type': f'{self.component_prefix}-dsa-uploader-all-plugins-run-status','index': 0},
@@ -2093,175 +1971,6 @@ class DSAUploader(DSATool):
                 status_div.append(dbc.Alert(f'Error adding metadata to item: {t}',color='danger'))
 
         return status_div
-
-    def organize_plugin_inputs(self, input_arg_list, plugin_inputs, plugin_input_infos)->dict:
-        """Organization of plugin inputs, preparing for request submission.
-
-        :param input_arg_list: List of predefined input arguments for a given plugin
-        :type input_arg_list: list
-        :param plugin_inputs: Values returned from input components
-        :type plugin_inputs: list
-        :param plugin_input_infos: Type information for each plugin input
-        :type plugin_input_infos: list
-        :return: Formatted dictionary of key-value pairs for each input name
-        :rtype: dict
-        """
-        
-        input_dict = {}
-        for p in plugin_input_infos:
-            if p['channel']=='output':
-                if p['type']=='file':
-                    # For output files, need a name for the output file and a folder Id for the _folder
-                    input_dict[p['name']] = plugin_inputs[input_arg_list.index(p['name'])]
-                    input_dict[p['name']+'_folder'] = plugin_inputs[input_arg_list.index(p['name']+'_folder')]
-
-            if p['name'] in input_arg_list:
-                if 'vector' in p['type'] or p['type']=='region':
-                    if not p['type']=='string-vector':
-                        input_dict[p['name']] = json.dumps([float(i) for i in plugin_inputs[input_arg_list.index(p['name'])].split(',')])
-                    else:
-                        input_dict[p['name']] = json.dumps(plugin_inputs[input_arg_list.index(p['name'])].split(','))
-                else:
-                    input_dict[p['name']] = plugin_inputs[input_arg_list.index(p['name'])]
-            else:
-                if 'default' in p:
-                    if 'vector' in p['type'] or p['type']=='region':
-                        if not p['type']=='string-vector':
-                            input_dict[p['name']] = json.dumps([float(i) for i in p['default'].split(',')])
-                        else:
-                            input_dict[p['name']] = json.dumps(p['default'].split(','))
-                    else:
-                        input_dict[p['name']] = p['default']
-
-        return input_dict
-
-    def submit_plugin(self, clicked, plugin_info, plugin_inputs, upload_type, session_data):
-
-        if not any([i['value'] for i in ctx.triggered]):
-            raise exceptions.PreventUpdate
-        
-        session_data = json.loads(session_data)
-        plugin_info = json.loads(get_pattern_matching_value(plugin_info))
-
-        upload_type = get_pattern_matching_value(upload_type)
-        selected_upload_type = self.dsa_upload_types[[i.name for i in self.dsa_upload_types].index(upload_type)]
-        
-        # Getting the correct plugin from all plugins (not sequences)
-        plugin_idx = ctx.triggered_id['index']
-        processing_plugins = [i for i in selected_upload_type.processing_plugins if type(i)==dict]
-        upload_processing_plugin = processing_plugins[plugin_idx]
-
-        plugin_input_start_idx = sum([len(i['input_args']) for i in processing_plugins[:plugin_idx]])
-        plugin_input_end_idx = plugin_input_start_idx+len(upload_processing_plugin['input_args'])
-
-        plugin_inputs = plugin_inputs[plugin_input_start_idx:plugin_input_end_idx]
-
-        if len(upload_processing_plugin['input_args'])>len(plugin_inputs):
-            # Mismatch in input length
-            status_div = dbc.Alert('Missing plugin inputs!',color='warning')
-            button_disable = True
-            return status_div, button_disable
-
-        job_dict = {
-            'docker_image': upload_processing_plugin['image'],
-            'cli': upload_processing_plugin['name'],
-            'input_args': [
-                {
-                    'name': i if type(i)==str else i['name'],
-                    'value': p
-                }
-                for i,p in zip(upload_processing_plugin['input_args'], plugin_inputs)
-            ]
-        }
-
-        # function incorporated from girder-job-sequence
-        job_obj = from_dict(self.handler.gc,job_dict)
-        job_start_response = job_obj.start()
-
-        if job_start_response.status_code==200:
-            status_div = dbc.Alert('Plugin successfully submitted!',color='success')
-            button_disable = True
-        else:
-            status_div = dbc.Alert(f'Error submitting plugin: {plugin_info["_id"]}',color = 'danger')
-            print(job_start_response.content)
-            button_disable = False
-
-        return status_div, button_disable
-
-    def submit_sequence(self, clicked, sequence_info, sequence_inputs, upload_type, session_data):
-
-        if not any([i['value'] for i in ctx.triggered]):
-            raise exceptions.PreventUpdate
-
-        session_data = json.loads(session_data)
-        # Loading each plugin that is part of any sequence
-        sequence_info = [json.loads(i) for i in sequence_info]
-
-        upload_type = get_pattern_matching_value(upload_type)
-        selected_upload_type = self.dsa_upload_types[[i.name for i in self.dsa_upload_types].index(upload_type)]
-        
-        # Getting the correct sequence from this upload type
-        sequence_index = ctx.triggered_id['index']
-        processing_sequences = [i for i in selected_upload_type.processing_plugins if type(i)==list]
-        upload_processing_sequence = processing_sequences[sequence_index]
-
-        sequence_input_start_idx = sum([sum([len(j['input_args']) for j in i]) for i in processing_sequences[:sequence_index]])
-        sequence_input_end_idx = sequence_input_start_idx+sum([len(i['input_args']) for i in upload_processing_sequence])
-
-        sequence_inputs = sequence_inputs[sequence_input_start_idx:sequence_input_end_idx]
-
-        # Checking for all inputs
-        if (sequence_input_end_idx - sequence_input_start_idx)>len(sequence_inputs):
-            # Mismatch in input length
-            status_div = dbc.Alert('Missing sequence inputs!',color='warning')
-            button_disable = False
-            return status_div, button_disable
-
-        sequence_job_list = []
-        job_input_start = 0
-        for j_idx,j in enumerate(upload_processing_sequence):
-            job_inputs = sequence_inputs[job_input_start:job_input_start+len(j['input_args'])]
-            job_input_start += len(j['input_args'])
-            job_dict = {
-                'docker_image': j['image'],
-                'cli': j['name'],
-                'input_args': [
-                    {
-                        'name': i if type(i)==str else i['name'],
-                        'value': p
-                    }
-                    for i,p in zip(j['input_args'],job_inputs)
-                ]
-            }
-            sequence_job_list.append(job_dict)
-
-        sequence_obj = from_list(self.handler.gc,sequence_job_list)
-
-        # Start job sequence thread
-        job_seq_thread = threading.Thread(
-            target = sequence_obj.start, 
-            name = f'fusion_tools_job_sequence_{sequence_obj.id}',
-            kwargs = {
-                "cancel_on_error": True
-            },
-            daemon=True
-        )
-        job_seq_thread.start()
-
-        status_div = dbc.Alert(f'Sequence {sequence_index+1} Submitted',color='success')
-        button_disable = True
-        return status_div, button_disable
-
-
-
-
-
-
-
-
-
-
-
 
 
 

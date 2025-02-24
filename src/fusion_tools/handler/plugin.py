@@ -4,19 +4,16 @@
 import requests
 import json
 import numpy as np
-import lxml.etree as ET
+import uuid
 
 from typing_extensions import Union
 import girder_client
-import types
 
-from PIL import Image
-from io import BytesIO
 
 # Dash imports
 import dash
 dash._dash_renderer._set_react_version('18.2.0')
-from dash import dcc, callback, ctx, ALL, MATCH, exceptions, Patch, no_update, dash_table
+from dash import dcc, callback, ctx, ALL, MATCH, exceptions, no_update
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform
@@ -97,7 +94,7 @@ class DSAPluginGroup(DSATool):
         except girder_client.HttpError:
             # Error getting this plugin
             return dbc.Alert(f'Error getting plugin: {plugin_dict}',color='danger')
-
+        
         if 'input_args' in plugin_dict:
             # Parsing through the provided input_args and pulling them out of the plugin_parameters
             inputs_list = []
@@ -130,22 +127,22 @@ class DSAPluginGroup(DSATool):
                             
                             elif in_arg['default']['type'] in ['upload_folder','upload_item']:
                                 # Find uploaded_items:
-                                uploaded_items = [i for i in session_data['uploaded_files'] if i['_modelType']=='item']
+                                uploaded_items = [i for i in session_data['uploaded_files'] if i['_modelType']=='file']
                                 # Which one matches the default name
-                                uploaded_item_names = [i['name'] for i in uploaded_items]
+                                uploaded_item_names = [i['fusion_upload_name'] for i in uploaded_items]
                                 if in_arg['default']['name'] in uploaded_item_names:
                                     matching_item = uploaded_items[uploaded_item_names.index(in_arg['default']['name'])]
-
+                                    matching_item_info = self.handler.get_item_info(matching_item['itemId'],session_data['current_user']['token'])
                                     if in_arg['default']['type']=='upload_folder':
-                                        folder_info = self.handler.get_folder_info(matching_item['folderId'],session_data['current_user']['token'])
+                                        folder_info = self.handler.get_folder_info(matching_item_info['folderId'],session_data['current_user']['token'])
                                         exe_input['default'] = {
                                             'name': folder_info['name'],
                                             '_id': folder_info['_id']
                                         }
                                     elif in_arg['default']['type']=='upload_item':
                                         exe_input['default'] = {
-                                            'name': matching_item['name'],
-                                            '_id': matching_item['_id']
+                                            'name': matching_item_info['name'],
+                                            '_id': matching_item_info['_id']
                                         }
                                     
                                 else:
@@ -153,7 +150,7 @@ class DSAPluginGroup(DSATool):
                             
                             elif in_arg['default']['type']=='upload_file':
                                 uploaded_files = [i for i in session_data['uploaded_files'] if i['_modelType']=='file']
-                                uploaded_file_names = [i['name'] for i in uploaded_files]
+                                uploaded_file_names = [i['fusion_upload_name'] for i in uploaded_files]
                                 if in_arg['default']['name'] in uploaded_file_names:
                                     matching_file = uploaded_files[uploaded_file_names.index(in_arg['default']['name'])]
                                     exe_input['default'] = {
@@ -227,27 +224,84 @@ class DSAPluginGroup(DSATool):
                                 else:
                                     exe_input['default'] = None
 
+                            elif in_arg['default']['type']=='output_file':
+                                # This will need fileName and folderId keys
+                                output_file_name = in_arg['default']['fileName']
+                                output_folder_id = in_arg['default']['folderId']
+
+                                exe_input['default'] = {}
+                                if type(output_file_name)==str:
+                                    exe_input['default']['fileName'] = output_file_name
+                                elif type(output_file_name)==dict:
+                                    reference = output_file_name['name']
+                                    uploaded_items = [i for i in session_data['uploaded_files'] if i['_modelType']=='file']
+                                    # Which one matches the default name
+                                    uploaded_item_names = [i['fusion_upload_name'] for i in uploaded_items]
+                                    if reference in uploaded_item_names:
+                                        matching_item = uploaded_items[uploaded_item_names.index(reference)]
+                                        matching_item_info = self.handler.get_item_info(matching_item['itemId'],session_data['current_user']['token'])
+
+                                        item_name = matching_item_info['name']
+                                        # Could do something with this, add a _output.{ref_ext} or something if a new extension isn't provided
+                                        ref_ext = item_name.split('.')[-1]
+                                        if 'ext' in output_file_name:
+                                            new_ext = output_file_name['ext'] if '.' in output_file_name['ext'] else f'.{output_file_name["ext"]}'
+                                            if '.' in item_name:
+                                                exe_input['default']['fileName'] = '.'.join(item_name.split('.')[:-2])+new_ext
+                                            else:
+                                                exe_input['default']['fileName'] = item_name+new_ext
+                                        else:
+                                            exe_input['default']['fileName'] = item_name
+
+                                if type(output_folder_id)==str:
+                                    exe_input['default']['folderId'] = output_folder_id
+                                elif type(output_folder_id)==dict:
+                                    reference = output_folder_id['name']
+                                    uploaded_items = [i for i in session_data['uploaded_files'] if i['_modelType']=='file']
+                                    # Which one matches the default name
+                                    uploaded_item_names = [i['fusion_upload_name'] for i in uploaded_items]
+                                    if reference in uploaded_item_names:
+                                        matching_item = uploaded_items[uploaded_item_names.index(reference)]
+                                        matching_item_info = self.handler.get_item_info(matching_item['itemId'],session_data['current_user']['token'])
+                                        folder_info = self.handler.get_folder_info(matching_item_info['folderId'],session_data['current_user']['token'])
+
+                                        exe_input['default']['folderId'] = folder_info['_id']
+                                    else:
+                                        exe_input['default'] = None
+                                else:
+                                    exe_input['default'] = None
+
                             else:
                                 exe_input['default'] = None
                         else:
                             exe_input['default'] = None
-                    
-                inputs_list.append(exe_input)
+                
+                if not sequence:
+                    inputs_list.append(exe_input | {'plugin_id': job_obj.plugin_id, 'unique_plugin_id': plugin_dict["unique_plugin_id"]})
+                else:
+                    inputs_list.append(exe_input | {'plugin_id': job_obj.plugin_id, 'unique_plugin_id': plugin_dict["unique_plugin_id"], 'sequence_id': plugin_dict['sequence_id']})
         else:
             inputs_list = []
             for ip in exe_dict['parameters']:
                 # ip = input, ipp = input parameter
-                inputs_list.extend([ipp | {'disabled': False} for ipp in ip['inputs']])
+                if not sequence:
+                    inputs_list.extend([ipp | {'disabled': False, 'plugin_id': job_obj.plugin_id, 'unique_plugin_id': plugin_dict['unique_plugin_id']} for ipp in ip['inputs']])
+                else:
+                    inputs_list.extend([ipp | {'disabled': False, 'plugin_id': job_obj.plugin_id, 'unique_plugin_id': plugin_dict['unique_plugin_id'], 'sequence_id': plugin_dict['sequence_id']} for ipp in ip['inputs']])
+
 
         # Now creating the interactive component (without component-prefix, can transform later)
         # https://stackoverflow.com/questions/21716940/is-there-a-way-to-track-the-number-of-times-a-function-is-called
         file_input_idx = [0]
         plugin_component = html.Div([
             dcc.Store(
-                id = {'type': 'dsa-plugin-plugin-info-store','index': component_index},
+                id = {'type': 'dsa-plugin-plugin-info-store','index': component_index} if not sequence else {'type': 'dsa-plugin-sequence-plugin-info-store','index': component_index},
                 data = json.dumps({
                     '_id': job_obj.plugin_id,
-                    'exe_dict': exe_dict.copy()
+                    'exe_dict': exe_dict.copy(),
+                    'input_args': job_obj.input_args,
+                    'unique_plugin_id': plugin_dict['unique_plugin_id'],
+                    'sequence_id': plugin_dict['sequence_id'] if 'sequence_id' in plugin_dict else None
                 }),
                 storage_type = 'memory'
             ),
@@ -315,7 +369,12 @@ class DSAPluginGroup(DSATool):
         
         input_desc_column = [
             dbc.Row(html.H6(input_dict['label'])),
-            dbc.Row(html.P(input_dict['description']))
+            dbc.Row(html.P(input_dict['description'])),
+            dcc.Store(
+                id = {'type': 'dsa-plugin-plugin-input-info','index': input_index} if not sequence else {'type': 'dsa-plugin-sequence-input-info','index': input_index},
+                data = json.dumps(input_dict),
+                storage_type = 'memory'
+            )
         ]
 
         if 'enumeration' in input_dict['type']:
@@ -339,23 +398,33 @@ class DSAPluginGroup(DSATool):
                 html.Hr()
             ])
         elif input_dict['type'] in ['region','geometry','point']:
+
+            #TODO: Replace this with a real region/geometry selector
             input_component = html.Div([
                 dbc.Row([
                     dbc.Col(input_desc_column,md=5),
                     dbc.Col([
-                        'This component is still in progress'
+                        dbc.Input(
+                            type = 'text',
+                            value = input_dict['default'] if not input_dict['default'] is None else [],
+                            maxLength = 1000,
+                            disabled = input_dict['disabled'],
+                            id = {'type': 'dsa-plugin-input','index': input_index} if not sequence else {'type': 'dsa-plugin-sequence-input','index': input_index},
+                            style = {'width': '100%'}
+                        )
                     ],md=7)
                 ]),
                 html.Hr()
             ])
+
         elif input_dict['type'] in ['file','directory','image']:
-            print(input_dict)
             input_component = html.Div([
                 dbc.Row([
                     dbc.Col(input_desc_column,md=5),
                     dbc.Col([
                         self.make_file_component(
                             select_type = input_dict['type'],
+                            channel = input_dict['channel'] if 'channel' in input_dict else 'input',
                             value = input_dict['default'] if 'default' in input_dict else "",
                             component_index = input_index,
                             file_selector_index = file_input_index[0],
@@ -416,8 +485,8 @@ class DSAPluginGroup(DSATool):
 
         return input_component
 
-    def make_file_component(self, select_type: str, value: Union[str,dict], component_index:int, file_selector_index: int, disabled:bool,sequence:bool=False):
-
+    def make_file_component(self, select_type: str, channel:str, value: Union[str,dict], component_index:int, file_selector_index: int, disabled:bool,sequence:bool=False):
+        
         if type(value)==dict:
             if all([i in value for i in ['name','_id']]):
                 selector_value = value['name']
@@ -425,15 +494,21 @@ class DSAPluginGroup(DSATool):
             elif 'value' in value:
                 selector_value = value['value']
                 input_value = value['value']
+            elif all([i in value for i in ['fileName','folderId']]):
+                selector_value = value['fileName']
+                input_value = json.dumps(value)
         else:
             selector_value = value
             input_value = value
-
+    
         file_component = html.Div([
             dcc.Store(
                 id = {'type': 'dsa-plugin-resource-selector-info','index': file_selector_index},
                 data = json.dumps({
-                    'type': select_type
+                    'type': select_type,
+                    'channel': channel,
+                    'component_index': component_index,
+                    'file_component_index': file_selector_index
                 }),
                 storage_type='memory'
             ),
@@ -492,8 +567,9 @@ class DSAPluginGroup(DSATool):
             for p_idx, p in enumerate(plugin_groups):
                 if type(p)==dict:
                     # This is a singular job that can be executed independently of any other processing plugin
+                    unique_plugin_id = uuid.uuid4().hex[:24]
                     p_component = self.load_plugin(
-                        plugin_dict = p,
+                        plugin_dict = p | {'unique_plugin_id': unique_plugin_id},
                         session_data = session_data,
                         component_index = plugin_count,
                         sequence=False
@@ -517,10 +593,15 @@ class DSAPluginGroup(DSATool):
                 elif type(p)==list:
                     # This is a sequential job where multiple jobs are submitted to a sequence handler at the same time and executed one-by-one
                     sequence_color = f'rgb({np.random.randint(0,255)},{np.random.randint(0,255)},{np.random.randint(0,255)})'
+                    sequence_id = uuid.uuid4().hex[:24]
+                    
                     sequence_components = []
+                    plugin_identifiers = []
                     for j_idx,j in enumerate(p):
+                        unique_plugin_id = uuid.uuid4().hex[:24]
+
                         j_component = self.load_plugin(
-                            plugin_dict = j,
+                            plugin_dict = j | {'sequence_id': sequence_id, 'unique_plugin_id': unique_plugin_id},
                             session_data = session_data,
                             component_index = sequence_plugin_count,
                             sequence=True
@@ -537,6 +618,7 @@ class DSAPluginGroup(DSATool):
                             ],value = f'dsa-plugin-sequence-{sequence_count}-{j_idx}')
                         )
                         sequence_plugin_count += 1
+                        plugin_identifiers.append(unique_plugin_id)
                     
                     sequence_components.append(
                         dmc.AccordionItem([
@@ -551,8 +633,13 @@ class DSAPluginGroup(DSATool):
                                         color = 'success',
                                         disabled = False
                                     ),
+                                    dcc.Store(
+                                        id = {'type': 'dsa-plugin-sequence-sequence-info','index': sequence_count},
+                                        data = json.dumps({'_id': sequence_id, 'plugins': plugin_identifiers}),
+                                        storage_type='memory'
+                                    ),
                                     html.Div(
-                                        id = {'type': 'dsa-plugin-sequence-status-div','index': sequence_count},
+                                        id = {'type': 'dsa-plugin-sequence-submit-status-div','index': sequence_count},
                                         children = []
                                     )
                                 ])
@@ -634,6 +721,7 @@ class DSAPluginGroup(DSATool):
             [
                 State({'type': 'dsa-plugin-plugin-info-store','index': ALL},'data'),
                 State({'type': 'dsa-plugin-input','index': ALL},'value'),
+                State({'type': 'dsa-plugin-plugin-input-info','index': ALL},'data'),
                 State('anchor-vis-store','data')
             ],
             [
@@ -649,8 +737,10 @@ class DSAPluginGroup(DSATool):
                 Input({'type': 'dsa-plugin-sequence-submit-button','index': MATCH},'n_clicks')
             ],
             [
-                State({'type': 'dsa-plugin-sequence-info-store','index': ALL},'data'),
+                State({'type': 'dsa-plugin-sequence-sequence-info','index': MATCH},'data'),
+                State({'type': 'dsa-plugin-sequence-plugin-info-store','index': ALL},'data'),
                 State({'type': 'dsa-plugin-sequence-input','index': ALL},'value'),
+                State({'type': 'dsa-plugin-sequence-input-info','index': ALL},'data'),
                 State('anchor-vis-store','data')
             ],
             [
@@ -708,43 +798,127 @@ class DSAPluginGroup(DSATool):
 
         """
 
-    def submit_plugin(self, clicked, plugin_info, plugin_inputs, upload_type, session_data):
+    def post_process_plugin_inputs(self, plugin_inputs, plugin_input_info):
+
+        processed_inputs = []
+        error_inputs = []
+        for p_input, p_info in zip(plugin_inputs,plugin_input_info):
+            # None type inputs are replaced with default if one is available
+            if not p_input is None:
+                if p_info['type'] in ['file','directory','image']:
+                    print(p_input)
+                    if '"' in p_input or "'" in p_input:
+                        p_input = json.loads(p_input.replace("'",'"'))
+                    if type(p_input)==list:
+                        p_input = p_input[0]
+                    if 'channel' in p_info:
+                        if p_info['channel']=='output':
+                            # This needs a _name and _folder argument
+                            if type(p_input)==dict:
+                                processed_inputs.extend([
+                                    {
+                                        'name': p_info['name'],
+                                        'value':p_input['fileName']
+                                    },
+                                    {
+                                        'name': p_info['name']+'_folder',
+                                        'value':p_input['folderId']
+                                    }
+                                ])
+
+                            else:
+                                error_inputs.append(p_info['name'])
+                        else:
+                            if type(p_input)==str:
+                                processed_inputs.append({
+                                    'name': p_info['name'],
+                                    'value':p_input
+                                })
+                            else:
+                                error_inputs.append(p_info['name'])
+
+                    else:
+                        if type(p_input)==str:
+                            processed_inputs.append({
+                                'name': p_info['name'],
+                                'value':p_input
+                            })
+                        else:
+                            error_inputs.append(p_info['name'])
+
+                elif p_info['type'] in ['region','geometry','point']:
+                    
+                    if p_info['type']=='region':
+                        if not all([j in p_input for j in ['[',']']]):
+                            fixed_region = p_input.replace(' ','').split(',')
+                        else:
+                            fixed_region = p_input.replace('[','').replace(']','').replace(' ','').split(',')
+
+                        try:
+                            fixed_region = [float(i) for i in fixed_region]
+                            processed_inputs.append({
+                                'name': p_info['name'],
+                                'value':json.dumps(fixed_region)
+                            })
+                        except ValueError:
+                            error_inputs.append(p_info['name'])
+
+                    else:
+                        error_inputs.append(p_info['name'])
+
+                elif 'vector' in p_info['type']:
+                    
+                    fixed_vector = p_input.replace('[','').replace(']','').replace(' ','').split(',')
+                    if not 'string' in p_info['type']:
+                        try:
+                            if any([i in p_info['type'] for i in ['float','double']]):
+                                fixed_vector = [float(i) for i in fixed_vector]
+                            elif 'integer' in p_info['type']:
+                                fixed_vector = [int(i) for i in fixed_vector]
+                        except ValueError:
+                            error_inputs.append(p_info['name'])
+
+                    processed_inputs.append({
+                        'name': p_info['name'],
+                        'value':json.dumps(fixed_vector)
+                    })
+
+        return processed_inputs, error_inputs
+
+    def submit_plugin(self, clicked, plugin_info, plugin_inputs,plugin_input_info, session_data):
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
         session_data = json.loads(session_data)
-        plugin_info = json.loads(get_pattern_matching_value(plugin_info))
+        plugin_info = [json.loads(p_info) for p_info in plugin_info]
+        all_plugin_input_info = [json.loads(i_info) for i_info in plugin_input_info]
 
-        upload_type = get_pattern_matching_value(upload_type)
-        selected_upload_type = self.dsa_upload_types[[i.name for i in self.dsa_upload_types].index(upload_type)]
+        selected_plugin = plugin_info[ctx.triggered_id['index']]
         
-        # Getting the correct plugin from all plugins (not sequences)
-        plugin_idx = ctx.triggered_id['index']
-        processing_plugins = [i for i in selected_upload_type.processing_plugins if type(i)==dict]
-        upload_processing_plugin = processing_plugins[plugin_idx]
+        selected_plugin_inputs = []
+        selected_plugin_inputs_info = []
+        for p,p_info in zip(plugin_inputs,all_plugin_input_info):
+            if p_info['unique_plugin_id']==selected_plugin['unique_plugin_id']:
+                selected_plugin_inputs.append(p)
+                selected_plugin_inputs_info.append(p_info)
 
-        plugin_input_start_idx = sum([len(i['input_args']) for i in processing_plugins[:plugin_idx]])
-        plugin_input_end_idx = plugin_input_start_idx+len(upload_processing_plugin['input_args'])
+        processed_inputs_dict, error_inputs = self.post_process_plugin_inputs(selected_plugin_inputs,selected_plugin_inputs_info)
 
-        plugin_inputs = plugin_inputs[plugin_input_start_idx:plugin_input_end_idx]
-
-        if len(upload_processing_plugin['input_args'])>len(plugin_inputs):
+        if len(selected_plugin['input_args'])>len(plugin_inputs):
             # Mismatch in input length
             status_div = dbc.Alert('Missing plugin inputs!',color='warning')
-            button_disable = True
+            button_disable = False
+            return status_div, button_disable
+
+        if len(error_inputs)>0:
+            status_div = dbc.Alert(f'Incorrect input types for: {error_inputs}',color='warning')
+            button_disable = False
             return status_div, button_disable
 
         job_dict = {
-            'docker_image': upload_processing_plugin['image'],
-            'cli': upload_processing_plugin['name'],
-            'input_args': [
-                {
-                    'name': i if type(i)==str else i['name'],
-                    'value': p
-                }
-                for i,p in zip(upload_processing_plugin['input_args'], plugin_inputs)
-            ]
+            'plugin_id': selected_plugin['_id'],
+            'input_args': processed_inputs_dict
         }
 
         # function incorporated from girder-job-sequence
@@ -755,58 +929,51 @@ class DSAPluginGroup(DSATool):
             status_div = dbc.Alert('Plugin successfully submitted!',color='success')
             button_disable = True
         else:
-            status_div = dbc.Alert(f'Error submitting plugin: {plugin_info["_id"]}',color = 'danger')
+            status_div = dbc.Alert(f'Error submitting plugin: {selected_plugin["_id"]}',color = 'danger')
             print(job_start_response.content)
             button_disable = False
 
         return status_div, button_disable
 
-    def submit_sequence(self, clicked, sequence_info, sequence_inputs, upload_type, session_data):
-
+    def submit_sequence(self, clicked, sequence_info, sequence_plugins_info, sequence_plugin_inputs, sequence_plugin_inputs_info, session_data):
+        
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
 
         session_data = json.loads(session_data)
-        # Loading each plugin that is part of any sequence
-        sequence_info = [json.loads(i) for i in sequence_info]
+        # Getting information on this sequence
+        sequence_info = json.loads(sequence_info)
+        # Getting information on plugins in this sequence
+        all_sequence_plugins_info = [json.loads(i) for i in sequence_plugins_info]
+        sequence_plugin_inputs_info = [json.loads(i) for i in sequence_plugin_inputs_info]
 
-        upload_type = get_pattern_matching_value(upload_type)
-        selected_upload_type = self.dsa_upload_types[[i.name for i in self.dsa_upload_types].index(upload_type)]
-        
-        # Getting the correct sequence from this upload type
-        sequence_index = ctx.triggered_id['index']
-        processing_sequences = [i for i in selected_upload_type.processing_plugins if type(i)==list]
-        upload_processing_sequence = processing_sequences[sequence_index]
+        selected_sequence_plugins_info = [i for i in all_sequence_plugins_info if i['sequence_id']==sequence_info['_id'] and i['unique_plugin_id'] in sequence_info['plugins']]
+        selected_sequence_plugins_ids = [i['unique_plugin_id'] for i in selected_sequence_plugins_info]
+        sequence_job_list = []
+        sequence_inputs_error_list = []
+        for plugin_id in sequence_info['plugins']:
+            plugin_info = selected_sequence_plugins_info[selected_sequence_plugins_ids.index(plugin_id)]
 
-        sequence_input_start_idx = sum([sum([len(j['input_args']) for j in i]) for i in processing_sequences[:sequence_index]])
-        sequence_input_end_idx = sequence_input_start_idx+sum([len(i['input_args']) for i in upload_processing_sequence])
+            plugin_inputs = []
+            plugin_inputs_info = []
+            for s,s_info in zip(sequence_plugin_inputs, sequence_plugin_inputs_info):
+                if s_info['unique_plugin_id']==plugin_id:
+                    plugin_inputs.append(s)
+                    plugin_inputs_info.append(s_info)
 
-        sequence_inputs = sequence_inputs[sequence_input_start_idx:sequence_input_end_idx]
-
-        # Checking for all inputs
-        if (sequence_input_end_idx - sequence_input_start_idx)>len(sequence_inputs):
-            # Mismatch in input length
-            status_div = dbc.Alert('Missing sequence inputs!',color='warning')
+            processed_plugin_inputs, error_inputs = self.post_process_plugin_inputs(plugin_inputs,plugin_inputs_info)
+            sequence_inputs_error_list.extend(error_inputs)
+            
+            plugin_dict = {
+                'plugin_id': plugin_info['_id'],
+                'input_args': processed_plugin_inputs
+            }
+            sequence_job_list.append(plugin_dict)
+    
+        if len(sequence_inputs_error_list) > 0:
+            status_div = dbc.Alert(f'Incorrect input types for: {sequence_inputs_error_list}',color='warning')
             button_disable = False
             return status_div, button_disable
-
-        sequence_job_list = []
-        job_input_start = 0
-        for j_idx,j in enumerate(upload_processing_sequence):
-            job_inputs = sequence_inputs[job_input_start:job_input_start+len(j['input_args'])]
-            job_input_start += len(j['input_args'])
-            job_dict = {
-                'docker_image': j['image'],
-                'cli': j['name'],
-                'input_args': [
-                    {
-                        'name': i if type(i)==str else i['name'],
-                        'value': p
-                    }
-                    for i,p in zip(j['input_args'],job_inputs)
-                ]
-            }
-            sequence_job_list.append(job_dict)
 
         sequence_obj = from_list(self.handler.gc,sequence_job_list)
 
@@ -821,7 +988,7 @@ class DSAPluginGroup(DSATool):
         )
         job_seq_thread.start()
 
-        status_div = dbc.Alert(f'Sequence {sequence_index+1} Submitted',color='success')
+        status_div = dbc.Alert(f'Sequence {ctx.triggered_id["index"]+1} Submitted',color='success')
         button_disable = True
         return status_div, button_disable
 
@@ -837,7 +1004,11 @@ class DSAPluginGroup(DSATool):
                 use_prefix = True,
                 selector_type = selector_info['type'] if not selector_info['type']=='image' else 'item',
                 select_count = 1,
-                source_component_index=ctx.triggered_id['index']
+                source_channel = selector_info['channel'],
+                source_index = {
+                    'component_index': selector_info['component_index'],
+                    'file_component_index': selector_info['file_component_index']
+                }
             )
 
             return [opened], [selector_children]
@@ -852,12 +1023,11 @@ class DSAPluginGroup(DSATool):
         if selected_data and not modal_opened:
             selected_data = json.loads(selected_data)
             update_index = selected_data['source_component_index']
-
             selector_val = ','.join([i['Name'] for i in selected_data['resource_list']])
-            input_val = json.dumps([i['_id'] for i in selected_data['resource_list']])
+            input_val = json.dumps([i['_id'] if '_id' in i else i for i in selected_data['resource_list']])
 
-            new_selector_vals = [no_update if not idx==update_index else selector_val for idx in range(len(ctx.outputs_list[0]))]
-            new_input_vals = [no_update if not idx==update_index else input_val for idx in range(len(ctx.outputs_list[1]))]
+            new_selector_vals = [no_update if not idx==update_index['file_component_index'] else selector_val for idx in range(len(ctx.outputs_list[0]))]
+            new_input_vals = [no_update if not idx==update_index['component_index'] else input_val for idx in range(len(ctx.outputs_list[1]))]
 
             return new_selector_vals, new_input_vals
         else:
@@ -889,7 +1059,6 @@ class DSAPluginRunner(DSATool):
         ]
 
         self.base_id = 'dsa-plugin-runner'
-
 
     def load(self, component_prefix: int):
         
