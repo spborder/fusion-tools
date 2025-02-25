@@ -859,21 +859,20 @@ class SlideMap(MapComponent):
 
             return return_table
         
-        def make_sub_accordion(input_data: Union[list,dict], main_list: list = [], sub_accordion_list:list = [],main_title:str=''):
+        def make_sub_accordion(input_data: Union[list,dict]):
             """Recursively generating sub-accordion objects for nested properties
 
             :param input_dict: Input dictionary containing nested and non-nested key/value pairs
             :type input_dict: dict
-            :param sub_accordion_list: List of sub-accordions, defaults to []
-            :type sub_accordion_list: list, optional
             """
-            #TODO: This part doesn't always have the correct titles for sub-accordions
+            main_list = []
+            sub_list = []
             for idx,in_data in enumerate(input_data):
                 title = list(in_data.keys())[0]
                 non_nested_data = [{'Sub-Property':key, 'Value': val} for key,val in in_data[title].items() if not type(val) in [list,dict]]
                 nested_data = [{key:val} for key,val in in_data[title].items() if type(val)==dict]
                 if len(non_nested_data)>0:
-                    sub_accordion_list.append(
+                    main_list.append(
                         dbc.AccordionItem([
                             html.Div([
                                 make_dash_table(pd.DataFrame.from_records(non_nested_data))
@@ -881,28 +880,23 @@ class SlideMap(MapComponent):
                         ],title = title)
                     )
                 if len(nested_data)>0:
-                    main_title = title
-                    main_list, sub_accordion_list = make_sub_accordion(nested_data, main_list, sub_accordion_list,main_title)
-
-            if len(sub_accordion_list)>0:
-                main_list.append(
-                    dbc.AccordionItem(
-                        children = dbc.Accordion(sub_accordion_list),
-                        title = main_title
-                    )
-                )
-            sub_accordion_list = []
-            main_title = ''
+                    nested_list = make_sub_accordion(nested_data)
+                    sub_list.extend(nested_list)
             
-            return main_list, sub_accordion_list
-
-        def make_sub_accordions(input_data: Union[list,dict]):
-
-            main_list = []
-            for idx,in_data in enumerate(input_data):
-                normed_data = pd.json_normalize(in_data)
-                print(normed_data)
-
+                if len(sub_list)>0:
+                    main_list.append(
+                        dbc.Accordion(
+                            dbc.AccordionItem(
+                                dbc.Accordion(
+                                    sub_list
+                                ),
+                                title = title
+                            )
+                        )
+                    )
+                    sub_list = []
+            
+            return main_list
 
         accordion_children = []
         all_properties = list(clicked['properties'].keys())
@@ -920,8 +914,7 @@ class SlideMap(MapComponent):
 
         # Now loading the dict properties as sub-accordions
         sub_properties = [{i:clicked['properties'][i]} for i in clicked['properties'] if type(clicked['properties'][i])==dict]
-        make_sub_accordions(sub_properties)
-        test_sub_accordions, _ = make_sub_accordion(sub_properties)
+        test_sub_accordions = make_sub_accordion(sub_properties)
         if len(test_sub_accordions)>0:
             accordion_children.extend(test_sub_accordions)
 
@@ -949,7 +942,7 @@ class SlideMap(MapComponent):
             dbc.Accordion(
                 children = accordion_children,
                 start_collapsed=True,
-                style = {'maxHeight': '800px','overflow': 'scroll','width': '400px'}
+                style = {'maxHeight': '800px','overflow': 'scroll','width': '300px'}
             )
         )
 

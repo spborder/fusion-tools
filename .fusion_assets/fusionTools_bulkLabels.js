@@ -1,8 +1,6 @@
 window.fusionTools = Object.assign({}, window.fusionTools, {
     bulkLabels: {
         removeMarker: function(e, ctx) {
-                console.log(ctx);
-                console.log(e);
                 e.target.removeLayer(e.layer._leaflet_id);
                 ctx.data.features.splice(ctx.data.features.indexOf(e.layer.feature), 1);
             }

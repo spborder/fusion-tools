@@ -247,7 +247,7 @@ class DSAPluginGroup(DSATool):
                                         if 'ext' in output_file_name:
                                             new_ext = output_file_name['ext'] if '.' in output_file_name['ext'] else f'.{output_file_name["ext"]}'
                                             if '.' in item_name:
-                                                exe_input['default']['fileName'] = '.'.join(item_name.split('.')[:-2])+new_ext
+                                                exe_input['default']['fileName'] = '.'.join(item_name.split('.')[:-1])+new_ext
                                             else:
                                                 exe_input['default']['fileName'] = item_name+new_ext
                                         else:
@@ -806,7 +806,6 @@ class DSAPluginGroup(DSATool):
             # None type inputs are replaced with default if one is available
             if not p_input is None:
                 if p_info['type'] in ['file','directory','image']:
-                    print(p_input)
                     if '"' in p_input or "'" in p_input:
                         p_input = json.loads(p_input.replace("'",'"'))
                     if type(p_input)==list:

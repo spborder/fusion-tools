@@ -128,12 +128,14 @@ class DSAHandler(Handler):
 
         if user_token is None or user_token=='' and self.user_token is None:
             request_string = self.gc.urlBase+f'/item/{item_id}/tiles/thumbnail'
+            #request_string = self.gc.urlBase+f'/item/{item_id}/zxy/0/0/0'
         else:
-            if not self.user_token is None:
+            if not self.user_token is None and user_token is None:
                 request_string = self.gc.urlBase+f'/item/{item_id}/tiles/thumbnail?token={self.user_token}'
+                #request_string = self.gc.urlBase+f'/item/{item_id}/zxy/0/0/0?token={self.user_token}'
             else:
                 request_string = self.gc.urlBase+f'/item/{item_id}/tiles/thumbnail?token={user_token}'
-
+                #request_string = self.gc.urlBase+f'/item/{item_id}/zxy/0/0/0?token={user_token}'
 
         try:
             image_array = np.uint8(
@@ -407,11 +409,14 @@ class DSAHandler(Handler):
         #                                              'limit': 0 
         #                                          })
 
-        folder_items = self.gc.get(f'/item',
-                                   parameters = {
-                                       'folderId': folder_info["_id"],
-                                       'limit': 0
-                                   })
+        if folder_type=='folder':
+            folder_items = self.gc.get(f'/item',
+                                    parameters = {
+                                        'folderId': folder_info["_id"],
+                                        'limit': 0
+                                    })
+        else:
+            folder_items = []
 
         if len(folder_items)>0:
             if ignore_histoqc:

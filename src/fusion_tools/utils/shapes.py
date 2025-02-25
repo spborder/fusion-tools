@@ -360,8 +360,18 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
                 index = anndata_object.obs_names
             )
     elif 'csv' in visium_path:
-        spot_coords = pd.read_csv(visium_path,index_col=0).loc[:,['imagecol','imagerow']]
+        spot_df = pd.read_csv(visium_path)
+        if all([i in spot_df for i in ['imagecol','imagerow']]):
+            # This is Visium in the 10x V1 structure (from Seurat)
+            spot_coords = pd.read_csv(visium_path,index_col=0).loc[:,['imagecol','imagerow']]
 
+        elif all([i in spot_df for i in ['x','y']]):
+            # This is Visium in the 10x V2 structure (from Seurat)
+            spot_coords = pd.read_csv(visium_path,index_col=0).loc[:,['x','y']]
+    elif 'h5' in visium_path:
+        # Loading raw h5 file
+        visium_data = ad.read_hdf(visium_path)
+        
 
     # Quick way to calculate how large the radius of each spot should be (minimum distance will be 100um between adjacent spot centroids )
     if mpp is None:

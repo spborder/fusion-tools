@@ -61,7 +61,6 @@ class DatasetBuilder(DSATool):
 
         # This might receive the DSAResourceSelector
        
-
     def gen_collections_dataframe(self,session_data:dict):
 
         collections_info = []
@@ -353,7 +352,7 @@ class DatasetBuilder(DSATool):
 
         return selectable_table
 
-    def organize_folder_contents(self, folder_info:dict, show_empty:bool=False, ignore_histoqc:bool=True)->list:
+    def organize_folder_contents(self, folder_info:dict, show_empty:bool=True, ignore_histoqc:bool=True)->list:
         """For a given folder selection, return a list of slides(0th) and folders (1th)
 
         :param folder_info: Folder info dict returned by self.handler.get_path_info(path)
