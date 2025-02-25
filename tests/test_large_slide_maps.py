@@ -8,7 +8,7 @@ import json
 import requests
 
 from fusion_tools.handler.dsa_handler import DSAHandler
-from fusion_tools import Visualization
+from fusion_tools.visualization import Visualization
 from fusion_tools.components.maps import LargeSlideMap, SlideMap
 from fusion_tools.components import OverlayOptions
 

@@ -52,12 +52,15 @@ class DatasetBuilder(DSATool):
         self.title = 'Dataset Builder'
         self.blueprint = DashBlueprint(
             transforms=[
-                PrefixIdTransform(prefix=f'{component_prefix}'),
+                PrefixIdTransform(prefix=f'{component_prefix}',escape = lambda input_id: self.prefix_escape(input_id)),
                 MultiplexerTransform()
             ]
         )
 
         self.get_callbacks()
+
+        # This might receive the DSAResourceSelector
+       
 
     def gen_collections_dataframe(self,session_data:dict):
 
@@ -475,6 +478,7 @@ class DatasetBuilder(DSATool):
         :param use_prefix: bool
         """
         
+        #TODO: Getting individual thumbnails is slow, see if this can be switched to async
         if not local_slide:
             try:
                 item_info = self.handler.gc.get(f'/item/{slide_id}')
@@ -991,7 +995,6 @@ class DatasetBuilder(DSATool):
             current_selected_slides.extend(new_slides)
 
             new_rem_slides = list(set(current_selected_slides) & set([i['Slide ID'] for i in not_selected_slides]))
-            print(f'new_rem_slides: {new_rem_slides}')
             for d_idx,d in enumerate(new_rem_slides):
                 del selected_slides[current_selected_slides.index(d)]
                 del current_selected_slides[current_selected_slides.index(d)]           

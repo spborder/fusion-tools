@@ -52,7 +52,7 @@ simple_upload_type = DSAUploadType(
                 {
                     'name': 'inputImageFile',
                     'default': {
-                        'type': 'input_file',
+                        'type': 'upload_file',
                         'name': 'Image'
                     },
                     'disabled': True
@@ -99,6 +99,118 @@ simple_upload_type = DSAUploadType(
     ]
 )
 
+sequence_upload_type = DSAUploadType(
+    name = 'Sequential Processing Upload',
+    description='This plugin requires multiple plugins to be run in sequence',
+    input_files = [
+        {
+            'name': 'Image',
+            'description': 'This is any image you would like to upload to the DSA instance',
+            'accepted_types': ['png','jpg','svs','tiff','tif'],
+            'preprocessing_plugins': None,
+            'type': 'item',
+            'required': True,
+        },
+    ],
+    processing_plugins=[
+        [
+            {
+                'name': 'MultiCompartmentSegment',
+                'image': 'samborder2256/multicomp:latest',
+                'input_args': [
+                    {
+                        'name': 'files',
+                        'default': {
+                            'type':'upload_file',
+                            'name': 'Image'
+                        },
+                        'disabled': True
+                    },
+                    {
+                        'name': 'base_dir',
+                        'default': {
+                            'type': 'upload_folder',
+                            'name': 'Image'
+                        },
+                        'disabled': True
+                    },
+                    {
+                        'name': 'modelfile',
+                        'default': {
+                            'value': '648123761019450486d13dce'
+                        },
+                        'disabled': True
+                    }
+                ]
+            },
+            {
+                'name': 'FeatureExtraction',
+                'image': 'fusionplugins/general:latest',
+                'input_args': [
+                    {
+                        'name': 'input_image',
+                        'default': {
+                            'type': 'upload_file',
+                            'name': 'Image'
+                        },
+                        'disabled': True
+                    },
+                    {
+                        'name': 'extract_sub_compartments',
+                        'default': {
+                            'value': True
+                        },
+                        'disabled': True
+                    },
+                    'hematoxylin_threshold',
+                    'eosinophilic_threshold',
+                    'hematoxylin_min_size',
+                    'eosinophilic_min_size'
+                ]
+            }
+        ],
+        {
+            'name': 'NucleiDetection',
+            'image': 'dsarchive/histomicstk:latest',
+            'input_args': [
+                {
+                    'name': 'inputImageFile',
+                    'default': {
+                        'type': 'upload_file',
+                        'name': 'Image'
+                    },
+                    'disabled': True
+                },
+                {
+                    'name': 'outputNucleiAnnotationFile_folder',
+                    'default': {
+                        'type': 'upload_folder',
+                        'name': 'Image'
+                    },
+                    'disabled': True
+                },
+                {
+                    'name': 'outputNucleiAnnotationFile',
+                    'default': {
+                        'type': 'output_file',
+                        'fileName': {
+                            'name': 'Image',
+                            'ext': '.annot'
+                        },
+                        'folderId': {
+                            'name': 'Image'
+                        }
+                    },
+                    'disabled': True
+                },
+                'nuclei_annotation_format',
+                'min_nucleus_area',
+                'ignore_border_nuclei',
+                'ImageInversionForm'
+            ]
+        }
+    ]
+)
 
 
 def main():
@@ -131,7 +243,8 @@ def main():
     dsa_plugin_progress = dsa_handler.create_plugin_progress()
     dsa_uploader = dsa_handler.create_uploader(
         upload_types = [
-            simple_upload_type
+            simple_upload_type,
+            sequence_upload_type
         ]
     )
 
@@ -164,15 +277,6 @@ def main():
     )
 
     vis_sess.start()
-
-
-
-
-
-
-
-
-
 
 if __name__=='__main__':
     main()

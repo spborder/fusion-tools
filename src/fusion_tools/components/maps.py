@@ -883,7 +883,6 @@ class SlideMap(MapComponent):
                 if len(nested_data)>0:
                     main_title = title
                     main_list, sub_accordion_list = make_sub_accordion(nested_data, main_list, sub_accordion_list,main_title)
-                    print(f'len(sub_accordion_list): {len(sub_accordion_list)}')
 
             if len(sub_accordion_list)>0:
                 main_list.append(
@@ -897,6 +896,12 @@ class SlideMap(MapComponent):
             
             return main_list, sub_accordion_list
 
+        def make_sub_accordions(input_data: Union[list,dict]):
+
+            main_list = []
+            for idx,in_data in enumerate(input_data):
+                normed_data = pd.json_normalize(in_data)
+                print(normed_data)
 
 
         accordion_children = []
@@ -915,6 +920,7 @@ class SlideMap(MapComponent):
 
         # Now loading the dict properties as sub-accordions
         sub_properties = [{i:clicked['properties'][i]} for i in clicked['properties'] if type(clicked['properties'][i])==dict]
+        make_sub_accordions(sub_properties)
         test_sub_accordions, _ = make_sub_accordion(sub_properties)
         if len(test_sub_accordions)>0:
             accordion_children.extend(test_sub_accordions)
@@ -1830,17 +1836,25 @@ class LargeSlideMap(SlideMap):
                                 }
                             };
                             for (let i = 0; i<new_annotations.annotation.elements.length; i++){
+
+                                console.log("user" in new_annotations.annotation.elements[i]);
+                                if ("user" in new_annotations.annotation.elements[i]) {
+                                    var user_properties = new_annotations.annotation.elements[i].user;
+                                } else {
+                                    var user_properties = new Object;
+                                }
+                                user_properties["id"] = i;
+                                user_properties["cluster"] = false;
+                                user_properties["name"] = annotation.annotation.name;
+
                                 let new_feature = {
                                     "type": "Feature",
-                                    "properties": new_annotations.annotation.elements[i].user,
+                                    "properties": user_properties,
                                     "geometry": {
                                         "type": "Polygon",
                                         "coordinates": [[]]
                                     }
                                 };
-
-                                new_feature["properties"]["id"] = i;
-                                new_feature["properties"]["cluster"] = false;
 
                                 for (let j = 0; j<new_annotations.annotation.elements[i].points.length;j++){
                                     let these_coords = new_annotations.annotation.elements[i].points[j];

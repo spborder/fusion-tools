@@ -1,5 +1,6 @@
 """Base classes for tools
 """
+from typing_extensions import Union
 
 class Tool:
     """General class for interactive components that visualize, edit, or perform analyses on data.
@@ -8,6 +9,31 @@ class Tool:
         # Property referring to how the layout is updated with a change in the 
         # visualization session
         self.session_update = False
+
+    def prefix_escape(self,input_id: Union[str,dict])->bool:
+        """Specifying the default prefix escape for all blueprints. Basic specification is to ignore "anchor" or ids that already have a prefix
+
+        :param input_id: Input component id either for a layout or a callback
+        :type input_id: Union[str,dict]
+        :return: True indicates that this id should not receive a prefix transform, False indicates that it should receive a prefix
+        :rtype: bool
+        """
+
+        if type(input_id)==dict:
+            if 'anchor' in input_id['type']:
+                return True
+            try:
+                current_comp_id = int(input_id['type'][0])
+                has_id = True
+            except ValueError:
+                has_id = False
+            
+            if has_id:
+                return True
+
+        elif 'anchor' in input_id:
+            return True
+        return False
     
 
 class MultiTool:
@@ -17,6 +43,32 @@ class MultiTool:
         # Property referring to how the layout is updated with a change in the 
         # visualization session
         self.session_update = True
+
+    def prefix_escape(self,input_id: Union[str,dict])->bool:
+        """Specifying the default prefix escape for all blueprints. Basic specification is to ignore "anchor" or ids that already have a prefix
+
+        :param input_id: Input component id either for a layout or a callback
+        :type input_id: Union[str,dict]
+        :return: True indicates that this id should not receive a prefix transform, False indicates that it should receive a prefix
+        :rtype: bool
+        """
+
+        if type(input_id)==dict:
+            if 'anchor' in input_id['type']:
+                return True
+            try:
+                current_comp_id = int(input_id['type'][0])
+                has_id = True
+            except ValueError:
+                has_id = False
+            
+            if has_id:
+                return True
+
+        elif 'anchor' in input_id:
+            return True
+        return False
+    
     
 class Handler:
     pass
@@ -44,5 +96,29 @@ class MapComponent:
         # visualization session
         self.session_update = False
     
+    def prefix_escape(self,input_id: Union[str,dict])->bool:
+        """Specifying the default prefix escape for all blueprints. Basic specification is to ignore "anchor" or ids that already have a prefix
 
+        :param input_id: Input component id either for a layout or a callback
+        :type input_id: Union[str,dict]
+        :return: True indicates that this id should not receive a prefix transform, False indicates that it should receive a prefix
+        :rtype: bool
+        """
+
+        if type(input_id)==dict:
+            if 'anchor' in input_id['type']:
+                return True
+            try:
+                current_comp_id = int(input_id['type'][0])
+                has_id = True
+            except ValueError:
+                has_id = False
+            
+            if has_id:
+                return True
+
+        elif 'anchor' in input_id:
+            return True
+        return False
+    
 

@@ -26,9 +26,12 @@ from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 from fusion_tools.utils.shapes import load_annotations
 
 from fusion_tools import DSATool
-from fusion_tools.handler.plugin import DSAPluginRunner
+from fusion_tools.handler.plugin import DSAPluginRunner, DSAPluginGroup
+from fusion_tools.handler.resource_selector import DSAResourceSelector
 
-
+from girder_job_sequence import Job, Sequence
+from girder_job_sequence.utils import from_list, from_dict
+import threading
 
 # Maximum allowed size of uploads (Mb)
 MAX_UPLOAD_SIZE = 1e4
@@ -118,9 +121,20 @@ class DSAUploadType:
 
         assert all(req_meta_check)
 
-        # All processing_plugins have to have a "dict" type
-        assert all([isinstance(i,dict) for i in self.processing_plugins])
+        # All processing_plugins have to have a "dict" or "list" type
+        assert all([isinstance(i,dict) or isinstance(i,list) for i in self.processing_plugins])
 
+        # Lists within self.processing_plugins are interpreted as a sequence
+        # Jobs that aren't in a sequence are determined to be independent of other processing steps
+        # and are therefore executed at the same time as the first job in each sequence.
+        """
+        self.job_sequences = []
+        for p in self.processing_plugins:
+            if type(p)==dict:
+                self.job_sequences.append(from_dict(p))
+            elif type(p)==list:
+                self.job_sequences.append(from_list(p))
+        """
 
 # RequestData is from the documentation for dash-uploader with the keys modified from "flow" to "resumable" (there must have been some update that they didn't account for initially)
 class RequestData:
@@ -336,12 +350,25 @@ class DSAUploader(DSATool):
         self.title = 'Dataset Uploader'
         self.blueprint = DashBlueprint(
             transforms=[
-                PrefixIdTransform(prefix=f'{component_prefix}'),
+                PrefixIdTransform(prefix=f'{component_prefix}',escape = lambda input_id: self.prefix_escape(input_id)),
                 MultiplexerTransform()
             ]
         )
 
         self.get_callbacks()
+
+        # Loading resource selector
+        #self.resource_selector = DSAResourceSelector(
+        #    handler = self.handler
+        #)
+
+        #self.resource_selector.load(self.component_prefix)
+
+        self.plugin_inputs_handler = DSAPluginGroup(
+            handler = self.handler
+        )
+        self.plugin_inputs_handler.load(self.component_prefix)
+        self.plugin_inputs_handler.gen_layout({})
 
     def update_layout(self, session_data:dict, use_prefix:bool):
 
@@ -354,8 +381,19 @@ class DSAUploader(DSATool):
             )
    
         else:
+            self.plugin_inputs_handler.update_layout(session_data,use_prefix=use_prefix)
             uploader_children = html.Div([
                 dbc.Row([
+                    #dbc.Modal(
+                    #    id = {'type': 'dsa-uploader-selector-modal','index': 0},
+                    #    centered = True,
+                    #    is_open = False,
+                    #    size = 'xl',
+                    #    className = None,
+                    #    children = [
+                    #        self.resource_selector.blueprint.embed(self.blueprint)
+                    #    ]
+                    #),
                     dcc.Loading(
                         html.Div(
                             id = {'type': 'dsa-uploader-collection-or-user-div','index': 0},
@@ -419,13 +457,17 @@ class DSAUploader(DSATool):
                         'Uploading slides and associated files to a particular folder on attached DSA instance. Access pre-processing plugins.'
                     ),
                     html.Hr(),
+                    html.Div(
+                        self.plugin_inputs_handler.blueprint.embed(self.blueprint),
+                        style = {'display':'none'}
+                    ),
                     uploader_children
                 ])
             )
         ],style = {'maxHeight': '90vh','overflow': 'scroll'})
 
         if use_prefix:
-            PrefixIdTransform(prefix=self.component_prefix).transform_layout(layout)
+            PrefixIdTransform(prefix=self.component_prefix,escape = lambda input_id: self.prefix_escape(input_id)).transform_layout(layout)
 
         return layout
 
@@ -599,25 +641,6 @@ class DSAUploader(DSATool):
             ],
             prevent_initial_call = True
         )(self.submit_metadata)
-
-        # Callback for running plugin
-        self.blueprint.callback(
-            [
-                Input({'type': 'dsa-plugin-runner-submit-button','index': MATCH},'n_clicks')
-            ],
-            [
-                State({'type': 'dsa-plugin-runner-plugin-info-store','index': ALL},'data'),
-                State({'type': 'dsa-plugin-runner-input','index': ALL},'value'),
-                State({'type': 'dsa-uploader-upload-type-drop','index':ALL},'value'),
-                State('anchor-vis-store','data')
-            ],
-            [
-                Output({'type': 'dsa-plugin-runner-submit-status-div','index': MATCH},'children'),
-                Output({'type': 'dsa-plugin-runner-submit-button','index': MATCH},'disabled'),
-                #Output({'type': 'dsa-uploader-all-plugins-run-status','index': ALL},'children')
-            ],
-            prevent_initial_call = True
-        )(self.submit_plugin)
 
     def make_selectable_dash_table(self, dataframe:pd.DataFrame, id:dict, multi_row:bool = True, selected_rows: list = []):
         """Generate a selectable DataTable to add to the layout
@@ -878,9 +901,13 @@ class DSAUploader(DSATool):
         return n_clicks_list
 
     def gen_metadata_table(self, required_metadata: list, upload_items: list):
-        
-        #TODO: Add a dropdown for "Target" for any metadata item that doesn't 
-        # specify the item that that metadata goes to. 
+        """Generates metadata tables that the user can modify to add metadata to an uploaded item.
+
+        :param required_metadata: List of required metadata items
+        :type required_metadata: list
+        :param upload_items: List of the names of uploaded items which can be used as targets of metadata values
+        :type upload_items: list
+        """
         dict_items = [i for i in required_metadata if type(i)==dict]
         dropdown_rows = [i for i in dict_items if 'values' in i]
         free_rows = [{'name':i, 'item': '', 'required': False} for i in required_metadata if type(i)==str]
@@ -888,6 +915,10 @@ class DSAUploader(DSATool):
         
         table_list = []
         for m_idx,m in enumerate([dropdown_rows,free_rows]):
+            # Skip generating this table if now rows are present
+            if len(m)==0:
+                continue
+
             m_df = pd.DataFrame.from_records([
                 {'Target': i['item'], 'Key': i['name'],'Value': '','row_id': idx}
                 for idx,i in enumerate(m)
@@ -978,13 +1009,13 @@ class DSAUploader(DSATool):
                 row_deletable = True,
                 page_current = 0,
                 page_size = 10,
-                tooltip_data = [
-                    {
-                        column:{'value':str(value), 'type':'markdown'}
-                        for column,value in row.items()
-                    } for row in m_df.to_dict('records')
-                ],
-                tooltip_duration = None,
+                #tooltip_data = [
+                #    {
+                #        column:{'value':str(value), 'type':'markdown'}
+                #        for column,value in row.items()
+                #    } for row in m_df.to_dict('records')
+                #],
+                #tooltip_duration = None,
                 css=[{"selector": ".Select-menu-outer", "rule": "display: block !important"}]
             ),
             dbc.Button(
@@ -1765,7 +1796,6 @@ class DSAUploader(DSATool):
 
         upload_div_children = [no_update]*len(ctx.outputs_list[0])
         for c in child_files:
-            
             file_info = {
                 'api_url': self.handler.girderApiUrl,
                 'token': session_data['current_user']['token'],
@@ -1808,12 +1838,10 @@ class DSAUploader(DSATool):
         upload_type = get_pattern_matching_value(upload_type)
         selected_upload_type = self.dsa_upload_types[[i.name for i in self.dsa_upload_types].index(upload_type)]
 
-        path_parts = self.extract_path_parts(get_pattern_matching_value(path_parts))
-        path_info = self.handler.get_path_info(
-            path = ''.join(path_parts)[:-1]
-        )
         session_data = json.loads(session_data)
         upload_files_data = json.loads(get_pattern_matching_value(upload_files_data))
+        # Modifying session data to include information on uploaded files (used by plugin inputs handler)
+        session_data['uploaded_files'] = upload_files_data['uploaded_files']
 
         uploaded_items = [i['name'] for i in selected_upload_type.input_files if i['type']=='item']
         metadata_table_list = self.gen_metadata_table(selected_upload_type.required_metadata, uploaded_items)
@@ -1821,21 +1849,11 @@ class DSAUploader(DSATool):
         any_required = any([i['required'] for i in any_required if 'required' in i])
 
         # Getting input components for the processing plugins
-        plugin_components = []
-        plugin_handler = DSAPluginRunner(
-            handler = self.handler
+        processing_plugin_children = self.plugin_inputs_handler.update_layout(
+            session_data=session_data,
+            use_prefix=True,
+            plugin_groups=selected_upload_type.processing_plugins
         )
-        for p_idx,p in enumerate(selected_upload_type.processing_plugins):
-            p_component = plugin_handler.load_plugin(
-                plugin_dict = p,
-                session_data = session_data,
-                uploaded_files_data= upload_files_data,
-                component_index = p_idx
-            )
-            PrefixIdTransform(prefix = self.component_prefix).transform_layout(p_component)
-
-            plugin_components.append(p_component)
-
 
         processing_plugin_div = html.Div([
             dbc.Row([
@@ -1867,24 +1885,7 @@ class DSAUploader(DSATool):
                         dbc.CardHeader('Processing Plugins'),
                         dbc.CardBody([
                             html.Div(
-                                dmc.Accordion(
-                                    id = {'type': f'{self.component_prefix}-dsa-uploader-plugin-accordion','index': 0},
-                                    children = [
-                                        dmc.AccordionItem([
-                                            dmc.AccordionControl(p_name['name']),
-                                            dmc.AccordionPanel(
-                                                dbc.Stack([
-                                                    p_component,
-                                                    html.Div(
-                                                        id = {'type': f'{self.component_prefix}-dsa-plugin-runner-submit-status-div','index': p_idx},
-                                                        children = []
-                                                    )
-                                                ])
-                                            )
-                                        ],value = f'dsa-uploader-plugin-{p_idx}')
-                                        for p_idx,(p_name,p_component) in enumerate(zip(selected_upload_type.processing_plugins,plugin_components))
-                                    ]
-                                )
+                                children = processing_plugin_children
                             ),
                             html.Div(
                                 id = {'type': f'{self.component_prefix}-dsa-uploader-all-plugins-run-status','index': 0},
@@ -1970,79 +1971,6 @@ class DSAUploader(DSATool):
                 status_div.append(dbc.Alert(f'Error adding metadata to item: {t}',color='danger'))
 
         return status_div
-
-    def submit_plugin(self, clicked, plugin_info, plugin_inputs, upload_type, session_data):
-
-        if not any([i['value'] for i in ctx.triggered]):
-            raise exceptions.PreventUpdate
-        
-        session_data = json.loads(session_data)
-        plugin_info = json.loads(get_pattern_matching_value(plugin_info))
-
-        upload_type = get_pattern_matching_value(upload_type)
-        selected_upload_type = self.dsa_upload_types[[i.name for i in self.dsa_upload_types].index(upload_type)]
-        plugin_idx = ctx.triggered_id['index']
-        upload_processing_plugin = selected_upload_type.processing_plugins[plugin_idx]
-
-        if 'input_args' in upload_processing_plugin:
-            input_arg_list = [i if type(i)==str else i['name'] for i in upload_processing_plugin['input_args']]
-            if not len(upload_processing_plugin['input_args'])==len(plugin_inputs):
-                status_div = dbc.Alert(f'Missing input values!',color = 'danger')
-                button_disable = False
-                return status_div, button_disable
-        else:
-            input_arg_list = []
-
-        plugin_handler = DSAPluginRunner(
-            handler = self.handler
-        )
-        plugin_cli_dict, plugin_info = plugin_handler.get_executable_dict(plugin_info,session_data)
-        plugin_input_infos = []
-        for p in plugin_cli_dict['parameters']:
-            plugin_input_infos.extend(p['inputs'])
-
-        input_dict = {}
-        for p in plugin_input_infos:
-            if p['channel']=='output':
-                if p['type']=='file':
-                    # For output files, need a name for the output file and a folder Id for the _folder
-                    input_dict[p['name']] = plugin_inputs[input_arg_list.index(p['name'])]
-                    input_dict[p['name']+'_folder'] = plugin_inputs[input_arg_list.index(p['name']+'_folder')]
-
-            if p['name'] in input_arg_list:
-                if 'vector' in p['type'] or p['type']=='region':
-                    if not p['type']=='string-vector':
-                        input_dict[p['name']] = json.dumps([float(i) for i in plugin_inputs[input_arg_list.index(p['name'])].split(',')])
-                    else:
-                        input_dict[p['name']] = json.dumps(plugin_inputs[input_arg_list.index(p['name'])].split(','))
-                else:
-                    input_dict[p['name']] = plugin_inputs[input_arg_list.index(p['name'])]
-            else:
-                if 'default' in p:
-                    if 'vector' in p['type'] or p['type']=='region':
-                        if not p['type']=='string-vector':
-                            input_dict[p['name']] = json.dumps([float(i) for i in p['default'].split(',')])
-                        else:
-                            input_dict[p['name']] = json.dumps(p['default'].split(','))
-                    else:
-                        input_dict[p['name']] = p['default']
-
-        submit_request = plugin_handler.run_plugin_request(
-            plugin_id = plugin_info['_id'],
-            session_data=session_data,
-            input_params_dict = input_dict
-        )
-
-        if submit_request.status_code==200:
-            status_div = dbc.Alert('Plugin successfully submitted!',color='success')
-            button_disable = True
-        else:
-            status_div = dbc.Alert(f'Error submitting plugin: {plugin_info["_id"]}',color = 'danger')
-            button_disable = False
-
-        return status_div, button_disable
-
-
 
 
 
