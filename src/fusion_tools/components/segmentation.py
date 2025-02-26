@@ -557,6 +557,7 @@ class FeatureAnnotation(Tool):
         image_save_path = f'{save_path}/Images/{"_".join([str(i) for i in image_bbox])}.png'
 
         if formatted_mask.shape[-1] in [1,3]:
+            
             Image.fromarray(np.uint8(formatted_mask)).save(mask_save_path)
             slide_image_region.save(image_save_path)
 

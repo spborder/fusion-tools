@@ -41,7 +41,6 @@ def load_annotations(file_path: str, name:Union[str,None]=None,**kwargs) -> dict
                 annotations = load_geojson(file_path,name)
             except:
                 annotations = load_histomics(file_path)
-
         elif file_extension=='parquet':
             annotations = load_parquet(file_path)
         
@@ -130,7 +129,7 @@ def load_histomics(json_path: str) -> list:
     
     #TODO: update for non-polyline annotations
 
-    geojson_list = convert_histomics(json_anns)
+    geojson_list = histomics_to_geojson(json_anns)
 
     return geojson_list
 
@@ -145,8 +144,13 @@ def load_aperio(xml_path: str) -> list:
     assert os.path.exists(xml_path)
 
     tree = ET.parse(xml_path)
-    structures_in_xml = tree.getroot().findall('Annotation')
+    geojson_list = aperio_to_geojson(tree.getroot())
+
+    return geojson_list
+
+def aperio_to_geojson(xml_tree) -> list:
     
+    structures_in_xml = xml_tree.findall('Annotation')
     geojson_list = []
     for ann_idx in range(0,len(structures_in_xml)):
 
@@ -158,7 +162,7 @@ def load_aperio(xml_path: str) -> list:
                 '_id': uuid.uuid4().hex[:24]
             }
         }
-        this_structure = tree.getroot().findall(f'Annotation[@Id="{str(ann_idx+1)}"]/Regions/Region')
+        this_structure = xml_tree.findall(f'Annotation[@Id="{str(ann_idx+1)}"]/Regions/Region')
 
         for obj_idx,obj in enumerate(this_structure):
             vertices = obj.findall('./Vertices/Vertex')
@@ -498,7 +502,7 @@ def detect_image_overlay(query_annotations:Union[list,dict]):
 
     return result
 
-def convert_histomics(json_anns: Union[list,dict]):
+def histomics_to_geojson(json_anns: Union[list,dict]):
     
     if type(json_anns)==dict:
         json_anns = [json_anns]

@@ -94,7 +94,7 @@ class MapComponent:
     def __init__(self):
         # Property referring to how the layout is updated with a change in the 
         # visualization session
-        self.session_update = False
+        self.session_update = True
     
     def prefix_escape(self,input_id: Union[str,dict])->bool:
         """Specifying the default prefix escape for all blueprints. Basic specification is to ignore "anchor" or ids that already have a prefix

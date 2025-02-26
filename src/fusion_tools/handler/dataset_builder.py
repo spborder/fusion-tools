@@ -1085,7 +1085,9 @@ class DatasetBuilder(DSATool):
                         'tiles_url': f'{self.handler.girderApiUrl}/item/{s}/tiles/zxy'+'/{z}/{x}/{y}',
                         'regions_url': f'{self.handler.girderApiUrl}/item/{s}/tiles/region',
                         'metadata_url': f'{self.handler.girderApiUrl}/item/{s}/tiles',
-                        'annotations_url': f'{self.handler.girderApiUrl}/annotation/item/{s}'
+                        'annotations_url': f'{self.handler.girderApiUrl}/annotation/item/{s}',
+                        'annotations_metadata_url': f'{self.handler.girderApiUrl}/annotation/?itemId={s}',
+                        'annotations_region_url': f'{self.handler.girderApiUrl}/annotation/'
                     }
                 )
             else:

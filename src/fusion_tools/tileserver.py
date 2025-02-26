@@ -16,7 +16,7 @@ import uvicorn
 from shapely.geometry import box, shape
 
 from fusion_tools.utils.shapes import (load_annotations,
-                                       convert_histomics, 
+                                       histomics_to_geojson, 
                                        detect_image_overlay, 
                                        detect_geojson, 
                                        detect_histomics,
@@ -154,7 +154,7 @@ class LocalTileServer(TileServer):
                         processed_anns.append(n.to_dict())
                     elif type(n)==dict:
                         if 'annotation' in n:
-                            converted = convert_histomics(n)
+                            converted = histomics_to_geojson(n)
                             processed_anns.append(converted)
                         else:
                             processed_anns.append(n)
@@ -175,7 +175,7 @@ class LocalTileServer(TileServer):
                     
             elif type(new_annotations)==dict:
                 if 'annotation' in new_annotations:
-                    converted_annotations = convert_histomics(new_annotations)
+                    converted_annotations = histomics_to_geojson(new_annotations)
                     self.annotations.append([converted_annotations])
                     self.annotations_metadata.append(self.extract_meta_dict([converted_annotations]))
                 else:

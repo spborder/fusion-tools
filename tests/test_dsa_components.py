@@ -6,7 +6,7 @@ import sys
 sys.path.append('./src/')
 
 from fusion_tools.visualization import Visualization
-from fusion_tools.components import SlideMap, OverlayOptions, BulkLabels
+from fusion_tools.components import SlideMap, MultiFrameSlideMap, ChannelMixer, OverlayOptions, BulkLabels, PropertyViewer, PropertyPlotter, FeatureAnnotation, HRAViewer
 from fusion_tools.handler.dsa_handler import DSAHandler
 from fusion_tools.handler.dataset_uploader import DSAUploadType
 from fusion_tools.handler.survey import SurveyType
@@ -229,8 +229,11 @@ def main():
         base_dir+'XY01_IU-21-015F.svs',
         base_dir+'new Visium\\V12U21-010_XY02_21-0069.tif',
     ]
+
+    # This can be set to False or removed, testing the upload overlaid annotations
+    testing_upload = True
     local_annotations_list = [
-        base_dir+'XY01_IU-21-015F_001.xml',
+        base_dir+'XY01_IU-21-015F_001.xml' if not testing_upload else None,
         None,
         base_dir+'new Visium\\V12U21-010_XY02_21-0069.h5ad',
     ]
@@ -266,9 +269,22 @@ def main():
                     SlideMap(),
                     [
                         OverlayOptions(),
+                        PropertyViewer(),
+                        PropertyPlotter(),
+                        HRAViewer(),
+                        FeatureAnnotation(
+                            storage_path = os.getcwd()+'\\tests\\Test_Annotations\\',
+                            annotations_format = 'rgb'
+                        ),
                         BulkLabels()
                     ]
                 ]   
+            ],
+            "MultiFrame Visualization": [
+                [
+                    MultiFrameSlideMap(),
+                    ChannelMixer()
+                ]
             ],
             "Dataset Builder": [
                 dsa_dataset_builder

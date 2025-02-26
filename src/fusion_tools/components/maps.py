@@ -16,6 +16,7 @@ import json
 import base64
 import requests
 from PIL import Image
+import lxml.etree as ET
 
 #os.environ['PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION'] = 'python'
 
@@ -32,7 +33,7 @@ from dash_extensions.javascript import assign, arrow_function, Namespace
 
 # fusion-tools imports
 from fusion_tools import MapComponent
-from fusion_tools.utils.shapes import find_intersecting, spatially_aggregate, convert_histomics, detect_image_overlay
+from fusion_tools.utils.shapes import find_intersecting, spatially_aggregate, histomics_to_geojson, detect_image_overlay, aperio_to_geojson
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 
 
@@ -675,7 +676,7 @@ class SlideMap(MapComponent):
         image_overlay_annotations = [i for i in new_annotations if 'image_path' in i]
         geo_annotations = [i for i in new_annotations if not 'image_path' in i]
         if any(['annotation' in i for i in new_annotations]):
-            histomics_annotations = convert_histomics([i for i in new_annotations if 'annotation' in i])
+            histomics_annotations = histomics_to_geojson([i for i in new_annotations if 'annotation' in i])
             g_count = 0
             for g_idx,g in enumerate(geo_annotations):
                 if 'annotation' in g:
@@ -1110,15 +1111,24 @@ class SlideMap(MapComponent):
                     added_roi_names.append(new_roi_name)
 
         elif 'upload-shape-data' in ctx.triggered_id['type']:
-
-            x_scale, y_scale = self.get_scale_factors(map_slide_information)
+            x_scale = map_slide_information['x_scale']
+            y_scale = map_slide_information['y_scale']
 
             if not uploaded_shape is None:
-                uploaded_roi = json.loads(base64.b64decode(uploaded_shape.split(',')[-1]).decode())
+                upload_shape_type = uploaded_shape.split(',')[0]
+                if 'json' in upload_shape_type:
+                    uploaded_roi = json.loads(base64.b64decode(uploaded_shape.split(',')[-1]).decode())
+                elif 'xml' in upload_shape_type:
+                    uploaded_roi = ET.fromstring(base64.b64decode(uploaded_shape.split(',')[-1]).decode())
+                    uploaded_roi = aperio_to_geojson(uploaded_roi)
+                else:
+                    print(f'upload_shape_type: {upload_shape_type}')
+                    raise exceptions.PreventUpdate
+
                 if type(uploaded_roi)==dict:
                     uploaded_roi = [uploaded_roi]
                 
-                for up_idx, up in uploaded_roi:
+                for up_idx, up in enumerate(uploaded_roi):
                     scaled_upload = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*x_scale,c[1]*y_scale),g),up)
 
                     # Checking if there is a name or _id property:
@@ -1131,7 +1141,7 @@ class SlideMap(MapComponent):
 
                     else:
                         scaled_upload['properties'] = {
-                            'name': f'Upload {len([i for i in annotation_names if "Upload" in i])+1}',
+                            'name': f'Upload {len([i for i in annotation_names if "Upload" in i])+1+up_idx}',
                             '_id': uuid.uuid4().hex[:24]
                         }
 
@@ -1140,10 +1150,12 @@ class SlideMap(MapComponent):
                     if len(initial_annotations)>0:
                         # Spatial aggregation performed just between individual manual ROIs and initial annotations (no manual ROI to manual ROI aggregation)
                         new_roi = spatially_aggregate(scaled_upload, initial_annotations,separate=separate_switch,summarize=summarize_switch)
+                    else:
+                        new_roi = scaled_upload
 
                     added_rois.append(new_roi)
                     added_roi_names.append(new_roi_name)
-                    manual_roi_idxes.append(max(manual_roi_idxes)+1)
+                    manual_roi_idxes.append(max(manual_roi_idxes)+1+up_idx)
 
         # Checking for deleted manual ROIs
         for m_idx,(m,man_idx) in enumerate(zip(manual_rois,manual_roi_idx)):
@@ -1157,7 +1169,7 @@ class SlideMap(MapComponent):
             line_colors = ['#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255)) for i in added_roi_names]
 
             new_layers = self.make_geojson_layers(
-                added_rois,added_roi_names,[len(initial_annotations)+max(manual_roi_idxes)],line_colors,colormap
+                added_rois,added_roi_names,[len(initial_annotations)+i for i in manual_roi_idxes],line_colors,colormap
             )
             new_manual_rois.extend(new_layers)
 
@@ -1504,7 +1516,10 @@ class MultiFrameSlideMap(SlideMap):
                 # This is a multi-frame image
                 if len(image_metadata['frames'])==3:
                     # Treat this as an RGB image by default
-                    rgb_url = tiles_url+'/?style={"bands": [{"framedelta":0,"palette":"rgba(255,0,0,0)"},{"framedelta":1,"palette":"rgba(0,255,0,0)"},{"framedelta":2,"palette":"rgba(0,0,255,0)"}]}'
+                    if '?token' in tiles_url:
+                        rgb_url = tiles_url+'&style={"bands": [{"framedelta":0,"palette":"rgba(255,0,0,0)"},{"framedelta":1,"palette":"rgba(0,255,0,0)"},{"framedelta":2,"palette":"rgba(0,0,255,0)"}]}'
+                    else:
+                        rgb_url = tiles_url+'?style={"bands": [{"framedelta":0,"palette":"rgba(255,0,0,0)"},{"framedelta":1,"palette":"rgba(0,255,0,0)"},{"framedelta":2,"palette":"rgba(0,0,255,0)"}]}'
                 else:
                     # Checking for "red", "green" and "blue" frame names
                     if all([i in frame_names for i in ['red','green','blue']]):
@@ -1518,7 +1533,11 @@ class MultiFrameSlideMap(SlideMap):
                             ]
                         }
 
-                        rgb_url = tiles_url+'/?style='+json.dumps(rgb_style_dict)
+                        if '?token' in tiles_url:
+                            rgb_url = tiles_url+'&style='+json.dumps(rgb_style_dict)
+                        else:
+                            rgb_url = tiles_url+'?style='+json.dumps(rgb_style_dict)
+                    
                     else:
                         rgb_url = None
 
@@ -1529,10 +1548,15 @@ class MultiFrameSlideMap(SlideMap):
                     layer_indices = list(range(0,len(frame_names)))
                 
                 for f_idx,f in enumerate(frame_names):
+                    if '?token' in tiles_url:
+                        frame_url = tiles_url+'&style={"bands": [{"palette":["rgba(0,0,0,0)","rgba(255,255,255,255)"],"framedelta":'+str(f_idx)+'}]}'
+                    else:
+                        frame_url = tiles_url+'?style={"bands": [{"palette":["rgba(0,0,0,0)","rgba(255,255,255,255)"],"framedelta":'+str(f_idx)+'}]}',
+                    
                     frame_layers.append(
                         dl.BaseLayer(
                             dl.TileLayer(
-                                url = tiles_url+'/?style={"bands": [{"palette":["rgba(0,0,0,0)","rgba(255,255,255,255)"],"framedelta":'+str(f_idx)+'}]}',
+                                url = frame_url,
                                 tileSize = image_metadata['tileHeight'],
                                 maxNativeZoom=image_metadata['levels']-2,
                                 minZoom = -1,
@@ -2995,13 +3019,25 @@ class ChannelMixer(MapComponent):
                     }
                 ]
             }
-            styled_urls.append(
-                slide_info['tiles_url']+'/?style='+json.dumps({"bands":f_dict["bands"]+style_dict["bands"]})
-            )
+
+            if '?token' in slide_info['tiles_url']:
+                styled_urls.append(
+                    slide_info['tiles_url']+'&style='+json.dumps({"bands":f_dict["bands"]+style_dict["bands"]})
+                )
+            else:
+                styled_urls.append(
+                    slide_info['tiles_url']+'?style='+json.dumps({"bands":f_dict["bands"]+style_dict["bands"]})
+                )
+
         if not rgb_style_dict is None:
-            styled_urls.append(
-                slide_info['tiles_url']+'/?style='+json.dumps({"bands":rgb_style_dict["bands"]+style_dict["bands"]})
-            )
+            if '?token' in slide_info['tiles_url']:
+                styled_urls.append(
+                    slide_info['tiles_url']+'&style='+json.dumps({"bands":rgb_style_dict["bands"]+style_dict["bands"]})
+                )
+            else:
+                styled_urls.append(
+                    slide_info['tiles_url']+'?style='+json.dumps({"bands":rgb_style_dict["bands"]+style_dict["bands"]})
+                )
 
         return styled_urls
 

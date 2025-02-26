@@ -46,7 +46,7 @@ from fusion_tools.utils.shapes import (
     extract_geojson_properties, 
     process_filters_queries,
     detect_histomics,
-    convert_histomics
+    histomics_to_geojson
 )
 from fusion_tools.utils.stats import get_label_statistics, run_wilcox_rank_sum
 from fusion_tools import Tool, MultiTool
@@ -2081,6 +2081,9 @@ class PropertyPlotter(Tool):
                         for l in l_parts:
                             if l in f_props_copy:
                                 f_props_copy = f_props_copy[l]
+                            else:
+                                f_props_copy = 0
+                                break    
                         
                         try:
                             f_dict[l] = float(f_props_copy)
@@ -2101,7 +2104,9 @@ class PropertyPlotter(Tool):
                     for l in l_parts:
                         if l in f_props_copy:
                             f_props_copy = f_props_copy[l]
-
+                        else:
+                            f_props_copy = 0
+                            break
                     try:
                         f_dict[labels] = float(f_props_copy)
                     except ValueError:
@@ -3530,7 +3535,7 @@ class GlobalPropertyPlotter(MultiTool):
             # Checking if these are histomics formatted or GeoJSON formatted
             is_histomics = detect_histomics(annotations)
             if is_histomics:
-                annotations = convert_histomics(annotations)
+                annotations = histomics_to_geojson(annotations)
 
             metadata = requests.get(s['metadata_url']).json()
 
