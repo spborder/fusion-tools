@@ -23,6 +23,10 @@ Slide Map
 MultiFrame Slide Map
 ^^^^^^^^^^^^^^^^^^^^
 
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/kVdPVM-4KlA?si=YxN-r-OtAR7GPEXc" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
 .. autoclass:: fusion_tools.components.maps::MultiFrameSlideMap
    :members:
 
@@ -42,6 +46,13 @@ Overlay Options
 
 Channel Mixer
 ^^^^^^^^^^^^^
+
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/neDJrCVz9-E?si=P7obUYMKsqeOZUAm" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+.. autoclass:: fusion_tools.components.maps::ChannelMixer
+   :members:
 
 
 Slide Image Overlay
@@ -136,6 +147,10 @@ DSALoginComponent
 DatasetBuilder
 ^^^^^^^^^^^^^^
 
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/BqXS19wbyxc?si=IlhcPq1fYTm_9qLa" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
 .. autoclass:: fusion_tools.handler.dataset_builder::DatasetBuilder
    :members:
 
@@ -143,6 +158,10 @@ DatasetBuilder
 
 DSAUploader
 ^^^^^^^^^^^
+
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/_wkRoArpV9k?si=AfQGQhK-sPlxKls7" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 
 .. autoclass:: fusion_tools.handler.dataset_uploader::DSAUploader
    :members:

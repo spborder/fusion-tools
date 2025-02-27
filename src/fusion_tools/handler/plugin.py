@@ -1098,24 +1098,31 @@ class DSAPluginRunner(DSATool):
                         'Select a plugin to run on the cloud!'
                     ),
                     html.Hr(),
-                    dcc.Dropdown(
-                        options = [
-                            {'label': i, 'value': i}
-                            for i in docker_list
+                    dbc.Row([
+                        dbc.Col([
+                            dcc.Dropdown(
+                                options = [
+                                    {'label': i, 'value': i}
+                                    for i in docker_list
+                                ],
+                                value = [],
+                                multi = False,
+                                placeholder = 'Docker Image containing Plugin',
+                                id = {'type': 'dsa-plugin-runner-docker-drop','index': 0}
+                            )],
+                            md = 6
+                        ),
+                        dbc.Col([
+                            dcc.Dropdown(
+                                options = [],
+                                value = [],
+                                multi = False,
+                                placeholder = 'Plugin Name',
+                                id = {'type': 'dsa-plugin-runner-cli-drop','index': 0}
+                            )
                         ],
-                        value = [],
-                        multi = False,
-                        placeholder = 'Docker Image containing Plugin',
-                        id = {'type': 'dsa-plugin-runner-docker-drop','index': 0}
-                    ),
-                    html.Hr(),
-                    dcc.Dropdown(
-                        options = [],
-                        value = [],
-                        multi = False,
-                        placeholder = 'Plugin Name',
-                        id = {'type': 'dsa-plugin-runner-cli-drop','index': 0}
-                    ),
+                        md = 6)
+                    ]),
                     html.Div(
                         id = {'type': 'dsa-plugin-runner-inputs-div','index': 0},
                         children = [

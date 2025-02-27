@@ -244,7 +244,8 @@ def main():
 
     dsa_items_list = [
         '64f545082d82d04be3e39ee1',
-        '64f54be52d82d04be3e39f65'
+        '64f54be52d82d04be3e39f65',
+        '64d3c6f3287cfdce1e9c4d88'
     ]
 
     dsa_tileservers = [dsa_handler.get_tile_server(i) for i in dsa_items_list]
