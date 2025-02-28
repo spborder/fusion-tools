@@ -2124,9 +2124,6 @@ class LargeSlideMap(SlideMap):
 
         return new_layer_children, manual_rois, gen_rois, geo_annotations, new_tile_layer, new_slide_info
 
-    
-
-
 class LargeMultiFrameSlideMap(MultiFrameSlideMap):
     """This is a sub-class of MultiFrameSlideMap used for LARGE amounts of annotations (>50k)
 
@@ -2638,7 +2635,7 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
 
     
 
-
+#TODO: This can be rewritten as its own embeddable blueprint
 class SlideImageOverlay(MapComponent):
     """Image overlay on specific coordinates within a SlideMap
 

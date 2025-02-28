@@ -4,7 +4,7 @@
 from fusion_tools.handler import SurveyType
 
 
-def get_surveys(*args):
+def get_surveys(args):
 
     general_user_survey = SurveyType(
         question_list=[],

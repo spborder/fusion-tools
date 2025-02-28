@@ -1,9 +1,9 @@
 """Defining UploadTypes which are accepted in FUSION
 """
 
-from fusion_tools.handler import DSAUploadType
+from fusion_tools.handler.dataset_uploader import DSAUploadType
 
-def get_upload_types(*args):
+def get_upload_types(args):
 
     # Basic Type:
     basic_type = DSAUploadType(

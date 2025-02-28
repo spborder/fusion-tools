@@ -1,7 +1,7 @@
 """Generating FUSION (Functional Unit State Identification in WSIs) layout
 """
-from fusion_tools import Visualization
-from fusion_tools.handler import DSAHandler
+from fusion_tools.visualization import Visualization
+from fusion_tools.handler.dsa_handler import DSAHandler
 from fusion_tools.components import (
     MultiFrameSlideMap,
     ChannelMixer,
@@ -14,7 +14,7 @@ from fusion_tools.components import (
 )
 
 
-def get_layout(*args):
+def get_layout(args):
 
     # Initialize DSA Handler
     dsa_handler = DSAHandler(
@@ -24,6 +24,8 @@ def get_layout(*args):
     )
 
     dsa_login_component = dsa_handler.create_login_component()
+    
+    dsa_plugin_progress = dsa_handler.create_plugin_progress()
 
     dsa_dataset_builder = dsa_handler.create_dataset_builder(
         include = args['dataset_builder_include']
@@ -34,7 +36,7 @@ def get_layout(*args):
     )
 
     user_surveys = []
-    dsa_user_surveys = [dsa_handler.create_survey(i) for i in user_surveys]
+    #dsa_user_surveys = [dsa_handler.create_survey(i) for i in user_surveys]
 
     initial_items = args['initialItems']
 
@@ -43,7 +45,8 @@ def get_layout(*args):
         linkage = 'page',
         header = [
             dsa_login_component,
-            dsa_user_surveys
+            dsa_plugin_progress,
+            #dsa_user_surveys
         ],
         components = {
             "Visualization": [
