@@ -31,6 +31,9 @@ class DataExtractor(Tool):
 
         super().__init__()
 
+        self.ignore_list = ignore_list
+        self.property_depth = property_depth
+
     def __str__(self):
         return 'Data Extractor'
 

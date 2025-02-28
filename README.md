@@ -3,8 +3,15 @@ Modular visualization and analysis dashboard creation for high-resolution micros
 
 
 ## Installation
+
+To access interactive dashboard components and functionality use:
 ```bash
 $ pip install fusion-tools[interactive]
+```
+
+To just use the `shapes` utility functions and `dataset` classes (`SegmentationDataset` and `ClassificationDataset`) use:
+```bash
+$ pip install fusion-tools
 ```
 
 ## Usage
@@ -17,7 +24,7 @@ One such example would be the `Visualization` and `SlideMap` class:
 </div>
 
 ```python
-from fusion_tools import Visualization
+from fusion_tools.visualization import Visualization
 from fusion_tools.components import SlideMap
 
 vis_session = Visualization(
@@ -44,7 +51,7 @@ By passing a list of paths to locally-stored whole slide images (WSIs), `fusion-
 
 ```python
 
-from fusion_tools import Visualization
+from fusion_tools.visualization import Visualization
 from fusion_tools.components import SlideMap, OverlayOptions, PropertyViewer
 from fusion_tools.utils.shapes import load_aperio
 
@@ -81,7 +88,7 @@ You can also access remote tile servers (either through `DSATileServer` or `Cust
 
 ```python
 
-from fusion_tools import Visualization
+from fusion_tools.visualization import Visualization
 from fusion_tools.handler.dsa_handler import DSAHandler
 from fusion_tools.components import SlideMap
 
@@ -126,7 +133,7 @@ You can also use some of `segmentation` components for adding labels and annotat
 
 ```python
 
-from fusion_tools import Visualization
+from fusion_tools.visualization import Visualization
 from fusion_tools.handler.dsa_handler import DSAHandler
 from fusion_tools.components import SlideMap, FeatureAnnotation, BulkLabels
 
@@ -172,7 +179,7 @@ Now you can add multiple slides to a single visualization session and you can ev
 
 ```python
 
-from fusion_tools import Visualization
+from fusion_tools.visualization import Visualization
 from fusion_tools.components import SlideMap, OverlayOptions, PropertyViewer, PropertyPlotter
 from fusion_tools.handler.dsa_handler import DSAHandler
 

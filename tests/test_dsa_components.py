@@ -221,7 +221,7 @@ sequence_upload_type = DSAUploadType(
 
 
 def main():
-    # Creates a two page application with a different set of slides on each page
+    # Creates a multi-page application with a different set of slides on each page
 
     base_dir = 'C:\\Users\\samuelborder\\Desktop\\HIVE_Stuff\\FUSION\\Test Upload\\'
     local_slide_list = [

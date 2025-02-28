@@ -346,6 +346,7 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
     assert os.path.exists(visium_path)
 
     if 'h5ad' in visium_path:
+        # This is for AnnData formatted Visium data
         anndata_object = ad.read_h5ad(visium_path)
 
         if 'spatial' in anndata_object.obsm_keys():
@@ -368,13 +369,13 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
         if all([i in spot_df for i in ['imagecol','imagerow']]):
             # This is Visium in the 10x V1 structure (from Seurat)
             spot_coords = pd.read_csv(visium_path,index_col=0).loc[:,['imagecol','imagerow']]
-
         elif all([i in spot_df for i in ['x','y']]):
             # This is Visium in the 10x V2 structure (from Seurat)
             spot_coords = pd.read_csv(visium_path,index_col=0).loc[:,['x','y']]
-    elif 'h5' in visium_path:
-        # Loading raw h5 file
-        visium_data = ad.read_hdf(visium_path)
+        elif all([i in spot_df for i in ['pxl_col_in_fullres','pxl_row_in_fullres']]):
+            # This is the tissue_positions.csv file that is output by spaceranger
+            spot_coords = pd.read_csv(visium_path,index_col=0)
+            spot_coords = spot_coords[spot_coords["in_tissue"]==1].loc[:,['pxl_col_in_fullres','pxl_row_in_fullres']]
         
 
     # Quick way to calculate how large the radius of each spot should be (minimum distance will be 100um between adjacent spot centroids )

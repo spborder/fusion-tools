@@ -11,7 +11,6 @@ def main():
     
     # This one 
     coords_path = 'C:\\Users\\samuelborder\\Downloads\\coordinates.csv'
-    print(os.path.exists(coords_path))
     visium_coords = load_visium(coords_path)
     print(len(visium_coords['features']))
 
