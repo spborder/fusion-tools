@@ -1,6 +1,6 @@
 Metadata-Version: 2.2
 Name: fusion-tools
-Version: 3.3.0
+Version: 3.3.3
 Summary: Modular visualization and analysis dashboard creation for high-resolution microscopy images
 Home-page: https://github.com/spborder/fusion-tools
 Author: Sam Border
@@ -16,11 +16,10 @@ Requires-Dist: lxml>=4.9.2
 Requires-Dist: geojson>=3.0.1
 Requires-Dist: shapely>=2.0.1
 Requires-Dist: anndata
-Requires-Dist: geopandas
+Requires-Dist: geopandas>=1.0.1
 Requires-Dist: girder-client
 Requires-Dist: numpy>=1.20.0
 Requires-Dist: large-image[common]
-Requires-Dist: wsi-annotations-kit
 Requires-Dist: requests
 Requires-Dist: uuid>=1.30
 Requires-Dist: scikit-image
@@ -54,8 +53,15 @@ Modular visualization and analysis dashboard creation for high-resolution micros
 
 
 ## Installation
+
+To access interactive dashboard components and functionality use:
 ```bash
 $ pip install fusion-tools[interactive]
+```
+
+To just use the `shapes` utility functions and `dataset` classes (`SegmentationDataset` and `ClassificationDataset`) use:
+```bash
+$ pip install fusion-tools
 ```
 
 ## Usage
@@ -68,7 +74,7 @@ One such example would be the `Visualization` and `SlideMap` class:
 </div>
 
 ```python
-from fusion_tools import Visualization
+from fusion_tools.visualization import Visualization
 from fusion_tools.components import SlideMap
 
 vis_session = Visualization(
@@ -95,7 +101,7 @@ By passing a list of paths to locally-stored whole slide images (WSIs), `fusion-
 
 ```python
 
-from fusion_tools import Visualization
+from fusion_tools.visualization import Visualization
 from fusion_tools.components import SlideMap, OverlayOptions, PropertyViewer
 from fusion_tools.utils.shapes import load_aperio
 
@@ -132,7 +138,7 @@ You can also access remote tile servers (either through `DSATileServer` or `Cust
 
 ```python
 
-from fusion_tools import Visualization
+from fusion_tools.visualization import Visualization
 from fusion_tools.handler.dsa_handler import DSAHandler
 from fusion_tools.components import SlideMap
 
@@ -177,7 +183,7 @@ You can also use some of `segmentation` components for adding labels and annotat
 
 ```python
 
-from fusion_tools import Visualization
+from fusion_tools.visualization import Visualization
 from fusion_tools.handler.dsa_handler import DSAHandler
 from fusion_tools.components import SlideMap, FeatureAnnotation, BulkLabels
 
@@ -223,7 +229,7 @@ Now you can add multiple slides to a single visualization session and you can ev
 
 ```python
 
-from fusion_tools import Visualization
+from fusion_tools.visualization import Visualization
 from fusion_tools.components import SlideMap, OverlayOptions, PropertyViewer, PropertyPlotter
 from fusion_tools.handler.dsa_handler import DSAHandler
 

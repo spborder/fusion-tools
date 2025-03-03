@@ -2,11 +2,10 @@ lxml>=4.9.2
 geojson>=3.0.1
 shapely>=2.0.1
 anndata
-geopandas
+geopandas>=1.0.1
 girder-client
 numpy>=1.20.0
 large-image[common]
-wsi-annotations-kit
 requests
 uuid>=1.30
 scikit-image

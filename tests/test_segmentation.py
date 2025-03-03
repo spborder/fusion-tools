@@ -3,6 +3,12 @@
 Using the SegmentationDataset for segmenting cells using cellpose
 
 """
+# This is for running with pipx environment, $ pipx run test_segmentation.py
+# /// script
+# dependencies = ["cellpose","fusion-tools[interactive]"]
+# ///
+
+
 
 import os
 import sys
@@ -22,10 +28,10 @@ from cellpose import io, models, utils
 import rasterio
 import rasterio.features
 
-from fusion_tools import Visualization
-from fusion_tools.tileserver import LocalTileServer
+from fusion_tools.visualization import Visualization
 from fusion_tools.components import SlideMap, OverlayOptions
-import threading
+
+import uuid
 
 
 def mask_to_shape(mask: np.ndarray, bbox: list)->list:
@@ -110,18 +116,20 @@ def main():
                     ]],
                 },
                 'properties': {
-                    'name': 'Bounding Boxes'
+                    'name': 'Bounding Boxes',
+                    '_id': uuid.uuid4().hex[:24]
                 }
             }
             for i in seg_dataset.data
         ],
         'properties': {
-            'name': 'Bounding Boxes'
+            'name': 'Bounding Boxes',
+            '_id': uuid.uuid4().hex[:24]
         }
     }
 
     all_cells_geo = all_cells_gdf.to_geo_dict(show_bbox=False)
-    all_cells_geo['properties'] = {'name': 'Segmented Cells'}
+    all_cells_geo['properties'] = {'name': 'Segmented Cells','_id': uuid.uuid4().hex[:24]}
     with open(slides[0].replace('tiff','json'),'w') as f:
         json.dump(all_cells_geo,f)
 

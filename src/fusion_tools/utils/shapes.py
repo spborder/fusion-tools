@@ -841,7 +841,7 @@ def spatially_aggregate(child_geo:dict, parent_geos: list, separate: bool = True
         a_shape = shape(a['geometry'])
         agg_props = {}
         for b_idx,b in enumerate(base_gdf):
-            b_intersect = b.sindex.query(a_shape,predicate='overlaps')
+            b_intersect = b.sindex.query(a_shape,predicate='intersects')
             if len(b_intersect)>0:
                 agg_props[base_names[b_idx]] = []
                 for c in b_intersect:

@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="fusion-tools",
-    version="3.3.0",
+    version="3.3.3",
     author="Sam Border",
     author_email="sam.border2256@gmail.com",
     description="Modular visualization and analysis dashboard creation for high-resolution microscopy images",
@@ -18,11 +18,10 @@ setuptools.setup(
         "geojson>=3.0.1",
         "shapely>=2.0.1",
         "anndata",
-        "geopandas",
+        "geopandas>=1.0.1",
         "girder-client",
         "numpy>=1.20.0",
         "large-image[common]",
-        "wsi-annotations-kit",
         "requests",
         "uuid>=1.30",
         "scikit-image",

@@ -74,62 +74,62 @@ An example *Tool* is shown below with the same functionality as the minimal *Das
     class BasicTool(Tool):
         def __init__(self):
 
-        super().__init__()
+            super().__init__()
 
-        self.df = pd.read_csv('https://raw.githubusercontent.com/plotly/datasets/master/gapminder_unfiltered.csv')
+            self.df = pd.read_csv('https://raw.githubusercontent.com/plotly/datasets/master/gapminder_unfiltered.csv')
 
 
         def __str__(self):
-        return 'Basic Tool'
+            return 'Basic Tool'
 
         def load(self, component_prefix:int):
 
-        self.component_prefix = component_prefix
+            self.component_prefix = component_prefix
 
-        self.title = 'Basic Tool'
-        self.blueprint = DashBlueprint(
-            transforms = [
-                PrefixIdTransform(prefix = f'{component_prefix}'),
-                MultiplexerTransform()
-            ]
-        )
+            self.title = 'Basic Tool'
+            self.blueprint = DashBlueprint(
+                transforms = [
+                    PrefixIdTransform(prefix = f'{component_prefix}'),
+                    MultiplexerTransform()
+                ]
+            )
 
-        self.get_callbacks()
+            self.get_callbacks()
         
         def gen_layout(self, session_data:dict):
 
-        layout = html.Div([
-            html.H1(
-                children = "Title of Dash App",
-                style = {'textAlign': 'center'}
-            ),
-            dcc.Dropdown(
-                options = self.df.country.unique(),
-                value = 'Canada',
-                id = 'dropdown-selection'
-            ),
-            dcc.Graph(
-                id = 'graph-content'
-            )
-        ])
+            layout = html.Div([
+                html.H1(
+                    children = "Title of Dash App",
+                    style = {'textAlign': 'center'}
+                ),
+                dcc.Dropdown(
+                    options = self.df.country.unique(),
+                    value = 'Canada',
+                    id = 'dropdown-selection'
+                ),
+                dcc.Graph(
+                    id = 'graph-content'
+                )
+            ])
 
         return layout
 
         def get_callbacks(self):
 
-        self.blueprint.callback(
-            [
-                Input('dropdown-selection','value')
-            ],
-            [
-                Output('graph-content')
-            ]
-        )(self.update_graph)
+            self.blueprint.callback(
+                [
+                    Input('dropdown-selection','value')
+                ],
+                [
+                    Output('graph-content')
+                ]
+            )(self.update_graph)
 
         def update_graph(self, new_country):
 
-        country_data = self.df[self.df.country==new_country]
-        new_plot = px.line(country_data, x = 'year', y = 'pop')
+            country_data = self.df[self.df.country==new_country]
+            new_plot = px.line(country_data, x = 'year', y = 'pop')
 
 
 This can then be added into a *fusion-tools* *Visualization* as below:
