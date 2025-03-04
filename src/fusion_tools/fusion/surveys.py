@@ -1,7 +1,7 @@
 """Generating UserSurvey components for FUSION
 """
 
-from fusion_tools.handler import SurveyType
+from fusion_tools.handler.survey import SurveyType
 
 
 def get_surveys(args):

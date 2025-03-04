@@ -82,7 +82,8 @@ class DatasetBuilder(DSATool):
                 'Collection Name': f'User: {session_data["current_user"]["login"]}',
                 'Collection ID': session_data["current_user"]['_id'],
                 'Number of Folder': 2,
-                'Last Updated': '-'
+                'Last Updated': '-',
+                'token': session_data['current_user']['token']
             })
             
         collections_df = pd.DataFrame.from_records(collections_info)
@@ -146,7 +147,10 @@ class DatasetBuilder(DSATool):
                         dcc.Store(
                             id = {'type':'dataset-builder-data-store','index': 0},
                             storage_type='memory',
-                            data = json.dumps({'selected_slides':starting_slides, 'selected_collections': [], 'available_collections': collections_df.to_dict("records")})
+                            data = json.dumps({
+                                'selected_slides':starting_slides, 
+                                'selected_collections': [], 
+                                'available_collections': collections_df.to_dict("records")})
                         )
                     ),
                     dbc.Row([
@@ -238,7 +242,8 @@ class DatasetBuilder(DSATool):
             ],
             [
                 State({'type':'dataset-builder-data-store','index': ALL},'data'),
-                State({'type':'dataset-builder-collection-contents-div','index': ALL},'children')
+                State({'type':'dataset-builder-collection-contents-div','index': ALL},'children'),
+                State('anchor-vis-store','data')
             ],
             [
                 Output({'type':'dataset-builder-collection-contents-div','index': ALL},'children'),
@@ -323,7 +328,7 @@ class DatasetBuilder(DSATool):
         dataframe = pd.json_normalize(dataframe.to_dict('records'))
         selectable_table = dash_table.DataTable(
             id = id,
-            columns = [{'name':i,'id':i,'deletable':False} for i in dataframe.columns],
+            columns = [{'name':i,'id':i,'deletable':False} for i in dataframe.columns if not i=='token'],
             data = dataframe.to_dict('records'),
             editable = False,
             filter_action='native',
@@ -352,13 +357,15 @@ class DatasetBuilder(DSATool):
 
         return selectable_table
 
-    def organize_folder_contents(self, folder_info:dict, show_empty:bool=True, ignore_histoqc:bool=True)->list:
+    def organize_folder_contents(self, folder_info:dict, show_empty:bool=True, ignore_histoqc:bool=True,session_data:dict = {})->list:
         """For a given folder selection, return a list of slides(0th) and folders (1th)
 
         :param folder_info: Folder info dict returned by self.handler.get_path_info(path)
         :type folder_info: dict
         :param show_empty: Whether or not to display folders which contain 0 slides, defaults to False
         :type show_empty: bool, optional
+        :param session_data: Current session information
+        :type session_data: dict
         :return: List of slides within the current folder as well as folders within that folder
         :rtype: list
         """
@@ -371,7 +378,8 @@ class DatasetBuilder(DSATool):
             all_folder_slides = self.handler.get_folder_slides(
                 folder_path = folder_info['_id'],
                 folder_type = folder_info['_modelType'],
-                ignore_histoqc=ignore_histoqc
+                ignore_histoqc=ignore_histoqc,
+                user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
             )
 
             folder_slides_folders = [i['folderId'] for i in all_folder_slides]
@@ -381,8 +389,14 @@ class DatasetBuilder(DSATool):
                 if not u==folder_info['_id'] and not u in folders_in_folder:
                     # This is for all folders in this folder
                     # This grabs parent folders of this folder
-                    u_folder_info = self.handler.get_folder_info(folder_id=u)
-                    u_folder_rootpath = self.handler.get_folder_rootpath(u)
+                    u_folder_info = self.handler.get_folder_info(
+                        folder_id=u,
+                        user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
+                    )
+                    u_folder_rootpath = self.handler.get_folder_rootpath(
+                        u,
+                        user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
+                    )
                     # Folders in order from collection-->child folder-->etc.
                     folder_ids = [i['object']['_id'] for i in u_folder_rootpath]
 
@@ -400,7 +414,8 @@ class DatasetBuilder(DSATool):
 
 
                     child_folder_path_info = self.handler.get_path_info(
-                        path = child_folder_path
+                        path = child_folder_path,
+                        user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
                     )
                     if not child_folder_path_info['_id'] in folders_in_folder:
                         folders_in_folder.append(child_folder_path_info['_id'])
@@ -429,10 +444,13 @@ class DatasetBuilder(DSATool):
 
         else:
             
+            folders_in_folder = []
+            unique_folders = []
             user_folders = ['Private','Public']
             for u_f in user_folders:
                 user_folder_info = self.handler.get_path_info(
-                    path = f'/user/{folder_info["login"]}/{u_f}'
+                    path = f'/user/{folder_info["login"]}/{u_f}',
+                    user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
                 )
 
                 folder_folders.append({
@@ -443,16 +461,23 @@ class DatasetBuilder(DSATool):
                     'Last Updated': user_folder_info['updated']
                 })
 
+                unique_folders.append(user_folder_info['_id'])
+
+
         if show_empty:
             # This is how you get all the empty folders within a folder (does not get child empty folders)
             empty_folders = self.handler.get_folder_folders(
                 folder_id = folder_info['_id'],
-                folder_type = folder_info['_modelType']
+                folder_type = folder_info['_modelType'],
+                user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
             )
             
             for f in empty_folders:
                 if not f['_id'] in folders_in_folder and not f['_id'] in unique_folders:
-                    folder_info = self.handler.gc.get(f'/folder/{f["_id"]}/details')
+                    if not 'current_user' in session_data:
+                        folder_info = self.handler.gc.get(f'/folder/{f["_id"]}/details')
+                    else:
+                        folder_info = self.handler.gc.get(f'/folder/{f["_id"]}/details?token={session_data["current_user"]["token"]}')
                     folder_folders.append(
                         {
                             'Folder Name': f['name'],
@@ -528,20 +553,23 @@ class DatasetBuilder(DSATool):
         
         return slide_card        
 
-    def collection_selection(self, collection_rows, builder_data, collection_div_children):
+    def collection_selection(self, collection_rows, builder_data, collection_div_children,session_data):
         """Callback for when one/multiple collections are selected from the collections table
 
         :param collection_rows: Row indices of selected collections
         :type collection_rows: list
         :param builder_data: Data store on available collections and currently included slides
         :type builder_data: list
-        :param colleciton_div_children: Child cards created by collection_selection
-        :type colleciton_div_children: list
+        :param collection_div_children: Child cards created by collection_selection
+        :type collection_div_children: list
+        :param session_data: Current session information
+        :type session_data: dict
         :return: Children of collection-contents-div (items/folders within selected collections)
         :rtype: list
         """
         selected_collections = get_pattern_matching_value(collection_rows)
         builder_data = json.loads(get_pattern_matching_value(builder_data))
+        session_data = json.loads(session_data)
 
         collection_card_indices = self.get_component_indices(collection_div_children)
 
@@ -559,11 +587,19 @@ class DatasetBuilder(DSATool):
             # For each collection, grab all items and unique folders (as well as those that are not nested in a folder)
             if not 'User: ' in collection_info["Collection Name"]:
                 folder_slides, folder_folders = self.organize_folder_contents(
-                    folder_info = self.handler.get_path_info(f'/collection/{collection_info["Collection Name"]}')
+                    folder_info = self.handler.get_path_info(
+                        f'/collection/{collection_info["Collection Name"]}',
+                        user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
+                    ),
+                    session_data = session_data
                 )
             else:
                 folder_slides, folder_folders = self.organize_folder_contents(
-                    folder_info=self.handler.get_path_info(f'/user/{collection_info["Collection Name"].replace("User: ","")}')
+                    folder_info=self.handler.get_path_info(
+                        f'/user/{collection_info["Collection Name"].replace("User: ","")}',
+                        user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
+                    ),
+                    session_data = session_data
                 )
 
             if len(folder_slides)>0:

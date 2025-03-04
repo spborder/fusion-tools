@@ -159,6 +159,45 @@ class DSAPluginGroup(DSATool):
                                     }
                                 else:
                                     exe_input['default'] = None
+                            
+                            elif in_arg['default']['type']=='intermediate_file':
+                                # This is for creating a wildcard input
+                                if 'wildcard' in in_arg['default']:
+                                    exe_input['default'] = {
+                                        'name': in_arg['default']['wildcard'],
+                                        '_id': in_arg['default']['wildcard']
+                                    }
+                                if 'transform' in in_arg['default']:
+                                    base = in_arg['default']['transform']['base']
+                                    uploaded_files = [i for i in session_data['uploaded_files'] if i['_modelType']=='file']
+                                    uploaded_file_names = [i['fusion_upload_name'] for i in uploaded_files]
+                                    if base in uploaded_file_names:
+                                        matching_file = uploaded_files[uploaded_file_names.index(base)]
+
+                                        if 'ext' in in_arg['default']['transform']:
+                                            old_ext = matching_file['name'].split('.')[-1]
+                                            new_name = matching_file['name'].replace(f'.{old_ext}',in_arg['default']['transform']['ext'])
+
+                                            exe_input['default'] = {
+                                                'name': new_name,
+                                                '_id': "{{'type':'file','item_type':'_id','item_query':'"+matching_file['itemId']+"','file_type': 'fileName','file_query':'"+new_name+"'}}"
+                                            }
+
+                                        elif 'replace' in in_arg['default']['transform']:
+                                            replace_str = in_arg['default']['transform']['replace']
+                                            new_name = matching_file['name'].replace(replace_str[0],replace_str[1])
+
+                                            exe_input['default'] = {
+                                                'name': new_name,
+                                                '_id': "{{'type':'file','item_type':'_id','item_query':'"+matching_file['itemId']+"','file_type':'fileName','file_query':'"+new_name+"'}}"
+                                            }
+
+                                            
+                                        else:
+                                            exe_input['default'] = None
+
+                                    else:
+                                        exe_input['default'] = None
 
                             elif in_arg['default']['type']=='upload_annotation':
                                 uploaded_annotations = [i for i in session_data['uploaded_files'] if i['_modelType']=='annotation']
@@ -805,7 +844,7 @@ class DSAPluginGroup(DSATool):
         for p_input, p_info in zip(plugin_inputs,plugin_input_info):
             # None type inputs are replaced with default if one is available
             if not p_input is None:
-                if p_info['type'] in ['file','directory','image']:
+                if p_info['type'] in ['file','directory','image'] and p_info['channel']=='output':
                     if '"' in p_input or "'" in p_input:
                         p_input = json.loads(p_input.replace("'",'"'))
                     if type(p_input)==list:
@@ -880,6 +919,12 @@ class DSAPluginGroup(DSATool):
                     processed_inputs.append({
                         'name': p_info['name'],
                         'value':json.dumps(fixed_vector)
+                    })
+
+                else:
+                    processed_inputs.append({
+                        'name': p_info['name'],
+                        'value': p_input
                     })
 
         return processed_inputs, error_inputs

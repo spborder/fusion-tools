@@ -3,15 +3,17 @@
 from fusion_tools.visualization import Visualization
 from fusion_tools.handler.dsa_handler import DSAHandler
 from fusion_tools.components import (
+    SlideMap,
     MultiFrameSlideMap,
     ChannelMixer,
     OverlayOptions,
     PropertyViewer,
     GlobalPropertyPlotter,
     HRAViewer,
-    FeatureAnnotation,
     BulkLabels
 )
+
+from fusion_tools.fusion.data_types import get_upload_types
 
 
 def get_layout(args):
@@ -27,12 +29,10 @@ def get_layout(args):
     
     dsa_plugin_progress = dsa_handler.create_plugin_progress()
 
-    dsa_dataset_builder = dsa_handler.create_dataset_builder(
-        include = args['dataset_builder_include']
-    )
+    dsa_dataset_builder = dsa_handler.create_dataset_builder()
 
     dsa_dataset_uploader = dsa_handler.create_uploader(
-        uploader_types = []
+        upload_types = get_upload_types()
     )
 
     user_surveys = []
@@ -51,13 +51,23 @@ def get_layout(args):
         components = {
             "Visualization": [
                 [
-                    MultiFrameSlideMap()
-                ],
-                [
+                    SlideMap(),
                     [
                         OverlayOptions(),
-                        ChannelMixer(),
                         PropertyViewer(ignore_list=['_id','_index']),
+                        GlobalPropertyPlotter(ignore_list = ['_id','_index']),
+                        HRAViewer(),
+                        BulkLabels()
+                    ]
+                ]
+            ],
+            "MultiFrame Visualization": [
+                [
+                    MultiFrameSlideMap(),
+                    [
+                        ChannelMixer(),
+                        OverlayOptions(),
+                        PropertyViewer(ignore_list = ['_id','_index']),
                         GlobalPropertyPlotter(ignore_list = ['_id','_index']),
                         HRAViewer(),
                         BulkLabels()

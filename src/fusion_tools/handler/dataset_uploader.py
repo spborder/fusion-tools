@@ -32,11 +32,16 @@ from fusion_tools.handler.resource_selector import DSAResourceSelector
 from girder_job_sequence import Job, Sequence
 from girder_job_sequence.utils import from_list, from_dict
 import threading
+import large_image
+
 
 # Maximum allowed size of uploads (Mb)
 MAX_UPLOAD_SIZE = 1e4
 # Minimum chunk size (Mb)
 MIN_UPLOAD_SIZE = 6
+
+WSI_TYPES = [i for i in list(large_image.listSources()['extensions'].keys()) if not i in ['json','yaml','yml']]
+ANN_TYPES = ['json','geojson','xml','csv']
 
 
 class DSAUploadType:
@@ -305,7 +310,8 @@ class DSAUploadHandler:
                     upload_info
                 )
                 post_response = {
-                    'n_annotations': post_response
+                    'n_annotations': post_response,
+                    '_modelType': 'annotation'
                 }
             else:
                 post_response = r.filename
@@ -1719,7 +1725,7 @@ class DSAUploader(DSATool):
         file_uploads = html.Div([
             dbc.Stack([
                 html.Div([
-                    html.H5(f'{f["name"]}, ({",".join(f["accepted_types"])})',style={'textTransform':'none'}),
+                    html.H5(f'{f["name"]}',style={'textTransform':'none'}),
                     html.Div(
                         self.create_upload_component(
                             file_info = f | {'parentId': folder_info["_id"],'parentType': 'folder', 'fusion_upload_name': f['name'], 'fusion_upload_type': f['type']},
@@ -1729,6 +1735,11 @@ class DSAUploader(DSATool):
                         dbc.Alert(f'This uploaded will be created when: {f["parent"]} is uploaded',color='warning'),
                         id = {'type': f'{self.component_prefix}-dsa-uploader-file-upload-div','index': f_idx},
                         style = {'width': '100%'}
+                    ),
+                    dbc.Tooltip(
+                        target = {'type': f'{self.component_prefix}-dsa-uploader-file-upload-div','index': f_idx},
+                        placement='top',
+                        children = ','.join(f['accepted_types'])
                     ),
                     html.Div(
                         id = {'type': f'{self.component_prefix}-dsa-uploader-file-upload-status-div','index': f_idx},
@@ -1775,8 +1786,15 @@ class DSAUploader(DSATool):
         selected_upload_type = self.dsa_upload_types[[i.name for i in self.dsa_upload_types].index(upload_type)]
 
         # Getting the filenames (json.dumps(post_response))
-        current_filenames = get_pattern_matching_value(current_filenames)
+        current_filenames = [i for i in current_filenames if not i is None]
+        if len(current_filenames)>0:
+            current_filenames = current_filenames[0]
+        else:
+            current_filenames = None
         completed_filenames = []
+        if current_filenames is None:
+            raise exceptions.PreventUpdate
+        
         for c in current_filenames:
             if not c is None:
                 #TODO: "fileNames" is a list of files by default so in theory this could be expanded to accept multiple
@@ -1815,6 +1833,8 @@ class DSAUploader(DSATool):
             upload_div_children[ctx.triggered_id['index']] = dbc.Alert(f'Success! {completed_filenames[0]["name"]}', color = 'success')
         elif 'n_annotations' in completed_filenames[0]:
             upload_div_children[ctx.triggered_id['index']] = dbc.Alert(f'Success! {completed_filenames[0]["n_annotations"]} Annotations Added!',color = 'success')
+        else:
+            upload_div_children[ctx.triggered_id['index']] = dbc.Alert(f'Success!', color = 'success')
 
         # Checking if all required uploads are done:
         required_files = [i['name'] for i in selected_upload_type.input_files if i['required']]
