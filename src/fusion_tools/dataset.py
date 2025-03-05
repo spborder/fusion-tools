@@ -334,8 +334,8 @@ class SegmentationDataset:
             if self.patch_mode=='all':
                 available_bbox = gpd.GeoDataFrame.from_features(available_regions['features']).total_bounds
 
-                x_start = np.maximum(self.patch_size[0]/2,int(available_bbox[0]-(self.patch_size[0]/2)))
-                y_start = np.maximum(self.patch_size[1]/2,int(available_bbox[1]-(self.patch_size[1]/2)))
+                x_start = np.maximum(int(self.patch_size[0]/2),int(available_bbox[0]+(self.patch_size[0]/2)))
+                y_start = np.maximum(int(self.patch_size[1]/2),int(available_bbox[1]+(self.patch_size[1]/2)))
                 n_x = floor((available_bbox[2]-available_bbox[0])/self.patch_size[0])
                 n_y = floor((available_bbox[3]-available_bbox[1])/self.patch_size[1])
 
@@ -812,7 +812,6 @@ class ClassificationDataset:
                         self.slide_annotation_names.append([b['properties']['name'] for b in a if type(b)==dict])
         else:       
             self.annotations = None
-
 
     def gen_slide_patches(self):
         
