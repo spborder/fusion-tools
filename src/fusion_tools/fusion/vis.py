@@ -10,6 +10,7 @@ from fusion_tools.components import (
     PropertyViewer,
     GlobalPropertyPlotter,
     HRAViewer,
+    DataExtractor,
     BulkLabels
 )
 
@@ -57,7 +58,8 @@ def get_layout(args):
                         PropertyViewer(ignore_list=['_id','_index']),
                         GlobalPropertyPlotter(ignore_list = ['_id','_index']),
                         HRAViewer(),
-                        BulkLabels()
+                        BulkLabels(),
+                        DataExtractor()
                     ]
                 ]
             ],
@@ -70,7 +72,8 @@ def get_layout(args):
                         PropertyViewer(ignore_list = ['_id','_index']),
                         GlobalPropertyPlotter(ignore_list = ['_id','_index']),
                         HRAViewer(),
-                        BulkLabels()
+                        BulkLabels(),
+                        DataExtractor()
                     ]
                 ]
             ],

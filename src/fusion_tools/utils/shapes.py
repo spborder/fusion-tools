@@ -331,7 +331,7 @@ def load_label_mask(label_mask: np.ndarray, name: str) -> dict:
 
     return full_geo
 
-def load_visium(visium_path:str, include_var_names:list = [], include_obs: list = [], mpp:Union[float,None]=None):
+def load_visium(visium_path:str, include_var_names:list = [], include_obs: list = [], mpp:Union[float,None]=None, scale_factor: Union[float,str,None] = None):
     """Loading 10x Visium Spot annotations from an h5ad file or csv file containing spot center coordinates. Adds any of the variables
     listed in var_names and also the barcodes associated with each spot (if the path is an h5ad file).
 
@@ -345,6 +345,20 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
 
     assert os.path.exists(visium_path)
 
+    if type(scale_factor)==str:
+        assert os.path.exists(scale_factor)
+
+        with open(scale_factor,'r') as f:
+            scale_factor_hires = json.load(f)
+            f.close()
+        
+        scale_factor_hires = scale_factor_hires["tissue_hires_scalef"]
+    elif type(scale_factor)==float:
+        scale_factor_hires = scale_factor
+    else:
+        scale_factor_hires = None
+
+    anndata_object = None
     if 'h5ad' in visium_path:
         # This is for AnnData formatted Visium data
         anndata_object = ad.read_h5ad(visium_path)
@@ -377,6 +391,8 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
             spot_coords = pd.read_csv(visium_path,index_col=0)
             spot_coords = spot_coords[spot_coords["in_tissue"]==1].loc[:,['pxl_col_in_fullres','pxl_row_in_fullres']]
         
+        # Adding other columns in the provided CSV file 
+        spot_coords = pd.concat([spot_coords,spot_df.loc[:,[i for i in spot_df if not i in spot_coords]]],ignore_index=True)
 
     # Quick way to calculate how large the radius of each spot should be (minimum distance will be 100um between adjacent spot centroids )
     if mpp is None:
@@ -416,20 +432,29 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
         else:
             include_obs = []
     else:
-        include_obs = []
-        include_vars = []
+        include_obs = [i for i in include_obs if i in spot_coords]
+        include_vars = [i for i in include_obs if i in spot_coords]
         
-
     barcodes = list(spot_coords.index)
     for idx in range(spot_coords.shape[0]):
         spot = Point(*spot_coords.iloc[idx,:].tolist()).buffer(spot_pixel_radius)
 
         additional_props = {}
         for i in include_vars:
-            additional_props[i] = anndata_object.X[idx,list(anndata_object.var_names).index(i)]
+            if not anndata_object is None:
+                additional_props[i] = float(anndata_object.X[idx,list(anndata_object.var_names).index(i)])
+            else:
+                try:
+                    additional_props[i] = float(spot_coords.loc[idx,i].values)
+                except ValueError:
+                    additional_props[i] = spot_coords.loc[idx,i].values
         
         for j in include_obs:
-            add_prop = anndata_object.obs[j].iloc[idx]
+            if not anndata_object is None:
+                add_prop = anndata_object.obs[j].iloc[idx]
+            else:
+                add_prop = spot_coords.loc[idx,j].values
+
             if not type(add_prop)==str:
                 additional_props[j] = float(add_prop)
             else:
@@ -450,6 +475,11 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
         }
 
         spot_annotations['features'].append(spot_feature)
+
+    if not scale_factor_hires is None:
+        spot_properties = spot_annotations['properties']
+        spot_annotations = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*scale_factor_hires,c[1]*scale_factor_hires),g),spot_annotations)
+        spot_annotations['properties'] = spot_properties
 
     return spot_annotations
 
