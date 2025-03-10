@@ -1600,9 +1600,7 @@ class MultiFrameSlideMap(SlideMap):
                 )
         else:
             raise TypeError("Missing 'frames' key in image metadata")
-        
-        print(frame_layers)
-        
+                
         return frame_layers
 
 
