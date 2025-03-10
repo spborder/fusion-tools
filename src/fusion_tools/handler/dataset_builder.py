@@ -12,6 +12,7 @@ from typing_extensions import Union
 from skimage.draw import polygon
 from PIL import Image
 from io import BytesIO
+import base64
 
 # Dash imports
 import dash
@@ -129,7 +130,6 @@ class DatasetBuilder(DSATool):
                 )
                 starting_slide_idx+=1
 
-        
         collections_df = self.gen_collections_dataframe(session_data)
 
         layout = html.Div([
@@ -143,6 +143,27 @@ class DatasetBuilder(DSATool):
                         'Search through available collections, folders, and slides to assemble a visualization session.'
                     ),
                     html.Hr(),
+                    dbc.Row([
+                        dcc.Upload(
+                            html.Div([
+                                'If you have a previous Visualization Session, drag it here or ',
+                                html.A('select the file')
+                                ]),
+                            id = {'type': 'dataset-builder-upload-session','index': 0},
+                            accept = 'application/json',
+                            style = {
+                                'width': '100%',
+                                'height': '60px',
+                                'lineHeight': '60px',
+                                'borderWidth': '1px',
+                                'borderStyle': 'dashed',
+                                'borderRadius': '5px',
+                                'textAlign': 'center',
+                                'margin': '10px'
+                            },
+                            multiple=False
+                        )
+                    ]),
                     html.Div(
                         dcc.Store(
                             id = {'type':'dataset-builder-data-store','index': 0},
@@ -278,7 +299,8 @@ class DatasetBuilder(DSATool):
                 Input({'type':'dataset-builder-slide-table','index':ALL},'selected_rows'),
                 Input({'type':'dataset-builder-slide-select-all','index':ALL},'n_clicks'),
                 Input({'type':'dataset-builder-slide-remove-all','index':ALL},'n_clicks'),
-                Input({'type':'dataset-builder-slide-remove-icon','index': ALL},'n_clicks')
+                Input({'type':'dataset-builder-slide-remove-icon','index': ALL},'n_clicks'),
+                Input({'type': 'dataset-builder-upload-session','index': ALL},'contents')
             ],
             [
                 State({'type': 'dataset-builder-collection-folder-nav-parent','index': ALL},'children'),
@@ -979,7 +1001,10 @@ class DatasetBuilder(DSATool):
 
         return folder_table_style, folder_table, slides_table, new_crumbs
 
-    def slide_selection(self, slide_rows, slide_all, slide_rem_all, slide_rem, current_crumbs, slide_table_data, builder_data, current_slide_components, current_collection_components, vis_session_data):
+    def slide_selection(self, slide_rows, slide_all, slide_rem_all, slide_rem, upload_session, current_crumbs, slide_table_data, builder_data, current_slide_components, current_collection_components, vis_session_data):
+
+
+        print(ctx.triggered)
 
         builder_data = json.loads(get_pattern_matching_value(builder_data))
         vis_session_data = json.loads(vis_session_data)
@@ -1072,6 +1097,65 @@ class DatasetBuilder(DSATool):
             del selected_slides[rem_idx]
             del current_selected_slides[rem_idx]
 
+        elif 'dataset-builder-upload-session' in ctx.triggered_id['type']:
+            upload_session = get_pattern_matching_value(upload_session)
+            content_type, content_string = upload_session.split(',')
+            try:
+                decoded = json.loads(base64.b64decode(content_string))  
+            except:
+                raise exceptions.PreventUpdate
+
+            if not 'current' in decoded:
+                raise exceptions.PreventUpdate
+
+            new_cloud_slides = []
+            new_local_slides = []
+            keep_slides = []
+            for s_idx,s in enumerate(decoded['current']):
+                if 'api_url' in s:
+                    if s['api_url']==self.handler.girderApiUrl:
+                        # Getting the id of the DSA slide from this same instance
+                        slide_id = s['tiles_url'].split('/item/')[1].split('/')[0]
+
+                        if not slide_id in current_selected_slides:
+                            new_cloud_slides.append(slide_id)
+                        else:
+                            keep_slides.append(slide_id)
+                else:
+                    if s['regions_url'] in [i['regions_url'] for i in vis_session_data['local']]:
+                        thumbnail_address = s['regions_url'].replace('region','thumbnail')
+                        slide_index = thumbnail_address.split('/')[-3]
+                        local_slide_id = f'local{slide_index}'
+                        if not local_slide_id in current_selected_slides:
+                            new_local_slides.append(local_slide_id)
+                        else:
+                            keep_slides.append(local_slide_id)
+            
+            # Now removing unneeded slides
+            remove_slides = [i for i in current_selected_slides if not i in new_local_slides+new_cloud_slides+keep_slides]
+            for d_idx, d in enumerate(remove_slides):
+                del selected_slides[current_selected_slides.index(d)]
+                del current_selected_slides[current_selected_slides.index(d)]
+
+            for new_idx, new_slide in enumerate(new_local_slides+new_cloud_slides):
+                current_selected_slides.append(new_slide)
+                if new_slide in new_local_slides:
+                    thumbnail_address = vis_session_data['local'][int(new_slide.replace('local',''))]['regions_url'].replace('region','thumbnail')
+                    selected_slides.append(
+                        self.make_selected_slide(
+                            slide_id = thumbnail_address,
+                            idx = new_idx,
+                            local_slide = True
+                        )
+                    )
+                else:
+                    selected_slides.append(
+                        self.make_selected_slide(
+                            slide_id = new_slide,
+                            idx = new_idx
+                        )
+                    )
+            
         else:
             raise exceptions.PreventUpdate
         

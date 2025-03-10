@@ -114,7 +114,7 @@ def get_feature_image(feature:dict, tile_source:None, return_mask: bool=False):
     else:
         return feature_image
 
-def write_ome_tiff(data: np.ndarray, output_path:str, channel_names:list, pixel_size:list, physical_size_z:float, compression:str='zlib', create_pyramid:bool = True, imagej:bool = False, unit:str='µm', downsample_count:int=4):
+def write_ome_tiff(data: np.ndarray, output_path:str, channel_names:list, pixel_size:list, physical_size_z:float, compression:str='zlib', create_pyramid:bool = True, imagej:bool = False, unit:str='pixel', downsample_count:int=4):
     """Write an ome-tiff file from a numpy array (from: https://github.com/TristanWhitmarsh/numpy2ometiff/blob/main/numpy2ometiff/writer.py)
 
     :param data: numpy array containing image data to save as OME-TIFF
@@ -142,16 +142,18 @@ def write_ome_tiff(data: np.ndarray, output_path:str, channel_names:list, pixel_
     #if len(data.shape) != 4:
     #    raise ValueError(f"Input data must have 4 dimensions (ZCYX). Found {len(data.shape)} dimensions.")
     
-    if channel_names and data.shape[1] != len(channel_names):
-        raise ValueError(f"Number of channels in the data ({data.shape[1]}) does not match the length of 'channel_names' ({len(channel_names)}).")
+    #if channel_names and data.shape[1] != len(channel_names):
+    #    raise ValueError(f"Number of channels in the data ({data.shape[1]}) does not match the length of 'channel_names' ({len(channel_names)}).")
     
+    data = data[None,...]
+
     # Provide default channel names if none are provided
     if not channel_names:
         channel_names = [f"Channel {i+1}" for i in range(data.shape[1])]
 
     # Handle unit conversion for ImageJ compatibility (ImageJ expects 'um' instead of 'µm')
-    if Unit == 'µm' and imagej:
-        Unit = 'um'
+    if unit == 'µm' and imagej:
+        unit = 'um'
         
     # Validate compression options
     valid_compressions = [None, 'zlib', 'lzma', 'jpeg']
@@ -162,23 +164,21 @@ def write_ome_tiff(data: np.ndarray, output_path:str, channel_names:list, pixel_
     if data.shape[0] > 1:
         
         if data.shape[1] == 3 and data.dtype == np.uint8:
-            print("Detected 3D color data")
             data = np.transpose(data, (0, 2, 3, 1))
             metadata = {
                 'axes': 'ZYXC',
                 'PhysicalSizeX': pixel_size[0],
-                'PhysicalSizeXUnit': Unit,
+                'PhysicalSizeXUnit': unit,
                 'PhysicalSizeY': pixel_size[1],
-                'PhysicalSizeYUnit': Unit,
+                'PhysicalSizeYUnit': unit,
                 'PhysicalSizeZ': physical_size_z,
-                'PhysicalSizeZUnit': Unit,
+                'PhysicalSizeZUnit': unit,
                 'Photometric': 'RGB',
                 'Planarconfig': 'contig',
             }
             
             # Handle pyramid creation
             if create_pyramid:
-                print(f"Writing with pyramid, {downsample_count} downsample levels")
                 with tifffile.TiffWriter(output_path, bigtiff=True, imagej=imagej) as tif:
                     tif.write(data, subifds=downsample_count, metadata=metadata, compression=compression)
                     for level in range(1, downsample_count + 1):
@@ -187,26 +187,23 @@ def write_ome_tiff(data: np.ndarray, output_path:str, channel_names:list, pixel_
                         metadata['PhysicalSizeY'] *= 2
                         tif.write(data, subfiletype=1, metadata=metadata, compression=compression)
             else:
-                print("Writing without pyramid")
                 with tifffile.TiffWriter(output_path, bigtiff=True, imagej=imagej) as tif:
                     tif.write(data, subifds=0, metadata=metadata, compression=compression)
         else:
-            print("Detected 3D data")
             metadata = {
                 'axes': 'ZCYX',
                 'Channel': [{'Name': name, 'SamplesPerPixel': 1} for name in channel_names],
                 'PhysicalSizeX': pixel_size[0],
-                'PhysicalSizeXUnit': Unit,
+                'PhysicalSizeXUnit': unit,
                 'PhysicalSizeY': pixel_size[1],
-                'PhysicalSizeYUnit': Unit,
+                'PhysicalSizeYUnit': unit,
                 'PhysicalSizeZ': physical_size_z,
-                'PhysicalSizeZUnit': Unit,
+                'PhysicalSizeZUnit': unit,
                 'Photometric': 'minisblack',
             }
         
             # Handle pyramid creation
             if create_pyramid:
-                print(f"Writing with pyramid, {downsample_count} downsample levels")
                 with tifffile.TiffWriter(output_path, bigtiff=True, imagej=imagej) as tif:
                     tif.write(data, subifds=downsample_count, metadata=metadata, compression=compression)
                     for level in range(1, downsample_count + 1):
@@ -215,7 +212,6 @@ def write_ome_tiff(data: np.ndarray, output_path:str, channel_names:list, pixel_
                         metadata['PhysicalSizeY'] *= 2
                         tif.write(data, subfiletype=1, metadata=metadata, compression=compression)
             else:
-                print("Writing without pyramid")
                 with tifffile.TiffWriter(output_path, bigtiff=True, imagej=imagej) as tif:
                     tif.write(data, subifds=0, metadata=metadata, compression=compression)
 
@@ -226,21 +222,19 @@ def write_ome_tiff(data: np.ndarray, output_path:str, channel_names:list, pixel_
             
         # Check if data is RGB (3 channels and uint8 type)
         if data.shape[0] == 3 and data.dtype == np.uint8:
-            print("Detected 2D color data")
             data = np.transpose(data, (1, 2, 0))
             metadata = {
                 'axes': 'YXC',
                 'PhysicalSizeX': pixel_size[0],
-                'PhysicalSizeXUnit': Unit,
+                'PhysicalSizeXUnit': unit,
                 'PhysicalSizeY': pixel_size[1],
-                'PhysicalSizeYUnit': Unit,
+                'PhysicalSizeYUnit': unit,
                 'Photometric': 'RGB',
                 'Planarconfig': 'contig',
             }
             
             # Handle pyramid creation
             if create_pyramid:
-                print(f"Writing with pyramid, {downsample_count} downsample levels")
                 with tifffile.TiffWriter(output_path, bigtiff=True, imagej=imagej) as tif:
                     tif.write(data, subifds=downsample_count, metadata=metadata, compression=compression)
                     for level in range(1, downsample_count + 1):
@@ -249,25 +243,22 @@ def write_ome_tiff(data: np.ndarray, output_path:str, channel_names:list, pixel_
                         metadata['PhysicalSizeY'] *= 2
                         tif.write(data, subfiletype=1, metadata=metadata, compression=compression)
             else:
-                print("Writing without pyramid")
                 with tifffile.TiffWriter(output_path, bigtiff=True, imagej=imagej) as tif:
                     tif.write(data, subifds=0, metadata=metadata, compression=compression)
         else:
-            print("Detected 2D data")
             metadata = {
                 'axes': 'CYX',
                 'Channel': [{'Name': name, 'SamplesPerPixel': 1} for name in channel_names],
                 'PhysicalSizeX': pixel_size[0],
-                'PhysicalSizeXUnit': Unit,
+                'PhysicalSizeXUnit': unit,
                 'PhysicalSizeY': pixel_size[1],
-                'PhysicalSizeYUnit': Unit,
+                'PhysicalSizeYUnit': unit,
                 'Photometric': 'minisblack',
                 'Planarconfig': 'separate',
             }
 
             # Handle pyramid creation
             if create_pyramid:
-                print(f"Writing with pyramid, {downsample_count} downsample levels")
                 with tifffile.TiffWriter(output_path, bigtiff=True, imagej=imagej) as tif:
                     tif.write(data, subifds=downsample_count, metadata=metadata, compression=compression)
                     for level in range(1, downsample_count + 1):
@@ -276,7 +267,6 @@ def write_ome_tiff(data: np.ndarray, output_path:str, channel_names:list, pixel_
                         metadata['PhysicalSizeY'] *= 2
                         tif.write(data, subfiletype=1, metadata=metadata, compression=compression)
             else:
-                print("Writing without pyramid")
                 with tifffile.TiffWriter(output_path, bigtiff=True, imagej=imagej) as tif:
                     tif.write(data, subifds=0, metadata=metadata, compression=compression)
 

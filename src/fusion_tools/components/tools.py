@@ -4014,9 +4014,6 @@ class DataExtractor(Tool):
         }
         scaled_features = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/x_scale,c[1]/y_scale),g),feature_collection)
 
-        print(tile_url)
-        print(len(feature_list))
-        
         for f_idx,f in enumerate(scaled_features['features']):
             if save_masks:
                 image, mask = get_feature_image(
@@ -4033,42 +4030,45 @@ class DataExtractor(Tool):
                         ),
                         axis=0
                     )
-                    print(combined_image_mask.shape)
                     write_ome_tiff(
                         combined_image_mask,
                         save_path+f'/Images & Masks/{f["properties"]["name"]}_{f_idx}.ome.tiff',
                         channel_names+[f['properties']['name']],
-                        [None,None],
-                        None
+                        [1.0,1.0],
+                        1.0
                     )
 
                 else:
-                    img_save_format = save_format[0]
-                    mask_save_format = save_format[1]
+                    img_save_format = save_format
+                    mask_save_format = save_format
 
-                    if img_save_format=='OME-TIFF':
-                        write_ome_tiff(
-                            image,
-                            save_path+f'/Images/{f["properties"]["name"]}_{f_idx}.ome.tiff',
-                            channel_names,
-                            [None,None],
-                            None
-                        )
-                    elif img_save_format in ['TIFF','PNG','JPG']:
-                        image_save_path = f'{save_path}/Images/{f["properties"]["name"]}_{f_idx}.{save_format.lower()}'
-                        Image.fromarray(image).save(image_save_path)
+                    if os.path.exists(f'{save_path}/Images/'):
+                        if img_save_format=='OME-TIFF':
+                            write_ome_tiff(
+                                image,
+                                save_path+f'/Images/{f["properties"]["name"]}_{f_idx}.ome.tiff',
+                                channel_names,
+                                [1.0,1.0],
+                                1.0
+                            )
+                        elif img_save_format in ['TIFF','PNG','JPG']:
+                            # Double check that these are RGB
+                            image_save_path = f'{save_path}/Images/{f["properties"]["name"]}_{f_idx}.{save_format.lower()}'
+                            Image.fromarray(image).save(image_save_path)
 
-                    if mask_save_format == 'OME-TIFF':
-                        write_ome_tiff(
-                            mask,
-                            save_path+f'/Masks/{f["properties"]["name"]}_{f_idx}.ome.tiff',
-                            [f["properties"]["name"]],
-                            [None,None],
-                            None
-                        )
-                    elif mask_save_format in ['TIFF','PNG','JPG']:
-                        mask_save_path = f'{save_path}/Masks/{f["properties"]["name"]}_{f_idx}.{save_format.lower()}'
-                        Image.fromarray(mask).save(mask_save_path)
+                    if os.path.exists(f'{save_path}/Masks/'):
+                        if mask_save_format == 'OME-TIFF':
+                            write_ome_tiff(
+                                mask,
+                                save_path+f'/Masks/{f["properties"]["name"]}_{f_idx}.ome.tiff',
+                                [f["properties"]["name"]],
+                                [1.0,1.0],
+                                1.0
+                            )
+                        elif mask_save_format in ['TIFF','PNG','JPG']:
+                            # Apply some kind of artificial color if not grayscale or RGB
+                            mask_save_path = f'{save_path}/Masks/{f["properties"]["name"]}_{f_idx}.{save_format.lower()}'
+                            Image.fromarray(mask).save(mask_save_path)
 
             else:
 
@@ -4084,8 +4084,8 @@ class DataExtractor(Tool):
                         image,
                         save_path+f'/Images/{f["properties"]["name"]}_{f_idx}.ome.tiff',
                         channel_names,
-                        [None,None],
-                        None
+                        [1.0,1.0],
+                        1.0
                     )
                 elif img_save_format in ['TIFF','PNG','JPG']:
                     image_save_path = f'{save_path}/Images/{f["properties"]["name"]}_{f_idx}.{save_format.lower()}'
@@ -4214,6 +4214,7 @@ class DataExtractor(Tool):
             struct_features = slide_annotations[layer_names.index(struct)]['features']
             for d_idx, (data,data_format) in enumerate(zip(selected_data,selected_data_formats)):
                 if data in ['Images','Masks','Images & Masks']:
+                    print(data)
                     if not os.path.exists(self.download_folder+base_download_folder+'/'+data):
                         os.makedirs(self.download_folder+base_download_folder+'/'+data)
 
@@ -4227,7 +4228,7 @@ class DataExtractor(Tool):
                             'folder': self.download_folder+base_download_folder,
                             'features': struct_features,
                             'tile_url': tile_layer_urls.replace('zxy/{z}/{x}/{y}','region'),
-                            'channel_names': [],
+                            'channel_names': ['red','green','blue'],
                             'save_masks': 'Masks' in data,
                             'combine': '&' in data,
                             '_id': uuid.uuid4().hex[:24]
