@@ -16,6 +16,7 @@ import re
 import uuid
 import threading
 import zipfile
+from shutil import rmtree
 
 from typing_extensions import Union
 from shapely.geometry import box, shape
@@ -3823,7 +3824,7 @@ class DataExtractor(Tool):
                 State({'type': 'map-marker-div','index': ALL},'children'),
                 State({'type': 'map-slide-information','index': ALL},'data'),
                 State({'type': 'base-layer','index': ALL},'checked'),
-                State({'type': 'tile-layer','index': ALL},'url')
+                State({'type': 'map-tile-layer','index': ALL},'url')
             ],
             prevent_initial_call = True
         )(self.start_download_data)
@@ -3918,8 +3919,6 @@ class DataExtractor(Tool):
 
     def download_session_data(self, clicked, session_data_selection, current_slide_info, session_data):
         
-        print(f'ctx.triggered in download_session_data: {ctx.triggered}')
-
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
@@ -4006,15 +4005,18 @@ class DataExtractor(Tool):
         
         return [info_return], [button_disabled], [selected_data_store]
 
-    def download_image_data(self, feature_list:list, x_scale:float, y_scale:float, tile_url:str='', channel_names: list = ['red','green','blue'], save_masks:bool=False, save_format:Union[str,list]='png', combine:bool=False, save_path:str=''):
+    def download_image_data(self, feature_list:list, x_scale:float, y_scale:float, tile_url:str='', channel_names: list = ['red','green','blue'], save_masks:bool=False, save_format:Union[str,list]='PNG', combine:bool=False, save_path:str=''):
         
         # Scaling coordinates of features back to the slide CRS
         feature_collection = {
             'type': 'FeatureCollection',
             'features': feature_list
         }
-        scaled_features = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*x_scale,c[1]*y_scale),g),feature_collection)
+        scaled_features = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/x_scale,c[1]/y_scale),g),feature_collection)
 
+        print(tile_url)
+        print(len(feature_list))
+        
         for f_idx,f in enumerate(scaled_features['features']):
             if save_masks:
                 image, mask = get_feature_image(
@@ -4076,7 +4078,7 @@ class DataExtractor(Tool):
                     return_mask = save_masks
                 )
 
-                img_save_format = save_format[0]
+                img_save_format = save_format
                 if img_save_format=='OME-TIFF':
                     write_ome_tiff(
                         image,
@@ -4106,14 +4108,20 @@ class DataExtractor(Tool):
                 property_df.to_excel(writer,engine='openpyxl')
                 writer.close()
             
-    def download_annotations(self, feature_list, save_format, save_path):
+    def download_annotations(self, feature_list, x_scale, y_scale, save_format, save_path):
         
         feature_collection = {
             'type': 'FeatureCollection',
             'features': feature_list
         }
-
         structure_name = feature_list[0]['properties']['name']
+
+        feature_collection = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/x_scale,c[1]/y_scale),g),feature_collection)
+        feature_collection['properties'] = {
+            'name': structure_name,
+            '_id': uuid.uuid4().hex[:24]
+        }
+
         if save_format=='Aperio XML':
             export_format = 'aperio'
             save_path = save_path + f'/{structure_name}.xml'
@@ -4135,19 +4143,44 @@ class DataExtractor(Tool):
     def pick_download_type(self, download_info):
 
         if download_info['download_type']=='Properties':
-            self.download_property_data(download_info['features'],download_info['format'],download_info['folder'])
+            self.download_property_data(
+                download_info['features'],
+                download_info['format'],
+                download_info['folder']
+            )
         elif download_info['download_type'] in ['Images','Masks','Images & Masks']:
-            self.download_image_data(download_info)
+            
+            self.download_image_data(
+                download_info['features'],
+                download_info['x_scale'],
+                download_info['y_scale'],
+                download_info['tile_url'],
+                download_info['channel_names'],
+                download_info['save_masks'],
+                download_info['format'],
+                download_info['combine'],
+                download_info['folder']
+            )
         elif download_info['download_type'] == 'Annotations':
-            self.download_annotations(download_info['features'],download_info['format'],download_info['folder'])
+            self.download_annotations(
+                download_info['features'],
+                download_info['x_scale'], 
+                download_info['y_scale'], 
+                download_info['format'],
+                download_info['folder']
+            )
 
     def create_zip_file(self, base_path, output_file):
         
         # Writing temporary data to a zip file
         with zipfile.ZipFile(output_file,'w', zipfile.ZIP_DEFLATED) as zip:
             for path,subdirs,files in os.walk(base_path):
+                extras_in_path = path.split('/downloads/')[0]+'/downloads/'
                 for name in files:
-                    zip.write(os.path.join(path,name))
+                    if not 'zip' in name:
+                        zip.write(os.path.join(path,name),os.path.join(path.replace(extras_in_path,''),name))
+        
+            zip.close()
 
     def start_download_data(self, clicked, selected_structures, selected_data, selected_data_formats, slide_annotations, slide_markers, slide_info, base_layer_checked, tile_layer_urls):
 
@@ -4164,11 +4197,11 @@ class DataExtractor(Tool):
         slide_annotations = json.loads(get_pattern_matching_value(slide_annotations))
         slide_info = json.loads(get_pattern_matching_value(slide_info))
         
+        print(slide_info)
         print(base_layer_checked)
         print(tile_layer_urls)
-        print(selected_structures)
-        print(selected_data)
-        print(selected_data_formats)
+
+        tile_layer_urls = get_pattern_matching_value(tile_layer_urls)
 
         base_download_folder = uuid.uuid4().hex[:24]
         if not os.path.exists(self.download_folder+base_download_folder):
@@ -4178,25 +4211,41 @@ class DataExtractor(Tool):
         download_thread_list = []
         layer_names = [i['properties']['name'] for i in slide_annotations]
         for s_idx, struct in enumerate(selected_structures):
-
             struct_features = slide_annotations[layer_names.index(struct)]['features']
-
             for d_idx, (data,data_format) in enumerate(zip(selected_data,selected_data_formats)):
-                print(f'Defining thread for {struct} {data}')
                 if data in ['Images','Masks','Images & Masks']:
                     if not os.path.exists(self.download_folder+base_download_folder+'/'+data):
                         os.makedirs(self.download_folder+base_download_folder+'/'+data)
-                        
-                download_thread_list.append(
-                    {
-                        'download_type': data,
-                        'structure': struct,
-                        'format': data_format,
-                        'folder': self.download_folder+base_download_folder,
-                        'features': struct_features,
-                        '_id': uuid.uuid4().hex[:24]
-                    }
-                )
+
+                    download_thread_list.append(
+                        {
+                            'download_type': data,
+                            'structure':struct,
+                            'x_scale': slide_info['x_scale'],
+                            'y_scale': slide_info['y_scale'],
+                            'format': data_format,
+                            'folder': self.download_folder+base_download_folder,
+                            'features': struct_features,
+                            'tile_url': tile_layer_urls.replace('zxy/{z}/{x}/{y}','region'),
+                            'channel_names': [],
+                            'save_masks': 'Masks' in data,
+                            'combine': '&' in data,
+                            '_id': uuid.uuid4().hex[:24]
+                        }
+                    )    
+                else:
+                    download_thread_list.append(
+                        {
+                            'download_type': data,
+                            'structure': struct,
+                            'x_scale': slide_info['x_scale'],
+                            'y_scale': slide_info['y_scale'],
+                            'format': data_format,
+                            'folder': self.download_folder+base_download_folder,
+                            'features': struct_features,
+                            '_id': uuid.uuid4().hex[:24]
+                        }
+                    )
 
         download_data_store = json.dumps({
             'selected_data': [],
@@ -4219,92 +4268,105 @@ class DataExtractor(Tool):
 
     def update_download_data(self, new_interval, download_info_store):
         
-        print(f'ctx.triggered in update_download_data: {ctx.triggered}')
-
         new_interval = get_pattern_matching_value(new_interval)
         download_info_store = json.loads(get_pattern_matching_value(download_info_store))
 
-        print(f'download_info_store: {download_info_store}')
         current_threads = [i.name for i in threading.enumerate()]
-        print(f'current_threads: {current_threads}')
         if not 'current_task' in download_info_store:
-            print('current_task not in download_info_store')
             raise exceptions.PreventUpdate
         
         if not download_info_store['current_task'] in current_threads:
             download_info_store['completed_tasks'].append(download_info_store['current_task'])
             
-            if len(download_info_store['download_tasks'])==1:
-                # This means that the last download task was completed, now creating a zip-file of the results
-                zip_files_task = uuid.uuid4().hex[:24]
-                task_name = 'Creating Zip File'
-                download_info_store['current_task'] = zip_files_task
-                del download_info_store['download_tasks'][0]
+            if 'download_tasks' in download_info_store:
+                if len(download_info_store['download_tasks'])==1:
+                    # This means that the last download task was completed, now creating a zip-file of the results
+                    zip_files_task = uuid.uuid4().hex[:24]
+                    task_name = 'Creating Zip File'
+                    download_info_store['current_task'] = zip_files_task
+                    del download_info_store['download_tasks'][0]
 
-                download_progress = 99
+                    download_progress = 99
 
-                interval_disabled = False
-                modal_open = True
-                new_n_intervals = no_update
-                download_data = no_update
+                    interval_disabled = False
+                    modal_open = True
+                    new_n_intervals = no_update
+                    download_data = no_update
 
-                new_thread = threading.Thread(
-                    target = self.create_zip_file,
-                    name = zip_files_task,
-                    args = [download_info_store['base_folder'],download_info_store['zip_file_path']],
-                    daemon=True
-                )
-                new_thread.start()
+                    new_thread = threading.Thread(
+                        target = self.create_zip_file,
+                        name = zip_files_task,
+                        args = [download_info_store['base_folder'],download_info_store['zip_file_path']],
+                        daemon=True
+                    )
+                    new_thread.start()
 
-            elif len(download_info_store['download_tasks'])==0:
-                # This means that the zip file has finished being created
-                task_name = 'All Done!'
+                elif len(download_info_store['download_tasks'])==0:
+                    # This means that the zip file has finished being created
+                    task_name = 'All Done!'
+                    interval_disabled = False
+                    modal_open = False
+                    new_n_intervals = 0
+                    download_data = dcc.send_file(download_info_store['zip_file_path'])
+                    del download_info_store['download_tasks']
+
+                    download_progress = 100
+
+                elif len(download_info_store['download_tasks'])>1:
+                    # This means there are still some download tasks remaining, move to the next one
+                    interval_disabled = False
+                    modal_open = True
+                    new_n_intervals = no_update
+                    download_data = no_update
+                    del download_info_store['download_tasks'][0]
+
+                    download_info_store['current_task'] = download_info_store['download_tasks'][0]['_id']
+
+                    task_name = f'{download_info_store["download_tasks"][0]["structure"]} {download_info_store["download_tasks"][0]["download_type"]}'
+
+                    new_thread = threading.Thread(
+                        target = self.pick_download_type,
+                        name = download_info_store['current_task'],
+                        args = [download_info_store['download_tasks'][0]],
+                        daemon=True
+                    )
+                    new_thread.start()
+                    
+                    n_complete = len(download_info_store['completed_tasks'])
+                    n_remaining = len(download_info_store['download_tasks'])
+                    download_progress = int(100*(n_complete/(n_complete+n_remaining)))
+
+                modal_children = html.Div([
+                    dbc.ModalHeader(html.H4(f'Download Progress')),
+                    dbc.ModalBody([
+                        html.Div(
+                            html.H6(f'Working on: {task_name}')
+                        ),
+                        dbc.Progress(
+                            value = download_progress,
+                            label = f'{download_progress}%'
+                        )
+                    ])
+                ])
+            else:
+                # Clearing the directory containing download
+                download_path = download_info_store['base_folder']
+                rmtree(download_path)
+
+                # Continuing with the current download task
                 interval_disabled = True
                 modal_open = False
-                new_n_intervals = 0
-                download_data = dcc.send_file(download_info_store['zip_file_path'])
-
-                download_progress = 100
-
-            elif len(download_info_store['download_tasks'])>1:
-                # This means there are still some download tasks remaining, move to the next one
-                interval_disabled = False
-                modal_open = True
+                modal_children = no_update
                 new_n_intervals = no_update
                 download_data = no_update
-                del download_info_store['download_tasks'][0]
 
-                download_info_store['current_task'] = download_info_store['download_tasks'][0]['_id']
-
-                task_name = f'{download_info_store["download_tasks"][0]["structure"]} {download_info_store["download_tasks"][0]["download_type"]}'
-
-                new_thread = threading.Thread(
-                    target = self.pick_download_type,
-                    name = download_info_store['current_task'],
-                    args = [download_info_store['download_tasks'][0]],
-                    daemon=True
-                )
-                new_thread.start()
-                
-                n_complete = len(download_info_store['completed_tasks'])
-                n_remaining = len(download_info_store['download_tasks'])
-                download_progress = int(100*(n_complete/(n_complete+n_remaining)))
-
-
-            modal_children = html.Div([
-                dbc.ModalHeader(html.H4(f'Download Progress')),
-                dbc.ModalBody([
-                    html.Div(
-                        html.H6(f'Working on: {task_name}')
-                    ),
-                    dbc.Progress(
-                        value = download_progress,
-                        label = f'{download_progress}%'
-                    )
-                ])
-            ])
+                del download_info_store['base_folder']
+                del download_info_store['zip_file_path']
+                del download_info_store['completed_tasks']
+                del download_info_store['current_task']
 
         else:
+            # Continuing with the current download task
             interval_disabled = False
             modal_open = True
             modal_children = no_update

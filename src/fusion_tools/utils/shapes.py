@@ -391,12 +391,15 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
             spot_coords = pd.read_csv(visium_path,index_col=0)
             spot_coords = spot_coords[spot_coords["in_tissue"]==1].loc[:,['pxl_col_in_fullres','pxl_row_in_fullres']]
         
+        spot_df.index = spot_coords.index
         # Adding other columns in the provided CSV file 
-        spot_coords = pd.concat([spot_coords,spot_df.loc[:,[i for i in spot_df if not i in spot_coords]]],ignore_index=True)
+        spot_coords = pd.concat([spot_coords,spot_df.loc[:,[i for i in spot_df if not i in spot_coords.columns.tolist()+['Unnamed: 0']]]],axis=1,ignore_index=True)
+        #spot_coords.columns = spot_df.columns.tolist()
+        spot_coords.columns = [i for i in spot_df.columns.tolist() if not i == 'Unnamed: 0']
 
     # Quick way to calculate how large the radius of each spot should be (minimum distance will be 100um between adjacent spot centroids )
     if mpp is None:
-        spot_centers = spot_coords.values
+        spot_centers = spot_coords.values[:,:2].astype(float)
         distance = np.sqrt(
             np.square(
                 spot_centers[:,0]-spot_centers[:,0].reshape(-1,1)
@@ -433,11 +436,11 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
             include_obs = []
     else:
         include_obs = [i for i in include_obs if i in spot_coords]
-        include_vars = [i for i in include_obs if i in spot_coords]
-        
+        include_vars = [i for i in include_var_names if i in spot_coords]
+    
     barcodes = list(spot_coords.index)
     for idx in range(spot_coords.shape[0]):
-        spot = Point(*spot_coords.iloc[idx,:].tolist()).buffer(spot_pixel_radius)
+        spot = Point(*spot_coords.iloc[idx,0:2].tolist()).buffer(spot_pixel_radius)
 
         additional_props = {}
         for i in include_vars:
@@ -445,9 +448,9 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
                 additional_props[i] = float(anndata_object.X[idx,list(anndata_object.var_names).index(i)])
             else:
                 try:
-                    additional_props[i] = float(spot_coords.loc[idx,i].values)
+                    additional_props[i] = float(spot_coords.loc[barcodes[idx],i])
                 except ValueError:
-                    additional_props[i] = spot_coords.loc[idx,i].values
+                    additional_props[i] = spot_coords.loc[barcodes[idx],i]
         
         for j in include_obs:
             if not anndata_object is None:
@@ -703,9 +706,6 @@ def export_annotations(
     :type ann_options: dict, optional
     """
     assert format in ['geojson','aperio','histomics']
-
-    if not os.path.exists(save_path):
-        os.makedirs(save_path)
 
     if format in ['histomics','geojson']:
         if format=='geojson':

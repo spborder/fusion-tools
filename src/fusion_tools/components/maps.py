@@ -220,7 +220,7 @@ class SlideMap(MapComponent):
                                 url = '',
                                 tileSize=240,
                                 maxNativeZoom=5,
-                                minZoom = 0
+                                minZoom = -1
                             )
                         ]
                     ),
@@ -777,7 +777,7 @@ class SlideMap(MapComponent):
                 id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
                 url = '',                
                 tileSize=new_tile_size,
-                maxNativeZoom=new_metadata['levels']-2,
+                maxNativeZoom=new_metadata['levels']-2 if new_metadata['levels']>=2 else 0,
                 minZoom = 0
             )
         else:
@@ -785,7 +785,7 @@ class SlideMap(MapComponent):
                 id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
                 url = new_url,
                 tileSize = new_tile_size,
-                maxNativeZoom=new_metadata['levels']-2,
+                maxNativeZoom=new_metadata['levels']-2 if new_metadata['levels']>=2 else 0,
                 minZoom = 0
             )
 
@@ -1558,7 +1558,7 @@ class MultiFrameSlideMap(SlideMap):
                             dl.TileLayer(
                                 url = frame_url,
                                 tileSize = image_metadata['tileHeight'],
-                                maxNativeZoom=image_metadata['levels']-2,
+                                maxNativeZoom=image_metadata['levels']-2 if image_metadata['levels']>=2 else 0,
                                 minZoom = -1,
                                 id = {'type': f'{self.component_prefix}-tile-layer','index': layer_indices[f_idx]}
                             ),
@@ -1573,7 +1573,7 @@ class MultiFrameSlideMap(SlideMap):
                             dl.TileLayer(
                                 url = rgb_url,
                                 tileSize = image_metadata['tileHeight'],
-                                maxNativeZoom=image_metadata['levels']-2,
+                                maxNativeZoom=image_metadata['levels']-2 if image_metadata['levels']>=2 else 0,
                                 minZoom = -1,
                                 id = {'type': f'{self.component_prefix}-tile-layer','index': layer_indices[f_idx+1]},
                                 #bounds = [[0,0],[-image_metadata['tileWidth'], image_metadata['tileWidth']]]
@@ -1589,7 +1589,7 @@ class MultiFrameSlideMap(SlideMap):
                         dl.TileLayer(
                             url = tiles_url,
                             tileSize = image_metadata['tileHeight'],
-                            maxNativeZoom=image_metadata['levels']-2,
+                            maxNativeZoom=image_metadata['levels']-2 if image_metadata['levels']>=2 else 0,
                             minZoom = -1,
                             id = {'type': f'{self.component_prefix}-tile-layer','index': 0},
                             #bounds = [[0,0],[-image_metadata['tileWidth'],image_metadata['tileWidth']]]
@@ -2092,7 +2092,7 @@ class LargeSlideMap(SlideMap):
                 id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
                 url = '',                
                 tileSize=new_tile_size,
-                maxNativeZoom=new_metadata['levels']-2,
+                maxNativeZoom=new_metadata['levels']-2 if new_metadata['levels']>=2 else 0,
                 minZoom = 0
             )
         else:
@@ -2100,7 +2100,7 @@ class LargeSlideMap(SlideMap):
                 id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
                 url = new_tile_url,
                 tileSize = new_tile_size,
-                maxNativeZoom=new_metadata['levels']-2,
+                maxNativeZoom=new_metadata['levels']-2 if new_metadata['levels']>=2 else 0,
                 minZoom = 0
             )
 
@@ -2601,7 +2601,7 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
                 id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
                 url = '',                
                 tileSize=new_tile_size,
-                maxNativeZoom=new_metadata['levels']-2,
+                maxNativeZoom=new_metadata['levels']-2 if new_metadata['levels']>=2 else 0,
                 minZoom = 0
             )
         else:
@@ -2609,7 +2609,7 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
                 id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
                 url = new_tile_url,
                 tileSize = new_tile_size,
-                maxNativeZoom=new_metadata['levels']-2,
+                maxNativeZoom=new_metadata['levels']-2 if new_metadata['levels']>=2 else 0,
                 minZoom = 0
             )
 

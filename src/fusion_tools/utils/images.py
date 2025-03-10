@@ -5,6 +5,7 @@ import os
 import sys
 from typing_extensions import Union
 import numpy as np
+import requests
 
 from shapely.geometry import shape
 from skimage.draw import polygon2mask

@@ -228,6 +228,7 @@ def main():
         base_dir+'XY01_IU-21-015F_001.svs',
         base_dir+'XY01_IU-21-015F.svs',
         base_dir+'new Visium\\V12U21-010_XY02_21-0069.tif',
+        base_dir+'KPMP_Atlas_V2\\V10S14-085_XY01_20-0038\\V10S14-085_XY01_20-0038_lowres_image.tiff'
     ]
 
     # This can be set to False or removed, testing the upload overlaid annotations
@@ -236,6 +237,7 @@ def main():
         base_dir+'XY01_IU-21-015F_001.xml' if not testing_upload else None,
         None,
         base_dir+'new Visium\\V12U21-010_XY02_21-0069.h5ad',
+        None
     ]
 
     dsa_handler = DSAHandler(
