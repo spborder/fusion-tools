@@ -1003,9 +1003,6 @@ class DatasetBuilder(DSATool):
 
     def slide_selection(self, slide_rows, slide_all, slide_rem_all, slide_rem, upload_session, current_crumbs, slide_table_data, builder_data, current_slide_components, current_collection_components, vis_session_data):
 
-
-        print(ctx.triggered)
-
         builder_data = json.loads(get_pattern_matching_value(builder_data))
         vis_session_data = json.loads(vis_session_data)
 

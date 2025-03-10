@@ -777,7 +777,7 @@ class SlideMap(MapComponent):
                 id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
                 url = '',                
                 tileSize=new_tile_size,
-                maxNativeZoom=new_metadata['levels']-2 if new_metadata['levels']>=2 else 0,
+                maxNativeZoom=new_metadata['levels']-2,
                 minZoom = 0
             )
         else:
@@ -1551,14 +1551,14 @@ class MultiFrameSlideMap(SlideMap):
                     if '?token' in tiles_url:
                         frame_url = tiles_url+'&style={"bands": [{"palette":["rgba(0,0,0,0)","rgba(255,255,255,255)"],"framedelta":'+str(f_idx)+'}]}'
                     else:
-                        frame_url = tiles_url+'?style={"bands": [{"palette":["rgba(0,0,0,0)","rgba(255,255,255,255)"],"framedelta":'+str(f_idx)+'}]}',
-                    
+                        frame_url = tiles_url+'?style={"bands": [{"palette":["rgba(0,0,0,0)","rgba(255,255,255,255)"],"framedelta":'+str(f_idx)+'}]}'
+
                     frame_layers.append(
                         dl.BaseLayer(
                             dl.TileLayer(
                                 url = frame_url,
                                 tileSize = image_metadata['tileHeight'],
-                                maxNativeZoom=image_metadata['levels']-2 if image_metadata['levels']>=2 else 0,
+                                maxNativeZoom=image_metadata['levels']-2,
                                 minZoom = -1,
                                 id = {'type': f'{self.component_prefix}-tile-layer','index': layer_indices[f_idx]}
                             ),
@@ -1573,7 +1573,7 @@ class MultiFrameSlideMap(SlideMap):
                             dl.TileLayer(
                                 url = rgb_url,
                                 tileSize = image_metadata['tileHeight'],
-                                maxNativeZoom=image_metadata['levels']-2 if image_metadata['levels']>=2 else 0,
+                                maxNativeZoom=image_metadata['levels']-2,
                                 minZoom = -1,
                                 id = {'type': f'{self.component_prefix}-tile-layer','index': layer_indices[f_idx+1]},
                                 #bounds = [[0,0],[-image_metadata['tileWidth'], image_metadata['tileWidth']]]
@@ -1589,7 +1589,7 @@ class MultiFrameSlideMap(SlideMap):
                         dl.TileLayer(
                             url = tiles_url,
                             tileSize = image_metadata['tileHeight'],
-                            maxNativeZoom=image_metadata['levels']-2 if image_metadata['levels']>=2 else 0,
+                            maxNativeZoom=image_metadata['levels']-2,
                             minZoom = -1,
                             id = {'type': f'{self.component_prefix}-tile-layer','index': 0},
                             #bounds = [[0,0],[-image_metadata['tileWidth'],image_metadata['tileWidth']]]
@@ -1600,6 +1600,8 @@ class MultiFrameSlideMap(SlideMap):
                 )
         else:
             raise TypeError("Missing 'frames' key in image metadata")
+        
+        print(frame_layers)
         
         return frame_layers
 

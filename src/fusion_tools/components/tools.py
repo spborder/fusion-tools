@@ -4456,7 +4456,6 @@ class GlobalPropertyPlotter(MultiTool):
             else:
                 session_properties = pd.concat([session_properties,slide_properties],axis=0,ignore_index=True)
 
-
         self.preloaded_properties = session_properties
         self.preloaded_options = session_properties.select_dtypes(exclude='object').columns.tolist()
         self.structure_column = 'Structure'

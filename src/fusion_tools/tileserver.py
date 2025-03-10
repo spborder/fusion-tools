@@ -128,7 +128,7 @@ class LocalTileServer(TileServer):
 
         self.tile_sources.append(new_tile_source)
         if not new_metadata is None:
-            self.tiles_metadata.append(new_tiles_metadata | {'user': new_metadata})
+            self.tiles_metadatas.append(new_tiles_metadata | {'user': new_metadata})
         else:
             self.tiles_metadatas.append(new_tiles_metadata)
 
