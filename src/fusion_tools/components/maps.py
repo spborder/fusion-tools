@@ -777,7 +777,7 @@ class SlideMap(MapComponent):
                 id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
                 url = '',                
                 tileSize=new_tile_size,
-                maxNativeZoom=new_metadata['levels']-2,
+                maxNativeZoom=new_metadata['levels']-2 if new_metadata['levels']>=2 else 0,
                 minZoom = 0
             )
         else:
@@ -797,6 +797,7 @@ class SlideMap(MapComponent):
         new_slide_info['y_scale'] = y_scale
         new_slide_info['image_overlays'] = image_overlay_annotations
         new_slide_info['tiles_url'] = new_url
+        new_slide_info['tiles_metadata'] = new_metadata
 
         geo_annotations = json.dumps(geo_annotations)
         new_slide_info = json.dumps(new_slide_info)
@@ -1558,7 +1559,7 @@ class MultiFrameSlideMap(SlideMap):
                             dl.TileLayer(
                                 url = frame_url,
                                 tileSize = image_metadata['tileHeight'],
-                                maxNativeZoom=image_metadata['levels']-2,
+                                maxNativeZoom=image_metadata['levels']-2 if image_metadata['levels']>=2 else 0,
                                 minZoom = -1,
                                 id = {'type': f'{self.component_prefix}-tile-layer','index': layer_indices[f_idx]}
                             ),
@@ -1573,7 +1574,7 @@ class MultiFrameSlideMap(SlideMap):
                             dl.TileLayer(
                                 url = rgb_url,
                                 tileSize = image_metadata['tileHeight'],
-                                maxNativeZoom=image_metadata['levels']-2,
+                                maxNativeZoom=image_metadata['levels']-2 if image_metadata['levels']>=2 else 0,
                                 minZoom = -1,
                                 id = {'type': f'{self.component_prefix}-tile-layer','index': layer_indices[f_idx+1]},
                                 #bounds = [[0,0],[-image_metadata['tileWidth'], image_metadata['tileWidth']]]
@@ -1589,7 +1590,7 @@ class MultiFrameSlideMap(SlideMap):
                         dl.TileLayer(
                             url = tiles_url,
                             tileSize = image_metadata['tileHeight'],
-                            maxNativeZoom=image_metadata['levels']-2,
+                            maxNativeZoom=image_metadata['levels']-2 if image_metadata['levels']>=2 else 0,
                             minZoom = -1,
                             id = {'type': f'{self.component_prefix}-tile-layer','index': 0},
                             #bounds = [[0,0],[-image_metadata['tileWidth'],image_metadata['tileWidth']]]
@@ -2972,7 +2973,6 @@ class ChannelMixer(MapComponent):
         
         slide_info = json.loads(get_pattern_matching_value(slide_info))
         frame_names = get_pattern_matching_value(frame_names)
-        #current_channels = get_pattern_matching_value(current_channels)
         
         style_dict = {"bands": []}
         for c in range(len(current_channels)):
@@ -3018,23 +3018,22 @@ class ChannelMixer(MapComponent):
             }
 
             if '?token' in slide_info['tiles_url']:
-                styled_urls.append(
-                    slide_info['tiles_url']+'&style='+json.dumps({"bands":f_dict["bands"]+style_dict["bands"]})
-                )
+                start_str = '&'
             else:
-                styled_urls.append(
-                    slide_info['tiles_url']+'?style='+json.dumps({"bands":f_dict["bands"]+style_dict["bands"]})
-                )
+                start_str = '?'
+            styled_urls.append(
+                slide_info['tiles_url']+f'{start_str}style='+json.dumps({"bands":f_dict["bands"]+style_dict["bands"]})
+            )
 
         if not rgb_style_dict is None:
             if '?token' in slide_info['tiles_url']:
-                styled_urls.append(
-                    slide_info['tiles_url']+'&style='+json.dumps({"bands":rgb_style_dict["bands"]+style_dict["bands"]})
-                )
+                start_str = '&'
             else:
-                styled_urls.append(
-                    slide_info['tiles_url']+'?style='+json.dumps({"bands":rgb_style_dict["bands"]+style_dict["bands"]})
-                )
+                start_str = '?'
+
+            styled_urls.append(
+                slide_info['tiles_url']+f'{start_str}style='+json.dumps({"bands":rgb_style_dict["bands"]+style_dict["bands"]})
+            )
 
         return styled_urls
 

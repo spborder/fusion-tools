@@ -9,6 +9,7 @@ import os
 import sys
 import json
 import geojson
+import geopandas as gpd
 import numpy as np
 import pandas as pd
 import textwrap
@@ -17,6 +18,7 @@ import uuid
 import threading
 import zipfile
 from shutil import rmtree
+from copy import deepcopy
 
 from typing_extensions import Union
 from shapely.geometry import box, shape
@@ -52,7 +54,7 @@ from fusion_tools.utils.shapes import (
     histomics_to_geojson,
     export_annotations
 )
-from fusion_tools.utils.images import get_feature_image, write_ome_tiff
+from fusion_tools.utils.images import get_feature_image, write_ome_tiff, format_intersecting_masks
 from fusion_tools.utils.stats import get_label_statistics, run_wilcox_rank_sum
 from fusion_tools import Tool, MultiTool
     
@@ -3602,7 +3604,7 @@ class DataExtractor(Tool):
                         dcc.Interval(
                             id = {'type': 'data-extractor-download-interval','index': 0},
                             disabled = True,
-                            interval = 1000,
+                            interval = 3000,
                             n_intervals = 0,
                             max_intervals=-1
                         )
@@ -3793,7 +3795,9 @@ class DataExtractor(Tool):
                 Input({'type': 'data-extractor-available-data-drop','index': ALL},'value')
             ],
             [
-                State({'type': 'data-extractor-store','index': ALL},'data')
+                State({'type': 'data-extractor-store','index': ALL},'data'),
+                State({'type': 'map-slide-information','index': ALL},'data'),
+                State({'type': 'channel-mixer-tab','index': ALL},'label')
             ],
             [
                 Output({'type': 'data-extractor-selected-data-parent','index': ALL},'children'),
@@ -3802,6 +3806,21 @@ class DataExtractor(Tool):
             ],
             prevent_initial_call = True
         )(self.update_data_info)
+
+        # Disabling channel selection if 'Use ChannelMixer' is checked
+        self.blueprint.callback(
+            [
+                Input({'type': 'data-extractor-channel-mix-switch','index': MATCH},'checked')
+            ],
+            [
+                State({'type': 'channel-mixer-tab','index':ALL},'label')
+            ],
+            [
+                Output({'type': 'data-extractor-selected-data-channels','index': MATCH},'disabled'),
+                Output({'type': 'data-extractor-selected-data-channels','index': MATCH},'value')
+            ],
+            prevent_initial_call = True
+        )(self.disable_channel_selector)
 
         # Callback for downloading selected data and clearing selections
         self.blueprint.callback(
@@ -3823,8 +3842,11 @@ class DataExtractor(Tool):
                 State({'type': 'map-annotations-store','index':ALL},'data'),
                 State({'type': 'map-marker-div','index': ALL},'children'),
                 State({'type': 'map-slide-information','index': ALL},'data'),
-                State({'type': 'base-layer','index': ALL},'checked'),
-                State({'type': 'map-tile-layer','index': ALL},'url')
+                State({'type': 'channel-mixer-tab','index': ALL},'label'),
+                State({'type': 'channel-mixer-tab','index': ALL},'label_style'),
+                State({'type': 'data-extractor-channel-mix-switch','index': ALL},'checked'),
+                State({'type': 'data-extractor-selected-data-channels','index': ALL},'value'),
+                State({'type': 'data-extractor-selected-data-masks','index': ALL},'value')
             ],
             prevent_initial_call = True
         )(self.start_download_data)
@@ -3908,8 +3930,6 @@ class DataExtractor(Tool):
 
     def update_session_data_description(self, session_data_selection):
         
-        print(f'ctx.triggered in update_session_data_description: {ctx.triggered}')
-
         if not any([i['value'] for i in ctx.triggered]):
             return ['Select a type of session data to see a description'], [True]
         
@@ -3942,17 +3962,40 @@ class DataExtractor(Tool):
 
         return [download_content]
 
-    def update_data_info(self, selected_data, data_extract_store):
+    def update_data_info(self, selected_data, data_extract_store, slide_info_store, channel_mix_frames):
 
-        print(f'ctx.triggered in update_data_info: {ctx.triggered}')
         if not any([i['value'] for i in ctx.triggered]):
             return [html.Div('Selected data descriptions will appear here')], [True], [no_update]
         
         selected_data = get_pattern_matching_value(selected_data)
         current_selected_data = json.loads(get_pattern_matching_value(data_extract_store))['selected_data']
+        slide_info = json.loads(get_pattern_matching_value(slide_info_store))['tiles_metadata']
 
-        def make_new_info(data_type):
+        channel_mix_opt = not channel_mix_frames is None and not channel_mix_frames==[]        
+
+        def make_new_info(data_type, slide_info, channel_mix_opt):
             data_type_index = list(self.exportable_data.keys()).index(data_type)
+
+            # Checking if this info card should also have a channel selector
+            if 'Images' in data_type and any([i in slide_info for i in ['frames','channels','channelmap']]):
+                show_channels = True
+
+                if 'channels' in slide_info:
+                    channel_names = slide_info['channels']
+                else:
+                    channel_names = [f'Channel {i+1}' for i in range(len(slide_info['frames']))]
+
+            else:
+                show_channels = False
+                channel_names = ['red','green','blue']
+
+            if "Masks" in data_type:
+                show_mask_opts = True
+                mask_opts = ['Structure Only','Intersecting']
+            else:
+                show_mask_opts = False
+                mask_opts = []
+
             return_card = dbc.Card([
                 dbc.CardHeader(data_type),
                 dbc.CardBody([
@@ -3971,7 +4014,47 @@ class DataExtractor(Tool):
                             ),
                             md = 9
                         )
-                    ])
+                    ]),
+                    dbc.Row([
+                        dbc.Col([
+                            dmc.Switch(
+                                label = 'Use ChannelMixer Colors',
+                                checked = False,
+                                description='Use colors selected in the ChannelMixer component, renders an RGB image.',
+                                id = {'type': f'{self.component_prefix}-data-extractor-channel-mix-switch','index': data_type_index}
+                            )
+                        ])
+                    ],style = {'display':'none'} if not channel_mix_opt else {}),
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Label('Channels to save: ')
+                        ], md = 3),
+                        dbc.Col(
+                            dcc.Dropdown(
+                                options = channel_names,
+                                value = channel_names,
+                                multi = True,
+                                id = {'type': f'{self.component_prefix}-data-extractor-selected-data-channels','index': data_type_index}
+                            ),
+                            md = 9
+                        )
+                    ],style = {'display': 'none'} if not show_channels else {}
+                    ),
+                    dbc.Row([
+                        dbc.Col([
+                            dbc.Label('Mask Options: ')
+                        ],md=3),
+                        dbc.Col(
+                            dcc.Dropdown(
+                                options = mask_opts,
+                                value = mask_opts[0] if len(mask_opts)>0 else [],
+                                multi = False,
+                                id = {'type': f'{self.component_prefix}-data-extractor-selected-data-masks','index': data_type_index}
+                            ),
+                            md = 9
+                        )
+                    ],style = {'display': 'none'} if not show_mask_opts else {}
+                    )
                 ])
             ])
 
@@ -3984,7 +4067,7 @@ class DataExtractor(Tool):
             if len(new_selected)>0:
                 # Appending to the partial property update
                 for n in new_selected:
-                    info_return.append(make_new_info(n))
+                    info_return.append(make_new_info(n,slide_info,channel_mix_opt))
 
             else:
                 # Removing some de-selected values
@@ -3998,45 +4081,131 @@ class DataExtractor(Tool):
             info_return = html.Div('Selected data descriptions will appear here')
         elif len(current_selected_data)==0 and len(selected_data)==1:
             info_return = Patch()
-            info_return.append(make_new_info(selected_data[0]))
+            info_return.append(make_new_info(selected_data[0],slide_info,channel_mix_opt))
 
         button_disabled = len(selected_data)==0
         selected_data_store = json.dumps({'selected_data': selected_data})
         
         return [info_return], [button_disabled], [selected_data_store]
 
-    def download_image_data(self, feature_list:list, x_scale:float, y_scale:float, tile_url:str='', channel_names: list = ['red','green','blue'], save_masks:bool=False, save_format:Union[str,list]='PNG', combine:bool=False, save_path:str=''):
+    def disable_channel_selector(self, switched, channel_labels):
+
+        if switched:
+            return True, channel_labels
+        return False, no_update
+
+    def extract_marker_structures(self, markers_geojson, slide_annotations):
+
+        marked_feature_list = []
+        structure_names = [i['properties']['name'] for i in slide_annotations]
+        for f in markers_geojson['features']:
+            # Getting the info of which structure this marker is marking
+            marked_name = f['properties']['name']
+            marked_idx = f['properties']['feature_index']
+
+            if marked_name in structure_names:
+                marked_feature = slide_annotations[structure_names.index(marked_name)]['features'][marked_idx]
+                marked_feature['properties']['name'] = f'Marked {marked_feature["properties"]["name"]}'
+                marked_feature_list.append(marked_feature)
+
+        return marked_feature_list
+
+    def download_image_data(self, feature_list:list, x_scale:float, y_scale:float, tile_url:str='', save_masks:bool=False, image_opts:list = [], mask_opts:str = '',save_format:Union[str,list]='PNG', combine:bool=False, save_path:str=''):
         
         # Scaling coordinates of features back to the slide CRS
-        feature_collection = {
-            'type': 'FeatureCollection',
-            'features': feature_list
-        }
-        scaled_features = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/x_scale,c[1]/y_scale),g),feature_collection)
+        if not mask_opts=='Intersecting':
+            feature_collection = {
+                'type': 'FeatureCollection',
+                'features': feature_list
+            }
+            scaled_features = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/x_scale,c[1]/y_scale),g),feature_collection)
+
+        else:
+            # Creating the intersecting masks
+            scaled_feature_list = []
+            for geo in feature_list:
+                if type(geo)==dict:
+                    scaled_feature_list.append(geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/x_scale,c[1]/y_scale),g),deepcopy(geo)))
+                elif type(geo)==list:
+                    for h in geo:
+                        scaled_feature_list.append(geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/x_scale,c[1]/y_scale),g),deepcopy(h)))
+
+            mask_names = [i['properties']['name'] for i in feature_list[1]]
+
+            intersecting_masks = format_intersecting_masks(
+                scaled_feature_list[0],
+                scaled_feature_list[1:],
+                mask_format = 'one-hot-labels'
+            )
+
+            scaled_features = scaled_feature_list[0]
+
+        channel_names = [i['name'] for i in image_opts]
+
+        color_opts = None
+        if any(['color' in i for i in image_opts]):
+            color_opts = [
+                [
+                    int(i) for i in j['color'].replace('rgba(','').replace(')','').replace(' ','').split(',')[:-1]
+                ]
+                for j in image_opts
+            ]
+
+        if not color_opts is None:
+            channel_names = ['red','green','blue']
 
         for f_idx,f in enumerate(scaled_features['features']):
             if save_masks:
-                image, mask = get_feature_image(
-                    feature=f,
-                    tile_source = tile_url,
-                    return_mask = save_masks
-                )
+                # This is for a normal tile_url grabbing an RGB image from a non-multi-frame image
+                if not any(['frame' in i for i in image_opts]):
+                    image, mask = get_feature_image(
+                        feature=f,
+                        tile_source = tile_url,
+                        return_mask = save_masks
+                    )
+                else:
+                    image, mask = get_feature_image(
+                        feature = f,
+                        tile_source = tile_url,
+                        return_mask = save_masks,
+                        frame_index = [i['frame'] for i in image_opts],
+                        frame_colors=color_opts
+                    )
 
                 if combine and save_format=='OME-TIFF':
-                    combined_image_mask = np.concatenate(
-                        (
-                            np.moveaxis(image,source=-1,destination=0),
-                            mask[None,:,:]
-                        ),
-                        axis=0
-                    )
-                    write_ome_tiff(
-                        combined_image_mask,
-                        save_path+f'/Images & Masks/{f["properties"]["name"]}_{f_idx}.ome.tiff',
-                        channel_names+[f['properties']['name']],
-                        [1.0,1.0],
-                        1.0
-                    )
+                    if mask_opts=='Structure Only':
+                        combined_image_mask = np.vstack(
+                            (
+                                np.moveaxis(image,source=-1,destination=0),
+                                mask[None,:,:]
+                            )
+                        )
+
+                        write_ome_tiff(
+                            combined_image_mask,
+                            save_path+f'/Images & Masks/{f["properties"]["name"]}_{f_idx}.ome.tiff',
+                            channel_names+[f['properties']['name']],
+                            [1.0,1.0],
+                            1.0
+                        )
+                    else:
+
+                        image = np.moveaxis(image,source=-1,destination = 0)
+                        mask = np.moveaxis(intersecting_masks[f_idx],source=-1,destination=0)
+                        combined_image_mask = np.vstack(
+                            (
+                                image,
+                                mask
+                            )
+                        )
+
+                        write_ome_tiff(
+                            combined_image_mask,
+                            save_path+f'/Images & Masks/{f["properties"]["name"]}_{f_idx}.ome.tiff',
+                            channel_names+mask_names,
+                            [1.0,1.0],
+                            1.0
+                        )
 
                 else:
                     img_save_format = save_format
@@ -4044,6 +4213,8 @@ class DataExtractor(Tool):
 
                     if os.path.exists(f'{save_path}/Images/'):
                         if img_save_format=='OME-TIFF':
+                            image = np.moveaxis(image,source=-1,destination=0)
+
                             write_ome_tiff(
                                 image,
                                 save_path+f'/Images/{f["properties"]["name"]}_{f_idx}.ome.tiff',
@@ -4052,31 +4223,66 @@ class DataExtractor(Tool):
                                 1.0
                             )
                         elif img_save_format in ['TIFF','PNG','JPG']:
-                            # Double check that these are RGB
-                            image_save_path = f'{save_path}/Images/{f["properties"]["name"]}_{f_idx}.{save_format.lower()}'
-                            Image.fromarray(image).save(image_save_path)
-
+                            if len(np.shape(image))==2 or np.shape(image)[-1]==1 or np.shape(image)[-1]==3 or img_save_format=='TIFF':
+                                image_save_path = f'{save_path}/Images/{f["properties"]["name"]}_{f_idx}.{save_format.lower()}'
+                                Image.fromarray(image).save(image_save_path)
+                            else:
+                                image_save_path = f'{save_path}/Images/{f["properties"]["name"]}_{f_idx}.tiff'
+                                Image.fromarray(image).save(image_save_path)
+                                
                     if os.path.exists(f'{save_path}/Masks/'):
                         if mask_save_format == 'OME-TIFF':
-                            write_ome_tiff(
-                                mask,
-                                save_path+f'/Masks/{f["properties"]["name"]}_{f_idx}.ome.tiff',
-                                [f["properties"]["name"]],
-                                [1.0,1.0],
-                                1.0
-                            )
+                            if mask_opts=='Structure Only':
+                                mask = np.moveaxis(mask,source=-1,destination=0)
+
+                                write_ome_tiff(
+                                    mask,
+                                    save_path+f'/Masks/{f["properties"]["name"]}_{f_idx}.ome.tiff',
+                                    [f["properties"]["name"]],
+                                    [1.0,1.0],
+                                    1.0
+                                )
+
+                            elif mask_opts=='Intersecting':
+                                write_ome_tiff(
+                                    intersecting_masks[f_idx],
+                                    save_path+f'/Masks/{f["properties"]["name"]}_{f_idx}.ome.tiff',
+                                    mask_names,
+                                    [1.0,1.0],
+                                    1.0                                
+                                )
+
                         elif mask_save_format in ['TIFF','PNG','JPG']:
-                            # Apply some kind of artificial color if not grayscale or RGB
-                            mask_save_path = f'{save_path}/Masks/{f["properties"]["name"]}_{f_idx}.{save_format.lower()}'
-                            Image.fromarray(mask).save(mask_save_path)
+                            if mask_opts=='Structure Only':
+                                save_mask = mask
+                            elif mask_opts=='Intersecting':
+                                save_mask = intersecting_masks[f_idx]
+
+                            if len(np.shape(save_mask))==2 or np.shape(save_mask)[-1]==1 or np.shape(save_mask)[-1]==3 or mask_save_format=='TIFF':
+                                # Apply some kind of artificial color if not grayscale or RGB
+                                mask_save_path = f'{save_path}/Masks/{f["properties"]["name"]}_{f_idx}.{save_format.lower()}'
+                                Image.fromarray(mask).save(mask_save_path)
+                            else:
+                                # Just overwriting and saving as TIFF anyways
+                                mask_save_path = f'{save_path}/Masks/{f["properties"]["name"]}_{f_idx}.tiff'
+                                Image.fromarray(mask).save(mask_save_path)
 
             else:
-
-                image = get_feature_image(
-                    feature=f,
-                    tile_source = tile_url,
-                    return_mask = save_masks
-                )
+                
+                if any(['frame' in i for i in image_opts]):
+                    image = get_feature_image(
+                        feature=f,
+                        tile_source = tile_url,
+                        return_mask = save_masks,
+                        frame_index = [i['frame'] for i in image_opts],
+                        frame_colors=color_opts
+                    )
+                else:
+                    image = get_feature_image(
+                        feature=f,
+                        tile_source = tile_url,
+                        return_mask = save_masks,
+                    )
 
                 img_save_format = save_format
                 if img_save_format=='OME-TIFF':
@@ -4088,8 +4294,13 @@ class DataExtractor(Tool):
                         1.0
                     )
                 elif img_save_format in ['TIFF','PNG','JPG']:
-                    image_save_path = f'{save_path}/Images/{f["properties"]["name"]}_{f_idx}.{save_format.lower()}'
-                    Image.fromarray(image).save(image_save_path)
+
+                    if len(np.shape(image))==2 or np.shape(image)[-1]==1 or np.shape(image)[-1]==3 or img_save_format=='TIFF':
+                        image_save_path = f'{save_path}/Images/{f["properties"]["name"]}_{f_idx}.{save_format.lower()}'
+                        Image.fromarray(image).save(image_save_path)
+                    else:
+                        image_save_path = f'{save_path}/Images/{f["properties"]["name"]}_{f_idx}.tiff'
+                        Image.fromarray(image).save(image_save_path)
 
     def download_property_data(self, feature_list, save_format, save_path):
         
@@ -4149,14 +4360,14 @@ class DataExtractor(Tool):
                 download_info['folder']
             )
         elif download_info['download_type'] in ['Images','Masks','Images & Masks']:
-            
             self.download_image_data(
                 download_info['features'],
                 download_info['x_scale'],
                 download_info['y_scale'],
                 download_info['tile_url'],
-                download_info['channel_names'],
                 download_info['save_masks'],
+                download_info['image_opts'],
+                download_info['mask_opts'],
                 download_info['format'],
                 download_info['combine'],
                 download_info['folder']
@@ -4182,9 +4393,7 @@ class DataExtractor(Tool):
         
             zip.close()
 
-    def start_download_data(self, clicked, selected_structures, selected_data, selected_data_formats, slide_annotations, slide_markers, slide_info, base_layer_checked, tile_layer_urls):
-
-        print(f'ctx.triggered in start_download_data: {ctx.triggered}')
+    def start_download_data(self, clicked, selected_structures, selected_data, selected_data_formats, slide_annotations, slide_markers, slide_info, channel_mix_frames, channel_mix_colors, channel_mix_checked, selected_data_channels, selected_mask_options):
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
@@ -4196,13 +4405,8 @@ class DataExtractor(Tool):
         selected_data = get_pattern_matching_value(selected_data)
         slide_annotations = json.loads(get_pattern_matching_value(slide_annotations))
         slide_info = json.loads(get_pattern_matching_value(slide_info))
+        slide_markers = get_pattern_matching_value(slide_markers)
         
-        print(slide_info)
-        print(base_layer_checked)
-        print(tile_layer_urls)
-
-        tile_layer_urls = get_pattern_matching_value(tile_layer_urls)
-
         base_download_folder = uuid.uuid4().hex[:24]
         if not os.path.exists(self.download_folder+base_download_folder):
             os.makedirs(self.download_folder+base_download_folder)
@@ -4211,12 +4415,47 @@ class DataExtractor(Tool):
         download_thread_list = []
         layer_names = [i['properties']['name'] for i in slide_annotations]
         for s_idx, struct in enumerate(selected_structures):
-            struct_features = slide_annotations[layer_names.index(struct)]['features']
-            for d_idx, (data,data_format) in enumerate(zip(selected_data,selected_data_formats)):
+            if struct in layer_names:
+                struct_features = slide_annotations[layer_names.index(struct)]['features']
+            elif struct == 'Marked Structures':
+                if not slide_markers is None:
+                    struct_features = []
+                    for m in slide_markers:
+                        struct_features.extend(self.extract_marker_structures(m['props']['data'],slide_annotations))
+
+            for d_idx, (data,data_format,data_channels,data_masks,data_channel_mix) in enumerate(zip(selected_data,selected_data_formats, selected_data_channels, selected_mask_options, channel_mix_checked)):
                 if data in ['Images','Masks','Images & Masks']:
-                    print(data)
                     if not os.path.exists(self.download_folder+base_download_folder+'/'+data):
                         os.makedirs(self.download_folder+base_download_folder+'/'+data)
+
+                    if data_masks=='Intersecting':
+                        struct_features = [{'type': 'FeatureCollection', 'features': struct_features}, slide_annotations]
+
+                    if data_channel_mix:
+                        image_opts = [
+                            {
+                                'frame': slide_info['tiles_metadata']['channels'].index(c_name),
+                                'name': c_name,
+                                'color': channel_mix_colors[c_idx]['color']
+                            }
+                            for c_idx,c_name in enumerate(channel_mix_frames)
+                        ]
+                    else:
+                        if 'frames' in slide_info['tiles_metadata']:
+                            image_opts = [
+                                {
+                                    'frame': slide_info['tiles_metadata']['channels'].index(c_name),
+                                    'name': c_name,
+                                }
+                                for c_name in data_channels
+                            ]
+                        else:
+                            image_opts = [
+                                {
+                                    'name': i
+                                }
+                                for i in ['red','green','blue']
+                            ]
 
                     download_thread_list.append(
                         {
@@ -4227,9 +4466,10 @@ class DataExtractor(Tool):
                             'format': data_format,
                             'folder': self.download_folder+base_download_folder,
                             'features': struct_features,
-                            'tile_url': tile_layer_urls.replace('zxy/{z}/{x}/{y}','region'),
-                            'channel_names': ['red','green','blue'],
+                            'tile_url': slide_info['tiles_url'].replace('zxy/{z}/{x}/{y}','region'),
                             'save_masks': 'Masks' in data,
+                            'image_opts': image_opts,
+                            'mask_opts': data_masks,
                             'combine': '&' in data,
                             '_id': uuid.uuid4().hex[:24]
                         }
@@ -4281,26 +4521,36 @@ class DataExtractor(Tool):
             
             if 'download_tasks' in download_info_store:
                 if len(download_info_store['download_tasks'])==1:
-                    # This means that the last download task was completed, now creating a zip-file of the results
-                    zip_files_task = uuid.uuid4().hex[:24]
-                    task_name = 'Creating Zip File'
-                    download_info_store['current_task'] = zip_files_task
-                    del download_info_store['download_tasks'][0]
 
-                    download_progress = 99
+                    if not os.path.exists(download_info_store['zip_file_path']):
+                        # This means that the last download task was completed, now creating a zip-file of the results
+                        zip_files_task = uuid.uuid4().hex[:24]
+                        task_name = 'Creating Zip File'
+                        download_info_store['current_task'] = zip_files_task
+                        del download_info_store['download_tasks'][0]
 
-                    interval_disabled = False
-                    modal_open = True
-                    new_n_intervals = no_update
-                    download_data = no_update
+                        download_progress = 99
 
-                    new_thread = threading.Thread(
-                        target = self.create_zip_file,
-                        name = zip_files_task,
-                        args = [download_info_store['base_folder'],download_info_store['zip_file_path']],
-                        daemon=True
-                    )
-                    new_thread.start()
+                        interval_disabled = False
+                        modal_open = True
+                        new_n_intervals = no_update
+                        download_data = no_update
+
+                        new_thread = threading.Thread(
+                            target = self.create_zip_file,
+                            name = zip_files_task,
+                            args = [download_info_store['base_folder'],download_info_store['zip_file_path']],
+                            daemon=True
+                        )
+                        new_thread.start()
+                    else:
+                        task_name = 'Zip File Created'
+
+                        download_progress = 99
+                        interval_disabled = True
+                        modal_open = False
+                        new_n_intervals = no_update
+                        download_data = dcc.send_file(download_info_store['zip_file_path'])
 
                 elif len(download_info_store['download_tasks'])==0:
                     # This means that the zip file has finished being created

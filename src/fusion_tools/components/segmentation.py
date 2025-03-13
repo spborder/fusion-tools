@@ -14,7 +14,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 from io import BytesIO
-from PIL import Image
+from PIL import Image, ImageOps
 import requests
 import time
 import geojson
@@ -134,7 +134,20 @@ class FeatureAnnotation(Tool):
                                 placeholder = "Structure",
                                 id = {'type': 'feature-annotation-structure-drop','index': 0}
                             )
-                        ],md = 9),
+                        ],md =7),
+                        dbc.Col([
+                            html.A(
+                                html.I(
+                                    className = 'fa-solid fa-rotate fa-xl',
+                                    n_clicks = 0,
+                                    id = {'type': 'feature-annotation-refresh-icon','index': 0}
+                                )
+                            ),
+                            dbc.Tooltip(
+                                target = {'type': 'feature-annotation-refresh-icon','index': 0},
+                                children = 'Click to refresh available structures'
+                            )
+                        ],md = 2),
                         dcc.Store(
                             id = {'type': 'feature-annotation-current-structures','index': 0},
                             storage_type='memory',
@@ -322,7 +335,8 @@ class FeatureAnnotation(Tool):
         # Updating which structures are available in the dropdown menu
         self.blueprint.callback(
             [
-                Input({'type': 'slide-map','index':ALL},'bounds')
+                Input({'type': 'feature-overlay','index':ALL},'name'),
+                Input({'type': 'feature-annotation-refresh-icon','index': ALL},'n_clicks')
             ],
             [
                 Output({'type': 'feature-annotation-structure-drop','index': ALL},'options'),
@@ -330,7 +344,8 @@ class FeatureAnnotation(Tool):
             ],
             [
                 State({'type': 'map-annotations-store','index': ALL},'data'),
-                State({'type': 'anchor-vis-layout-tabs','index': ALL},'active_tab')
+                State({'type': 'slide-map','index':ALL},'bounds'),
+                State({'type': 'vis-layout-tabs','index': ALL},'active_tab')
             ]
         )(self.update_structure_options)
 
@@ -565,7 +580,7 @@ class FeatureAnnotation(Tool):
             np.save(mask_save_path.replace('.png','.npy'),np.uint8(formatted_mask))
             slide_image_region.save(image_save_path)
 
-    def update_structure_options(self, slide_bounds, current_features, active_tab):
+    def update_structure_options(self, overlay_names, refresh_clicked, current_features, slide_bounds, active_tab):
         """Updating the structure options based on updated slide bounds
 
         :param slide_bounds: Current slide bounds
@@ -582,7 +597,12 @@ class FeatureAnnotation(Tool):
         if not active_tab is None:
             if not active_tab == 'feature-annotation':
                 raise exceptions.PreventUpdate
-            
+        else:
+            raise exceptions.PreventUpdate
+        
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
         slide_map_bounds = get_pattern_matching_value(slide_bounds)
         slide_map_box = box(slide_map_bounds[0][1],slide_map_bounds[0][0],slide_map_bounds[1][1],slide_map_bounds[1][0])
 
@@ -592,7 +612,7 @@ class FeatureAnnotation(Tool):
         structure_bboxes = {}
         for g in current_features:
             intersecting_shapes, intersecting_properties = find_intersecting(g,slide_map_box)
-            if len(intersecting_shapes)>0:
+            if len(intersecting_shapes['features'])>0:
                 structure_options.append(g['properties']['name'])
 
                 structure_bboxes[g['properties']['name']] = [
@@ -716,6 +736,8 @@ class FeatureAnnotation(Tool):
                 ).content
             )
         )
+
+        
 
         return image_region
     

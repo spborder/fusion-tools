@@ -1031,8 +1031,10 @@ def find_nested_levels(nested_dict)->int:
     :return: number of levels for nested dictionary
     :rtype: int
     """
-    
-    return max(find_nested_levels(v) if isinstance(v,dict) else 0 for v in nested_dict.values()) + 1
+    try:
+        return max(find_nested_levels(v) if isinstance(v,dict) else 0 for v in nested_dict.values()) + 1
+    except ValueError:
+        return 0
 
 def extract_nested_prop(main_prop_dict: dict, depth: int, path: tuple = (), values_list: list = []):
     """Extracted nested properties up to depth level.
@@ -1098,7 +1100,8 @@ def merge_dict(a:dict, b:dict, path = []):
             if isinstance(a[key],dict) and isinstance(b[key],dict):
                 merge_dict(a[key],b[key],path+[str(key)])
             elif a[key] != b[key]:
-                raise Exception(f'Conflict at {".".join(path+[str(key)])}')
+                #raise Exception(f'Conflict at {".".join(path+[str(key)])}')
+                continue
         else:
             a[key] = b[key]
     return a
