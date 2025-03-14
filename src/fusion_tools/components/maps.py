@@ -629,6 +629,93 @@ class SlideMap(MapComponent):
             ]
         )(self.upload_shape)
 
+    def get_annotations_callbacks(self):
+
+        self.blueprint.clientside_callback(
+            """
+            async function(selected_slide, vis_session){
+
+                // Have to grab the slide_information from the selected slide index and vis session
+
+
+                // Prevent update at initialization
+                if (slide_information[0]==undefined){
+                    throw window.dash_clientside.PreventUpdate;
+                }
+
+                // Reading in map-slide-information
+                var map_slide_information = JSON.parse(slide_information);
+                var annotations_list = [];
+                var annotations_str = [];
+
+                try {
+                    let ann_url = map_slide_information.annotations_url;
+                    var ann_response = await fetch(
+                        ann_url, {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                        }
+                    );
+
+                    if (!ann_response.ok) {
+                        throw new Error(`Oh no! Error encountered: ${ann_response.status}`)
+                    }
+
+                    // Scaling coordinates of returned annotations (If the url is for a DSA instance then the annotations will not be in GeoJSON format by default)
+                    var new_annotations = await ann_response.json();
+                    
+                    // Annotations have to be in GeoJSON format already in order to use this
+                    const scale_geoJSON = (data, name, id, x_scale, y_scale) => {
+                        return {
+                            ...data,
+                            properties: {
+                                name: name,
+                                _id: id
+                            },
+                            features: data.features.map(feature => ({
+                                ...feature,
+                                geometry: {
+                                    ...feature.geometry,
+                                    coordinates: feature.geometry.coordinates.map(axes =>
+                                        axes.map(([x, y]) => [x*x_scale, y*y_scale])
+                                    )
+                                }
+                            }))
+                        }
+                    };
+
+                    for (let ann=0; ann<new_annotations.length; ann++){
+                        let annotation = scale_geoJSON(new_annotations[ann], map_slide_information.x_scale, map_slide_information.y_scale);
+                        
+                        annotation_str.push(annotation);
+                        annotations_list.push(new_geojson);
+
+                    }
+
+
+                } catch (error) {
+                    console.error(error.message);
+                }
+
+                return [annotations_list, [JSON.stringify(annotations_str)]];
+            }
+            """,
+            [
+                Output({'type': 'feature-bounds','index': ALL},'data'),
+                Output({'type': 'map-annotations-store','index': ALL},'data')
+            ],
+            [
+                State('anchor-vis-store','data')
+            ],
+            [
+                Input({'type': 'slide-select-drop','index': ALL},'value')
+            ]
+        )
+
+
+
     def update_vis_session(self, new_vis_data):
         """Updating slide dropdown options based on current visualization session
 
@@ -657,6 +744,9 @@ class SlideMap(MapComponent):
         vis_data = json.loads(vis_data)
 
         new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
+
+        #TODO: Add some collapsible component containing slide/tiles metadata
+        #TODO: Add progress bar for loading annotations (make this part faster)
 
         # Getting data from the tileservers:
         if not 'current_user' in vis_data:
@@ -1077,6 +1167,9 @@ class SlideMap(MapComponent):
         added_rois = []
         added_roi_names = []
         deleted_rois = []
+
+        #TODO: Add functionality for if a manual ROI is edited
+        #TODO: Add functionality for adding a marker (render a point GeoJSON component to enable access by DataExtractor)
 
         if 'edit-control' in ctx.triggered_id['type']:
             # Checking for new manual ROIs
@@ -1855,7 +1948,6 @@ class LargeSlideMap(SlideMap):
                             };
                             for (let i = 0; i<new_annotations.annotation.elements.length; i++){
 
-                                console.log("user" in new_annotations.annotation.elements[i]);
                                 if ("user" in new_annotations.annotation.elements[i]) {
                                     var user_properties = new_annotations.annotation.elements[i].user;
                                 } else {
@@ -1890,7 +1982,7 @@ class LargeSlideMap(SlideMap):
                 } else {
                     // General case.
                     try {
-                        let ann_url = map_slide_information.annotations_region_url+"?top="+scaled_map_bounds[0]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[2]+"&right="+scaled_map_bounds[3]
+                        let ann_url = map_slide_information.annotations_region_url+"?top="+scaled_map_bounds[0]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[2]+"&right="+scaled_map_bounds[3];
                         var ann_response = await fetch(
                             ann_url, {
                             method: 'GET',

@@ -450,7 +450,10 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
                 try:
                     additional_props[i] = float(spot_coords.loc[barcodes[idx],i])
                 except ValueError:
-                    additional_props[i] = spot_coords.loc[barcodes[idx],i]
+                    if not '{' in spot_coords.loc[barcodes[idx],i]:
+                        additional_props[i] = spot_coords.loc[barcodes[idx],i]
+                    else:
+                        additional_props[i] = json.loads(spot_coords.loc[barcodes[idx],i].replace("'",'"'))
         
         for j in include_obs:
             if not anndata_object is None:
@@ -458,10 +461,14 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
             else:
                 add_prop = spot_coords.loc[idx,j].values
 
-            if not type(add_prop)==str:
-                additional_props[j] = float(add_prop)
-            else:
-                additional_props[j] = add_prop
+            try:
+                additional_props[i] = float(add_prop)
+            except ValueError:
+                if not '{' in add_prop:
+                    additional_props[i] = add_prop
+                else:
+                    additional_props[i] = json.loads(add_prop.replace("'",'"'))
+
 
         spot_feature = {
             'type': 'Feature',
