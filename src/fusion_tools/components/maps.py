@@ -697,6 +697,9 @@ class SlideMap(MapComponent):
 
                 var ann_meta = await ann_meta_response.json();
 
+                // Making sure these are only structural annotations, not image overlays
+                ann_meta = ann_meta.filter(item => !('image_path' in item))
+
                 if (ann_meta.length==0){
                     let empty_geojson = {
                         'type': 'FeatureCollection',
@@ -707,6 +710,7 @@ class SlideMap(MapComponent):
                     return [[empty_geojson], [JSON.stringify([empty_geojson])]]
                 }
 
+                // Initializing empty annotations list
                 var annotations_list = new Array(ann_meta.length);
                 try {
                     if ('annotations_geojson_url' in map_slide_information){
@@ -811,11 +815,14 @@ class SlideMap(MapComponent):
         new_tile_size = new_image_metadata['tileHeight']
 
         image_overlay_annotations = [i for i in annotations_metadata if 'image_path' in i]
+        print(image_overlay_annotations)
+        non_image_overlay_metadata = [i for i in annotations_metadata if not 'image_path' in i]
         x_scale, y_scale = self.get_scale_factors(new_image_metadata)
         new_layer_children = []
 
         # Adding overlaid annotation layers:
-        for st_idx, st_info in enumerate(annotations_metadata):
+        for st_idx, st_info in enumerate(non_image_overlay_metadata):
+
             new_layer_children.append(
                 dl.Overlay(
                     dl.LayerGroup(

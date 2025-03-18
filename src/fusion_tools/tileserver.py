@@ -86,11 +86,14 @@ class LocalTileServer(TileServer):
 
     def extract_meta_dict(self, annotations):
 
-        if type(annotations)==dict:
+        if not type(annotations)==list:
             annotations = [annotations]
 
         ann_metadata = []
         for a in annotations:
+            if hasattr(a,'to_dict'):
+                a = a.to_dict()
+                
             if 'properties' in a:
                 ann_metadata.append({
                     'name': a['properties']['name'],
