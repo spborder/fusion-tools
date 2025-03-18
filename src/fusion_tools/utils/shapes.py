@@ -1278,7 +1278,6 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
 
             # only used for OR mods
             include_list = [(False,)]*intermediate_gdf.shape[0]
-            print(len(include_list))
             for s_q in spatial_list:
                 sq_geo = [i for i in all_geo_list if i['properties']['name']==s_q['structure']][0]
                 sq_structure = gpd.GeoDataFrame.from_features(sq_geo['features'])
