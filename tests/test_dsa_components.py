@@ -232,7 +232,7 @@ def main():
     ]
 
     # This can be set to False or removed, testing the upload overlaid annotations
-    testing_upload = True
+    testing_upload = False
     local_annotations_list = [
         base_dir+'XY01_IU-21-015F_001.xml' if not testing_upload else None,
         None,

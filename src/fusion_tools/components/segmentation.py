@@ -436,7 +436,7 @@ class FeatureAnnotation(Tool):
         slide_data = vis_data['current'][get_pattern_matching_value(slide_selection)]
         new_slide_data = {}
         new_slide_data['regions_url'] = slide_data['regions_url']
-        new_metadata = requests.get(slide_data['metadata_url']).json()
+        new_metadata = requests.get(slide_data['image_metadata_url']).json()
         new_slide_data['x_scale'], new_slide_data['y_scale'] = self.get_scale_factors(new_metadata)
 
         new_slide_data = json.dumps(new_slide_data)

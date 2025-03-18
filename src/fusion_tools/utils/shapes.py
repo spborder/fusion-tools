@@ -1131,10 +1131,18 @@ def extract_geojson_properties(geo_list: list, reference_object: Union[str,None]
     if ignore_list is None:
         ignore_list = []
 
+    if type(geo_list)==dict:
+        geo_list = [geo_list]
+
+    start = time.time()
     geojson_properties = []
     feature_names = []
     property_info = {}
     for ann in geo_list:
+        if not 'properties' in ann:
+            continue
+        if len(list(ann['properties'].keys()))==0:
+            continue
         feature_names.append(ann['properties']['name'])
         for f in ann['features']:
             f_props = [i for i in list(f['properties'].keys()) if not i in ignore_list]
@@ -1218,6 +1226,7 @@ def extract_geojson_properties(geo_list: list, reference_object: Union[str,None]
     
     
     geojson_properties = sorted(geojson_properties)
+    end = time.time()
 
     return geojson_properties, feature_names, property_info
 

@@ -644,12 +644,24 @@ class SlideMap(MapComponent):
                 var map_slide_information = JSON.parse(slide_information);
 
                 // Annotations have to be in GeoJSON format already in order to use this
-                const scale_geoJSON = (data, x_scale, y_scale) => {
+                function process_json(json_data, idx, ann_meta){
+                    if (json_data.constructor.name == 'Object'){
+                        return scale_geoJSON(json_data, ann_meta[idx].name, ann_meta[idx]["_id"],map_slide_information.x_scale, map_slide_information.y_scale);
+                    } else {
+                        let scaled_list = [];
+                        for (let j=0; j<json_data.length; j++){
+                            scaled_list.push(scale_geoJSON(json_data[j], ann_meta[idx+j].name, ann_meta[idx+j]["_id"], map_slide_information.x_scale, map_slide_information.y_scale));
+                        }
+                        return scaled_list;
+                    }
+                };
+
+                const scale_geoJSON = (data, name, id, x_scale, y_scale) => {
                     return {
                         ...data,
                         properties: {
-                            name: 'name',
-                            _id: 'id'
+                            name: name,
+                            _id: id
                         },
                         features: data.features.map(feature => ({
                             ...feature,
@@ -658,6 +670,10 @@ class SlideMap(MapComponent):
                                 coordinates: feature.geometry.coordinates.map(axes =>
                                     axes.map(([x, y]) => [x*x_scale, y*y_scale])
                                 )
+                            },
+                            properties: {
+                                ...feature.properties.user,
+                                name: name,
                             }
                         }))
                     }
@@ -681,62 +697,47 @@ class SlideMap(MapComponent):
 
                 var ann_meta = await ann_meta_response.json();
 
-                var annotations_list = [];
-                var annotations_str = [];
+                if (ann_meta.length==0){
+                    let empty_geojson = {
+                        'type': 'FeatureCollection',
+                        'features': [],
+                        'properties': {}
+                    };
 
-                //try {
-
-                if ('annotations_geojson_url' in map_slide_information){
-                    // This slide has a specific url for getting individual GeoJSON formatted annotations
-                    var new_annotations = [];
-                    const promises = map_slide_information.annotations_geojson_url.map((url) =>
-                        fetch(url).then((response) => new_annotations.push(response.json()))
-                    );
-
-                    const promise_await = await Promise.all(promises);
-                    console.log(promise_await);
-                    console.log(new_annotations);
-
-                } else {
-                    let ann_url = map_slide_information.annotations_url;
-                    var ann_response = await fetch(
-                        ann_url, {
-                            method: 'GET',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            }
-                        }
-                    );
-
-                    if (!ann_response.ok) {
-                        throw new Error(`Oh no! Error encountered: ${ann_response.status}`)
-                    }
-
-                    // Scaling coordinates of returned annotations (If the url is for a DSA instance then the annotations will not be in GeoJSON format by default)
-                    var new_annotations = await ann_response.json();
-
-                    var ann_names = [];
-                    new_annotations.forEach((ann) => ann_names.push(ann.properties.name))
+                    return [[empty_geojson], [JSON.stringify([empty_geojson])]]
                 }
 
-                
+                var annotations_list = new Array(ann_meta.length);
+                try {
+                    if ('annotations_geojson_url' in map_slide_information){
+                        // This slide has a specific url for getting individual GeoJSON formatted annotations
+                        var new_annotations = [];
+                        ann_meta.forEach((ann_,idx) => ann_meta.splice(idx,1,{'name': ann_.annotation.name, '_id': ann_._id}))
+                        const promises = map_slide_information.annotations_geojson_url.map((url,idx) =>
+                            fetch(url)
+                            .then((response) => response.json())
+                            .then(function(json_data){return process_json(json_data,idx,ann_meta)})
+                            .then((geojson_anns) => annotations_list.splice(idx,1,geojson_anns))
+                        );
 
-                //for (let ann=0; ann<ann_meta.length; ann++){
-                //    console.log(ann_meta[ann]);
-                //    console.log(new_annotations[ann]);
-                //    let new_geojson = scale_geoJSON(Promise.resolve(new_annotations[ann]), ann_meta[ann].name, ann_meta[ann]["_id"], map_slide_information.x_scale, map_slide_information.y_scale);
-                //    
-                //    annotations_str.push(new_geojson);
-                //    annotations_list.push(new_geojson);
-                //
-                //}
+                        const promise_await = await Promise.all(promises);
 
-                //} catch (error) {
-                //    console.error(error.message);
-                //}
+                    } else {
+                        const promises = [map_slide_information.annotations_url].map((url,idx) =>
+                            fetch(url)
+                            .then((response) => response.json())
+                            .then((json_data) => annotations_list.push(process_json(json_data,idx,ann_meta)))
+                        );
+                        const promise_await = await Promise.all(promises);
+                        annotations_list = annotations_list.flat();
 
-                console.log(annotations_list);
-                return [annotations_list, [JSON.stringify(annotations_str)]];
+                    }
+
+                } catch (error) {
+                    console.error(error.message);
+                }
+
+                return [annotations_list, [JSON.stringify(annotations_list)]];
             }
             """,
             [
@@ -828,6 +829,7 @@ class SlideMap(MapComponent):
                             options = {
                                 'style': self.js_namespace('featureStyle')
                             },
+                            filter = self.js_namespace("featureFilter"),
                             hideout = {
                                 'overlayBounds': {},
                                 'overlayProp': {},
