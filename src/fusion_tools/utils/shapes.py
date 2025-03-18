@@ -1278,7 +1278,7 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
 
             # only used for OR mods
             include_list = [(False,)]*intermediate_gdf.shape[0]
-
+            print(len(include_list))
             for s_q in spatial_list:
                 sq_geo = [i for i in all_geo_list if i['properties']['name']==s_q['structure']][0]
                 sq_structure = gpd.GeoDataFrame.from_features(sq_geo['features'])
@@ -1294,13 +1294,9 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                             )
 
                             # Updating include_list (removing items)
-                            del_count = 0
-                            for idx,i in enumerate(intermediate_gdf['_id_right'].isna().tolist()):
-                                if not i:
-                                    del include_list[idx-del_count]
-                                    del_count+=1
-                                else:
-                                    include_list[idx-del_count]+=(True,)
+                            include_list = [i for d,i in zip(intermediate_gdf['_id_right'].isna().tolist(),include_list) if not d]
+                            include_list = [i+(True,) for i in include_list]
+
 
                             intermediate_gdf = intermediate_gdf.loc[intermediate_gdf['_id_right'].isna()]
                             
@@ -1312,13 +1308,8 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                                 predicate = s_q['type']
                             )
                             # Updating include_list (removing items)
-                            del_count = 0
-                            for idx,i in enumerate(intermediate_gdf['_id_right'].isna().tolist()):
-                                if i:
-                                    del include_list[idx-del_count]
-                                    del_count+=1
-                                else:
-                                    include_list[idx-del_count]+=(True,)
+                            include_list = [i for d,i in zip(intermediate_gdf['_id_right'].isna().tolist(),include_list) if not d]
+                            include_list = [i+(True,) for i in include_list]
 
                             intermediate_gdf = intermediate_gdf.loc[intermediate_gdf['_id_right'].notna()]
                             
@@ -1341,13 +1332,8 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                         )
 
                         # Updating include_list (removing items)
-                        del_count = 0
-                        for idx,i in enumerate(intermediate_gdf['_id_right'].isna().tolist()):
-                            if i:
-                                del include_list[idx-del_count]
-                                del_count+=1
-                            else:
-                                include_list[idx-del_count]+=(True,)
+                        include_list = [i for d,i in zip(intermediate_gdf['_id_right'].isna().tolist(),include_list) if not d]
+                        include_list = [i+(True,) for i in include_list]
 
                         intermediate_gdf = intermediate_gdf.loc[intermediate_gdf['_id_right'].notna()]
 
@@ -1362,13 +1348,9 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                             )
 
                             # Updating include_list (removing items)
-                            del_count = 0
-                            for idx,i in enumerate(intermediate_gdf['_id_right'].isna().tolist()):
-                                if not i:
-                                    del include_list[idx-del_count]
-                                    del_count+=1
-                                else:
-                                    include_list[idx-del_count]+=(True,)
+                            include_list = [i for d,i in zip(intermediate_gdf['_id_right'].isna().tolist(),include_list) if not d]
+                            include_list = [i+(True,) for i in include_list]
+
 
                             intermediate_gdf = intermediate_gdf.loc[intermediate_gdf['_id_right'].isna()]
 
@@ -1381,13 +1363,8 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                             )
 
                             # Updating include_list (removing items)
-                            del_count = 0
-                            for idx,i in enumerate(intermediate_gdf['_id_right'].isna().tolist()):
-                                if i:
-                                    del include_list[idx-del_count]
-                                    del_count+=1
-                                else:
-                                    include_list[idx-del_count]+=(True,)
+                            include_list = [i for d,i in zip(intermediate_gdf['_id_right'].isna().tolist(),include_list) if not d]
+                            include_list = [i+(True,) for i in include_list]
 
                             intermediate_gdf = intermediate_gdf.loc[intermediate_gdf['_id_right'].notna()]
                         
@@ -1412,13 +1389,9 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                         )
 
                         # Updating include_list (removing items)
-                        del_count = 0
-                        for idx,i in enumerate(intermediate_gdf['_id_right'].isna().tolist()):
-                            if i:
-                                del include_list[idx-del_count]
-                                del_count+=1
-                            else:
-                                include_list[idx-del_count]+=(True,)
+                        include_list = [i for d,i in zip(intermediate_gdf['_id_right'].isna().tolist(),include_list) if not d]
+                        include_list = [i+(True,) for i in include_list]
+
 
                         intermediate_gdf = intermediate_gdf.loc[intermediate_gdf['_id_right'].notna()]
                     

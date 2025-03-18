@@ -1870,7 +1870,6 @@ class BulkLabels(Tool):
 
         filter_data = json.loads(get_pattern_matching_value(filter_data))
 
-        #TODO: Add the mods to this function
         filtered_geojson, filtered_ref_list = process_filters_queries(filter_data["Filters"], filter_data["Spatial"], include_structures, current_features)
 
         new_structures_div = [

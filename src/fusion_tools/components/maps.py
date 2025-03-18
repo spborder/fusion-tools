@@ -647,6 +647,15 @@ class SlideMap(MapComponent):
                 // Reading in map-slide-information
                 var map_slide_information = JSON.parse(slide_information);
 
+                function uuidv4() {
+                    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
+                    .replace(/[xy]/g, function (c) {
+                        const r = Math.random() * 16 | 0, 
+                            v = c == 'x' ? r : (r & 0x3 | 0x8);
+                        return v.toString(16);
+                    });
+                }
+
                 // Annotations have to be in GeoJSON format already in order to use this
                 function process_json(json_data, idx, ann_meta){
                     if (json_data.constructor.name == 'Object'){
@@ -667,7 +676,7 @@ class SlideMap(MapComponent):
                             name: name,
                             _id: id
                         },
-                        features: data.features.map(feature => ({
+                        features: data.features.map((feature,f_idx) => ({
                             ...feature,
                             geometry: {
                                 ...feature.geometry,
@@ -678,6 +687,8 @@ class SlideMap(MapComponent):
                             properties: {
                                 ...feature.properties.user,
                                 name: name,
+                                _id: uuidv4(),
+                                _index: f_idx
                             }
                         }))
                     }
