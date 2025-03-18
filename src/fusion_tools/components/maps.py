@@ -307,7 +307,11 @@ class SlideMap(MapComponent):
                 id = {'type': 'load-annotations-modal','index': 0},
                 is_open = False,
                 children = []
-            )
+            ),
+            html.Div(
+                id = {'type': 'map-slide-metadata-div','index': 0},
+                children = []
+            ),
         ])
 
         if use_prefix:
@@ -511,9 +515,9 @@ class SlideMap(MapComponent):
                 Output({'type': 'map-initial-annotations','index': MATCH},'children'),
                 Output({'type': 'map-manual-rois','index': MATCH},'children'),
                 Output({'type': 'map-generated-rois','index': MATCH},'children'),
-                #Output({'type': 'map-annotations-store','index':MATCH},'data'),
                 Output({'type': 'map-tile-layer-holder','index': MATCH},'children'),
-                Output({'type': 'map-slide-information','index': MATCH},'data')
+                Output({'type': 'map-slide-information','index': MATCH},'data'),
+                Output({'type': 'map-slide-metadata-div','index': MATCH},'children')
             ],
             [
                 State('anchor-vis-store','data')
@@ -781,7 +785,6 @@ class SlideMap(MapComponent):
         vis_data = json.loads(vis_data)
         new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
 
-        #TODO: Add some collapsible component containing slide/tiles metadata
         #TODO: Add progress bar for loading annotations (make this part faster)
 
         # Getting data from the tileservers:
@@ -815,7 +818,6 @@ class SlideMap(MapComponent):
         new_tile_size = new_image_metadata['tileHeight']
 
         image_overlay_annotations = [i for i in annotations_metadata if 'image_path' in i]
-        print(image_overlay_annotations)
         non_image_overlay_metadata = [i for i in annotations_metadata if not 'image_path' in i]
         x_scale, y_scale = self.get_scale_factors(new_image_metadata)
         new_layer_children = []
@@ -938,8 +940,58 @@ class SlideMap(MapComponent):
         gen_rois = []
 
         #TODO: Add something else to make sure that "Filtered" annotations are removed after loading a new slide
+        if 'meta' in new_metadata:
+            display_metadata = {
+                k: v
+                for k,v in new_metadata['meta'].items()
+                if not type(v)==dict
+            }
+        else:
+            display_metadata = {}
 
-        return new_layer_children, manual_rois, gen_rois, new_tile_layer, new_slide_info
+        for k,v in new_metadata.items():
+            if not k=='meta':
+                if not type(v)==dict:
+                    display_metadata[k] = v
+
+        slide_metadata_div = html.Div(
+            dbc.Accordion(
+                children = [
+                    dbc.AccordionItem(
+                        title = 'Image Metadata',
+                        children = [
+                            self.make_dash_table(
+                                pd.DataFrame.from_records([
+                                    {
+                                        'Key': k,
+                                        'Value': v
+                                    }
+                                    for k,v in new_image_metadata.items()
+                                ])
+                            )
+                        ]
+                    ),
+                    dbc.AccordionItem(
+                        title = 'Case Metadata',
+                        children = [
+                            self.make_dash_table(
+                                pd.DataFrame.from_records([
+                                    {
+                                        'Key': k,
+                                        'Value': v
+                                    }
+                                    for k,v in display_metadata.items()
+                                ])
+                            )
+                        ]
+                    )
+                ]
+            )
+        )
+
+
+
+        return new_layer_children, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div
 
     def upload_shape(self, upload_clicked, is_open):
 
@@ -948,6 +1000,73 @@ class SlideMap(MapComponent):
 
         if upload_clicked:
             return [not is_open]
+
+    def make_dash_table(self, df:pd.DataFrame):
+        """
+        Populate dash_table.DataTable
+        """
+        return_table = dash_table.DataTable(
+            columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in df],
+            data = df.to_dict('records'),
+            editable=False,                                        
+            sort_mode='multi',
+            sort_action = 'native',
+            page_current=0,
+            page_size=5,
+            style_cell = {
+                'overflow':'hidden',
+                'textOverflow':'ellipsis',
+                'maxWidth':0
+            },
+            tooltip_data = [
+                {
+                    column: {'value':str(value),'type':'markdown'}
+                    for column, value in row.items()
+                } for row in df.to_dict('records')
+            ],
+            tooltip_duration = None
+        )
+
+        return return_table
+    
+    def make_sub_accordion(self, input_data: Union[list,dict]):
+        """Recursively generating sub-accordion objects for nested properties
+
+        :param input_dict: Input dictionary containing nested and non-nested key/value pairs
+        :type input_dict: dict
+        """
+        main_list = []
+        sub_list = []
+        for idx,in_data in enumerate(input_data):
+            title = list(in_data.keys())[0]
+            non_nested_data = [{'Sub-Property':key, 'Value': val} for key,val in in_data[title].items() if not type(val) in [list,dict]]
+            nested_data = [{key:val} for key,val in in_data[title].items() if type(val)==dict]
+            if len(non_nested_data)>0:
+                main_list.append(
+                    dbc.AccordionItem([
+                        html.Div([
+                            self.make_dash_table(pd.DataFrame.from_records(non_nested_data))
+                        ])
+                    ],title = title)
+                )
+            if len(nested_data)>0:
+                nested_list = self.make_sub_accordion(nested_data)
+                sub_list.extend(nested_list)
+        
+            if len(sub_list)>0:
+                main_list.append(
+                    dbc.Accordion(
+                        dbc.AccordionItem(
+                            dbc.Accordion(
+                                sub_list
+                            ),
+                            title = title
+                        )
+                    )
+                )
+                sub_list = []
+        
+        return main_list
 
     def get_click_popup(self, clicked):
         """Populating popup Div with summary information on the clicked GeoJSON feature
@@ -964,73 +1083,6 @@ class SlideMap(MapComponent):
         
         clicked = get_pattern_matching_value(clicked)
         
-        def make_dash_table(df:pd.DataFrame):
-            """
-            Populate dash_table.DataTable
-            """
-            return_table = dash_table.DataTable(
-                columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in df],
-                data = df.to_dict('records'),
-                editable=False,                                        
-                sort_mode='multi',
-                sort_action = 'native',
-                page_current=0,
-                page_size=5,
-                style_cell = {
-                    'overflow':'hidden',
-                    'textOverflow':'ellipsis',
-                    'maxWidth':0
-                },
-                tooltip_data = [
-                    {
-                        column: {'value':str(value),'type':'markdown'}
-                        for column, value in row.items()
-                    } for row in df.to_dict('records')
-                ],
-                tooltip_duration = None
-            )
-
-            return return_table
-        
-        def make_sub_accordion(input_data: Union[list,dict]):
-            """Recursively generating sub-accordion objects for nested properties
-
-            :param input_dict: Input dictionary containing nested and non-nested key/value pairs
-            :type input_dict: dict
-            """
-            main_list = []
-            sub_list = []
-            for idx,in_data in enumerate(input_data):
-                title = list(in_data.keys())[0]
-                non_nested_data = [{'Sub-Property':key, 'Value': val} for key,val in in_data[title].items() if not type(val) in [list,dict]]
-                nested_data = [{key:val} for key,val in in_data[title].items() if type(val)==dict]
-                if len(non_nested_data)>0:
-                    main_list.append(
-                        dbc.AccordionItem([
-                            html.Div([
-                                make_dash_table(pd.DataFrame.from_records(non_nested_data))
-                            ])
-                        ],title = title)
-                    )
-                if len(nested_data)>0:
-                    nested_list = make_sub_accordion(nested_data)
-                    sub_list.extend(nested_list)
-            
-                if len(sub_list)>0:
-                    main_list.append(
-                        dbc.Accordion(
-                            dbc.AccordionItem(
-                                dbc.Accordion(
-                                    sub_list
-                                ),
-                                title = title
-                            )
-                        )
-                    )
-                    sub_list = []
-            
-            return main_list
-
         accordion_children = []
         all_properties = list(clicked['properties'].keys())
 
@@ -1040,14 +1092,14 @@ class SlideMap(MapComponent):
         accordion_children.append(
             dbc.AccordionItem([
                 html.Div([
-                    make_dash_table(pd.DataFrame(non_dict_prop_list))
+                    self.make_dash_table(pd.DataFrame(non_dict_prop_list))
                 ])
             ], title = 'Properties')
         )
 
         # Now loading the dict properties as sub-accordions
         sub_properties = [{i:clicked['properties'][i]} for i in clicked['properties'] if type(clicked['properties'][i])==dict]
-        test_sub_accordions = make_sub_accordion(sub_properties)
+        test_sub_accordions = self.make_sub_accordion(sub_properties)
         if len(test_sub_accordions)>0:
             accordion_children.extend(test_sub_accordions)
 
