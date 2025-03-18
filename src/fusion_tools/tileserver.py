@@ -33,6 +33,7 @@ class LocalTileServer(TileServer):
     def __init__(self,
                  local_image_path: Union[str,list,None] = [],
                  local_image_annotations: Union[str,list] = [],
+                 local_metadata: Union[dict,list] = [],
                  tile_server_port:int = 8050,
                  host: str = 'localhost'
                  ):
@@ -46,6 +47,7 @@ class LocalTileServer(TileServer):
 
         self.local_image_paths = local_image_path if type(local_image_path)==list else [local_image_path]
         self.local_image_annotations = local_image_annotations if type(local_image_annotations)==list else [local_image_annotations]
+        self.local_metadata = local_metadata
         self.tile_server_port = tile_server_port
         self.host = host
 
@@ -54,12 +56,14 @@ class LocalTileServer(TileServer):
         self.tile_sources = [large_image.open(i,encoding='PNG') for i in self.local_image_paths]
         self.tiles_metadatas = [i.getMetadata() for i in self.tile_sources]
         self.annotations, self.annotations_metadata = self.load_annotations()
+        self.metadata = self.local_metadata if not self.local_metadata is None else [{} for i in self.local_image_paths]
 
         self.app = FastAPI()
         self.router = APIRouter()
         self.router.add_api_route('/',self.root,methods=["GET"])
         self.router.add_api_route('/names',self.get_names,methods=["GET"])
         self.router.add_api_route('/{image}/tiles/{z}/{x}/{y}',self.get_tile,methods=["GET"])
+        self.router.add_api_route('/{image}/image_metadata',self.get_image_metadata,methods=["GET"])
         self.router.add_api_route('/{image}/metadata',self.get_metadata,methods=["GET"])
         self.router.add_api_route('/{image}/tiles/region',self.get_region,methods=["GET"])
         self.router.add_api_route('/{image}/tiles/thumbnail',self.get_thumbnail,methods=["GET"])
@@ -127,10 +131,12 @@ class LocalTileServer(TileServer):
                 )
 
         self.tile_sources.append(new_tile_source)
+        self.tiles_metadatas.append(new_tiles_metadata)
+
         if not new_metadata is None:
-            self.tiles_metadatas.append(new_tiles_metadata | {'user': new_metadata})
+            self.metadata.append(new_metadata)
         else:
-            self.tiles_metadatas.append(new_tiles_metadata)
+            self.metadata.append({})
 
         if not new_annotations is None:
             if type(new_annotations)==str:
@@ -245,6 +251,16 @@ class LocalTileServer(TileServer):
             return f'http://{self.host}:{self.tile_server_port}/{name_index}/metadata'
         else:
             return None
+        
+    def get_name_image_metadata_url(self,name):
+
+        if name in self.names:
+            name_index = self.names.index(name)
+
+            return f'http://{self.host}:{self.tile_server_port}/{name_index}/image_metadata'
+
+        else:
+            return None
 
     def get_tile(self,image:int,z:int, x:int, y:int, style:str = ''):
         """Tiles endpoint, returns an image tyle based on provided coordinates
@@ -286,7 +302,7 @@ class LocalTileServer(TileServer):
         else:
             return Response(content = 'invalid image index', media_type='application/json',status_code=400)
     
-    def get_metadata(self,image:int):
+    def get_image_metadata(self,image:int):
         """Getting large-image metadata for image
 
         :return: Dictionary containing metadata for local image
@@ -296,6 +312,17 @@ class LocalTileServer(TileServer):
             return Response(content = json.dumps(self.tiles_metadatas[image]),media_type = 'application/json')
         else:
             return Response(content = 'invalid image index',media_type='application/json', status_code=400)
+        
+    def get_metadata(self, image:int):
+        """Getting metadata associated with slide/case/patient
+
+        :param image: Index of local image
+        :type image: int
+        """
+        if image<len(self.metadata) and image>=0:
+            return Response(content = json.dumps(self.metadata[image]),media_type = 'application/json')
+        else:
+            return Response(content = 'invalid image index',media_type='application/json',status_code=400)
     
     def get_region(self, image:int, top: int, left: int, bottom:int, right:int,style:str = ''):
         """
@@ -400,7 +427,6 @@ class LocalTileServer(TileServer):
 
 class DSATileServer(TileServer):
     """Use for linking visualization with remote tiles API (DSA server)
-
     """
     def __init__(self,
                  api_url: str,
@@ -420,20 +446,20 @@ class DSATileServer(TileServer):
         #TODO: Add some method for appending the user_token to these URLs (Might be better to save this on the 
         # component side so that that property can be dynamic)
         if user_token is None:
-            item_info = requests.get(
-                f'{api_url}/item/{item_id}'
-            ).json()
-        else:
-            item_info = requests.get(
-                f'{api_url}/item/{item_id}?token={user_token}'
-            ).json()
+            info_url = f'{api_url}/item/{item_id}'
 
+        else:
+            info_url = f'{api_url}/item/{item_id}?token={user_token}'
+
+        item_info = requests.get(info_url).json()
         self.item_metadata = item_info['meta']
         self.name = item_info['name']
 
+        self.metadata_url = info_url
+
         self.tiles_url = f'{api_url}/item/{item_id}/tiles/zxy/'+'{z}/{x}/{y}'
         self.regions_url = f'{api_url}/item/{item_id}/tiles/region'
-        self.metadata_url = f'{api_url}/item/{item_id}/tiles'
+        self.image_metadata_url = f'{api_url}/item/{item_id}/tiles'
 
         self.tiles_metadata = requests.get(
             f'{api_url}/item/{item_id}/tiles'
@@ -446,6 +472,9 @@ class DSATileServer(TileServer):
             self.annotations_metadata_url = f'{api_url}/annotation?itemId={item_id}'
         else:
             self.annotations_metadata_url = f'{api_url}/annotation?token={user_token}&itemId={item_id}'
+
+        annotations_metadata = requests.get(self.annotations_metadata_url).json()
+        self.annotations_geojson_url = [f'{api_url}/annotation/{a["_id"]}/geojson' for a in annotations_metadata]
 
         self.annotations_region_url = f'{api_url}/annotation/'
 

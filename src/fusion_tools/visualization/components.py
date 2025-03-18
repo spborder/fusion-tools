@@ -324,10 +324,10 @@ class Visualization:
                     )
 
                     slide_dict = {
-                        #'start_idx': s_idx,
                         'name': s.split(os.sep)[-1],
                         'tiles_url': self.local_tile_server.get_name_tiles_url(s.split(os.sep)[-1]),
                         'regions_url': self.local_tile_server.get_name_regions_url(s.split(os.sep)[-1]),
+                        'image_metadata_url': self.local_tile_server.get_name_image_metadata_url(s.split(os.sep)[-1]),
                         'metadata_url': self.local_tile_server.get_name_metadata_url(s.split(os.sep)[-1]),
                         'annotations_url': self.local_tile_server.get_name_annotations_url(s.split(os.sep)[-1]),
                         'annotations_metadata_url': self.local_tile_server.get_name_annotations_metadata_url(s.split(os.sep)[-1]),
@@ -349,10 +349,10 @@ class Visualization:
                 if type(t)==LocalTileServer:
                     slide_store['current'].extend([
                         {
-                            #'start_idx': (s_idx+t_idx+1),
                             'name': j,
                             'tiles_url': t.get_name_tiles_url(j),
                             'regions_url': t.get_name_regions_url(j),
+                            'image_metadata_url': t.get_name_image_metadata_url(j),
                             'metadata_url': t.get_name_metadata_url(j),
                             'annotations_url': t.get_name_annotations_url(j),
                             'annotations_metadata_url': t.get_name_annotations_metadata_url(j),
@@ -362,10 +362,10 @@ class Visualization:
                     ])
                     slide_store['local'].extend([
                         {
-                            #'start_idx': (s_idx+t_idx+1),
                             'name': j,
                             'tiles_url': t.get_name_tiles_url(j),
                             'regions_url': t.get_name_regions_url(j),
+                            'image_metadata_url': t.get_name_image_metadata_url(j),
                             'metadata_url': t.get_name_metadata_url(j),
                             'annotations_url': t.get_name_annotations_url(j),
                             'annotations_metadata_url': t.get_name_annotations_metadata_url(j),
@@ -376,26 +376,28 @@ class Visualization:
 
                 elif type(t)==DSATileServer:
                     slide_store['current'].append({
-                        #'start_idx': (s_idx+t_idx+1),
                         'name': t.name,
                         'api_url': t.base_url,
                         'tiles_url': t.tiles_url,
                         'regions_url': t.regions_url,
+                        'image_metadata_url': t.image_metadata_url,
                         'metadata_url': t.metadata_url,
                         'annotations_url': t.annotations_url,
                         'annotations_metadata_url':t.annotations_metadata_url,
-                        'annotations_region_url': t.annotations_region_url
+                        'annotations_region_url': t.annotations_region_url,
+                        'annotations_geojson_url': t.annotations_geojson_url
                     })
                 elif type(t)==CustomTileServer:
                     slide_store['current'].append({
-                        #'start_idx': (s_idx+t_idx+t),
                         'name': t.name,
                         'tiles_url': t.tiles_url,
                         'regions_url': t.regions_url if hasattr(t,'regions_url') else None,
+                        'image_metadata_url': t.image_metadata_url if hasattr(t,'image_metadata_url') else None,
                         'metadata_url': t.metadata_url if hasattr(t,'metadata_url') else None,
                         'annotations_url': t.annotations_url if hasattr(t,'annotations_url') else None,
                         'annotations_metadata_url': t.annotations_metadata_url if hasattr(t,'annotations_metadata_url') else None,
-                        'annotations_region_url': t.annotations_regions_url if hasattr(t,'annotations_regions_url') else None
+                        'annotations_region_url': t.annotations_regions_url if hasattr(t,'annotations_regions_url') else None,
+                        'annotations_geojson_url': t.annotations_geojson_url if hasattr(t,'annotations_geojson_url') else None
                     })
 
 

@@ -69,6 +69,7 @@ class SlideMap(MapComponent):
 
         # Add callback functions here
         self.get_callbacks()
+        self.get_annotations_callbacks()
 
     def __str__(self):
         return 'Slide Map'
@@ -510,7 +511,7 @@ class SlideMap(MapComponent):
                 Output({'type': 'map-initial-annotations','index': MATCH},'children'),
                 Output({'type': 'map-manual-rois','index': MATCH},'children'),
                 Output({'type': 'map-generated-rois','index': MATCH},'children'),
-                Output({'type': 'map-annotations-store','index':MATCH},'data'),
+                #Output({'type': 'map-annotations-store','index':MATCH},'data'),
                 Output({'type': 'map-tile-layer-holder','index': MATCH},'children'),
                 Output({'type': 'map-slide-information','index': MATCH},'data')
             ],
@@ -633,11 +634,7 @@ class SlideMap(MapComponent):
 
         self.blueprint.clientside_callback(
             """
-            async function(selected_slide, vis_session){
-
-                // Have to grab the slide_information from the selected slide index and vis session
-
-
+            async function(slide_information){
                 // Prevent update at initialization
                 if (slide_information[0]==undefined){
                     throw window.dash_clientside.PreventUpdate;
@@ -645,17 +642,69 @@ class SlideMap(MapComponent):
 
                 // Reading in map-slide-information
                 var map_slide_information = JSON.parse(slide_information);
-                var annotations_list = [];
-                var annotations_str = [];
 
-                try {
-                    let ann_url = map_slide_information.annotations_url;
-                    var ann_response = await fetch(
-                        ann_url, {
+                // Annotations have to be in GeoJSON format already in order to use this
+                const scale_geoJSON = (data, x_scale, y_scale) => {
+                    return {
+                        ...data,
+                        properties: {
+                            name: 'name',
+                            _id: 'id'
+                        },
+                        features: data.features.map(feature => ({
+                            ...feature,
+                            geometry: {
+                                ...feature.geometry,
+                                coordinates: feature.geometry.coordinates.map(axes =>
+                                    axes.map(([x, y]) => [x*x_scale, y*y_scale])
+                                )
+                            }
+                        }))
+                    }
+                };
+
+
+                // Getting the names of each annotation
+                let ann_meta_url = map_slide_information.annotations_metadata_url;
+                var ann_meta_response = await fetch(
+                    ann_meta_url, {
                         method: 'GET',
                         headers: {
                             'Content-Type': 'application/json'
                         }
+                    }
+                );
+
+                if (!ann_meta_response.ok) {
+                    throw new Error(`Oh no! Error encountered: ${ann_meta_response.status}`)
+                }
+
+                var ann_meta = await ann_meta_response.json();
+
+                var annotations_list = [];
+                var annotations_str = [];
+
+                //try {
+
+                if ('annotations_geojson_url' in map_slide_information){
+                    // This slide has a specific url for getting individual GeoJSON formatted annotations
+                    var new_annotations = [];
+                    const promises = map_slide_information.annotations_geojson_url.map((url) =>
+                        fetch(url).then((response) => new_annotations.push(response.json()))
+                    );
+
+                    const promise_await = await Promise.all(promises);
+                    console.log(promise_await);
+                    console.log(new_annotations);
+
+                } else {
+                    let ann_url = map_slide_information.annotations_url;
+                    var ann_response = await fetch(
+                        ann_url, {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            }
                         }
                     );
 
@@ -665,40 +714,28 @@ class SlideMap(MapComponent):
 
                     // Scaling coordinates of returned annotations (If the url is for a DSA instance then the annotations will not be in GeoJSON format by default)
                     var new_annotations = await ann_response.json();
-                    
-                    // Annotations have to be in GeoJSON format already in order to use this
-                    const scale_geoJSON = (data, name, id, x_scale, y_scale) => {
-                        return {
-                            ...data,
-                            properties: {
-                                name: name,
-                                _id: id
-                            },
-                            features: data.features.map(feature => ({
-                                ...feature,
-                                geometry: {
-                                    ...feature.geometry,
-                                    coordinates: feature.geometry.coordinates.map(axes =>
-                                        axes.map(([x, y]) => [x*x_scale, y*y_scale])
-                                    )
-                                }
-                            }))
-                        }
-                    };
 
-                    for (let ann=0; ann<new_annotations.length; ann++){
-                        let annotation = scale_geoJSON(new_annotations[ann], map_slide_information.x_scale, map_slide_information.y_scale);
-                        
-                        annotation_str.push(annotation);
-                        annotations_list.push(new_geojson);
-
-                    }
-
-
-                } catch (error) {
-                    console.error(error.message);
+                    var ann_names = [];
+                    new_annotations.forEach((ann) => ann_names.push(ann.properties.name))
                 }
 
+                
+
+                //for (let ann=0; ann<ann_meta.length; ann++){
+                //    console.log(ann_meta[ann]);
+                //    console.log(new_annotations[ann]);
+                //    let new_geojson = scale_geoJSON(Promise.resolve(new_annotations[ann]), ann_meta[ann].name, ann_meta[ann]["_id"], map_slide_information.x_scale, map_slide_information.y_scale);
+                //    
+                //    annotations_str.push(new_geojson);
+                //    annotations_list.push(new_geojson);
+                //
+                //}
+
+                //} catch (error) {
+                //    console.error(error.message);
+                //}
+
+                console.log(annotations_list);
                 return [annotations_list, [JSON.stringify(annotations_str)]];
             }
             """,
@@ -707,14 +744,9 @@ class SlideMap(MapComponent):
                 Output({'type': 'map-annotations-store','index': ALL},'data')
             ],
             [
-                State('anchor-vis-store','data')
-            ],
-            [
-                Input({'type': 'slide-select-drop','index': ALL},'value')
+                Input({'type': 'map-slide-information','index': ALL},'data')
             ]
         )
-
-
 
     def update_vis_session(self, new_vis_data):
         """Updating slide dropdown options based on current visualization session
@@ -742,7 +774,6 @@ class SlideMap(MapComponent):
             raise exceptions.PreventUpdate
 
         vis_data = json.loads(vis_data)
-
         new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
 
         #TODO: Add some collapsible component containing slide/tiles metadata
@@ -751,51 +782,52 @@ class SlideMap(MapComponent):
         # Getting data from the tileservers:
         if not 'current_user' in vis_data:
             new_url = new_slide['tiles_url']
-            new_annotations = requests.get(new_slide['annotations_url']).json()
-            new_metadata = requests.get(new_slide['metadata_url']).json()
+            image_metadata_url = new_slide['image_metadata_url']
+            metadata_url = new_slide['metadata_url']
+            annotations_metadata_url = new_slide['annotations_metadata_url']
+
         else:
             new_url = new_slide['tiles_url']+f'?token={vis_data["current_user"]["token"]}'
-            new_annotations = requests.get(new_slide['annotations_url']+f'?token={vis_data["current_user"]["token"]}').json()
-            new_metadata = requests.get(new_slide['metadata_url']+f'?token={vis_data["current_user"]["token"]}').json()
+            image_metadata_url = new_slide['image_metadata_url']+f'?token={vis_data["current_user"]["token"]}'
+            metadata_url = new_slide['metadata_url']+f'?token={vis_data["current_user"]["token"]}'
+            annotations_metadata_url = new_slide['annotations_metadata_url']
 
-        new_tile_size = new_metadata['tileHeight']
+        new_image_metadata = requests.get(image_metadata_url).json()
+        new_metadata = requests.get(metadata_url).json()
+        annotations_metadata = requests.get(annotations_metadata_url).json()
 
-        if type(new_annotations)==dict:
-            new_annotations = [new_annotations]
+        if any(['annotation' in i for i in annotations_metadata]):
+            annotations_metadata = [
+                {
+                    'name': a['annotation']['name'],
+                    '_id': a['_id']
+                }
+                for a in annotations_metadata
+            ]
 
-        image_overlay_annotations = [i for i in new_annotations if 'image_path' in i]
-        geo_annotations = [i for i in new_annotations if not 'image_path' in i]
-        if any(['annotation' in i for i in new_annotations]):
-            histomics_annotations = histomics_to_geojson([i for i in new_annotations if 'annotation' in i])
-            g_count = 0
-            for g_idx,g in enumerate(geo_annotations):
-                if 'annotation' in g:
-                    geo_annotations[g_idx] = histomics_annotations[g_count]
-                    g_count+=1
-            
+        annotation_names = [i['name'] for i in annotations_metadata]
 
-        x_scale, y_scale = self.get_scale_factors(new_metadata)
-        annotation_properties = [i['properties'] for i in geo_annotations]
-        annotation_names = [i['name'] for i in annotation_properties]
-        geo_annotations = [
-            geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*x_scale,c[1]*y_scale),g),i)
-            for i in geo_annotations
-        ]
+        new_tile_size = new_image_metadata['tileHeight']
+
+        image_overlay_annotations = [i for i in annotations_metadata if 'image_path' in i]
+        x_scale, y_scale = self.get_scale_factors(new_image_metadata)
         new_layer_children = []
 
-        for st_idx,(st,name) in enumerate(zip(geo_annotations,annotation_names)):
-
+        # Adding overlaid annotation layers:
+        for st_idx, st_info in enumerate(annotations_metadata):
             new_layer_children.append(
                 dl.Overlay(
                     dl.LayerGroup(
                         dl.GeoJSON(
-                            data = dlx.geojson_to_geobuf(st),
-                            format = 'geobuf',
+                            data = {
+                                'type': 'FeatureCollection',
+                                'features': []
+                            },
+                            #format = 'geojson',
                             id = {'type': f'{self.component_prefix}-feature-bounds','index': st_idx},
                             options = {
-                                'style': self.js_namespace("featureStyle")
+                                'style': self.js_namespace('featureStyle')
                             },
-                            filter = self.js_namespace("featureFilter"),
                             hideout = {
                                 'overlayBounds': {},
                                 'overlayProp': {},
@@ -811,22 +843,25 @@ class SlideMap(MapComponent):
                                 {
                                     'weight': 5,
                                     'color': '#9caf00',
-                                    'dashArray':''
+                                    'dashArray': ''
                                 }
                             ),
                             zoomToBounds = False,
                             children = [
                                 dl.Popup(
                                     id = {'type': f'{self.component_prefix}-feature-popup','index': st_idx},
-                                    autoPan = False,
+                                    autoPan = False
                                 )
                             ]
                         )
                     ),
-                    name = name, checked = True, id = {'type':f'{self.component_prefix}-feature-overlay','index':np.random.randint(0,1000)}
+                    name = st_info['name'],
+                    checked = True,
+                    id = {'type': f'{self.component_prefix}-feature-overlay','index': np.random.randint(0,1000)}
                 )
             )
-        
+
+
         for img_idx, img in enumerate(image_overlay_annotations):
 
             # miny, minx, maxy, maxx (a.k.a. minlat, minlng, maxlat, maxlng)
@@ -862,12 +897,12 @@ class SlideMap(MapComponent):
 
         # For MultiFrameSlideMap, add frame BaseLayers and RGB layer (if present)
         if isinstance(self,MultiFrameSlideMap):
-            new_layer_children.extend(self.process_frames(new_metadata, new_url))
+            new_layer_children.extend(self.process_frames(new_image_metadata, new_url))
             new_tile_layer = dl.TileLayer(
                 id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
                 url = '',                
                 tileSize=new_tile_size,
-                maxNativeZoom=new_metadata['levels']-2 if new_metadata['levels']>=2 else 0,
+                maxNativeZoom=new_image_metadata['levels']-2 if new_image_metadata['levels']>=2 else 0,
                 minZoom = 0
             )
         else:
@@ -875,21 +910,18 @@ class SlideMap(MapComponent):
                 id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
                 url = new_url,
                 tileSize = new_tile_size,
-                maxNativeZoom=new_metadata['levels']-2 if new_metadata['levels']>=2 else 0,
+                maxNativeZoom=new_image_metadata['levels']-2 if new_image_metadata['levels']>=2 else 0,
                 minZoom = 0
             )
-
-        for n,j in zip(geo_annotations,annotation_properties):
-            n['properties'] = j
 
         new_slide_info = {}
         new_slide_info['x_scale'] = x_scale
         new_slide_info['y_scale'] = y_scale
         new_slide_info['image_overlays'] = image_overlay_annotations
-        new_slide_info['tiles_url'] = new_url
-        new_slide_info['tiles_metadata'] = new_metadata
+        new_slide_info['annotations_metadata'] = annotations_metadata
+        new_slide_info['metadata'] = new_metadata
+        new_slide_info = new_slide_info | new_slide
 
-        geo_annotations = json.dumps(geo_annotations)
         new_slide_info = json.dumps(new_slide_info)
 
         # Updating manual and generated ROIs divs
@@ -898,7 +930,7 @@ class SlideMap(MapComponent):
 
         #TODO: Add something else to make sure that "Filtered" annotations are removed after loading a new slide
 
-        return new_layer_children, manual_rois, gen_rois, geo_annotations, new_tile_layer, new_slide_info
+        return new_layer_children, manual_rois, gen_rois, new_tile_layer, new_slide_info
 
     def upload_shape(self, upload_clicked, is_open):
 
