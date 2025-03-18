@@ -53,6 +53,7 @@ tests/test_get_gene_info.py
 tests/test_global_property_plotter.py
 tests/test_hra_viewer.py
 tests/test_image_overlay.py
+tests/test_json_stream.py
 tests/test_large_slide_maps.py
 tests/test_load_visium_csv.py
 tests/test_meta_embed.py
