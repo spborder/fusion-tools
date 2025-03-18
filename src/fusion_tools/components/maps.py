@@ -69,6 +69,7 @@ class SlideMap(MapComponent):
 
         # Add callback functions here
         self.get_callbacks()
+        self.get_annotations_callbacks()
 
     def __str__(self):
         return 'Slide Map'
@@ -306,7 +307,11 @@ class SlideMap(MapComponent):
                 id = {'type': 'load-annotations-modal','index': 0},
                 is_open = False,
                 children = []
-            )
+            ),
+            html.Div(
+                id = {'type': 'map-slide-metadata-div','index': 0},
+                children = []
+            ),
         ])
 
         if use_prefix:
@@ -510,9 +515,9 @@ class SlideMap(MapComponent):
                 Output({'type': 'map-initial-annotations','index': MATCH},'children'),
                 Output({'type': 'map-manual-rois','index': MATCH},'children'),
                 Output({'type': 'map-generated-rois','index': MATCH},'children'),
-                Output({'type': 'map-annotations-store','index':MATCH},'data'),
                 Output({'type': 'map-tile-layer-holder','index': MATCH},'children'),
-                Output({'type': 'map-slide-information','index': MATCH},'data')
+                Output({'type': 'map-slide-information','index': MATCH},'data'),
+                Output({'type': 'map-slide-metadata-div','index': MATCH},'children')
             ],
             [
                 State('anchor-vis-store','data')
@@ -629,6 +634,140 @@ class SlideMap(MapComponent):
             ]
         )(self.upload_shape)
 
+    def get_annotations_callbacks(self):
+
+        self.blueprint.clientside_callback(
+            """
+            async function(slide_information){
+                // Prevent update at initialization
+                if (slide_information[0]==undefined){
+                    throw window.dash_clientside.PreventUpdate;
+                }
+
+                // Reading in map-slide-information
+                var map_slide_information = JSON.parse(slide_information);
+
+                function uuidv4() {
+                    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
+                    .replace(/[xy]/g, function (c) {
+                        const r = Math.random() * 16 | 0, 
+                            v = c == 'x' ? r : (r & 0x3 | 0x8);
+                        return v.toString(16);
+                    });
+                }
+
+                // Annotations have to be in GeoJSON format already in order to use this
+                function process_json(json_data, idx, ann_meta){
+                    if (json_data.constructor.name == 'Object'){
+                        return scale_geoJSON(json_data, ann_meta[idx].name, ann_meta[idx]["_id"],map_slide_information.x_scale, map_slide_information.y_scale);
+                    } else {
+                        let scaled_list = [];
+                        for (let j=0; j<json_data.length; j++){
+                            scaled_list.push(scale_geoJSON(json_data[j], ann_meta[idx+j].name, ann_meta[idx+j]["_id"], map_slide_information.x_scale, map_slide_information.y_scale));
+                        }
+                        return scaled_list;
+                    }
+                };
+
+                const scale_geoJSON = (data, name, id, x_scale, y_scale) => {
+                    return {
+                        ...data,
+                        properties: {
+                            name: name,
+                            _id: id
+                        },
+                        features: data.features.map((feature,f_idx) => ({
+                            ...feature,
+                            geometry: {
+                                ...feature.geometry,
+                                coordinates: feature.geometry.coordinates.map(axes =>
+                                    axes.map(([x, y]) => [x*x_scale, y*y_scale])
+                                )
+                            },
+                            properties: {
+                                ...feature.properties.user,
+                                name: name,
+                                _id: uuidv4(),
+                                _index: f_idx
+                            }
+                        }))
+                    }
+                };
+
+
+                // Getting the names of each annotation
+                let ann_meta_url = map_slide_information.annotations_metadata_url;
+                var ann_meta_response = await fetch(
+                    ann_meta_url, {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        }
+                    }
+                );
+
+                if (!ann_meta_response.ok) {
+                    throw new Error(`Oh no! Error encountered: ${ann_meta_response.status}`)
+                }
+
+                var ann_meta = await ann_meta_response.json();
+
+                // Making sure these are only structural annotations, not image overlays
+                ann_meta = ann_meta.filter(item => !('image_path' in item))
+
+                if (ann_meta.length==0){
+                    let empty_geojson = {
+                        'type': 'FeatureCollection',
+                        'features': [],
+                        'properties': {}
+                    };
+
+                    return [[empty_geojson], [JSON.stringify([empty_geojson])]]
+                }
+
+                // Initializing empty annotations list
+                var annotations_list = new Array(ann_meta.length);
+                try {
+                    if ('annotations_geojson_url' in map_slide_information){
+                        // This slide has a specific url for getting individual GeoJSON formatted annotations
+                        var new_annotations = [];
+                        ann_meta.forEach((ann_,idx) => ann_meta.splice(idx,1,{'name': ann_.annotation.name, '_id': ann_._id}))
+                        const promises = map_slide_information.annotations_geojson_url.map((url,idx) =>
+                            fetch(url)
+                            .then((response) => response.json())
+                            .then(function(json_data){return process_json(json_data,idx,ann_meta)})
+                            .then((geojson_anns) => annotations_list.splice(idx,1,geojson_anns))
+                        );
+
+                        const promise_await = await Promise.all(promises);
+
+                    } else {
+                        const promises = [map_slide_information.annotations_url].map((url,idx) =>
+                            fetch(url)
+                            .then((response) => response.json())
+                            .then((json_data) => annotations_list.push(process_json(json_data,idx,ann_meta)))
+                        );
+                        const promise_await = await Promise.all(promises);
+                        annotations_list = annotations_list.flat();
+
+                    }
+
+                } catch (error) {
+                    console.error(error.message);
+                }
+
+                return [annotations_list, [JSON.stringify(annotations_list)]];
+            }
+            """,
+            [
+                Output({'type': 'feature-bounds','index': ALL},'data'),
+                Output({'type': 'map-annotations-store','index': ALL},'data')
+            ],
+            [
+                Input({'type': 'map-slide-information','index': ALL},'data')
+            ]
+        )
+
     def update_vis_session(self, new_vis_data):
         """Updating slide dropdown options based on current visualization session
 
@@ -655,55 +794,60 @@ class SlideMap(MapComponent):
             raise exceptions.PreventUpdate
 
         vis_data = json.loads(vis_data)
-
         new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
+
+        #TODO: Add progress bar for loading annotations (make this part faster)
 
         # Getting data from the tileservers:
         if not 'current_user' in vis_data:
             new_url = new_slide['tiles_url']
-            new_annotations = requests.get(new_slide['annotations_url']).json()
-            new_metadata = requests.get(new_slide['metadata_url']).json()
+            image_metadata_url = new_slide['image_metadata_url']
+            metadata_url = new_slide['metadata_url']
+            annotations_metadata_url = new_slide['annotations_metadata_url']
+
         else:
             new_url = new_slide['tiles_url']+f'?token={vis_data["current_user"]["token"]}'
-            new_annotations = requests.get(new_slide['annotations_url']+f'?token={vis_data["current_user"]["token"]}').json()
-            new_metadata = requests.get(new_slide['metadata_url']+f'?token={vis_data["current_user"]["token"]}').json()
+            image_metadata_url = new_slide['image_metadata_url']+f'?token={vis_data["current_user"]["token"]}'
+            metadata_url = new_slide['metadata_url']+f'?token={vis_data["current_user"]["token"]}'
+            annotations_metadata_url = new_slide['annotations_metadata_url']
 
-        new_tile_size = new_metadata['tileHeight']
+        new_image_metadata = requests.get(image_metadata_url).json()
+        new_metadata = requests.get(metadata_url).json()
+        annotations_metadata = requests.get(annotations_metadata_url).json()
 
-        if type(new_annotations)==dict:
-            new_annotations = [new_annotations]
+        if any(['annotation' in i for i in annotations_metadata]):
+            annotations_metadata = [
+                {
+                    'name': a['annotation']['name'],
+                    '_id': a['_id']
+                }
+                for a in annotations_metadata
+            ]
 
-        image_overlay_annotations = [i for i in new_annotations if 'image_path' in i]
-        geo_annotations = [i for i in new_annotations if not 'image_path' in i]
-        if any(['annotation' in i for i in new_annotations]):
-            histomics_annotations = histomics_to_geojson([i for i in new_annotations if 'annotation' in i])
-            g_count = 0
-            for g_idx,g in enumerate(geo_annotations):
-                if 'annotation' in g:
-                    geo_annotations[g_idx] = histomics_annotations[g_count]
-                    g_count+=1
-            
+        annotation_names = [i['name'] for i in annotations_metadata]
 
-        x_scale, y_scale = self.get_scale_factors(new_metadata)
-        annotation_properties = [i['properties'] for i in geo_annotations]
-        annotation_names = [i['name'] for i in annotation_properties]
-        geo_annotations = [
-            geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*x_scale,c[1]*y_scale),g),i)
-            for i in geo_annotations
-        ]
+        new_tile_size = new_image_metadata['tileHeight']
+
+        image_overlay_annotations = [i for i in annotations_metadata if 'image_path' in i]
+        non_image_overlay_metadata = [i for i in annotations_metadata if not 'image_path' in i]
+        x_scale, y_scale = self.get_scale_factors(new_image_metadata)
         new_layer_children = []
 
-        for st_idx,(st,name) in enumerate(zip(geo_annotations,annotation_names)):
+        # Adding overlaid annotation layers:
+        for st_idx, st_info in enumerate(non_image_overlay_metadata):
 
             new_layer_children.append(
                 dl.Overlay(
                     dl.LayerGroup(
                         dl.GeoJSON(
-                            data = dlx.geojson_to_geobuf(st),
-                            format = 'geobuf',
+                            data = {
+                                'type': 'FeatureCollection',
+                                'features': []
+                            },
+                            #format = 'geojson',
                             id = {'type': f'{self.component_prefix}-feature-bounds','index': st_idx},
                             options = {
-                                'style': self.js_namespace("featureStyle")
+                                'style': self.js_namespace('featureStyle')
                             },
                             filter = self.js_namespace("featureFilter"),
                             hideout = {
@@ -721,22 +865,25 @@ class SlideMap(MapComponent):
                                 {
                                     'weight': 5,
                                     'color': '#9caf00',
-                                    'dashArray':''
+                                    'dashArray': ''
                                 }
                             ),
                             zoomToBounds = False,
                             children = [
                                 dl.Popup(
                                     id = {'type': f'{self.component_prefix}-feature-popup','index': st_idx},
-                                    autoPan = False,
+                                    autoPan = False
                                 )
                             ]
                         )
                     ),
-                    name = name, checked = True, id = {'type':f'{self.component_prefix}-feature-overlay','index':np.random.randint(0,1000)}
+                    name = st_info['name'],
+                    checked = True,
+                    id = {'type': f'{self.component_prefix}-feature-overlay','index': np.random.randint(0,1000)}
                 )
             )
-        
+
+
         for img_idx, img in enumerate(image_overlay_annotations):
 
             # miny, minx, maxy, maxx (a.k.a. minlat, minlng, maxlat, maxlng)
@@ -772,12 +919,12 @@ class SlideMap(MapComponent):
 
         # For MultiFrameSlideMap, add frame BaseLayers and RGB layer (if present)
         if isinstance(self,MultiFrameSlideMap):
-            new_layer_children.extend(self.process_frames(new_metadata, new_url))
+            new_layer_children.extend(self.process_frames(new_image_metadata, new_url))
             new_tile_layer = dl.TileLayer(
                 id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
                 url = '',                
                 tileSize=new_tile_size,
-                maxNativeZoom=new_metadata['levels']-2 if new_metadata['levels']>=2 else 0,
+                maxNativeZoom=new_image_metadata['levels']-2 if new_image_metadata['levels']>=2 else 0,
                 minZoom = 0
             )
         else:
@@ -785,21 +932,18 @@ class SlideMap(MapComponent):
                 id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
                 url = new_url,
                 tileSize = new_tile_size,
-                maxNativeZoom=new_metadata['levels']-2 if new_metadata['levels']>=2 else 0,
+                maxNativeZoom=new_image_metadata['levels']-2 if new_image_metadata['levels']>=2 else 0,
                 minZoom = 0
             )
-
-        for n,j in zip(geo_annotations,annotation_properties):
-            n['properties'] = j
 
         new_slide_info = {}
         new_slide_info['x_scale'] = x_scale
         new_slide_info['y_scale'] = y_scale
         new_slide_info['image_overlays'] = image_overlay_annotations
-        new_slide_info['tiles_url'] = new_url
-        new_slide_info['tiles_metadata'] = new_metadata
+        new_slide_info['annotations_metadata'] = annotations_metadata
+        new_slide_info['metadata'] = new_metadata
+        new_slide_info = new_slide_info | new_slide
 
-        geo_annotations = json.dumps(geo_annotations)
         new_slide_info = json.dumps(new_slide_info)
 
         # Updating manual and generated ROIs divs
@@ -807,8 +951,58 @@ class SlideMap(MapComponent):
         gen_rois = []
 
         #TODO: Add something else to make sure that "Filtered" annotations are removed after loading a new slide
+        if 'meta' in new_metadata:
+            display_metadata = {
+                k: v
+                for k,v in new_metadata['meta'].items()
+                if not type(v)==dict
+            }
+        else:
+            display_metadata = {}
 
-        return new_layer_children, manual_rois, gen_rois, geo_annotations, new_tile_layer, new_slide_info
+        for k,v in new_metadata.items():
+            if not k=='meta':
+                if not type(v)==dict:
+                    display_metadata[k] = v
+
+        slide_metadata_div = html.Div(
+            dbc.Accordion(
+                children = [
+                    dbc.AccordionItem(
+                        title = 'Image Metadata',
+                        children = [
+                            self.make_dash_table(
+                                pd.DataFrame.from_records([
+                                    {
+                                        'Key': k,
+                                        'Value': v
+                                    }
+                                    for k,v in new_image_metadata.items()
+                                ])
+                            )
+                        ]
+                    ),
+                    dbc.AccordionItem(
+                        title = 'Case Metadata',
+                        children = [
+                            self.make_dash_table(
+                                pd.DataFrame.from_records([
+                                    {
+                                        'Key': k,
+                                        'Value': v
+                                    }
+                                    for k,v in display_metadata.items()
+                                ])
+                            )
+                        ]
+                    )
+                ]
+            )
+        )
+
+
+
+        return new_layer_children, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div
 
     def upload_shape(self, upload_clicked, is_open):
 
@@ -817,6 +1011,73 @@ class SlideMap(MapComponent):
 
         if upload_clicked:
             return [not is_open]
+
+    def make_dash_table(self, df:pd.DataFrame):
+        """
+        Populate dash_table.DataTable
+        """
+        return_table = dash_table.DataTable(
+            columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in df],
+            data = df.to_dict('records'),
+            editable=False,                                        
+            sort_mode='multi',
+            sort_action = 'native',
+            page_current=0,
+            page_size=5,
+            style_cell = {
+                'overflow':'hidden',
+                'textOverflow':'ellipsis',
+                'maxWidth':0
+            },
+            tooltip_data = [
+                {
+                    column: {'value':str(value),'type':'markdown'}
+                    for column, value in row.items()
+                } for row in df.to_dict('records')
+            ],
+            tooltip_duration = None
+        )
+
+        return return_table
+    
+    def make_sub_accordion(self, input_data: Union[list,dict]):
+        """Recursively generating sub-accordion objects for nested properties
+
+        :param input_dict: Input dictionary containing nested and non-nested key/value pairs
+        :type input_dict: dict
+        """
+        main_list = []
+        sub_list = []
+        for idx,in_data in enumerate(input_data):
+            title = list(in_data.keys())[0]
+            non_nested_data = [{'Sub-Property':key, 'Value': val} for key,val in in_data[title].items() if not type(val) in [list,dict]]
+            nested_data = [{key:val} for key,val in in_data[title].items() if type(val)==dict]
+            if len(non_nested_data)>0:
+                main_list.append(
+                    dbc.AccordionItem([
+                        html.Div([
+                            self.make_dash_table(pd.DataFrame.from_records(non_nested_data))
+                        ])
+                    ],title = title)
+                )
+            if len(nested_data)>0:
+                nested_list = self.make_sub_accordion(nested_data)
+                sub_list.extend(nested_list)
+        
+            if len(sub_list)>0:
+                main_list.append(
+                    dbc.Accordion(
+                        dbc.AccordionItem(
+                            dbc.Accordion(
+                                sub_list
+                            ),
+                            title = title
+                        )
+                    )
+                )
+                sub_list = []
+        
+        return main_list
 
     def get_click_popup(self, clicked):
         """Populating popup Div with summary information on the clicked GeoJSON feature
@@ -833,73 +1094,6 @@ class SlideMap(MapComponent):
         
         clicked = get_pattern_matching_value(clicked)
         
-        def make_dash_table(df:pd.DataFrame):
-            """
-            Populate dash_table.DataTable
-            """
-            return_table = dash_table.DataTable(
-                columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in df],
-                data = df.to_dict('records'),
-                editable=False,                                        
-                sort_mode='multi',
-                sort_action = 'native',
-                page_current=0,
-                page_size=5,
-                style_cell = {
-                    'overflow':'hidden',
-                    'textOverflow':'ellipsis',
-                    'maxWidth':0
-                },
-                tooltip_data = [
-                    {
-                        column: {'value':str(value),'type':'markdown'}
-                        for column, value in row.items()
-                    } for row in df.to_dict('records')
-                ],
-                tooltip_duration = None
-            )
-
-            return return_table
-        
-        def make_sub_accordion(input_data: Union[list,dict]):
-            """Recursively generating sub-accordion objects for nested properties
-
-            :param input_dict: Input dictionary containing nested and non-nested key/value pairs
-            :type input_dict: dict
-            """
-            main_list = []
-            sub_list = []
-            for idx,in_data in enumerate(input_data):
-                title = list(in_data.keys())[0]
-                non_nested_data = [{'Sub-Property':key, 'Value': val} for key,val in in_data[title].items() if not type(val) in [list,dict]]
-                nested_data = [{key:val} for key,val in in_data[title].items() if type(val)==dict]
-                if len(non_nested_data)>0:
-                    main_list.append(
-                        dbc.AccordionItem([
-                            html.Div([
-                                make_dash_table(pd.DataFrame.from_records(non_nested_data))
-                            ])
-                        ],title = title)
-                    )
-                if len(nested_data)>0:
-                    nested_list = make_sub_accordion(nested_data)
-                    sub_list.extend(nested_list)
-            
-                if len(sub_list)>0:
-                    main_list.append(
-                        dbc.Accordion(
-                            dbc.AccordionItem(
-                                dbc.Accordion(
-                                    sub_list
-                                ),
-                                title = title
-                            )
-                        )
-                    )
-                    sub_list = []
-            
-            return main_list
-
         accordion_children = []
         all_properties = list(clicked['properties'].keys())
 
@@ -909,14 +1103,14 @@ class SlideMap(MapComponent):
         accordion_children.append(
             dbc.AccordionItem([
                 html.Div([
-                    make_dash_table(pd.DataFrame(non_dict_prop_list))
+                    self.make_dash_table(pd.DataFrame(non_dict_prop_list))
                 ])
             ], title = 'Properties')
         )
 
         # Now loading the dict properties as sub-accordions
         sub_properties = [{i:clicked['properties'][i]} for i in clicked['properties'] if type(clicked['properties'][i])==dict]
-        test_sub_accordions = make_sub_accordion(sub_properties)
+        test_sub_accordions = self.make_sub_accordion(sub_properties)
         if len(test_sub_accordions)>0:
             accordion_children.extend(test_sub_accordions)
 
@@ -1077,6 +1271,9 @@ class SlideMap(MapComponent):
         added_rois = []
         added_roi_names = []
         deleted_rois = []
+
+        #TODO: Add functionality for if a manual ROI is edited
+        #TODO: Add functionality for adding a marker (render a point GeoJSON component to enable access by DataExtractor)
 
         if 'edit-control' in ctx.triggered_id['type']:
             # Checking for new manual ROIs
@@ -1855,7 +2052,6 @@ class LargeSlideMap(SlideMap):
                             };
                             for (let i = 0; i<new_annotations.annotation.elements.length; i++){
 
-                                console.log("user" in new_annotations.annotation.elements[i]);
                                 if ("user" in new_annotations.annotation.elements[i]) {
                                     var user_properties = new_annotations.annotation.elements[i].user;
                                 } else {
@@ -1890,7 +2086,7 @@ class LargeSlideMap(SlideMap):
                 } else {
                     // General case.
                     try {
-                        let ann_url = map_slide_information.annotations_region_url+"?top="+scaled_map_bounds[0]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[2]+"&right="+scaled_map_bounds[3]
+                        let ann_url = map_slide_information.annotations_region_url+"?top="+scaled_map_bounds[0]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[2]+"&right="+scaled_map_bounds[3];
                         var ann_response = await fetch(
                             ann_url, {
                             method: 'GET',

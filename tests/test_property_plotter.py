@@ -22,7 +22,7 @@ def main():
         tileservers = [dsa_handler.get_tile_server(item_id)],
         components = [
             [
-                LargeSlideMap(min_zoom=5),
+                SlideMap(),
                 [
                     OverlayOptions(),
                     PropertyPlotter(),

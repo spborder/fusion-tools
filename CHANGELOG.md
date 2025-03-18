@@ -1,6 +1,19 @@
 # Changelog
 
 <!--next-version-placeholder-->
+## v3.4.0 (03/2025)
+
+### Features:
+- `DataExtractor` component added!
+    - This component enables many different types of data extraction including properties, annotations, images, and masks from individual slides as well as session data (slide metadata and visualization session data)
+- Saving sessions!
+    - Using the `DataExtractor` component, you can now save your current visualization session and then upload it in the `DatasetBuilder` component to quickly reload.
+    - In successive versions, more information from user interactions can be stored in this session and reloaded whenever someone wants to use a previous session.
+        - Things like:
+            1. Manual ROIs per-slide
+            2. Marked structures per-slide
+            3. Labeling sessions (`BulkLabels`)
+
 ## v3.1.0 (02/2025)
 
 ### Features:

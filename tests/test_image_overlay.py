@@ -5,22 +5,26 @@ import os
 import sys
 import threading
 sys.path.append('./src/')
-from fusion_tools import Visualization
+from fusion_tools.visualization import Visualization
 from fusion_tools.components import SlideMap, SlideImageOverlay
 
 
 def main():
 
-    slide_list = ['C:\\Users\\samuelborder\\Downloads\\10H_LargeGlobalFlatfield.tifStitchedO.svs']
+    base_dir = 'C:\\Users\\samuelborder\\Desktop\\HIVE_Stuff\\FUSION\\Test Upload\\'
+    local_slide_list = [
+        base_dir+'XY01_IU-21-015F.svs',
+    ]
+
 
     annotations = [
         SlideImageOverlay(
-            image_path = 'C:\\Users\\samuelborder\\Downloads\\10H_LargeGlobalFlatfield.tif Y00003 X00008.jpg'
+            image_path = 'C:\\Users\\samuelborder\\Downloads\\20250224_095335.jpg'
         )
     ]
     
     vis_session = Visualization(
-        local_slides = slide_list,
+        local_slides = local_slide_list,
         local_annotations=annotations,
         components = [
             [

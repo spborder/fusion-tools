@@ -1677,6 +1677,49 @@ class PropertyPlotter(Tool):
         
         self.get_callbacks()
 
+    def get_namespace(self):
+        """Adding JavaScript functions to the PropertyPlotter Namespace
+        """
+        # Same kind of marker-related functions as in BulkLabels
+        self.js_namespace = Namespace(
+            "fusionTools","propertyPlotter"
+        )
+
+        self.js_namespace.add(
+            name = 'removeMarker',
+            src = """
+                function(e,ctx){
+                    e.target.removeLayer(e.layer._leaflet_id);
+                    ctx.data.features.splice(ctx.data.features.indexOf(e.layer.feature),1);
+                }
+            """
+        )
+
+        self.js_namespace.add(
+            name = 'tooltipMarker',
+            src='function(feature,layer,ctx){layer.bindTooltip("Double-click to remove")}'
+        )
+
+        self.js_namespace.add(
+            name = "markerRender",
+            src = """
+                function(feature,latlng,context) {
+                    marker = L.marker(latlng, {
+                        title: "PropertyPlotter Marker",
+                        alt: "PropertyPlotter Marker",
+                        riseOnHover: true,
+                        draggable: false,
+                    });
+
+                    return marker;
+                }
+            """
+        )
+
+        self.js_namespace.dump(
+            assets_folder = self.assets_folder
+        )
+
     def generate_property_dict(self, available_properties, title: str = 'Features'):
         all_properties = {
             'title': title,
@@ -2422,6 +2465,30 @@ class PropertyPlotter(Tool):
         if type(selected_data)==list:
             if len(selected_data)==0:
                 raise exceptions.PreventUpdate
+
+        #TODO: This should be updated to return a GeoJSON of points with indications of which structures are selected
+        map_marker_geojson = {
+            'type': 'FeatureCollection',
+            'features': [
+                {
+                    'type': 'Feature',
+                    'geometry': {
+                        'type': 'Point',
+                        'coordinates': [
+                            [
+                                (p['customdata'][0][0]+p['customdata'][0][2])/2,
+                                (p['customdata'][0][1]+p['customdata'][0][3])/2
+                            ][::-1]
+                        ]
+                    },
+                    'properties': {
+
+                    }
+                }
+                for p_idx, p in enumerate(selected_data['points'])
+            ]
+        }
+
 
         map_marker = []
         for p_idx,p in enumerate(selected_data['points']):
@@ -3952,7 +4019,7 @@ class DataExtractor(Tool):
                 current_slide_tile_urls = [i['tiles_url'] for i in session_data['current']]
                 slide_idx = current_slide_tile_urls.index(slide_tile_url)
 
-                slide_metadata = requests.get(session_data['current'][slide_idx]['metadata_url'])
+                slide_metadata = requests.get(session_data['current'][slide_idx]['metadata_url']).json()
 
                 download_content = {'content': json.dumps(slide_metadata,indent=4),'filename': 'slide_metadata.json'}
             else:

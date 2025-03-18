@@ -440,38 +440,3 @@ def format_intersecting_masks(base_geojson, other_geojsons, mask_format='one-hot
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
