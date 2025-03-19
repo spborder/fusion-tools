@@ -33,7 +33,14 @@ from dash_extensions.javascript import assign, arrow_function, Namespace
 
 # fusion-tools imports
 from fusion_tools import MapComponent
-from fusion_tools.utils.shapes import find_intersecting, spatially_aggregate, histomics_to_geojson, detect_image_overlay, aperio_to_geojson
+from fusion_tools.utils.shapes import (
+    find_intersecting,
+    spatially_aggregate,
+    histomics_to_geojson,
+    detect_image_overlay,
+    aperio_to_geojson,
+    extract_geojson_properties
+)
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 
 
@@ -233,7 +240,7 @@ class SlideMap(MapComponent):
                         children = [
                             dl.EditControl(
                                 id = {'type': 'edit-control','index': 0},
-                                draw = dict(polyline=False, line=False, circle = False, circlemarker=False, marker = False),
+                                draw = dict(polyline=False, line=False, circle = False, circlemarker=False),
                                 position='topleft'
                             )
                         ]
@@ -242,13 +249,18 @@ class SlideMap(MapComponent):
                         id = {'type': 'map-colorbar-div','index': 0},
                         children = []
                     ),
-                    html.Div(
+                    html.Div([
                         dcc.Store(
                             id = {'type': 'map-annotations-store','index': 0},
                             data = json.dumps({}),
                             storage_type = 'memory'
+                        ),
+                        dcc.Store(
+                            id = {'type': 'map-annotations-info-store','index': 0},
+                            data = json.dumps({}),
+                            storage_type = 'memory'
                         )
-                    ),
+                    ]),
                     dl.LayersControl(
                         id = {'type': 'map-layers-control','index': 0},
                         children = [
@@ -524,6 +536,17 @@ class SlideMap(MapComponent):
             ]
         )(self.update_slide)
 
+        # Extracting properties from loaded GeoJSONs
+        self.blueprint.callback(
+            [
+                Input({'type': 'map-annotations-store','index': ALL},'data')
+            ],
+            [
+                Output({'type': 'map-annotations-info-store','index': ALL},'data')
+            ],
+            prevent_initial_call = True
+        )(self.update_ann_info)
+
         # Getting popup info for clicked feature
         self.blueprint.callback(
             [
@@ -654,7 +677,7 @@ class SlideMap(MapComponent):
                             v = c == 'x' ? r : (r & 0x3 | 0x8);
                         return v.toString(16);
                     });
-                }
+                };
 
                 // Annotations have to be in GeoJSON format already in order to use this
                 function process_json(json_data, idx, ann_meta){
@@ -835,7 +858,6 @@ class SlideMap(MapComponent):
 
         # Adding overlaid annotation layers:
         for st_idx, st_info in enumerate(non_image_overlay_metadata):
-
             new_layer_children.append(
                 dl.Overlay(
                     dl.LayerGroup(
@@ -1003,6 +1025,32 @@ class SlideMap(MapComponent):
 
 
         return new_layer_children, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div
+
+    def update_ann_info(self, annotations_geojson):
+        """Extracting descriptive information on properties stored in GeoJSON data, referenced by other components
+
+        :param annotations_geojson: GeoJSON data
+        :type annotations_geojson: list
+        """
+        if not any([i['value'] for i in ctx.triggered]):
+            empty_store = {
+                'available_properties': [],
+                'feature_names': [],
+                'property_info': {}
+            }
+            return [json.dumps(empty_store)]
+        
+        annotations_geojson = json.loads(get_pattern_matching_value(annotations_geojson))
+
+        new_available_properties, new_feature_names, new_property_info = extract_geojson_properties(annotations_geojson,None,['_id','_index'],4)
+
+        annotations_info_store = json.dumps({
+            'available_properties': new_available_properties,
+            'feature_names': new_feature_names,
+            'property_info': new_property_info
+        })
+
+        return [annotations_info_store]
 
     def upload_shape(self, upload_clicked, is_open):
 
@@ -1526,6 +1574,7 @@ class SlideMap(MapComponent):
         scaled_manual_roi = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/slide_information['x_scale'],c[1]/slide_information['y_scale']),g),manual_roi)
 
         return {'content': json.dumps(scaled_manual_roi),'filename': f'Manual ROI {manual_roi_feature_index+1}.json'}
+
 
 class MultiFrameSlideMap(SlideMap):
     """MultiFrameSlideMap component, containing an image with multiple frames which are added as additional, selectable dl.TileLayer() components

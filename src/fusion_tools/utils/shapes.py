@@ -871,6 +871,8 @@ def spatially_aggregate(child_geo:dict, parent_geos: list, separate: bool = True
     :return: Updated child_geo object with new properties from intersecting parent_geos
     :rtype: dict
     """
+
+    start = time.time()
     agg_geo = deepcopy(child_geo)
     base_gdf = [gpd.GeoDataFrame.from_features(i['features']) for i in parent_geos]
     base_names = [i['properties']['name'] for i in parent_geos]
@@ -939,11 +941,6 @@ def spatially_aggregate(child_geo:dict, parent_geos: list, separate: bool = True
 
                         a['properties'][name] = merge_dict(a['properties'][name], nested_dict)
 
-                        """if not part in a['properties'][name]:
-                            a['properties'][name][part] = nested_dict[part]
-                        else:
-                            a['properties'][name][part] = a['properties'][name][part] | nested_dict[part]
-                        """
                 else:
                     mean_props = numeric_df.mean(axis=0).to_dict()
                     props = numeric_df.columns.tolist()
@@ -954,13 +951,6 @@ def spatially_aggregate(child_geo:dict, parent_geos: list, separate: bool = True
                             mean_dict = {part: mean_dict}
 
                         a['properties'][name] = merge_dict(a['properties'][name],mean_dict)
-
-                        """
-                        if not part in a['properties'][name]:
-                            a['properties'][name][part] = mean_dict[part]
-                        else:
-                            a['properties'][name][part] = a['properties'][name][part] | mean_dict[part]
-                        """
 
                 # Adding the non-numeric properties
                 non_numeric_df = name_df.select_dtypes(include='object')
@@ -1002,13 +992,6 @@ def spatially_aggregate(child_geo:dict, parent_geos: list, separate: bool = True
                     
                     a['properties'] = merge_dict(a['properties'],nested_dict)
 
-                    """
-                    if not part in a['properties']:
-                        a['properties'][part] = nested_dict[part]
-                    else:
-                        a['properties'][part] = a['properties'][part] | nested_dict[part]
-                    """
-
             else:
                 mean_props = numeric_df.mean(axis=0).to_dict()
                 props = numeric_df.columns.tolist()
@@ -1027,6 +1010,9 @@ def spatially_aggregate(child_geo:dict, parent_geos: list, separate: bool = True
                 
                 # This one has to change the name because string properties in base can't be merged as dicts
                 a['properties'] = merge_dict(a['properties'],{f'{non}_Aggregated':{'Count': counts_dict}})
+
+    end = time.time()
+    print(f'Time for spatial aggregation: {end-start}')
 
     return agg_geo
 
@@ -1149,84 +1135,91 @@ def extract_geojson_properties(geo_list: list, reference_object: Union[str,None]
             for p in f_props:
                 # Checking for sub-properties
                 sub_props = []
-                if type(f['properties'][p]) in [dict,list]:
-                    # Pulling out nested properties (either dictionaries or lists or lists of dictionaries or dictionaries of lists, etc.)
-                    if type(f['properties'][p]) ==dict:
-                        nested_value = extract_nested_prop({p: f['properties'][p]}, nested_depth, (), [])
-                    elif type(f['properties'][p])==list:
-                        nested_value = extract_listed_prop(f['properties'][p],(p,),[])
+                if not p in property_info:
+                    if type(f['properties'][p]) in [dict,list]:
+                        # Pulling out nested properties (either dictionaries or lists or lists of dictionaries or dictionaries of lists, etc.)
+                        if type(f['properties'][p]) ==dict:
+                            nested_value = extract_nested_prop({p: f['properties'][p]}, nested_depth, (), [])
+                        elif type(f['properties'][p])==list:
+                            nested_value = extract_listed_prop(f['properties'][p],(p,),[])
 
-                    if len(nested_value)>0:
-                        for n in nested_value:
-                            n_key = list(n.keys())[0]
-                            n_value = list(n.values())[0]
-                            if not n_key in property_info:
-                                sub_props.append(n_key)
-                                if type(n_value) in [int,float]:
-                                    property_info[n_key] = {
-                                        'min': n_value,
-                                        'max': n_value,
-                                        'distinct': 1
-                                    }
-                                elif type(n_value) in [str]:
-                                    property_info[n_key] = {
-                                        'unique': [n_value],
-                                        'distinct': 1
-                                    }
+                        if len(nested_value)>0:
+                            all_nested_keys = []
+                            for j in nested_value:
+                                all_nested_keys.extend(list(j.keys()))
+                            if not all([i in property_info for i in all_nested_keys]):
+                                for n in nested_value:
+                                    n_key = list(n.keys())[0]
+                                    n_value = list(n.values())[0]
+                                    if not n_key in property_info:
+                                        sub_props.append(n_key)
+                                        if type(n_value) in [int,float]:
+                                            property_info[n_key] = {
+                                                'min': n_value,
+                                                'max': n_value,
+                                                'distinct': 1
+                                            }
+                                        elif type(n_value) in [str]:
+                                            property_info[n_key] = {
+                                                'unique': [n_value],
+                                                'distinct': 1
+                                            }
+                                    else:
+                                        if type(n_value) in [int,float]:
+                                            if n_value < property_info[n_key]['min']:
+                                                property_info[n_key]['min'] = n_value
+                                                property_info[n_key]['distinct'] +=1
+                                            
+                                            if n_value > property_info[n_key]['max']:
+                                                property_info[n_key]['max'] = n_value
+                                                property_info[n_key]['distinct'] +=1
+
+                                        elif type(n_value) in [str]:
+                                            if not n_value in property_info[n_key]['unique']:
+                                                property_info[n_key]['unique'].append(n_value)
+                                                property_info[n_key]['distinct'] +=1
+
+                    elif type(f['properties'][p]) in [int,float,str]:
+                        f_sup_val = f['properties'][p]
+
+                        if not p in property_info:
+                            sub_props = [p]
+                            if type(f_sup_val) in [int,float]:
+                                property_info[p] = {
+                                    'min': f_sup_val,
+                                    'max': f_sup_val,
+                                    'distinct': 1
+                                }
                             else:
-                                if type(n_value) in [int,float]:
-                                    if n_value < property_info[n_key]['min']:
-                                        property_info[n_key]['min'] = n_value
-                                        property_info[n_key]['distinct'] +=1
-                                    
-                                    if n_value > property_info[n_key]['max']:
-                                        property_info[n_key]['max'] = n_value
-                                        property_info[n_key]['distinct'] +=1
-
-                                elif type(n_value) in [str]:
-                                    if not n_value in property_info[n_key]['unique']:
-                                        property_info[n_key]['unique'].append(n_value)
-                                        property_info[n_key]['distinct'] +=1
-
-                elif type(f['properties'][p]) in [int,float,str]:
-                    f_sup_val = f['properties'][p]
-
-                    if not p in property_info:
-                        sub_props = [p]
-                        if type(f_sup_val) in [int,float]:
-                            property_info[p] = {
-                                'min': f_sup_val,
-                                'max': f_sup_val,
-                                'distinct': 1
-                            }
+                                property_info[p] = {
+                                    'unique': [f_sup_val],
+                                    'distinct': 1
+                                }
                         else:
-                            property_info[p] = {
-                                'unique': [f_sup_val],
-                                'distinct': 1
-                            }
-                    else:
-                        if type(f_sup_val) in [int,float]:
-                            if f_sup_val < property_info[p]['min']:
-                                property_info[p]['min'] = f_sup_val
-                                property_info[p]['distinct'] += 1
-                            
-                            elif f_sup_val > property_info[p]['max']:
-                                property_info[p]['max'] = f_sup_val
-                                property_info[p]['distinct']+=1
+                            if type(f_sup_val) in [int,float]:
+                                if f_sup_val < property_info[p]['min']:
+                                    property_info[p]['min'] = f_sup_val
+                                    property_info[p]['distinct'] += 1
+                                
+                                elif f_sup_val > property_info[p]['max']:
+                                    property_info[p]['max'] = f_sup_val
+                                    property_info[p]['distinct']+=1
 
-                        elif type(f_sup_val) in [str]:
-                            if not f_sup_val in property_info[p]['unique']:
-                                property_info[p]['unique'].append(f_sup_val)
-                                property_info[p]['distinct']+=1
+                            elif type(f_sup_val) in [str]:
+                                if not f_sup_val in property_info[p]['unique']:
+                                    property_info[p]['unique'].append(f_sup_val)
+                                    property_info[p]['distinct']+=1
 
-                new_props = [i for i in sub_props if not i in geojson_properties and not i in ignore_list]
-                geojson_properties.extend(new_props)
+                    new_props = [i for i in sub_props if not i in geojson_properties and not i in ignore_list]
+                    geojson_properties.extend(new_props)
 
     #TODO: After loading an experiment, reference the file here for additional properties
     
     
     geojson_properties = sorted(geojson_properties)
     end = time.time()
+
+    print(f'Time for extracting GeoJSON properties: {end-start}')
 
     return geojson_properties, feature_names, property_info
 

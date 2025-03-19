@@ -1,7 +1,5 @@
 """
-
 Visualization tools which can be linked to SlideMap components (but don't have to be)
-
 
 """
 
@@ -358,7 +356,7 @@ class OverlayOptions(Tool):
         # Updating for new slide selection:
         self.blueprint.callback(
             [
-                Input({'type': 'map-annotations-store','index': ALL},'data')
+                Input({'type': 'map-annotations-info-store','index': ALL},'data')
             ],
             [
                 Output({'type': 'overlay-drop','index': ALL},'options'),
@@ -479,13 +477,15 @@ class OverlayOptions(Tool):
             ]
         )(self.export_layers)
 
-    def update_slide(self, new_annotations:list):
+    def update_slide(self, new_annotations_info:list):
         
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
 
-        new_annotations = json.loads(get_pattern_matching_value(new_annotations))
-        overlay_options, feature_names, overlay_info = extract_geojson_properties(new_annotations, None, self.ignore_list, self.property_depth)
+        new_annotations_info = json.loads(get_pattern_matching_value(new_annotations_info))
+        overlay_options = new_annotations_info['available_properties']
+        feature_names = new_annotations_info['feature_names']
+        overlay_info = new_annotations_info['property_info']
 
         drop_options = [
             {
@@ -1134,7 +1134,7 @@ class PropertyViewer(Tool):
         # Updating for a new slide:
         self.blueprint.callback(
             [
-                Input({'type': 'map-annotations-store','index': ALL},'data')
+                Input({'type': 'map-annotations-info-store','index': ALL},'data')
             ],
             [
                 Output({'type': 'property-viewer-available-properties','index': ALL},'data'),
@@ -1166,14 +1166,14 @@ class PropertyViewer(Tool):
             ]
         )(self.update_property_viewer)
 
-    def update_slide(self, new_annotations: list):
+    def update_slide(self, new_annotations_info: list):
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
-        new_annotations = json.loads(get_pattern_matching_value(new_annotations))
-
-        new_available_properties, new_feature_names, new_property_info = extract_geojson_properties(new_annotations,None,self.ignore_list,self.property_depth)
+        new_annotations_info = json.loads(get_pattern_matching_value(new_annotations_info))
+        new_available_properties = new_annotations_info['available_properties']
+        new_property_info = new_annotations_info['property_info']
 
         new_available_properties = json.dumps(new_available_properties)
         new_property_info = json.dumps(new_property_info)
@@ -1796,7 +1796,7 @@ class PropertyPlotter(Tool):
         # Updating for a new slide:
         self.blueprint.callback(
             [
-                Input({'type': 'map-annotations-store','index':ALL},'data')
+                Input({'type': 'map-annotations-info-store','index':ALL},'data')
             ],
             [
                 Output({'type': 'property-list','index': ALL},'data'),
@@ -1885,14 +1885,14 @@ class PropertyPlotter(Tool):
             ]
         )(self.sub_select_data)
 
-    def update_slide(self, new_annotations:list):
+    def update_slide(self, new_annotations_info:list):
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
-        new_annotations = json.loads(get_pattern_matching_value(new_annotations))
+        new_annotations_info = json.loads(get_pattern_matching_value(new_annotations_info))
+        new_available_properties = new_annotations_info['available_properties']
 
-        new_available_properties, new_feature_names, new_property_info = extract_geojson_properties(new_annotations, None, self.ignore_list, self.property_depth)
         new_property_dict, new_property_keys = self.generate_property_dict(new_available_properties)
         new_figure = go.Figure()
         new_graph_tabs_children = []
@@ -3799,7 +3799,7 @@ class DataExtractor(Tool):
         # Callback for updating current slide
         self.blueprint.callback(
             [
-                Input({'type': 'map-annotations-store','index': ALL},'data')
+                Input({'type': 'map-annotations-info-store','index': ALL},'data')
             ],
             [
                 Output({'type': 'data-extractor-current-structures-drop','index': ALL},'options'),
@@ -3936,13 +3936,13 @@ class DataExtractor(Tool):
             prevent_initial_call = True
         )(self.update_download_data)
     
-    def update_slide(self, new_annotations:list):
+    def update_slide(self, new_annotations_info:list):
         
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
-        new_annotations = json.loads(get_pattern_matching_value(new_annotations))
-        new_structure_names = [i['properties']['name'] for i in new_annotations if 'properties' in i]
+        new_annotations_info = json.loads(get_pattern_matching_value(new_annotations_info))
+        new_structure_names = new_annotations_info['feature_names']
 
         available_structures_drop = [
             {'label': i, 'value': i, 'disabled': False}

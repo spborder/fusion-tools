@@ -1115,11 +1115,6 @@ class BulkLabels(Tool):
                     ),
                     html.Hr(),
                     dcc.Store(
-                        id = {'type': 'bulk-labels-property-info','index': 0},
-                        storage_type='memory',
-                        data = json.dumps({})
-                    ),
-                    dcc.Store(
                         id = {'type': 'bulk-labels-labels-store','index': 0},
                         storage_type = 'memory',
                         data = json.dumps({'labels': [], 'labels_metadata': []})
@@ -1328,10 +1323,9 @@ class BulkLabels(Tool):
         # Updating for new slide
         self.blueprint.callback(
             [
-                Input({'type': 'map-annotations-store','index': ALL},'data')
+                Input({'type': 'map-annotations-info-store','index': ALL},'data')
             ],
             [
-                Output({'type': 'bulk-labels-property-info','index': ALL},'data'),
                 Output({'type': 'bulk-labels-labels-store','index': ALL},'data'),
                 Output({'type': 'bulk-labels-label-stats-div','index': ALL},'children'),
                 Output({'type': 'bulk-labels-spatial-query-div','index': ALL},'children'),
@@ -1409,7 +1403,7 @@ class BulkLabels(Tool):
                 Output({'type': 'bulk-labels-add-property-div','index': ALL},'children')
             ],
             [
-                State({'type': 'bulk-labels-property-info','index': ALL},'data')
+                State({'type': 'map-annotations-info-store','index': ALL},'data')
             ]
         )(self.update_label_properties)
 
@@ -1422,7 +1416,7 @@ class BulkLabels(Tool):
                 Output({'type':'bulk-labels-property-selector-div','index':MATCH},'children')
             ],
             [
-                State({'type': 'bulk-labels-property-info','index': ALL},'data')
+                State({'type': 'map-annotations-info-store','index': ALL},'data')
             ]
         )(self.update_property_selector)
 
@@ -1550,27 +1544,17 @@ class BulkLabels(Tool):
             ]
         )(self.update_label_table)
 
-    def update_slide(self, new_annotations: list):
+    def update_slide(self, new_annotations_info: list):
 
-        if not any([i['value'] or i['value']==0 for i in ctx.triggered]):
+        if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
 
-        new_annotations = json.loads(get_pattern_matching_value(new_annotations))
-
-        new_properties, new_feature_names, new_property_info = extract_geojson_properties(new_annotations, None, self.ignore_list, self.property_depth)
-        
-        new_property_info = {
-            'names': new_properties,
-            'property_info': new_property_info
-        }
-
-        new_property_info = json.dumps(new_property_info)
         new_labels_data = json.dumps({'labels': [], 'labels_metadata': []})
         new_label_stats_div = []
         new_spatial_query_div = []
         new_property_filter_div = []
 
-        return [new_property_info], [new_labels_data], [new_label_stats_div], [new_spatial_query_div],[new_property_filter_div]
+        return [new_labels_data], [new_label_stats_div], [new_spatial_query_div],[new_property_filter_div]
 
     def update_method_explanation(self, method):
         """Updating explanation given for the selected label method
@@ -1927,7 +1911,7 @@ class BulkLabels(Tool):
 
         return [new_structures_div], [new_markers_div], [new_labels_source], [labels_type_disabled], [labels_text_disabled], [labels_rationale_disabled], [labels_apply_button_disabled], [labels_download_button_disabled], [labels_add_to_structures_button_disabled]
 
-    def update_label_properties(self, add_click:list, remove_click:list, property_info:list):
+    def update_label_properties(self, add_click:list, remove_click:list, annotations_info:list):
         """Adding/removing property filter dropdown
 
         :param add_click: Add property filter clicked
@@ -1943,7 +1927,7 @@ class BulkLabels(Tool):
         
         properties_div = Patch()
         add_click = get_pattern_matching_value(add_click)
-        property_info = json.loads(get_pattern_matching_value(property_info))['property_info']
+        property_info = json.loads(get_pattern_matching_value(annotations_info))['property_info']
 
         if 'bulk-labels-add-property-icon' in ctx.triggered_id['type']:
 
@@ -2003,7 +1987,7 @@ class BulkLabels(Tool):
         
         return [properties_div]
 
-    def update_property_selector(self, property_value:str, property_info:list):
+    def update_property_selector(self, property_value:str, annotations_info:list):
         """Updating property filter range selector
 
         :param property_value: Name of property to generate selector for
@@ -2017,7 +2001,7 @@ class BulkLabels(Tool):
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
-        property_info = json.loads(get_pattern_matching_value(property_info))['property_info']
+        property_info = json.loads(get_pattern_matching_value(annotations_info))['property_info']
         property_values = property_info[property_value]
 
         if 'min' in property_values:
@@ -2045,7 +2029,7 @@ class BulkLabels(Tool):
                 dcc.Dropdown(
                     id = {'type': f'{self.component_prefix}-bulk-labels-filter-selector','index': ctx.triggered_id['index']},
                     options = property_values['unique'],
-                    value = property_values['unique'],
+                    value = property_values['unique'] if len(property_values['unique'])<10 else [],
                     multi = True
                 )
             )
