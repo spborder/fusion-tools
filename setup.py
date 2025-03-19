@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="fusion-tools",
-    version="3.5.4",
+    version="3.5.5",
     author="Sam Border",
     author_email="sam.border2256@gmail.com",
     description="Modular visualization and analysis dashboard creation for high-resolution microscopy images",
@@ -33,7 +33,7 @@ setuptools.setup(
     extras_require = {
         'interactive': [
             "dash-leaflet[all]>=1.0.15",
-            "dash>=2.18.1",
+            "dash>=2.18.1,<3.0.0",
             "dash-extensions>=1.0.18",
             "dash-uploader==0.7.0-a1",
             "dash_mantine_components>=0.14.4",

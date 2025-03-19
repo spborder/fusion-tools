@@ -16,7 +16,7 @@ girder-job-sequence>=0.2.7
 
 [interactive]
 dash-leaflet[all]>=1.0.15
-dash>=2.18.1
+dash<3.0.0,>=2.18.1
 dash-extensions>=1.0.18
 dash-uploader==0.7.0-a1
 dash_mantine_components>=0.14.4

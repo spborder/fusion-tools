@@ -127,7 +127,6 @@ class Visualization:
             ],
             'external_scripts': [
                 'https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.1.0/chroma.min.js',
-                "https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js"
             ]
         }
 
@@ -269,6 +268,11 @@ class Visualization:
                 )
 
                 return page_content, no_update
+            
+            elif 'session' in pathname:
+                print(f'Loading session: {pathname}')
+                pass
+
             else:
                 # Otherwise, return a list of clickable links for valid pages
                 not_found_page = html.Div([
@@ -296,7 +300,8 @@ class Visualization:
         # This should be all the information necessary to reproduce the tileservers and annotations for each image
         slide_store = {
             "current": [],
-            "local": []
+            "local": [],
+            "data": {}
         }
         s_idx = 0
         t_idx = 0

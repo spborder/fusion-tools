@@ -820,7 +820,7 @@ class SlideMap(MapComponent):
         vis_data = json.loads(vis_data)
         new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
 
-        #TODO: Add progress bar for loading annotations (make this part faster)
+        #TODO: Add progress bar for loading annotations
 
         # Getting data from the tileservers:
         if not 'current_user' in vis_data:
@@ -839,6 +839,7 @@ class SlideMap(MapComponent):
         new_metadata = requests.get(metadata_url).json()
         annotations_metadata = requests.get(annotations_metadata_url).json()
 
+        # Detecting DSA-formatted annotations
         if any(['annotation' in i for i in annotations_metadata]):
             annotations_metadata = [
                 {
@@ -1022,7 +1023,6 @@ class SlideMap(MapComponent):
                 ]
             )
         )
-
 
 
         return new_layer_children, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div
@@ -1321,7 +1321,7 @@ class SlideMap(MapComponent):
         added_roi_names = []
         deleted_rois = []
 
-        #TODO: Add functionality for if a manual ROI is edited
+        #TODO: Add functionality for if a manual ROI is edited (Have to add in "edit" back to EditControl to make this option appear)
         #TODO: Add functionality for adding a marker (render a point GeoJSON component to enable access by DataExtractor)
 
         if 'edit-control' in ctx.triggered_id['type']:
@@ -1432,6 +1432,8 @@ class SlideMap(MapComponent):
 
         if not operation:
             new_manual_rois = no_update
+
+        
 
         return new_manual_rois, annotations_data
 

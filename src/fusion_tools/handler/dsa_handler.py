@@ -589,6 +589,91 @@ class DSAHandler(Handler):
         collections = self.gc.get('/collection')
 
         return collections
+    
+    def create_collection(self, collection_name:str, collection_description:Union[str,None]=None,user_token:Union[str,None]=None):
+
+        if not user_token is None:
+            self.gc.setToken(user_token)
+
+        collection_post = self.gc.post(
+            'collection',
+            parameters={
+                'name': collection_name,
+                'description': collection_description if not collection_description is None else ''
+            }
+        )
+
+        return collection_post
+
+    def create_folder(self, parentId:str, parentType:str, folder_name:str, folder_description:Union[str,None]=None,user_token:Union[str,None]=None):
+
+        if not user_token is None:
+            self.gc.setToken(user_token)
+
+        folder_post_response = self.gc.post(
+            'folder',
+            parameters={
+                'parentType':parentType,
+                'parentId':parentId,
+                'name': folder_name,
+                'description': folder_description if not folder_description is None else '',
+                'reuseExisting': True
+            }
+        )
+
+        return folder_post_response
+
+    def upload_session(self, session_data:dict, user_token:Union[str,None]=None):
+        """Upload session data to dedicated fusion-tools sessions collection
+
+        :param session_data: Visualization session data to be saved on DSA instance
+        :type session_data: dict
+        :param user_token: user token, defaults to None
+        :type user_token: Union[str,None], optional
+        """
+
+        if not user_token is None:
+            self.gc.setToken(user_token)
+
+        collections = self.get_collections(user_token)
+        collection_names = [i['name'] for i in collections]
+
+        if not 'fusion-tools Sessions' in collection_names:
+            # Creating the collection/folder if it's not there already
+            collection_post_result = self.create_collection(
+                collection_name = 'fusion-tools Sessions',
+                collection_description='Session information related to fusion-tools uploaded by users.',
+                user_token = user_token
+            )
+
+            folder_post_response = self.create_folder(
+                parentId = collection_post_result['_id'],
+                parentType='collection',
+                folder_name = 'fusion-tools Sessions',
+                folder_description = 'Saved Sessions',
+                user_token = user_token
+            )
+
+            session_collection_id = collection_post_result['_id']
+            folder_id = folder_post_response['_id']
+
+        else:
+            # Grabbing the folder id that is already present
+            session_collection_id = collections[collection_names.index('fusion-tools sessions')]['_id']
+
+            session_folders = self.get_folder_folders(
+                folder_id = session_collection_id,
+                folder_type = 'collection',
+                user_token=user_token
+            )
+            folder_names = [i['name'] for i in session_folders]
+            folder_id = session_folders[folder_names.index('fusion-tools Sessions')]['_id']
+
+        
+
+
+
+
 
     def create_survey(self, survey_args:dict):
         """Create a survey component which will route collected data to a specific file in the connected DSA instance.

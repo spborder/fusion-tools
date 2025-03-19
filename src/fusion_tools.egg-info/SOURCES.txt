@@ -26,6 +26,7 @@ src/fusion_tools/handler/dsa_handler.py
 src/fusion_tools/handler/login.py
 src/fusion_tools/handler/plugin.py
 src/fusion_tools/handler/resource_selector.py
+src/fusion_tools/handler/save_session.py
 src/fusion_tools/handler/survey.py
 src/fusion_tools/utils/__init__.py
 src/fusion_tools/utils/images.py
