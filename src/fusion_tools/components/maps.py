@@ -240,7 +240,8 @@ class SlideMap(MapComponent):
                         children = [
                             dl.EditControl(
                                 id = {'type': 'edit-control','index': 0},
-                                draw = dict(polyline=False, line=False, circle = False, circlemarker=False),
+                                draw = dict(polyline=False, line=False, circle = False, circlemarker=False,marker=False),
+                                edit = dict(edit=False),
                                 position='topleft'
                             )
                         ]

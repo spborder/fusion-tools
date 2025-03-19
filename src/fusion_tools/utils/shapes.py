@@ -1012,7 +1012,7 @@ def spatially_aggregate(child_geo:dict, parent_geos: list, separate: bool = True
                 a['properties'] = merge_dict(a['properties'],{f'{non}_Aggregated':{'Count': counts_dict}})
 
     end = time.time()
-    print(f'Time for spatial aggregation: {end-start}')
+    #print(f'Time for spatial aggregation: {end-start}')
 
     return agg_geo
 
@@ -1219,7 +1219,7 @@ def extract_geojson_properties(geo_list: list, reference_object: Union[str,None]
     geojson_properties = sorted(geojson_properties)
     end = time.time()
 
-    print(f'Time for extracting GeoJSON properties: {end-start}')
+    #print(f'Time for extracting GeoJSON properties: {end-start}')
 
     return geojson_properties, feature_names, property_info
 
