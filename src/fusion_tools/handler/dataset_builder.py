@@ -1195,15 +1195,22 @@ class DatasetBuilder(DSATool):
         for s in new_slide_data['selected_slides']:
             if not 'local' in s:
                 slide_info = self.handler.gc.get(f'/item/{s}')
+                annotations_metadata_url = f'{self.handler.girderApiUrl}/annotation/?itemId={s}'
+                annotations_metadata = requests.get(annotations_metadata_url).json()
+                annotations_geojson_url = [f'{self.handler.girderApiUrl}/annotation/{a["_id"]}/geojson' for a in annotations_metadata]
+
+
                 new_slide_info.append(
                     {
                         'name': slide_info['name'],
                         'api_url': self.handler.girderApiUrl,
                         'tiles_url': f'{self.handler.girderApiUrl}/item/{s}/tiles/zxy'+'/{z}/{x}/{y}',
                         'regions_url': f'{self.handler.girderApiUrl}/item/{s}/tiles/region',
-                        'metadata_url': f'{self.handler.girderApiUrl}/item/{s}/tiles',
+                        'image_metadata_url': f'{self.handler.girderApiUrl}/item/{s}/tiles',
+                        'metadata_url': f'{self.handler.girderApiUrl}/item/{s}',
                         'annotations_url': f'{self.handler.girderApiUrl}/annotation/item/{s}',
-                        'annotations_metadata_url': f'{self.handler.girderApiUrl}/annotation/?itemId={s}',
+                        'annotations_metadata_url': annotations_metadata_url,
+                        'annotations_geojson_url': annotations_geojson_url,
                         'annotations_region_url': f'{self.handler.girderApiUrl}/annotation/'
                     }
                 )

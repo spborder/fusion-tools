@@ -36,6 +36,8 @@ def get_layout(args):
         upload_types = get_upload_types()
     )
 
+    dsa_save_session = dsa_handler.create_save_session()
+
     user_surveys = []
     #dsa_user_surveys = [dsa_handler.create_survey(i) for i in user_surveys]
 
@@ -47,6 +49,7 @@ def get_layout(args):
         header = [
             dsa_login_component,
             dsa_plugin_progress,
+            dsa_save_session,
             #dsa_user_surveys
         ],
         components = {

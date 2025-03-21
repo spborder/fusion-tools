@@ -821,6 +821,7 @@ class SlideMap(MapComponent):
         new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
 
         #TODO: Add progress bar for loading annotations
+        #TODO: Load manual ROIs and marker layer from visualization session
 
         # Getting data from the tileservers:
         if not 'current_user' in vis_data:

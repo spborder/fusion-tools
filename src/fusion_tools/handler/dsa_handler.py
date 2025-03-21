@@ -21,6 +21,7 @@ from fusion_tools.handler.login import DSALoginComponent
 from fusion_tools.handler.dataset_uploader import DSAUploader
 from fusion_tools.handler.dataset_builder import DatasetBuilder
 from fusion_tools.handler.plugin import DSAPluginProgress, DSAPluginRunner
+from fusion_tools.handler.save_session import DSASession
 from fusion_tools import Handler
 
 #TODO: Consider making a function decorator for authentication just to clean up all the 
@@ -590,7 +591,7 @@ class DSAHandler(Handler):
 
         return collections
     
-    def create_collection(self, collection_name:str, collection_description:Union[str,None]=None,user_token:Union[str,None]=None):
+    def create_collection(self, collection_name:str, collection_description:Union[str,None]=None,public:bool=True,user_token:Union[str,None]=None):
 
         if not user_token is None:
             self.gc.setToken(user_token)
@@ -599,13 +600,14 @@ class DSAHandler(Handler):
             'collection',
             parameters={
                 'name': collection_name,
-                'description': collection_description if not collection_description is None else ''
+                'description': collection_description if not collection_description is None else '',
+                'public': public
             }
         )
 
         return collection_post
 
-    def create_folder(self, parentId:str, parentType:str, folder_name:str, folder_description:Union[str,None]=None,user_token:Union[str,None]=None):
+    def create_folder(self, parentId:str, parentType:str, folder_name:str, folder_description:Union[str,None]=None,public:bool=True,user_token:Union[str,None]=None):
 
         if not user_token is None:
             self.gc.setToken(user_token)
@@ -617,7 +619,8 @@ class DSAHandler(Handler):
                 'parentId':parentId,
                 'name': folder_name,
                 'description': folder_description if not folder_description is None else '',
-                'reuseExisting': True
+                'reuseExisting': True,
+                'public': public
             }
         )
 
@@ -659,7 +662,7 @@ class DSAHandler(Handler):
 
         else:
             # Grabbing the folder id that is already present
-            session_collection_id = collections[collection_names.index('fusion-tools sessions')]['_id']
+            session_collection_id = collections[collection_names.index('fusion-tools Sessions')]['_id']
 
             session_folders = self.get_folder_folders(
                 folder_id = session_collection_id,
@@ -669,11 +672,47 @@ class DSAHandler(Handler):
             folder_names = [i['name'] for i in session_folders]
             folder_id = session_folders[folder_names.index('fusion-tools Sessions')]['_id']
 
-        
+        session_data_data = json.dumps(session_data)
+        session_data_size = len(session_data_data.encode('utf-8'))
 
+        # Making new item
+        make_file_response = self.gc.post(
+            'file',
+            parameters={
+                'parentType':'folder',
+                'parentId': folder_id,
+                'name': 'fusion-tools session.json',
+                'size': session_data_size
+            }
+        )
 
+        post_response = self.gc.post(f'/file/chunk',
+            parameters={
+                'size':session_data_size,
+                'offset':0,
+                'uploadId':make_file_response['_id']
+                },
+            data = session_data_data
+        )
 
+        return post_response
 
+    def get_session_data(self, session_id:str, user_token:Union[str,None]=None):
+
+        if not user_token is None:
+            self.gc.setToken(user_token)
+
+        # downloading session file specified by id
+        file_contents = self.gc.get(
+            f'file/{session_id}/download'
+        )
+
+        print(file_contents)
+
+        return file_contents
+
+    def create_save_session(self):
+        return DSASession(handler = self)
 
     def create_survey(self, survey_args:dict):
         """Create a survey component which will route collected data to a specific file in the connected DSA instance.

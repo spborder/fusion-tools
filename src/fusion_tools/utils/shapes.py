@@ -1125,6 +1125,8 @@ def extract_geojson_properties(geo_list: list, reference_object: Union[str,None]
     feature_names = []
     property_info = {}
     for ann in geo_list:
+        if ann is None:
+            continue
         if not 'properties' in ann:
             continue
         if len(list(ann['properties'].keys()))==0:

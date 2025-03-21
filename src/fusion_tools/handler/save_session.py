@@ -11,7 +11,7 @@ from typing_extensions import Union
 # Dash imports
 import dash
 dash._dash_renderer._set_react_version('18.2.0')
-from dash import callback, ctx, ALL, MATCH, exceptions, no_update
+from dash import callback, ctx, ALL, MATCH, exceptions, no_update, dcc
 import dash_bootstrap_components as dbc
 from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform
 
@@ -64,13 +64,15 @@ class DSASession(DSATool):
                         id = {'type': 'dsa-save-session-button','index': 0},
                         n_clicks = 0
                     ),
-                    html.Div(
-                        id = {'type': 'dsa-session-status-div','index': 0},
-                        children = []
+                    dcc.Loading(
+                        html.Div(
+                            id = {'type': 'dsa-session-status-div','index': 0},
+                            children = []
+                        )
                     )
                 ],direction = 'vertical')
             )
-        ])
+        ],style = {'padding': '10px 10px 10px 10px'})
 
         if use_prefix:
             PrefixIdTransform(prefix = self.component_prefix).transform_layout(layout)
@@ -90,11 +92,12 @@ class DSASession(DSATool):
         
         self.blueprint.callback(
             [
-                Input({'type': 'dsa-session-save-button','index': ALL},'n_clicks')
+                Input({'type': 'dsa-save-session-button','index': ALL},'n_clicks')
             ],
             [
                 State('anchor-vis-store','data'),
-                State('page-url','pathname')
+                State('anchor-page-url','href'),
+                State('anchor-page-url','pathname')
             ],
             [
                 Output({'type': 'dsa-session-status-div','index': ALL},'children')
@@ -102,16 +105,71 @@ class DSASession(DSATool):
             prevent_initial_call = True
         )(self.save_session)
 
-    def save_session(self, clicked, session_data, page):
+    def save_session(self, clicked, session_data, page_url, pathname):
         
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
         session_data = json.loads(session_data)
+
+        if not 'current_user' in session_data:
+            session_status_div = html.Div(
+                dbc.Alert(
+                    'Sign in first to save a session',
+                    color = 'danger',
+                    dismissable=True
+                )
+            )
+            return [session_status_div]
+
+        saved_session_data = {
+            'page_url': page_url,
+            'page': pathname,
+            'current': session_data['current'],
+            'data': session_data['data'],
+            'user_session': session_data['current_user']['login']
+        }
+
+        uploaded_file_details = self.handler.upload_session(saved_session_data,user_token = session_data['current_user']['token'])
         
-        print(json.dumps(session_data))
-        print(f'Page: {page}')
-        
-        raise exceptions.PreventUpdate
+        # Find a way to extract the window url or something
+        session_link = f'{page_url}/session?id={uploaded_file_details["_id"]}'
+
+        session_status_div = html.Div([
+            dbc.Alert('Session Saved Successfully!',color = 'success',dismissable=True),
+            dbc.Row([
+                dbc.Col(
+                    dbc.Label(
+                        'Session URL:',
+                        style = {'fontSize': 15}
+                    ),
+                    md = 2
+                ),
+                dbc.Col([
+                    dcc.Input(
+                        value = session_link,
+                        disabled = True,
+                        id = {'type': f'{self.component_prefix}-dsa-session-link','index': 0},
+                        style = {
+                            'width': '100%',
+                            'fontSize': 20
+                        }
+                    )
+                ], md = 9),
+                dbc.Col(
+                    dcc.Clipboard(
+                        target_id = {'type': f'{self.component_prefix}-dsa-session-link','index':0},
+                        title = 'copy',
+                        style = {
+                            'fontSize': 20,
+                            'display': 'inline-block'
+                        }
+                    ),
+                    md = 1
+                )
+            ])
+        ])
+
+        return [session_status_div]
 
 
