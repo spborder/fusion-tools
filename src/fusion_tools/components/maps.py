@@ -17,6 +17,7 @@ import base64
 import requests
 from PIL import Image
 import lxml.etree as ET
+from copy import deepcopy
 
 #os.environ['PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION'] = 'python'
 
@@ -216,6 +217,9 @@ class SlideMap(MapComponent):
                 id = {'type': 'slide-map','index': 0},
                 crs = 'Simple',
                 center = [-120,120],
+                eventHandlers = {
+                    'dblclick': self.js_namespace('sendPosition')
+                },
                 zoom = 0,
                 zoomDelta = 0.25,
                 style = {'height': '90vh','width': '100%','margin': 'auto','display': 'inline-block'},
@@ -240,9 +244,15 @@ class SlideMap(MapComponent):
                         children = [
                             dl.EditControl(
                                 id = {'type': 'edit-control','index': 0},
-                                draw = dict(polyline=False, line=False, circle = False, circlemarker=False,marker=False),
+                                draw = dict(
+                                    polyline=False, 
+                                    line=False, 
+                                    circle = False, 
+                                    circlemarker=False,
+                                    marker=False
+                                ),
                                 edit = dict(edit=False),
-                                position='topleft'
+                                position='topleft',
                             )
                         ]
                     ),
@@ -493,7 +503,7 @@ class SlideMap(MapComponent):
             src = """
             function(e,ctx){
                 ctx.setProps({
-                    data: e.latlng
+                    data: e.latlng,
                 });
             }
             """,
@@ -530,7 +540,7 @@ class SlideMap(MapComponent):
                 Output({'type': 'map-generated-rois','index': MATCH},'children'),
                 Output({'type': 'map-tile-layer-holder','index': MATCH},'children'),
                 Output({'type': 'map-slide-information','index': MATCH},'data'),
-                Output({'type': 'map-slide-metadata-div','index': MATCH},'children')
+                Output({'type': 'map-slide-metadata-div','index': MATCH},'children'),
             ],
             [
                 State('anchor-vis-store','data')
@@ -565,8 +575,9 @@ class SlideMap(MapComponent):
                 Input({'type':'upload-shape-data','index': ALL},'contents')
             ],
             [
-                Output({'type': 'map-manual-rois','index': MATCH},'children'),
-                Output({'type': 'map-annotations-store','index': MATCH},'data')
+                Output({'type': 'map-manual-rois','index': ALL},'children'),
+                Output({'type': 'map-annotations-store','index': ALL},'data'),
+                Output('anchor-vis-store','data')
             ],
             [
                 State({'type': 'map-annotations-store','index': ALL},'data'),
@@ -575,7 +586,8 @@ class SlideMap(MapComponent):
                 State({'type': 'adv-overlay-colormap','index': ALL},'value'),
                 State({'type': 'manual-roi-separate-switch','index': ALL},'checked'),
                 State({'type': 'manual-roi-summarize-switch','index': ALL},'checked'),
-                State({'type': 'map-slide-information','index': ALL},'data')
+                State({'type': 'map-slide-information','index': ALL},'data'),
+                State('anchor-vis-store','data')
             ]
         )(self.add_manual_roi)
 
@@ -666,7 +678,10 @@ class SlideMap(MapComponent):
                 // Prevent update at initialization
                 if (slide_information[0]==undefined){
                     throw window.dash_clientside.PreventUpdate;
-                }
+                };
+
+                // Getting component prefix for the triggered id
+                var component_prefix = window.dash_clientside.callback_context.triggered_id.type.split('-')[0];
 
                 // Reading in map-slide-information
                 var map_slide_information = JSON.parse(slide_information);
@@ -725,7 +740,7 @@ class SlideMap(MapComponent):
                     ann_meta_url, {
                         method: 'GET',
                         headers: {
-                            'Content-Type': 'application/json'
+                            'Content-Type': 'application/json',
                         }
                     }
                 );
@@ -757,7 +772,12 @@ class SlideMap(MapComponent):
                         var new_annotations = [];
                         ann_meta.forEach((ann_,idx) => ann_meta.splice(idx,1,{'name': ann_.annotation.name, '_id': ann_._id}))
                         const promises = map_slide_information.annotations_geojson_url.map((url,idx) =>
-                            fetch(url)
+                            fetch(url, {
+                                method: 'GET',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                }
+                            })
                             .then((response) => response.json())
                             .then(function(json_data){return process_json(json_data,idx,ann_meta)})
                             .then((geojson_anns) => annotations_list.splice(idx,1,geojson_anns))
@@ -767,7 +787,12 @@ class SlideMap(MapComponent):
 
                     } else {
                         const promises = [map_slide_information.annotations_url].map((url,idx) =>
-                            fetch(url)
+                            fetch(url, {
+                                method: 'GET',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                }
+                            })
                             .then((response) => response.json())
                             .then((json_data) => annotations_list.push(process_json(json_data,idx,ann_meta)))
                         );
@@ -778,14 +803,35 @@ class SlideMap(MapComponent):
 
                 } catch (error) {
                     console.error(error.message);
-                }
+                } 
+
+                // If manual ROIs are present
+                if ('manual_rois' in map_slide_information){
+                    // var geojson_features = L.geoJson(map_slide_information.manual_rois);
+                    annotations_list.push(map_slide_information.manual_rois);
+                };
+
+                //var edit_control_children = new L.Control.Draw({
+                //    edit: {
+                //        feature_group: geojson_features
+                //    },
+                //    draw: true,
+                //    position: 'topleft'
+                //});
+
+                // const map = document.getElementById(JSON.stringify({index:0,type:`${component_prefix}-slide-map`}));
+                // console.log(map);
+                // map.addControl(edit_control_children);
+
+                // console.log(annotations_list);
 
                 return [annotations_list, [JSON.stringify(annotations_list)]];
             }
             """,
             [
                 Output({'type': 'feature-bounds','index': ALL},'data'),
-                Output({'type': 'map-annotations-store','index': ALL},'data')
+                Output({'type': 'map-annotations-store','index': ALL},'data'),
+                Output({'type': 'edit-feature-group','index': ALL},'children')
             ],
             [
                 Input({'type': 'map-slide-information','index': ALL},'data')
@@ -820,7 +866,7 @@ class SlideMap(MapComponent):
         vis_data = json.loads(vis_data)
         new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
 
-        #TODO: Add progress bar for loading annotations
+        #TODO: Add progress bar for loading annotations?
         #TODO: Load manual ROIs and marker layer from visualization session
 
         # Getting data from the tileservers:
@@ -1024,7 +1070,6 @@ class SlideMap(MapComponent):
                 ]
             )
         )
-
 
         return new_layer_children, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div
 
@@ -1266,7 +1311,7 @@ class SlideMap(MapComponent):
 
         return annotation_components
 
-    def add_manual_roi(self,new_geojson:list, uploaded_shape: list, current_annotations:list, frame_layers:list, line_colors:list, colormap:list, separate_switch: list, summarize_switch: list, map_slide_information:list) -> list:
+    def add_manual_roi(self,new_geojson:list, uploaded_shape: list, current_annotations:list, frame_layers:list, line_colors:list, colormap:list, separate_switch: list, summarize_switch: list, map_slide_information:list, session_data:dict) -> list:
         """Adding a manual region of interest (ROI) to the SlideMap using dl.EditControl() tools including polygon, rectangle, and markers.
 
         :param new_geojson: Incoming GeoJSON object that is emitted by dl.EditControl() following annotation on SlideMap
@@ -1279,19 +1324,24 @@ class SlideMap(MapComponent):
         :type frame_layers: list
         :param map_slide_information: Current slide image metadata
         :type map_slide_information: list
+        :param session_data: Current Visualization session data
+        Ptype session_data: dict
         :raises exceptions.PreventUpdate: new_geojson input is None
         :raises exceptions.PreventUpdate: No new features are added, this can occur after deletion of previous manual ROIs.
         :return: List of new children to dl.LayerControl() consisting of overlaid GeoJSON components.
         :rtype: list
         """
-        
+        print(ctx.triggered)
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
 
         uploaded_shape = get_pattern_matching_value(uploaded_shape)
         new_geojson = get_pattern_matching_value(new_geojson)
         current_annotations = json.loads(get_pattern_matching_value(current_annotations))
+        if type(current_annotations)==list:
+            print(f'Len of current_annotations: {len(current_annotations)}')
 
+        session_data = json.loads(session_data)
         map_slide_information = json.loads(get_pattern_matching_value(map_slide_information))
 
         colormap = get_pattern_matching_value(colormap)
@@ -1302,7 +1352,7 @@ class SlideMap(MapComponent):
 
         if colormap is None or len(colormap)==0:
             colormap = 'blue->red'
-        
+
         # All but the last one which holds the manual ROIs
         initial_annotations = [i for i in current_annotations if not any([j in i['properties']['name'] for j in ['Manual','Filtered','Upload']])]
         # Current manual rois (used for determining if a new ROI has been created/edited)
@@ -1313,8 +1363,6 @@ class SlideMap(MapComponent):
 
         # The three different types of ROIs present on maps
         manual_roi_idx = [idx for idx,i in enumerate(current_annotations) if 'Manual' in i['properties']['name']]
-        #filtered_rois = [idx for idx,i in enumerate(current_annotations) if 'Filtered' in i['properties']['name']]
-        #uploaded_rois = [idx for idx,i in enumerate(current_annotations) if 'Upload' in i['properties']['name']]
 
         # Initializing layers with partial update object
         new_manual_rois = Patch()
@@ -1421,7 +1469,13 @@ class SlideMap(MapComponent):
             )
             new_manual_rois.extend(new_layers)
 
-            current_annotations.extend(added_rois)
+            if type(current_annotations)==list:
+                current_annotations.extend(added_rois)
+            else:
+                if len(list(current_annotations.keys()))==0:
+                    current_annotations = added_rois
+                else:
+                    current_annotations = [current_annotations]+added_rois
         
         if len(deleted_rois)>0:
             operation = True
@@ -1430,13 +1484,21 @@ class SlideMap(MapComponent):
                 del current_annotations[current_d-d_idx]
 
         annotations_data = json.dumps(current_annotations)
+        new_session_data = deepcopy(session_data)
+
+        # Finding the current slide index:
+        if 'tiles_url' in map_slide_information:
+            current_slide_tile_urls = [i['tiles_url'] for i in new_session_data['current']]
+            slide_idx = current_slide_tile_urls.index(map_slide_information['tiles_url'])
+
+            new_session_data['current'][slide_idx]['manual_rois'] = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/map_slide_information['y_scale'],c[1]/map_slide_information['y_scale']),g),new_geojson)
+
+        new_session_data = json.dumps(new_session_data)
 
         if not operation:
             new_manual_rois = no_update
 
-        
-
-        return new_manual_rois, annotations_data
+        return [new_manual_rois], [annotations_data], new_session_data
 
     def update_image_overlay_transparency(self, new_opacity: float):
         """Update transparency of image overlay component

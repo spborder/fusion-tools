@@ -144,7 +144,7 @@ window.fusionTools = Object.assign({}, window.fusionTools, {
             ,
         sendPosition: function(e, ctx) {
             ctx.setProps({
-                data: e.latlng,
+                data: e.latlng
             });
         }
 

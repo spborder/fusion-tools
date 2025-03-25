@@ -5,6 +5,7 @@ Tile server components
 """
 import os
 from fastapi import FastAPI, APIRouter, Response
+from fastapi.middleware.cors import CORSMiddleware
 import large_image
 import requests
 import json
@@ -35,7 +36,8 @@ class LocalTileServer(TileServer):
                  local_image_annotations: Union[str,list] = [],
                  local_metadata: Union[dict,list] = [],
                  tile_server_port:int = 8050,
-                 host: str = 'localhost'
+                 host: str = 'localhost',
+                 cors_options: dict = {'origins': ['*'], 'allow_methods': ['*'], 'allow_headers': ['*'], 'expose_headers': ['*']}
                  ):
         """Constructor method
 
@@ -50,6 +52,7 @@ class LocalTileServer(TileServer):
         self.local_metadata = local_metadata
         self.tile_server_port = tile_server_port
         self.host = host
+        self.cors_options = cors_options
 
         self.names = [i.split(os.sep)[-1] for i in self.local_image_paths]
    
@@ -59,16 +62,17 @@ class LocalTileServer(TileServer):
         self.metadata = self.local_metadata if not self.local_metadata is None else [{} for i in self.local_image_paths]
 
         self.app = FastAPI()
+
         self.router = APIRouter()
         self.router.add_api_route('/',self.root,methods=["GET"])
         self.router.add_api_route('/names',self.get_names,methods=["GET"])
-        self.router.add_api_route('/{image}/tiles/{z}/{x}/{y}',self.get_tile,methods=["GET"])
+        self.router.add_api_route('/{image}/tiles/{z}/{x}/{y}',self.get_tile,methods=["GET","OPTIONS"])
         self.router.add_api_route('/{image}/image_metadata',self.get_image_metadata,methods=["GET"])
         self.router.add_api_route('/{image}/metadata',self.get_metadata,methods=["GET"])
         self.router.add_api_route('/{image}/tiles/region',self.get_region,methods=["GET"])
         self.router.add_api_route('/{image}/tiles/thumbnail',self.get_thumbnail,methods=["GET"])
-        self.router.add_api_route('/{image}/annotations',self.get_annotations,methods=["GET"])
-        self.router.add_api_route('/{image}/annotations/metadata',self.get_annotations_metadata,methods=["GET"])
+        self.router.add_api_route('/{image}/annotations',self.get_annotations,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/annotations/metadata',self.get_annotations_metadata,methods=["GET","OPTIONS"])
 
     def load_annotations(self):
 
@@ -371,7 +375,15 @@ class LocalTileServer(TileServer):
         if image<len(self.names) and image>=0:
             if all([i is None for i in [top,left,bottom,right]]):
                 # Returning all annotations by default
-                return Response(content = json.dumps(self.annotations[image]),media_type='application/json')
+                return Response(
+                    content = json.dumps(self.annotations[image]),
+                    media_type='application/json',
+                    headers = {
+                        'Access-Control-Allow-Origin': '*',
+                        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                        'Access-Control-Allow-Headers': 'Content-Type',
+                    }
+                )
             else:
                 # Parsing region of annotations:
                 if all([not i is None for i in [top,left,bottom,right]]):
@@ -407,17 +419,51 @@ class LocalTileServer(TileServer):
                                         image_region_anns.append(filtered_g)
                         else:
                             print(f'Unrecognized annotation format found for image: {image}, {self.names[image]}')
-                    return Response(content = json.dumps(image_region_anns), media_type='application/json')
+                    return Response(
+                        content = json.dumps(image_region_anns), 
+                        media_type='application/json',
+                        headers = {
+                            'Access-Control-Allow-Origin': '*',
+                            'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                            'Access-Control-Allow-Headers': 'Content-Type',
+                        }
+                    )
 
         else:
-            return Response(content = 'invalid image index', media_type = 'application/json', status_code = 400)
+            return Response(
+                content = 'invalid image index',
+                media_type = 'application/json', 
+                status_code = 400,
+                headers = {
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type',
+                }
+            )
 
     def get_annotations_metadata(self,image:int):
         
         if image<len(self.names) and image>=0:
-            return Response(content = json.dumps(self.annotations_metadata[image]),media_type='application/json')
+            return Response(
+                content = json.dumps(self.annotations_metadata[image]),
+                media_type='application/json',
+                headers = {
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type',
+                }
+            )
         else:
-            return Response(content = 'invalid image index',media_type = 'application/json',status_code = 400)
+            return Response(
+                content = 'invalid image index',
+                media_type = 'application/json',
+                status_code = 400,
+                headers = {
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'GET, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type',
+                }
+            )
 
     def start(self):
         """Starting tile server instance on a provided port
@@ -426,6 +472,16 @@ class LocalTileServer(TileServer):
         :type port: str, optional
         """
         self.app.include_router(self.router)
+        
+        # Enabling CORS (https://fastapi.tiangolo.com/tutorial/cors/#use-corsmiddleware)
+        self.app.add_middleware(
+            CORSMiddleware,
+            allow_origins =self.cors_options['origins'],
+            allow_methods=self.cors_options['allow_methods'],
+            allow_headers=self.cors_options['allow_headers'],
+            expose_headers=self.cors_options['expose_headers']
+        )
+
         uvicorn.run(self.app,host=self.host,port=self.tile_server_port)
 
 class DSATileServer(TileServer):
