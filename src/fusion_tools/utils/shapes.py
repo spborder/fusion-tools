@@ -1119,6 +1119,17 @@ def extract_geojson_properties(geo_list: list, reference_object: Union[str,None]
 
     if type(geo_list)==dict:
         geo_list = [geo_list]
+    elif type(geo_list)==list:
+        if not all([type(i)==dict for i in geo_list]):
+            fixed_list = []
+            for a in geo_list:
+                if type(a)==dict:
+                    fixed_list.append(a)
+                elif type(a)==list:
+                    fixed_list.extend(a)
+            geo_list = fixed_list
+            
+
 
     start = time.time()
     geojson_properties = []

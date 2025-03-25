@@ -480,7 +480,7 @@ class OverlayOptions(Tool):
     def update_slide(self, new_annotations_info:list):
         
         if not any([i['value'] for i in ctx.triggered]):
-            raise exceptions.PreventUpdate
+            return [[]], [json.dumps({})], [[]], [[]]
 
         new_annotations_info = json.loads(get_pattern_matching_value(new_annotations_info))
         overlay_options = new_annotations_info['available_properties']

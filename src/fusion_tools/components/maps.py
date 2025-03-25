@@ -536,6 +536,7 @@ class SlideMap(MapComponent):
             ],
             [
                 Output({'type': 'map-initial-annotations','index': MATCH},'children'),
+                Output({'type': 'edit-control','index': MATCH},'editToolbar'),
                 Output({'type': 'map-manual-rois','index': MATCH},'children'),
                 Output({'type': 'map-generated-rois','index': MATCH},'children'),
                 Output({'type': 'map-tile-layer-holder','index': MATCH},'children'),
@@ -808,22 +809,12 @@ class SlideMap(MapComponent):
                 // If manual ROIs are present
                 if ('manual_rois' in map_slide_information){
                     // var geojson_features = L.geoJson(map_slide_information.manual_rois);
-                    annotations_list.push(map_slide_information.manual_rois);
+                    for (let m=0; m<map_slide_information.manual_rois.length; m++){
+                        console.log(map_slide_information.manual_rois[m]);
+                        let manual_roi = map_slide_information.manual_rois[m];
+                        annotations_list.push(scale_geoJSON(manual_roi, manual_roi.properties.name, manual_roi.properties._id, map_slide_information.x_scale, map_slide_information.y_scale))
+                    }
                 };
-
-                //var edit_control_children = new L.Control.Draw({
-                //    edit: {
-                //        feature_group: geojson_features
-                //    },
-                //    draw: true,
-                //    position: 'topleft'
-                //});
-
-                // const map = document.getElementById(JSON.stringify({index:0,type:`${component_prefix}-slide-map`}));
-                // console.log(map);
-                // map.addControl(edit_control_children);
-
-                // console.log(annotations_list);
 
                 return [annotations_list, [JSON.stringify(annotations_list)]];
             }
@@ -831,7 +822,6 @@ class SlideMap(MapComponent):
             [
                 Output({'type': 'feature-bounds','index': ALL},'data'),
                 Output({'type': 'map-annotations-store','index': ALL},'data'),
-                Output({'type': 'edit-feature-group','index': ALL},'children')
             ],
             [
                 Input({'type': 'map-slide-information','index': ALL},'data')
@@ -904,6 +894,13 @@ class SlideMap(MapComponent):
         non_image_overlay_metadata = [i for i in annotations_metadata if not 'image_path' in i]
         x_scale, y_scale = self.get_scale_factors(new_image_metadata)
         new_layer_children = []
+
+        if 'manual_rois' in new_slide:
+            non_image_overlay_metadata += [
+                i['properties']
+                for i in new_slide['manual_rois']
+            ]
+            annotation_names += [i['properties']['name'] for i in new_slide['manual_rois']]
 
         # Adding overlaid annotation layers:
         for st_idx, st_info in enumerate(non_image_overlay_metadata):
@@ -1021,6 +1018,12 @@ class SlideMap(MapComponent):
         manual_rois = []
         gen_rois = []
 
+        remove_old_edits = {
+            'mode':'remove',
+            'n_clicks':0,
+            'action':'clear all'
+        }
+
         #TODO: Add something else to make sure that "Filtered" annotations are removed after loading a new slide
         if 'meta' in new_metadata:
             display_metadata = {
@@ -1071,7 +1074,7 @@ class SlideMap(MapComponent):
             )
         )
 
-        return new_layer_children, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div
+        return new_layer_children, remove_old_edits, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div
 
     def update_ann_info(self, annotations_geojson):
         """Extracting descriptive information on properties stored in GeoJSON data, referenced by other components
@@ -1331,15 +1334,13 @@ class SlideMap(MapComponent):
         :return: List of new children to dl.LayerControl() consisting of overlaid GeoJSON components.
         :rtype: list
         """
-        print(ctx.triggered)
+
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
 
         uploaded_shape = get_pattern_matching_value(uploaded_shape)
         new_geojson = get_pattern_matching_value(new_geojson)
         current_annotations = json.loads(get_pattern_matching_value(current_annotations))
-        if type(current_annotations)==list:
-            print(f'Len of current_annotations: {len(current_annotations)}')
 
         session_data = json.loads(session_data)
         map_slide_information = json.loads(get_pattern_matching_value(map_slide_information))
@@ -1491,7 +1492,19 @@ class SlideMap(MapComponent):
             current_slide_tile_urls = [i['tiles_url'] for i in new_session_data['current']]
             slide_idx = current_slide_tile_urls.index(map_slide_information['tiles_url'])
 
-            new_session_data['current'][slide_idx]['manual_rois'] = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/map_slide_information['y_scale'],c[1]/map_slide_information['y_scale']),g),new_geojson)
+            if not 'manual_rois' in new_session_data['current'][slide_idx]:
+                scaled_rois = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/map_slide_information['x_scale'],c[1]/map_slide_information['y_scale']),g),a) for a in deepcopy(added_rois)]
+                new_session_data['current'][slide_idx]['manual_rois'] = [
+                    i | {'properties': a['properties']}
+                    for a,i in zip(added_rois,scaled_rois)
+                ]
+            else:
+                new_session_data['current'][slide_idx]['manual_rois'] += [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/map_slide_information['x_scale'],c[1]/map_slide_information['y_scale']),g),a) for a in deepcopy(added_rois)]
+                new_session_data['current'][slide_idx]['manual_rois'] = [
+                    i | {'properties': a['properties']}
+                    for a,i in zip(added_rois,scaled_rois)
+                ]
+
 
         new_session_data = json.dumps(new_session_data)
 
