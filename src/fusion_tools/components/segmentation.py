@@ -54,6 +54,7 @@ class FeatureAnnotation(Tool):
         """
 
         super().__init__()
+<<<<<<< HEAD
 
         # Overruling inherited session_update prop
         self.session_update = True
