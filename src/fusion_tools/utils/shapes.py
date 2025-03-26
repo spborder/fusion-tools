@@ -624,6 +624,7 @@ def geojson_to_histomics(geojson_anns: Union[list,dict]):
                     {
                         'type': 'polyline',
                         'user': f['properties'],
+                        'closed': True,
                         'points': [list(i)+[0] if type(i)==tuple else i+[0] for i in f['geometry']['coordinates'][0]]
                     }
                     for f in g['features']
