@@ -747,6 +747,7 @@ def export_annotations(
                     ann_dict['annotation']['elements'].append(
                         {
                             'type': 'polyline',
+                            'closed': True,
                             'points': [i+[0] for i in f['geometry']['coordinates']],
                             'user': f['properties']
                         }
