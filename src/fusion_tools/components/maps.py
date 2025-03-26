@@ -875,6 +875,7 @@ class SlideMap(MapComponent):
         new_image_metadata = requests.get(image_metadata_url).json()
         new_metadata = requests.get(metadata_url).json()
         annotations_metadata = requests.get(annotations_metadata_url).json()
+        print(annotations_metadata)
 
         # Detecting DSA-formatted annotations
         if any(['annotation' in i for i in annotations_metadata]):

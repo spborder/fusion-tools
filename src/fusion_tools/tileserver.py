@@ -86,7 +86,7 @@ class LocalTileServer(TileServer):
                     annotations_metadata.append(self.extract_meta_dict(new_loaded_annotations))
                 else:
                     print(f'Unrecognized annotation format: {self.local_image_annotations}')
-                    self.annotations.append([])
+                    geojson_annotations.append([])
                     annotations_metadata.append([])
 
             elif hasattr(self.local_image_annotations,"to_dict"):
@@ -94,31 +94,35 @@ class LocalTileServer(TileServer):
                 annotations_metadata.append(self.extract_meta_dict(self.local_image_annotations))
 
             elif type(self.local_image_annotations)==list:
-                processed_anns = []
                 for n in self.local_image_annotations:
-                    if hasattr(n,"to_dict"):
-                        processed_anns.append(n.to_dict())
-                    elif type(n)==dict:
-                        if 'annotation' in n:
-                            converted = histomics_to_geojson(n)
-                            processed_anns.append(converted)
-                        else:
-                            processed_anns.append(n)
-                    elif type(n)==str:
-                        loaded_anns = load_annotations(n)
-                        if type(loaded_anns)==list:
-                            processed_anns.extend(loaded_anns)
-                        elif type(loaded_anns)==dict:
-                            processed_anns.append(loaded_anns)
+                    processed_anns = []
+                    if not n is None:
+                        if hasattr(n,"to_dict"):
+                            processed_anns.append(n.to_dict())
+                        elif type(n)==dict:
+                            if 'annotation' in n:
+                                converted = histomics_to_geojson(n)
+                                processed_anns.append(converted)
+                            else:
+                                processed_anns.append(n)
+                        elif type(n)==str:
+                            loaded_anns = load_annotations(n)
+                            if not loaded_anns is None:
+                                if type(loaded_anns)==list:
+                                    processed_anns.extend(loaded_anns)
+                                elif type(loaded_anns)==dict:
+                                    processed_anns.append(loaded_anns)
+                            else:
+                                print(f'Unrecognized Format: {n}')
 
-                    elif type(n)==np.ndarray:
-                        print(f'Found annotations of type: {type(n)}, make sure to specify if this is an overlay image (use fusion_tools.SlideImageOverlay) or a label mask (use fusion_tools.utils.shapes.load_label_mask)')
-                    else:
-                        print(f'Unknown annotations type found: {n}')
-                
-                geojson_annotations.append(processed_anns)
-                annotations_metadata.append(self.extract_meta_dict(processed_anns))
+                        elif type(n)==np.ndarray:
+                            print(f'Found annotations of type: {type(n)}, make sure to specify if this is an overlay image (use fusion_tools.SlideImageOverlay) or a label mask (use fusion_tools.utils.shapes.load_label_mask)')
+                        else:
+                            print(f'Unknown annotations type found: {n}')
                     
+                    geojson_annotations.append(processed_anns)
+                    annotations_metadata.append(self.extract_meta_dict(processed_anns))
+                        
             elif type(self.local_image_annotations)==dict:
                 if 'annotation' in self.local_image_annotations:
                     converted_annotations = histomics_to_geojson(self.local_image_annotations)
@@ -208,25 +212,29 @@ class LocalTileServer(TileServer):
             elif type(new_annotations)==list:
                 processed_anns = []
                 for n in new_annotations:
-                    if hasattr(n,"to_dict"):
-                        processed_anns.append(n.to_dict())
-                    elif type(n)==dict:
-                        if 'annotation' in n:
-                            converted = histomics_to_geojson(n)
-                            processed_anns.append(converted)
-                        else:
-                            processed_anns.append(n)
-                    elif type(n)==str:
-                        loaded_anns = load_annotations(n)
-                        if type(loaded_anns)==list:
-                            processed_anns.extend(loaded_anns)
-                        elif type(loaded_anns)==dict:
-                            processed_anns.append(loaded_anns)
+                    if not n is None:
+                        if hasattr(n,"to_dict"):
+                            processed_anns.append(n.to_dict())
+                        elif type(n)==dict:
+                            if 'annotation' in n:
+                                converted = histomics_to_geojson(n)
+                                processed_anns.append(converted)
+                            else:
+                                processed_anns.append(n)
+                        elif type(n)==str:
+                            loaded_anns = load_annotations(n)
+                            if not loaded_anns is None:
+                                if type(loaded_anns)==list:
+                                    processed_anns.extend(loaded_anns)
+                                elif type(loaded_anns)==dict:
+                                    processed_anns.append(loaded_anns)
+                            else:
+                                print(f'Unrecognized format: {n}')
 
-                    elif type(n)==np.ndarray:
-                        print(f'Found annotations of type: {type(n)}, make sure to specify if this is an overlay image (use fusion_tools.SlideImageOverlay) or a label mask (use fusion_tools.utils.shapes.load_label_mask)')
-                    else:
-                        print(f'Unknown annotations type found: {n}')
+                        elif type(n)==np.ndarray:
+                            print(f'Found annotations of type: {type(n)}, make sure to specify if this is an overlay image (use fusion_tools.SlideImageOverlay) or a label mask (use fusion_tools.utils.shapes.load_label_mask)')
+                        else:
+                            print(f'Unknown annotations type found: {n}')
                 
                 self.annotations.append(processed_anns)
                 self.annotations_metadata.append(self.extract_meta_dict(processed_anns))

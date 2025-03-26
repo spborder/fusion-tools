@@ -5,6 +5,7 @@ setup.py
 src/fusion_tools/__init__.py
 src/fusion_tools/dataset.py
 src/fusion_tools/feature_extraction.py
+src/fusion_tools/simple_fusion.py
 src/fusion_tools/tileserver.py
 src/fusion_tools.egg-info/PKG-INFO
 src/fusion_tools.egg-info/SOURCES.txt
