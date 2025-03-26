@@ -54,6 +54,9 @@ class FeatureAnnotation(Tool):
         """
 
         super().__init__()
+        # Overruling inherited property 
+        self.session_update = True
+
         self.storage_path = storage_path
         self.labels_format = labels_format
         self.annotations_format = annotations_format
