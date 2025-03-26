@@ -54,6 +54,10 @@ class FeatureAnnotation(Tool):
         """
 
         super().__init__()
+
+        # Overruling inherited session_update prop
+        self.session_update = True
+
         self.storage_path = storage_path
         self.labels_format = labels_format
         self.annotations_format = annotations_format
@@ -103,9 +107,14 @@ class FeatureAnnotation(Tool):
 
         return x_scale, y_scale
 
-    def gen_layout(self, session_data:dict):
+    def update_layout(self, session_data:dict, use_prefix:bool):
         """Generating layout for component
         """
+
+        if 'data' in session_data:
+            if 'feature-annotation' in session_data['data']:
+                print('Loading feature-annotation data from previous session')
+
 
         layout = html.Div([
             dbc.Card([
@@ -313,7 +322,14 @@ class FeatureAnnotation(Tool):
             ])
         ],style = {'maxHeight': '100vh','overflow': 'scroll'})
 
-        self.blueprint.layout = layout
+        if use_prefix:
+            PrefixIdTransform(prefix=f'{self.component_prefix}').transform_layout(layout)
+
+        return layout
+
+    def gen_layout(self, session_data:dict):
+
+        self.blueprint.layout = self.update_layout(session_data,use_prefix=False)
 
     def get_callbacks(self):
         """Initializing callbacks and adding to DashBlueprint
@@ -1028,12 +1044,19 @@ class BulkLabels(Tool):
             assets_folder = self.assets_folder
         )
 
-    def gen_layout(self, session_data:dict):
+    def update_layout(self, session_data:dict, use_prefix:bool):
         """Generating layout for BulkLabels component
 
         :return: BulkLabels layout
         :rtype: html.Div
         """
+
+        if 'data' in session_data:
+            if 'bulk-labels' in session_data['data']:
+                print('Loading bulk-labels data from previous session')
+                #TODO: Update stores
+
+
         layout = html.Div([
             dbc.Card([
                 dbc.CardBody([
@@ -1043,13 +1066,6 @@ class BulkLabels(Tool):
                     html.Hr(),
                     dbc.Row(
                         'Apply labels to structures based on several different inclusion and exclusion criteria.'
-                    ),
-                    html.Div(
-                        dcc.Store(
-                            id = {'type': 'bulk-annotation-property-info','index': 0},
-                            storage_type='memory',
-                            data = json.dumps({})
-                        )
                     ),
                     html.Hr(),
                     dbc.Row([
@@ -1314,7 +1330,14 @@ class BulkLabels(Tool):
             ])
         ],style = {'maxHeight': '100vh','overflow': 'scroll'})
 
-        self.blueprint.layout = layout
+        if use_prefix:
+            PrefixIdTransform(prefix = f'{self.component_prefix}').transform_layout(layout)
+
+        return layout
+
+    def gen_layout(self, session_data:dict):
+
+        self.blueprint.layout = self.update_layout(session_data,use_prefix=False)
 
     def get_callbacks(self):
         """Adding callbacks to DashBlueprint object
