@@ -710,28 +710,53 @@ class SlideMap(MapComponent):
                 };
 
                 const scale_geoJSON = (data, name, id, x_scale, y_scale) => {
-                    return {
-                        ...data,
-                        properties: {
-                            name: name,
-                            _id: id
-                        },
-                        features: data.features.map((feature,f_idx) => ({
-                            ...feature,
-                            geometry: {
-                                ...feature.geometry,
-                                coordinates: feature.geometry.coordinates.map(axes =>
-                                    axes.map(([x, y]) => [x*x_scale, y*y_scale])
-                                )
-                            },
+                    if ('user' in data.features[0].properties){
+                        return {
+                            ...data,
                             properties: {
-                                ...feature.properties.user,
                                 name: name,
-                                _id: uuidv4(),
-                                _index: f_idx
-                            }
-                        }))
-                    }
+                                _id: id
+                            },
+                            features: data.features.map((feature,f_idx) => ({
+                                ...feature,
+                                geometry: {
+                                    ...feature.geometry,
+                                    coordinates: feature.geometry.coordinates.map(axes =>
+                                        axes.map(([x, y]) => [x*x_scale, y*y_scale])
+                                    )
+                                },
+                                properties: {
+                                    ...feature.properties.user,
+                                    name: name,
+                                    _id: uuidv4(),
+                                    _index: f_idx
+                                }
+                            }))
+                        }
+                    } else {
+                        return {
+                            ...data,
+                            properties: {
+                                name: name,
+                                _id: id
+                            },
+                            features: data.features.map((feature,f_idx) => ({
+                                ...feature,
+                                geometry: {
+                                    ...feature.geometry,
+                                    coordinates: feature.geometry.coordinates.map(axes =>
+                                        axes.map(([x, y]) => [x*x_scale, y*y_scale])
+                                    )
+                                },
+                                properties: {
+                                    ...feature.properties,
+                                    name: name,
+                                    _id: uuidv4(),
+                                    _index: f_idx
+                                }
+                            }))
+                        }
+                    };
                 };
 
 
@@ -875,7 +900,6 @@ class SlideMap(MapComponent):
         new_image_metadata = requests.get(image_metadata_url).json()
         new_metadata = requests.get(metadata_url).json()
         annotations_metadata = requests.get(annotations_metadata_url).json()
-        print(annotations_metadata)
 
         # Detecting DSA-formatted annotations
         if any(['annotation' in i for i in annotations_metadata]):
@@ -1053,6 +1077,7 @@ class SlideMap(MapComponent):
                                         'Value': v
                                     }
                                     for k,v in new_image_metadata.items()
+                                    if not type(v) in [list,dict]
                                 ])
                             )
                         ]
@@ -1500,8 +1525,8 @@ class SlideMap(MapComponent):
                     for a,i in zip(added_rois,scaled_rois)
                 ]
             else:
-                new_session_data['current'][slide_idx]['manual_rois'] += [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/map_slide_information['x_scale'],c[1]/map_slide_information['y_scale']),g),a) for a in deepcopy(added_rois)]
-                new_session_data['current'][slide_idx]['manual_rois'] = [
+                scaled_rois = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/map_slide_information['x_scale'],c[1]/map_slide_information['y_scale']),g),a) for a in deepcopy(added_rois)]
+                new_session_data['current'][slide_idx]['manual_rois'] += [
                     i | {'properties': a['properties']}
                     for a,i in zip(added_rois,scaled_rois)
                 ]
@@ -1686,6 +1711,7 @@ class MultiFrameSlideMap(SlideMap):
         )
 
         super().get_callbacks()
+        super().get_annotations_callbacks()
     
     def __str__(self):
         return 'Multi-Frame Slide Map'
@@ -1747,12 +1773,17 @@ class MultiFrameSlideMap(SlideMap):
                         id = {'type': 'map-colorbar-div','index': 0},
                         children = []
                     ),
-                    html.Div(
+                    html.Div([
                         dcc.Store(
                             id = {'type':'map-annotations-store','index': 0},
                             data = json.dumps({})
+                        ),
+                        dcc.Store(
+                            id = {'type': 'map-annotations-info-store','index': 0},
+                            data = json.dumps({}),
+                            storage_type = 'memory'
                         )
-                    ),
+                    ]),
                     dl.LayersControl(
                         id = {'type': 'map-layers-control','index': 0},
                         children = [
@@ -1811,7 +1842,11 @@ class MultiFrameSlideMap(SlideMap):
                 id = {'type': 'load-annotations-modal','index': 0},
                 is_open = False,
                 children = []
-            )
+            ),
+            html.Div(
+                id = {'type': 'map-slide-metadata-div','index': 0},
+                children = []
+            ),
         ])
 
         if use_prefix:
@@ -1844,16 +1879,16 @@ class MultiFrameSlideMap(SlideMap):
                 if len(image_metadata['frames'])==3:
                     # Treat this as an RGB image by default
                     if '?token' in tiles_url:
-                        rgb_url = tiles_url+'&style={"bands": [{"framedelta":0,"palette":"rgba(255,0,0,0)"},{"framedelta":1,"palette":"rgba(0,255,0,0)"},{"framedelta":2,"palette":"rgba(0,0,255,0)"}]}'
+                        rgb_url = tiles_url+'&style={"bands": [{"framedelta":0,"palette":["rgba(0,0,0,0)","rgba(255,0,0,255)"]},{"framedelta":1,"palette":["rgba(0,0,0,0)","rgba(0,255,0,255)"]},{"framedelta":2,"palette":["rgba(0,0,0,0)","rgba(0,0,255,255)"]}]}'
                     else:
-                        rgb_url = tiles_url+'?style={"bands": [{"framedelta":0,"palette":"rgba(255,0,0,0)"},{"framedelta":1,"palette":"rgba(0,255,0,0)"},{"framedelta":2,"palette":"rgba(0,0,255,0)"}]}'
+                        rgb_url = tiles_url+'?style={"bands": [{"framedelta":0,"palette":["rgba(0,0,0,0)","rgba(255,0,0,255)"]},{"framedelta":1,"palette":["rgba(0,0,0,0)","rgba(0,255,0,255)"]},{"framedelta":2,"palette":["rgba(0,0,0,0)","rgba(0,0,255,255)"]}]}'
                 else:
                     # Checking for "red", "green" and "blue" frame names
                     if all([i in frame_names for i in ['red','green','blue']]):
                         rgb_style_dict = {
                             "bands": [
                                 {
-                                    "palette": ["rgba(0,0,0,0)",'rgba('+','.join(['255' if i==c_idx else '0' for i in range(3)]+['0'])+')'],
+                                    "palette": ["rgba(0,0,0,0)",'rgba('+','.join(['255' if i==c_idx else '0' for i in range(3)]+['255'])+')'],
                                     "framedelta": frame_names.index(c)
                                 }
                                 for c_idx,c in enumerate(['red','green','blue'])

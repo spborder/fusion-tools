@@ -37,7 +37,7 @@ class LocalTileServer(TileServer):
                  local_metadata: Union[dict,list] = [],
                  tile_server_port:int = 8050,
                  host: str = 'localhost',
-                 cors_options: dict = {'origins': ['*'], 'allow_methods': ['*'], 'allow_headers': ['*'], 'expose_headers': ['*']}
+                 cors_options: dict = {'origins': ['*'], 'allow_methods': ['*'], 'allow_headers': ['*'], 'expose_headers': ['*'], 'max_age': '36000000'}
                  ):
         """Constructor method
 
@@ -54,14 +54,6 @@ class LocalTileServer(TileServer):
         self.host = host
         self.cors_options = cors_options
 
-        self.cors_headers = {
-            'Access-Control-Allow-Origin': self.cors_options['origins'],
-            'Access-Control-Allow-Methods': self.cors_options['allow_methods'],
-            'Access-Control-Allow-Headers': self.cors_options['allow_headers'],
-            'Access-Control-Expose-Headers': self.cors_options['expose_headers'],
-            'Access-Control-Allow-Credentials': True
-        }
-
         self.names = [i.split(os.sep)[-1] for i in self.local_image_paths]
    
         self.tile_sources = [large_image.open(i,encoding='PNG') for i in self.local_image_paths]
@@ -72,13 +64,13 @@ class LocalTileServer(TileServer):
         self.app = FastAPI()
 
         self.router = APIRouter()
-        self.router.add_api_route('/',self.root,methods=["GET"])
-        self.router.add_api_route('/names',self.get_names,methods=["GET"])
+        self.router.add_api_route('/',self.root,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/names',self.get_names,methods=["GET","OPTIONS"])
         self.router.add_api_route('/{image}/tiles/{z}/{x}/{y}',self.get_tile,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{image}/image_metadata',self.get_image_metadata,methods=["GET"])
-        self.router.add_api_route('/{image}/metadata',self.get_metadata,methods=["GET"])
-        self.router.add_api_route('/{image}/tiles/region',self.get_region,methods=["GET"])
-        self.router.add_api_route('/{image}/tiles/thumbnail',self.get_thumbnail,methods=["GET"])
+        self.router.add_api_route('/{image}/image_metadata',self.get_image_metadata,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/metadata',self.get_metadata,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/tiles/region',self.get_region,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/tiles/thumbnail',self.get_thumbnail,methods=["GET","OPTIONS"])
         self.router.add_api_route('/{image}/annotations',self.get_annotations,methods=["GET","OPTIONS"])
         self.router.add_api_route('/{image}/annotations/metadata',self.get_annotations_metadata,methods=["GET","OPTIONS"])
 
@@ -166,7 +158,7 @@ class LocalTileServer(TileServer):
         return ann_metadata
 
     def __str__(self):
-        return f'TileServer class for {self.local_image_path} to {self.host}:{self.tile_server_port}'
+        return f'TileServer class for {self.local_image_paths} to {self.host}:{self.tile_server_port}'
 
     def __len__(self):
         return len(self.tile_sources)
@@ -366,9 +358,9 @@ class LocalTileServer(TileServer):
                     dtype=np.uint8
                 ).tobytes()
 
-            return Response(content = raw_tile, media_type='image/png',headers=self.cors_headers)
+            return Response(content = raw_tile, media_type='image/png')
         else:
-            return Response(content = 'invalid image index', media_type='application/json',status_code=400,headers=self.cors_headers)
+            return Response(content = 'invalid image index', media_type='application/json',status_code=400)
     
     def get_image_metadata(self,image:int):
         """Getting large-image metadata for image
@@ -377,9 +369,9 @@ class LocalTileServer(TileServer):
         :rtype: Response
         """
         if image<len(self.tiles_metadatas) and image>=0:
-            return Response(content = json.dumps(self.tiles_metadatas[image]),media_type = 'application/json',headers=self.cors_headers)
+            return Response(content = json.dumps(self.tiles_metadatas[image]),media_type = 'application/json')
         else:
-            return Response(content = 'invalid image index',media_type='application/json', status_code=400,headers=self.cors_headers)
+            return Response(content = 'invalid image index',media_type='application/json', status_code=400)
         
     def get_metadata(self, image:int):
         """Getting metadata associated with slide/case/patient
@@ -388,9 +380,9 @@ class LocalTileServer(TileServer):
         :type image: int
         """
         if image<len(self.metadata) and image>=0:
-            return Response(content = json.dumps(self.metadata[image]),media_type = 'application/json',headers=self.cors_headers)
+            return Response(content = json.dumps(self.metadata[image]),media_type = 'application/json')
         else:
-            return Response(content = 'invalid image index',media_type='application/json',status_code=400,headers=self.cors_headers)
+            return Response(content = 'invalid image index',media_type='application/json',status_code=400)
     
     def get_region(self, image:int, top: int, left: int, bottom:int, right:int,style:str = ''):
         """
@@ -413,9 +405,9 @@ class LocalTileServer(TileServer):
                 },
             )
 
-            return Response(content = image_region, media_type = 'image/png',headers=self.cors_headers)
+            return Response(content = image_region, media_type = 'image/png')
         else:
-            return Response(content = 'invalid image index', media_type = 'application/json', status_code = 400,headers=self.cors_headers)
+            return Response(content = 'invalid image index', media_type = 'application/json', status_code = 400)
 
     def get_thumbnail(self, image:int):
         """Grabbing an image thumbnail
@@ -426,9 +418,9 @@ class LocalTileServer(TileServer):
 
         if image<len(self.names) and image>=0:
             thumbnail,mime_type = large_image.open(self.local_image_paths[image]).getThumbnail(encoding='PNG')
-            return Response(content = thumbnail, media_type = 'image/png',headers=self.cors_headers)
+            return Response(content = thumbnail, media_type = 'image/png')
         else:
-            return Response(content = 'invalid image index', media_type = 'application/json', status_code=400,headers=self.cors_headers)
+            return Response(content = 'invalid image index', media_type = 'application/json', status_code=400)
 
     def get_annotations(self,image:int, top:Union[int,None]=None, left:Union[int,None]=None, bottom: Union[int,None]=None, right: Union[int,None]=None):
         
@@ -438,8 +430,7 @@ class LocalTileServer(TileServer):
                 # Returning all annotations by default
                 return Response(
                     content = json.dumps(self.annotations[image]),
-                    media_type='application/json',
-                    headers = self.cors_headers
+                    media_type='application/json'
                 )
             else:
                 # Parsing region of annotations:
@@ -478,16 +469,14 @@ class LocalTileServer(TileServer):
                             print(f'Unrecognized annotation format found for image: {image}, {self.names[image]}')
                     return Response(
                         content = json.dumps(image_region_anns), 
-                        media_type='application/json',
-                        headers = self.cors_headers
+                        media_type='application/json'
                     )
 
         else:
             return Response(
                 content = 'invalid image index',
                 media_type = 'application/json', 
-                status_code = 400,
-                headers = self.cors_headers
+                status_code = 400
             )
 
     def get_annotations_metadata(self,image:int):
@@ -495,15 +484,13 @@ class LocalTileServer(TileServer):
         if image<len(self.names) and image>=0:
             return Response(
                 content = json.dumps(self.annotations_metadata[image]),
-                media_type='application/json',
-                headers = self.cors_headers
+                media_type='application/json'
             )
         else:
             return Response(
                 content = 'invalid image index',
                 media_type = 'application/json',
                 status_code = 400,
-                headers = self.cors_headers
             )
 
     def start(self):
@@ -517,10 +504,12 @@ class LocalTileServer(TileServer):
         # Enabling CORS (https://fastapi.tiangolo.com/tutorial/cors/#use-corsmiddleware)
         self.app.add_middleware(
             CORSMiddleware,
-            allow_origins =self.cors_options['origins'],
+            allow_origins=self.cors_options['origins'],
             allow_methods=self.cors_options['allow_methods'],
+            allow_credentials = True,
             allow_headers=self.cors_options['allow_headers'],
-            expose_headers=self.cors_options['expose_headers']
+            expose_headers=self.cors_options['expose_headers'],
+            max_age=self.cors_options['max_age']
         )
 
         uvicorn.run(self.app,host=self.host,port=self.tile_server_port)

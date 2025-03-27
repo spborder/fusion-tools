@@ -54,12 +54,8 @@ class FeatureAnnotation(Tool):
         """
 
         super().__init__()
-<<<<<<< HEAD
 
         # Overruling inherited session_update prop
-=======
-        # Overruling inherited property 
->>>>>>> 200a1eb9c99bae54c250056e0141a7be557dc3c5
         self.session_update = True
 
         self.storage_path = storage_path
