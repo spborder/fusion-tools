@@ -707,8 +707,6 @@ class DSAHandler(Handler):
             f'file/{session_id}/download'
         )
 
-        print(file_contents)
-
         return file_contents
 
     def create_save_session(self):
