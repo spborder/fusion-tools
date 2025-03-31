@@ -258,9 +258,7 @@ class SlideAnnotation(MultiTool):
     def add_label(self):
         pass
 
-
-
-
-
+    def download_annotations(self):
+        pass
 
 

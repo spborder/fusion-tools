@@ -270,6 +270,11 @@ class SlideMap(MapComponent):
                             id = {'type': 'map-annotations-info-store','index': 0},
                             data = json.dumps({}),
                             storage_type = 'memory'
+                        ),
+                        dcc.Store(
+                            id = {'type': 'map-annotations-fetch-error-backup-store','index': 0},
+                            data = json.dumps({}),
+                            storage_type='memory'
                         )
                     ]),
                     dl.LayersControl(
@@ -542,11 +547,26 @@ class SlideMap(MapComponent):
                 Output({'type': 'map-tile-layer-holder','index': MATCH},'children'),
                 Output({'type': 'map-slide-information','index': MATCH},'data'),
                 Output({'type': 'map-slide-metadata-div','index': MATCH},'children'),
+                Output({'type': 'map-annotations-fetch-error-backup-store','index': MATCH},'data')
             ],
             [
                 State('anchor-vis-store','data')
             ]
         )(self.update_slide)
+
+        # Backup handling for blocked "fetch" of annotations
+        self.blueprint.callback(
+            [
+                Input({'type': 'map-annotations-fetch-error-backup-store','index': ALL},'data')
+            ],
+            [
+                Output({'type': 'feature-bounds','index': ALL},'data'),
+                Output({'type': 'map-annotations-store','index': ALL},'data'),
+            ],
+            [
+                State('anchor-vis-store','data')
+            ]
+        )(self.get_annotations_backup)
 
         # Extracting properties from loaded GeoJSONs
         self.blueprint.callback(
@@ -686,6 +706,7 @@ class SlideMap(MapComponent):
 
                 // Reading in map-slide-information
                 var map_slide_information = JSON.parse(slide_information);
+                var annotations_list = [];
 
                 function uuidv4() {
                     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
@@ -759,94 +780,108 @@ class SlideMap(MapComponent):
                     };
                 };
 
+                // Initializing an error store in the event that fetch is blocked by some CORS policy
+                const annotations_error_store = [];
 
                 // Getting the names of each annotation
                 let ann_meta_url = map_slide_information.annotations_metadata_url;
-                var ann_meta_response = await fetch(
-                    ann_meta_url, {
-                        method: 'GET',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        }
-                    }
-                );
 
-                if (!ann_meta_response.ok) {
-                    throw new Error(`Oh no! Error encountered: ${ann_meta_response.status}`)
-                }
-
-                var ann_meta = await ann_meta_response.json();
-
-                // Making sure these are only structural annotations, not image overlays
-                ann_meta = ann_meta.filter(item => !('image_path' in item))
-
-                if (ann_meta.length==0){
-                    let empty_geojson = {
-                        'type': 'FeatureCollection',
-                        'features': [],
-                        'properties': {}
-                    };
-
-                    return [[empty_geojson], [JSON.stringify([empty_geojson])]]
-                }
-
-                // Initializing empty annotations list
-                var annotations_list = new Array(ann_meta.length);
                 try {
-                    if ('annotations_geojson_url' in map_slide_information){
-                        // This slide has a specific url for getting individual GeoJSON formatted annotations
-                        var new_annotations = [];
-                        ann_meta.forEach((ann_,idx) => ann_meta.splice(idx,1,{'name': ann_.annotation.name, '_id': ann_._id}))
-                        const promises = map_slide_information.annotations_geojson_url.map((url,idx) =>
-                            fetch(url, {
-                                method: 'GET',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                }
-                            })
-                            .then((response) => response.json())
-                            .then(function(json_data){return process_json(json_data,idx,ann_meta)})
-                            .then((geojson_anns) => annotations_list.splice(idx,1,geojson_anns))
-                        );
+                    var ann_meta_response = await fetch(
+                        ann_meta_url, {
+                            method: 'GET',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            }
+                        }
+                    ); 
 
-                        const promise_await = await Promise.all(promises);
-
-                    } else {
-                        const promises = [map_slide_information.annotations_url].map((url,idx) =>
-                            fetch(url, {
-                                method: 'GET',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                }
-                            })
-                            .then((response) => response.json())
-                            .then((json_data) => annotations_list.push(process_json(json_data,idx,ann_meta)))
-                        );
-                        const promise_await = await Promise.all(promises);
-                        annotations_list = annotations_list.flat();
-
+                    if (!ann_meta_response.ok) {
+                        throw new Error(`Oh no! Error encountered: ${ann_meta_response.status}`)
                     }
 
-                } catch (error) {
-                    console.error(error.message);
-                } 
+                    var ann_meta = await ann_meta_response.json();
 
-                // If manual ROIs are present
-                if ('manual_rois' in map_slide_information){
-                    // var geojson_features = L.geoJson(map_slide_information.manual_rois);
-                    for (let m=0; m<map_slide_information.manual_rois.length; m++){
-                        console.log(map_slide_information.manual_rois[m]);
-                        let manual_roi = map_slide_information.manual_rois[m];
-                        annotations_list.push(scale_geoJSON(manual_roi, manual_roi.properties.name, manual_roi.properties._id, map_slide_information.x_scale, map_slide_information.y_scale))
-                    }
+                } catch {
+                    console.log('Error using fetch at provided url');
+                    annotations_error_store.push(map_slide_information);
+                    var ann_meta = false;
                 };
 
-                return [annotations_list, [JSON.stringify(annotations_list)]];
+                // If ann_meta isn't false then, continue with processing clientside
+                if (ann_meta){
+                    // Making sure these are only structural annotations, not image overlays
+                    ann_meta = ann_meta.filter(item => !('image_path' in item))
+
+                    if (ann_meta.length==0){
+                        let empty_geojson = {
+                            'type': 'FeatureCollection',
+                            'features': [],
+                            'properties': {}
+                        };
+
+                        return [[empty_geojson], [JSON.stringify([empty_geojson])], [JSON.stringify(annotations_error_store)]];
+                    }
+
+                    // Initializing empty annotations list
+                    var annotations_list = new Array(ann_meta.length);
+                    try {
+                        if ('annotations_geojson_url' in map_slide_information){
+                            // This slide has a specific url for getting individual GeoJSON formatted annotations
+                            var new_annotations = [];
+                            ann_meta.forEach((ann_,idx) => ann_meta.splice(idx,1,{'name': ann_.annotation.name, '_id': ann_._id}))
+                            const promises = map_slide_information.annotations_geojson_url.map((url,idx) =>
+                                fetch(url, {
+                                    method: 'GET',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                    }
+                                })
+                                .then((response) => response.json())
+                                .then(function(json_data){return process_json(json_data,idx,ann_meta)})
+                                .then((geojson_anns) => annotations_list.splice(idx,1,geojson_anns))
+                            );
+
+                            const promise_await = await Promise.all(promises);
+
+                        } else {
+                            const promises = [map_slide_information.annotations_url].map((url,idx) =>
+                                fetch(url, {
+                                    method: 'GET',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                    }
+                                })
+                                .then((response) => response.json())
+                                .then((json_data) => annotations_list.push(process_json(json_data,idx,ann_meta)))
+                            );
+                            const promise_await = await Promise.all(promises);
+                            annotations_list = annotations_list.flat();
+
+                        }
+
+                    } catch (error) {
+                        console.error(error.message);
+                    } 
+
+                    // If manual ROIs are present
+                    if ('manual_rois' in map_slide_information){
+                        // var geojson_features = L.geoJson(map_slide_information.manual_rois);
+                        for (let m=0; m<map_slide_information.manual_rois.length; m++){
+                            console.log(map_slide_information.manual_rois[m]);
+                            let manual_roi = map_slide_information.manual_rois[m];
+                            annotations_list.push(scale_geoJSON(manual_roi, manual_roi.properties.name, manual_roi.properties._id, map_slide_information.x_scale, map_slide_information.y_scale))
+                        }
+                    };
+                };
+
+                return [annotations_list, [JSON.stringify(annotations_list)], [JSON.stringify(annotations_error_store)]];
             }
             """,
             [
                 Output({'type': 'feature-bounds','index': ALL},'data'),
                 Output({'type': 'map-annotations-store','index': ALL},'data'),
+                Output({'type': 'map-annotations-fetch-error-backup-store','index': ALL},'data')
             ],
             [
                 Input({'type': 'map-slide-information','index': ALL},'data')
@@ -1100,7 +1135,71 @@ class SlideMap(MapComponent):
             )
         )
 
-        return new_layer_children, remove_old_edits, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div
+        # Updating fetch error store to be empty again
+        fetch_data_store = json.dumps({})
+
+        return new_layer_children, remove_old_edits, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
+
+    def get_annotations_backup(self, ann_error_store, vis_data):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        ann_error_store = json.loads(get_pattern_matching_value(ann_error_store))
+        if type(ann_error_store)==list:
+            ann_error_store = ann_error_store[0]
+
+        if len(list(ann_error_store.keys()))==0:
+            raise exceptions.PreventUpdate
+        else:
+            vis_data = json.loads(vis_data)
+            # Use requests to get annotations data
+            if 'annotations_geojson_url' in ann_error_store:
+                raw_geojson = []
+                for req_url in ann_error_store['annotations_geojson_url']:
+                    if 'current_user' in vis_data:
+                        req_url += f'?token={vis_data["current_user"]["token"]}'
+
+                    new_geojson = requests.get(req_url).json()
+                    raw_geojson.append(new_geojson)
+            else:
+                raw_geojson = []
+                new_geojson = requests.get(ann_error_store['annotations_url']).json()
+                raw_geojson.extend(new_geojson)
+
+            metadata_url = ann_error_store['annotations_metadata_url']
+            if 'current_user' in vis_data:
+                metadata_url += f'?token={vis_data["current_user"]["token"]}'
+
+            ann_metadata = requests.get(metadata_url).json()
+            # Filtering out overlaid images
+            ann_metadata = [a for a in ann_metadata if not 'image_path' in a]
+
+            # Scaling geojson to map
+            scaled_geojson = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*ann_error_store['x_scale'],c[1]*ann_error_store['y_scale']),g),a) for a in raw_geojson]
+            for s,m in zip(scaled_geojson,ann_metadata):
+                if 'annotation' in m:
+                    s['properties'] = {
+                        'name': m['annotation']['name'],
+                        '_id': m['_id']
+                    }
+                else:
+                    s['properties'] = m
+
+                for f_idx, f in enumerate(s['features']):
+                    if 'properties' in f:
+                        if not 'user' in f['properties']:
+                            if not all([i in f['properties'] for i in ['_index','_id','name']]):
+                                f['properties'] = f['properties'] | {'_index': f_idx, '_id': uuid.uuid4().hex[:24], 'name': s['properties']['name']}
+                        else:
+                            f['properties'] = f['properties']['user']
+                            if not all([i in f['properties'] for i in ['_index','_id','name']]):
+                                f['properties'] = f['properties'] | {'_index': f_idx, '_id': uuid.uuid4().hex[:24], 'name': s['properties']['name']}
+                    else:
+                        f['properties'] = {'_index': f_idx, '_id': uuid.uuid4().hex[:24], 'name': s['properties']['name']}
+
+            
+        return scaled_geojson, [json.dumps(scaled_geojson)]
 
     def update_ann_info(self, annotations_geojson):
         """Extracting descriptive information on properties stored in GeoJSON data, referenced by other components
