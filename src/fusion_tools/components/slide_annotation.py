@@ -126,14 +126,19 @@ class SlideAnnotation(MultiTool):
         self.handler = handler
         self.preload_schema = preload_schema
 
-        self.local_schemas = []
-        self.cloud_schemas = []
+        self.schemas = []
 
         if not self.preload_schema is None:
-            self.load_local_schema(self.preload_schema)
+            local_schemas = self.load_local_schema(self.preload_schema)
+        else:
+            local_schemas = []
         
         if not self.handler is None:
-            self.load_cloud_schema()
+            cloud_schemas = self.load_cloud_schema()
+        else:
+            cloud_schemas = []
+        
+        self.schemas = local_schemas+cloud_schemas
 
     def __str__(self):
         return 'Slide Annotation'
@@ -153,7 +158,6 @@ class SlideAnnotation(MultiTool):
 
     def get_callbacks(self):
 
-        # Callback for updating Visualization Session
         # Callback for updating the current slide
         # Callback for selecting existing annotation schema (cloud or local)
         # Callback for creating/updating annotation schema
@@ -180,6 +184,9 @@ class SlideAnnotation(MultiTool):
 
         # Getting slide-annotation data from session 
         slide_annotation_data = session_data.get('data',{}).get('slide-annotation')
+        if not slide_annotation_data is None:
+            # Loading schemas from session data
+            pass
 
         layout = html.Div([
             dbc.Card([
@@ -239,15 +246,17 @@ class SlideAnnotation(MultiTool):
             new_schema = [schema]
 
         else:
-            new_schema = None
+            new_schema = []
         
-        if not new_schema is None:
-            self.local_schemas.extend(new_schema)
+        return new_schema
 
     def load_cloud_schema(self):
         """Checking linked DSA instance for annotation session collection
         """
-        pass
+        cloud_schemas = []
+
+
+        return cloud_schemas
 
     def update_slide(self, new_slide_info):
         pass
