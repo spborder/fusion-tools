@@ -191,7 +191,21 @@ class FeatureAnnotation(Tool):
                             storage_type = 'memory',
                             data = json.dumps({})
                         )
-                    ],style = {'marginBottom': '10px'}),
+                    ],style = {'marginBottom': '10px'},align='center'),
+                    dbc.Row([
+                        dbc.Col(
+                            dbc.Label('Bounding Box Padding:'),
+                            md = 4
+                        ),
+                        dbc.Col(
+                            dcc.Input(
+                                type = 'number',
+                                value = 0,
+                                id = {'type': 'feature-annotation-bbox-padding','index': 0}
+                            ),
+                            md = 8
+                        )
+                    ],style = {'marginTop':'5px','marginTop':'5px'}),
                     dbc.Row([
                         dbc.Col([
                             dbc.Row([
@@ -387,6 +401,8 @@ class FeatureAnnotation(Tool):
             [
                 State({'type': 'map-annotations-store','index': ALL},'data'),
                 State({'type': 'slide-map','index':ALL},'bounds'),
+                State({'type': 'feature-annotation-bbox-padding','index': ALL},'value'),
+                State({'type': 'feature-annotation-slide-information','index': ALL},'data'),
                 State({'type': 'vis-layout-tabs','index': ALL},'active_tab')
             ]
         )(self.update_structure_options)
@@ -464,7 +480,7 @@ class FeatureAnnotation(Tool):
                 Output({'type': 'feature-annotation-save','index': ALL},'children')
             ],
             [
-                State({'type': 'feature-annotation-figure','index': ALL},'relayoutData'),
+                State({'type': 'feature-annotation-figure','index': ALL},'figure'),
                 State({'type': 'feature-annotation-class-drop','index': ALL},'options'),
                 State({'type': 'feature-annotation-current-structures','index': ALL},'data'),
                 State({'type': 'feature-annotation-structure-drop','index': ALL},'value'),
@@ -649,7 +665,7 @@ class FeatureAnnotation(Tool):
             np.save(mask_save_path.replace('.png','.npy'),np.uint8(formatted_mask))
             slide_image_region.save(image_save_path)
 
-    def update_structure_options(self, overlay_names, refresh_clicked, current_features, slide_bounds, active_tab):
+    def update_structure_options(self, overlay_names, refresh_clicked, current_features, slide_bounds, bbox_padding, slide_information, active_tab):
         """Updating the structure options based on updated slide bounds
 
         :param slide_bounds: Current slide bounds
@@ -677,8 +693,11 @@ class FeatureAnnotation(Tool):
             raise exceptions.PreventUpdate
         
         slide_map_box = box(slide_map_bounds[0][1],slide_map_bounds[0][0],slide_map_bounds[1][1],slide_map_bounds[1][0])
-
+        bbox_padding = get_pattern_matching_value(bbox_padding)
         current_features = json.loads(get_pattern_matching_value(current_features))
+        slide_information = json.loads(get_pattern_matching_value(slide_information))
+        x_scale = slide_information['x_scale']
+        y_scale = slide_information['y_scale']
 
         structure_options = []
         structure_bboxes = {}
@@ -688,7 +707,7 @@ class FeatureAnnotation(Tool):
                 structure_options.append(g['properties']['name'])
 
                 structure_bboxes[g['properties']['name']] = [
-                    list(shape(f['geometry']).bounds) for f in intersecting_shapes['features']
+                    list(shape(f['geometry']).buffer(bbox_padding*x_scale).bounds) for f in intersecting_shapes['features']
                 ]
                 structure_bboxes[f'{g["properties"]["name"]}_index'] = 0
 
@@ -808,8 +827,6 @@ class FeatureAnnotation(Tool):
                 ).content
             )
         )
-
-        
 
         return image_region
     
@@ -949,7 +966,7 @@ class FeatureAnnotation(Tool):
                     )
                 elif matching_label['type']=='options': 
                     return_component = dcc.Checklist(
-                        options = matching_label['options'],
+                        options = list(set(matching_label['options'])),
                         id = {'type': f'{self.component_prefix}-feature-annotation-label-text','index': 0}
                     )
             
@@ -972,7 +989,6 @@ class FeatureAnnotation(Tool):
             )
 
         return [return_component]
-
 
     def create_class_label(self, add_class_value, add_submit_click, add_class_color, add_class_name, add_label_name, current_class_options, current_label_options, add_label_options, session_data):
         """Creating a new class or label to add to the session
@@ -1204,32 +1220,40 @@ class FeatureAnnotation(Tool):
 
         return [add_class_drop_value], [options_div], [add_submit_disabled], [new_class_options], [new_label_options], json.dumps(session_data)
 
-    def save_annotation(self, save_click, current_annotations, current_classes, current_structure_data, current_structure, slide_information):
+    def save_annotation(self, save_click, current_figure, current_classes, current_structure_data, current_structure, slide_information):
         """Saving the current annotation in image format
 
         :param save_click: Save button is clicked
         :type save_click: list
-        :param current_annotations: Current annotations (in SVG path format)
-        :type current_annotations: list
+        :param current_figure: Figure information which includes current annotated shapes
+        :type current_figure: list
+        :param current_classes: List of classes available for saving
+        :type current_classes: list
+        :param current_structure_data: Bounding boxes for current structure as well as current index
+        :param current_structure_data: list
+        :param current_structure: Currently selected structure
+        :param current_structure: list
+        :param slide_information: Information on the current slide (such as x and y scale)
+        :param slide_information: list
         """
 
 
         if not any([i['value'] for i in ctx.triggered]) or current_classes is None:
             raise exceptions.PreventUpdate
 
-        current_annotations = get_pattern_matching_value(current_annotations)
         current_classes = get_pattern_matching_value(current_classes)
         current_structure_data = json.loads(get_pattern_matching_value(current_structure_data))
         current_structure = get_pattern_matching_value(current_structure)
         slide_information = json.loads(get_pattern_matching_value(slide_information))
 
-        annotations = []
-        if not current_annotations is None:
-            if 'shapes' in current_annotations.keys():
-                annotations += current_annotations['shapes']
+        current_shapes = get_pattern_matching_value(current_figure)['layout'].get('shapes')
+        current_lines = get_pattern_matching_value(current_figure)['layout'].get('line')
 
-                if 'line' in current_annotations.keys():
-                    annotations += current_annotations['line']
+        annotations = []
+        if not current_shapes is None:
+            annotations += current_shapes
+        if not current_lines is None:
+            annotations += current_lines
             
         image_bbox = current_structure_data[current_structure][current_structure_data[f'{current_structure}_index']]
 

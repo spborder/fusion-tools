@@ -7,10 +7,46 @@ import threading
 sys.path.append('./src/')
 from fusion_tools.visualization import Visualization
 from fusion_tools.handler.dsa_handler import DSAHandler
-from fusion_tools.components import SlideMap, FeatureAnnotation, BulkLabels
-
+from fusion_tools.components import SlideMap, FeatureAnnotation, BulkLabels, SlideAnnotation, SlideAnnotationSchema
 
 import pandas as pd
+
+test_schema = SlideAnnotationSchema(
+    {
+        "name": "Test Slide Annotation",
+        "description": "This is a test of the SlideAnnotation component",
+        "annotations": [
+            {
+                "name": "Example Text Label",
+                "description": "This is an example free text annotation type.",
+                "type": "text",
+                "roi": False
+            },
+            {
+                "name": "Example Numeric Label",
+                "description": "This is an example numeric input label",
+                "type": "numeric",
+                "min": 0,
+                "max": 100,
+                "roi": False
+            },
+            {
+                "name": "Example Options Label",
+                "description": "This is an example of a label with predefined options",
+                "type": "options",
+                "options": [
+                    "Option 1",
+                    "Option 2",
+                    "Option 3"
+                ],
+                "multi": False,
+                "roi": False
+            }
+        ]
+    }
+)
+
+
 
 def main():
 
@@ -34,7 +70,10 @@ def main():
                         labels_format = 'json',
                         annotations_format = 'rgb'
                     ),
-                    BulkLabels()
+                    BulkLabels(),
+                    SlideAnnotation(
+                        preload_schema=test_schema
+                    )
                 ]
             ]
         ]

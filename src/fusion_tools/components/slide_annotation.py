@@ -167,7 +167,41 @@ class SlideAnnotation(MultiTool):
         # Optional: Callback for inviting user to existing annotation schema
         # Optional: Callback for admin panel indicating other user's progress
 
-        pass
+        self.blueprint.callback(
+            [
+                Input({'type': 'slide-select-drop','index': ALL},'value')
+            ],
+            [
+                State('anchor-vis-store','data')
+            ],
+            [
+                Output({'type': 'slide-annotation-current-slide-div','index': ALL},'children')
+            ]
+        )(self.update_slide)
+
+        self.blueprint.callback(
+            [
+                Input({'type':'slide-annotation-schema-drop','index': ALL},'value')
+            ],
+            [
+                State('anchor-vis-store','data')
+            ],
+            [
+                Output({'type': 'slide-annotation-schema-parent-div','index':ALL},'children')
+            ]
+        )(self.update_schema)
+
+        self.blueprint.callback(
+            [
+                Input({'type': 'slide-annotation-schema-refresh-icon','index': ALL},'n_clicks')
+            ],
+            [
+                State('anchor-vis-store','data')
+            ],
+            [
+                Output({'type': 'slide-annotation-schema-drop','index': ALL},'options')
+            ]
+        )(self.refresh_schemas)
 
     def update_layout(self, session_data:dict, use_prefix:bool):
 
@@ -203,6 +237,49 @@ class SlideAnnotation(MultiTool):
                         )
                     ),
                     html.Hr(),
+                    dbc.Row([
+                        dbc.Col(
+                            dbc.Label(
+                                'Select Annotation Schema: '
+                            ),
+                            md = 4
+                        ),
+                        dbc.Col(
+                            dcc.Dropdown(
+                                options = [
+                                    {
+                                        'label': n.schema_data['name'],
+                                        'value': n.schema_data['name']
+                                    }
+                                    for n in self.schemas
+                                ],
+                                value = [],
+                                multi = False,
+                                id = {'type': 'slide-annotation-schema-drop','index': 0}
+                            ),
+                            md = 6
+                        ),
+                        dbc.Col([
+                            html.A(
+                                html.I(
+                                    className = 'fa-solid fa-rotate fa-2x',
+                                    n_clicks = 0,
+                                    id = {'type': 'slide-annotation-schema-refresh-icon','index': 0}
+                                )
+                            ),
+                            dbc.Tooltip(
+                                target = {'type': 'slide-annotation-schema-refresh-icon','index': 0},
+                                children = 'Click to refresh available schema'
+                            )
+                        ])
+                    ]),
+                    html.Hr(),
+                    html.Div(
+                        id = {'type': 'slide-annotation-schema-parent-div','index': 0},
+                        children = [
+                            'Select a schema to get started!'
+                        ]
+                    )
                 ])
             ])
         ])
@@ -257,12 +334,159 @@ class SlideAnnotation(MultiTool):
 
 
         return cloud_schemas
-
-    def update_slide(self, new_slide_info):
-        pass
     
-    def update_schema(self):
-        pass
+    def refresh_schemas(self, clicked, session_data):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        #TODO: check linked cloud instance for any new schemas added
+        new_schema_options = [
+            {
+                'label': i['name'],
+                'value': i['name']
+            }
+            for i in self.schemas
+        ]
+
+        return [new_schema_options]
+
+    def update_slide(self, new_slide_index, session_data):
+        
+
+        if not any([i['value'] or i['value']==0 for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        session_data = json.loads(session_data)
+        new_slide = session_data['current'][get_pattern_matching_value(new_slide_index)]
+
+        new_slide_div = html.Div(
+            children = [
+                html.h5(f'Labeling for: {new_slide["name"]}')
+            ]
+        )
+
+        return [new_slide_div]
+    
+    def update_schema(self, new_schema_val, session_data):
+        
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        session_data = json.loads(session_data)
+        new_schema_val = get_pattern_matching_value(new_schema_val)
+
+        new_ann_components = self.make_annotation_components(new_schema_val)
+
+        return [new_ann_components]
+
+    def make_annotation_components(self, schema_key):
+
+        if not schema_key in [i.schema_data['name'] for i in self.schemas]:
+            return f'Schema: {schema_key} Not Found!'
+        
+        schema_index = [i.schema_data['name'] for i in self.schemas].index(schema_key)
+        schema_info = self.schemas[schema_index].schema_data
+        schema_div = html.Div([
+            dbc.Card([
+                dbc.CardHeader(html.H4(schema_key)),
+                dbc.CardBody([
+                    dbc.Row(
+                        schema_info.get('description')
+                    ),
+                    html.Hr(),
+                    html.Div(
+                        id = {'type': 'slide-annotation-current-slide-div','index': 0},
+                        children = []
+                    ),
+                    html.Div(
+                        children = [
+                            self.make_input_component(i,idx)
+                            for idx,i in enumerate(schema_info.get('annotations',[]))
+                        ]
+                    )
+                ])
+            ])
+        ])
+
+        PrefixIdTransform(prefix=f'{self.component_prefix}').transform_layout(schema_div)
+
+        return [schema_div]
+
+    def make_input_component(self, input_spec, input_index):
+
+        input_desc_column = [
+            dbc.Row(html.H6(input_spec['name'])),
+            dbc.Row(html.P(input_spec['description'])),
+            dcc.Store(
+                id = {'type': 'slide-annotation-input-info','index': input_index},
+                data = json.dumps(input_spec),
+                storage_type = 'memory'
+            )
+        ]
+
+        if input_spec['type']=='text':
+            input_component = html.Div([
+                dbc.Row([
+                    dbc.Col(input_desc_column,md=5),
+                    dbc.Col([
+                        dbc.Input(
+                            type = 'text',
+                            id = {'type': 'slide-annotation-input','index': input_index},
+                            style = {'width': '100%'}
+                        )
+                    ],md=7)
+                ]),
+                html.Hr()
+            ])
+        elif input_spec['type']=='boolean':
+
+            input_component = html.Div([
+                dbc.Row([
+                    dbc.Col(input_desc_column,md=5),
+                    dbc.Col([
+                        dcc.RadioItems(
+                            options = [
+                                {'label': 'True', 'value': 1},
+                                {'label': 'False', 'value': 0}
+                            ],
+                            id = {'type': 'slide-annotation-input','index': input_index}
+                        )
+                    ],md=7)
+                ])
+            ])
+
+        elif input_spec['type']=='numeric':
+            input_component = html.Div([
+                dbc.Row([
+                    dbc.Col(input_desc_column,md=5),
+                    dbc.Col([
+                        dbc.Input(
+                            type = 'number',
+                            id = {'type': 'slide-annotation-input','index': input_index},
+                            style = {'width': '100%'}
+                        )
+                    ],md=7)
+                ]),
+                html.Hr()
+            ])
+
+        elif input_spec['type']=='options':
+            input_component = html.Div([
+                dbc.Row([
+                    dbc.Col(input_desc_column,md=5),
+                    dbc.Col([
+                        dcc.Checklist(
+                            options = input_spec['options'],
+                            id = {'type': 'slide-annotation-input','index': input_index},
+                            style = {'width': '100%'}
+                        )
+                    ],md=7)
+                ]),
+                html.Hr()
+            ])
+
+        return input_component
 
     def add_label(self):
         pass
