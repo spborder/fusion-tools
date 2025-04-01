@@ -20,7 +20,8 @@ test_schema = SlideAnnotationSchema(
                 "name": "Example Text Label",
                 "description": "This is an example free text annotation type.",
                 "type": "text",
-                "roi": False
+                "roi": True,
+                "editable": True
             },
             {
                 "name": "Example Numeric Label",

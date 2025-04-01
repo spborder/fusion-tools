@@ -3496,7 +3496,7 @@ class HRAViewer(Tool):
                         ],
                         tooltip_duration = None
                     )
-                    ]
+                ]
                 
                 data_doi = dbc.Row([
                         dbc.Col(

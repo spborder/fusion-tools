@@ -121,7 +121,7 @@ class Visualization:
                 dbc.themes.BOOTSTRAP,
                 dbc.icons.BOOTSTRAP,
                 dbc.icons.FONT_AWESOME,
-                dmc.styles.ALL,
+                dmc.styles.ALL
             ],
             'transforms': [
                 MultiplexerTransform()
