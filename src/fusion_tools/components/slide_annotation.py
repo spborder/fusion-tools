@@ -170,12 +170,9 @@ class SlideAnnotation(MultiTool):
         self.get_callbacks()
 
     def get_callbacks(self):
-
-        # Callback for updating the current slide
-        # Callback for selecting existing annotation schema (cloud or local)
+        
+        #TODO: Remaining callbacks to implement:
         # Callback for creating/updating annotation schema
-        # Callback for adding new label (text, numeric, button, (Optional: ROI))
-        # Callback for downloading annotation data
 
         # Optional: Callback for inviting user to existing annotation schema
         # Optional: Callback for admin panel indicating other user's progress
@@ -206,7 +203,8 @@ class SlideAnnotation(MultiTool):
                 State('anchor-vis-store','data')
             ],
             [
-                Output({'type': 'slide-annotation-schema-parent-div','index':ALL},'children')
+                Output({'type': 'slide-annotation-schema-parent-div','index':ALL},'children'),
+                Output({'type': 'slide-annotation-download-button','index': ALL},'disabled'),
             ]
         )(self.update_schema)
 
@@ -263,6 +261,7 @@ class SlideAnnotation(MultiTool):
             ],
             [
                 Output({'type': 'slide-annotation-output-parent','index':ALL},'children'),
+                Output({'type': 'slide-annotation-download-button','index': ALL},'disabled'),
                 Output('anchor-vis-store','data')
             ]
         )(self.submit_labels)
@@ -282,6 +281,19 @@ class SlideAnnotation(MultiTool):
                 Output({'type': 'slide-annotation-roi-input','index': ALL},'color')
             ]
         )(self.submit_roi)
+
+        self.blueprint.callback(
+            [
+                Input({'type': 'slide-annotation-download-button','index': ALL},'n_clicks')
+            ],
+            [
+                State({'type':'slide-annotation-schema-drop','index': ALL},'value'),
+                State('anchor-vis-store','data')
+            ],
+            [
+                Output({'type': 'slide-annotation-download-data','index': ALL},'data')
+            ]
+        )(self.download_annotations)
 
 
     def update_layout(self, session_data:dict, use_prefix:bool):
@@ -366,6 +378,22 @@ class SlideAnnotation(MultiTool):
                         children = [
                             'Select a schema to get started!'
                         ]
+                    ),
+                    html.Div(
+                        children = [
+                            dbc.Button(
+                                'Download Annotations',
+                                className = 'd-grid col-12 mx-auto',
+                                color = 'success',
+                                disabled = True,
+                                n_clicks = 0,
+                                id = {'type': 'slide-annotation-download-button','index': 0}
+                            ),
+                            dcc.Download(
+                                id = {'type': 'slide-annotation-download-data','index': 0}
+                            )
+                        ],
+                        style = {'marginTop': '5px'}
                     )
                 ])
             ])
@@ -463,6 +491,8 @@ class SlideAnnotation(MultiTool):
 
         # Checking if this slide has any labels        
         previous_labels = session_data.get('data',{}).get('slide-annotation',{}).get(schema_val,None)
+        current_input_infos = [json.loads(i) for i in current_input_infos]
+
         if not previous_labels is None:
             slide_names = [i['Slide Name'] for i in previous_labels]
             if new_slide['name'] in slide_names:
@@ -480,7 +510,7 @@ class SlideAnnotation(MultiTool):
             load_input_infos = [no_update if not i['roi'] else i | {'roi': True} for i in current_input_infos]
             load_roi_input_colors = ['primary' if i['roi'] else 'secondary' for i in current_input_infos]
 
-        return [new_slide_div], [load_input_vals], [load_input_infos], [load_roi_input_colors]
+        return [new_slide_div], load_input_vals, [json.dumps(i) if type(i)==dict else i for i in load_input_infos], load_roi_input_colors
     
     def update_schema(self, new_schema_val, current_slide_index, session_data):
         
@@ -494,10 +524,16 @@ class SlideAnnotation(MultiTool):
             current_slide = None
 
         new_schema_val = get_pattern_matching_value(new_schema_val)
+        new_ann_components = self.make_annotation_components(new_schema_val, current_slide, session_data)
 
-        new_ann_components = self.make_annotation_components(new_schema_val, current_slide,session_data)
+        # Checking if there is any data in the session for this schema
+        schema_data = session_data.get('data',{}).get('slide-annotation',{}).get(new_schema_val)
+        if not schema_data is None:
+            disable_download_button = False
+        else:
+            disable_download_button = True
 
-        return [new_ann_components]
+        return [new_ann_components], [disable_download_button]
 
     def make_annotation_components(self, schema_key, slide_name, session_data):
 
@@ -511,10 +547,26 @@ class SlideAnnotation(MultiTool):
         if 'slide-annotation' in session_data['data']:
             if schema_key in session_data['data']['slide-annotation']:
                 schema_table = self.make_schema_label_table(session_data,schema_key)
+                schema_data = session_data['data']['slide-annotation'][schema_key]
             else:
                 schema_table = 'No labels added yet!'
+                schema_data = None
         else:
             schema_table = 'No labels added yet!'
+            schema_data = None
+
+        if not schema_data is None:
+            slide_names = [i['Slide Name'] for i in schema_data]
+            if not slide_name is None:
+                if slide_name in slide_names:
+                    # First two values are Slide Name and Slide ID
+                    slide_input_vals = schema_data[slide_names.index(slide_name)]
+                else:
+                    slide_input_vals = None
+            else:
+                slide_input_vals = None
+        else:
+            slide_input_vals = None
 
 
         schema_div = html.Div([
@@ -533,7 +585,7 @@ class SlideAnnotation(MultiTool):
                     ),
                     html.Div(
                         children = [
-                            self.make_input_component(i,idx)
+                            self.make_input_component(i,idx, slide_input_vals)
                             for idx,i in enumerate(schema_info.get('annotations',[]))
                         ]
                     ),
@@ -565,7 +617,27 @@ class SlideAnnotation(MultiTool):
 
         return [schema_div]
 
-    def make_input_component(self, input_spec, input_index):
+    def make_input_component(self, input_spec, input_index, slide_input_vals):
+
+        
+        roi_input_color = 'secondary' if not input_spec.get('roi',False) else 'primary'
+        use_val = []
+        if not slide_input_vals is None:
+            if input_spec.get('roi',False):
+                if f"{input_spec['name']}_ROI" in slide_input_vals:
+                    slide_input_roi = slide_input_vals.get(f"{input_spec['name']}_ROI")
+                    if type(slide_input_roi)==dict:
+                        input_spec['roi'] = slide_input_roi
+                        roi_input_color = 'success'
+                    else:
+                        roi_input_color = 'primary'
+                else:
+                    roi_input_color = 'primary'
+            
+            if slide_input_vals.get(input_spec['name'],False):
+                use_val = slide_input_vals.get(input_spec['name'])
+            else:
+                use_val = []
 
         input_desc_column = [
             dbc.Row(html.H6(input_spec['name'])),
@@ -608,9 +680,9 @@ class SlideAnnotation(MultiTool):
                 )
             ],
             id = {'type': 'slide-annotation-roi-input','index': input_index},
-            color = 'primary' if input_spec.get('roi',False) else 'secondary',
+            color = roi_input_color,
             n_clicks = 0,
-            disabled= not input_spec.get('roi', False) 
+            disabled= roi_input_color=='secondary'
         ) 
 
         if input_spec['type']=='text':
@@ -621,6 +693,7 @@ class SlideAnnotation(MultiTool):
                         dbc.InputGroup([
                             dbc.Input(
                                 type = 'text',
+                                value = use_val,
                                 id = {'type': 'slide-annotation-input','index': input_index},
                             ),
                             roi_button,
@@ -642,6 +715,7 @@ class SlideAnnotation(MultiTool):
                                 {'label': 'True', 'value': 1},
                                 {'label': 'False', 'value': 0}
                             ],
+                            value = use_val,
                             id = {'type': 'slide-annotation-input','index': input_index}
                         )
                     ],md=7)
@@ -656,6 +730,7 @@ class SlideAnnotation(MultiTool):
                         dbc.InputGroup([
                             dbc.Input(
                                 type = 'number',
+                                value = use_val,
                                 id = {'type': 'slide-annotation-input','index': input_index},
                             ),
                             roi_button,
@@ -676,6 +751,7 @@ class SlideAnnotation(MultiTool):
                         dbc.InputGroup([
                             dbc.Select(
                                 options = input_spec['options'],
+                                value = use_val,
                                 id = {'type': 'slide-annotation-input','index': input_index}
                             ),
                             roi_button,
@@ -704,6 +780,9 @@ class SlideAnnotation(MultiTool):
         
         tile_url = get_pattern_matching_value(tile_url)
         tile_size = get_pattern_matching_value(tile_size)
+
+        if any([i is None for i in [tile_url, tile_size]]):
+            raise exceptions.PreventUpdate
         
         modal_children = [
             html.Div([
@@ -750,6 +829,12 @@ class SlideAnnotation(MultiTool):
         schema_name = get_pattern_matching_value(schema_name)
         slide_information = json.loads(get_pattern_matching_value(slide_information))
 
+        # If a slide hasn't been loaded yet
+        if slide_information is None:
+            raise exceptions.PreventUpdate
+        elif len(list(slide_information.keys()))==0:
+            raise exceptions.PreventUpdate
+
         input_infos = [json.loads(i) for i in input_infos]
 
         slide_annotation_data = session_data.get('data',{}).get('slide-annotation',{}).get(schema_name)
@@ -781,36 +866,39 @@ class SlideAnnotation(MultiTool):
                     schema_name: [this_slide_dict]
                 }
 
-        ann_schema_df = pd.DataFrame.from_records(session_data['data']['slide-annotation'][schema_name])
-
         ann_schema_table = self.make_schema_label_table(session_data,schema_name)
+        disable_download_button = False
 
-        return [ann_schema_table], json.dumps(session_data)
+        return [ann_schema_table], [disable_download_button], json.dumps(session_data)
     
     def make_schema_label_table(self, session_data, schema_name):
 
-        ann_schema_df = pd.DataFrame.from_records(session_data['data']['slide-annotation'][schema_name])
+        schema_data = session_data.get('data',{}).get('slide-annotation',{}).get(schema_name)
+        if not schema_data is None:
+            ann_schema_df = pd.DataFrame.from_records(schema_data)
 
-        ann_schema_table = dash_table.DataTable(
-            id = {'type':f'{self.component_prefix}-slide-annotation-schema-table','index': 0},
-            columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in ann_schema_df.columns],
-            data = ann_schema_df.to_dict('records'),
-            fixed_columns={ 'headers': True, 'data': 1 },
-            style_table={'minWidth': '100%'},
-            style_cell={
-                # all three widths are needed
-                'minWidth': '250px', 'width': '250px', 'maxWidth': '250px',
-                'overflow': 'hidden',
-                'textOverflow': 'ellipsis',
-            },
-            tooltip_data = [
-                {
-                    column: {'value': str(value),'type':'markdown'}
-                    for column,value in row.items()
-                } for row in ann_schema_df.to_dict('records')
-            ],
-            tooltip_duration = None
-        )
+            ann_schema_table = dash_table.DataTable(
+                id = {'type':f'{self.component_prefix}-slide-annotation-schema-table','index': 0},
+                columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in ann_schema_df.columns],
+                data = ann_schema_df.to_dict('records'),
+                fixed_columns={ 'headers': True, 'data': 1 },
+                style_table={'minWidth': '100%'},
+                style_cell={
+                    # all three widths are needed
+                    'minWidth': '250px', 'width': '250px', 'maxWidth': '250px',
+                    'overflow': 'hidden',
+                    'textOverflow': 'ellipsis',
+                },
+                tooltip_data = [
+                    {
+                        column: {'value': str(value),'type':'markdown'}
+                        for column,value in row.items()
+                    } for row in ann_schema_df.to_dict('records')
+                ],
+                tooltip_duration = None
+            )
+        else:
+            ann_schema_table = html.Div()
 
         return ann_schema_table
 
@@ -835,7 +923,21 @@ class SlideAnnotation(MultiTool):
 
         return update_infos, modal_open, roi_button_color
 
-    def download_annotations(self):
-        pass
+    def download_annotations(self, button_clicked, schema_name, session_data):
+        
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        schema_name = get_pattern_matching_value(schema_name)
+        session_data = json.loads(session_data)
 
+        annotation_data = session_data.get('data',{}).get('slide-annotation',{}).get(schema_name)
+        if not annotation_data is None:
+            annotation_df = pd.DataFrame.from_records(annotation_data)
+            
+            # Transforming the schema name so that it's a valid filename
+            schema_save_name = re.sub(r'[^\w_.)( -]', '', schema_name)
+            return [dcc.send_data_frame(annotation_df.to_csv,f'{schema_save_name}.csv')]
+        else:
+            return [no_update]
 

@@ -53,7 +53,7 @@ def main():
 
     # Grabbing first item from demo DSA instance
     base_url = 'https://demo.kitware.com/histomicstk/api/v1'
-    item_id = '5bbdeed1e629140048d01bcb'
+    item_id = ['5bbdeed1e629140048d01bcb','58b480ba92ca9a000b08c89d']
 
     # Starting the DSAHandler to grab information:
     dsa_handler = DSAHandler(
@@ -61,7 +61,7 @@ def main():
     )
     
     vis_session = Visualization(
-        tileservers=[dsa_handler.get_tile_server(item_id)],
+        tileservers=[dsa_handler.get_tile_server(i) for i in item_id],
         components = [
             [
                 SlideMap(),
