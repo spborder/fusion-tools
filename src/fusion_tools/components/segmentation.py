@@ -307,7 +307,7 @@ class FeatureAnnotation(Tool):
                                 placeholder = 'Label',
                                 id = {'type': 'feature-annotation-label-drop','index': 0}
                             )
-                        ], md = 4),
+                        ], md = 3),
                         dbc.Col([
                             html.Div([
                                 dcc.Textarea(
@@ -317,17 +317,17 @@ class FeatureAnnotation(Tool):
                                     style = {'width': '100%','height': '100px'}
                                 )
                             ], id = {'type': 'feature-annotation-label-input-div','index': 0})
-                        ], md = 5),
+                        ], md = 4),
                         dbc.Col([
-                            html.A(
-                                html.I(
-                                    id = {'type': 'feature-annotation-label-submit','index': 0},
-                                    className = 'bi bi-check-circle-fill fa-xl',
-                                    style = {'color': 'rgb(0,255,0)'}
-                                )
+                            dbc.Button(
+                                'Save',
+                                id = {'type': 'feature-annotation-label-submit','index': 0},
+                                color = 'success',
+                                n_clicks = 0,
+                                style = {'width': '100%'}
                             )
-                        ],md = 1)
-                    ],style = {'marginTop':'10px'}),
+                        ],md = 3)
+                    ],style = {'marginTop':'10px'}, align = 'center',justify='center'),
                     html.Hr(),
                     dbc.Row([
                         dbc.Col([
@@ -1111,7 +1111,16 @@ class FeatureAnnotation(Tool):
                     options_div = []
                     add_submit_disabled = True
                     if not current_class_options is None:
-                        new_class_options = current_class_options + [{'label': html.Div(add_class_name,style = {'color': add_class_color}), 'value': add_class_color}]
+                        current_classes = [i['label']['props']['children'] for i in current_class_options]
+                        if not add_class_name in current_classes:
+                            new_class_options = current_class_options + [{'label': html.Div(add_class_name,style = {'color': add_class_color}), 'value': add_class_color}]
+                        else:
+                            # Updating the color if class already exists
+                            new_class_options[current_classes.index(add_class_name)] = {
+                                'label': html.Div(add_class_name,style = {'color': add_class_color}),
+                                'value': add_class_name
+                            }
+
                     else:
                         new_class_options = [{'label': html.Div(add_class_name,style={'color': add_class_color}),'value': add_class_color}]
                     new_label_options = no_update
@@ -1119,10 +1128,17 @@ class FeatureAnnotation(Tool):
                     # Adding to the session data
                     if 'feature-annotation' in session_data['data']:
                         if 'classes' in session_data['data']['feature-annotation']:
-                            session_data['data']['feature-annotation']['classes'].append({
-                                'name': add_class_name,
-                                'color': add_class_color
-                            })
+                            class_names = [i['name'] for i in session_data['data']['feature-annotation']['classes']]
+                            if not add_class_name in class_names:
+                                session_data['data']['feature-annotation']['classes'].append({
+                                    'name': add_class_name,
+                                    'color': add_class_color
+                                })
+                            else:
+                                session_data['data']['feature-annotation']['classes'][class_names.index(add_class_name)] = {
+                                    'name': add_class_name,
+                                    'color': add_class_color
+                                }
                         else:
                             session_data['data']['feature-annotation']['classes'] = [
                                 {
@@ -1148,16 +1164,21 @@ class FeatureAnnotation(Tool):
                     add_submit_disabled = True
                     new_class_options = no_update
                     if not current_label_options is None:
-                        new_label_options = current_label_options + [{'label': add_label_name, 'value': add_label_name}]
+                        if not {'label': add_label_name,'value': add_label_name} in current_label_options:
+                            new_label_options = current_label_options + [{'label': add_label_name, 'value': add_label_name}]
+                        else:
+                            new_label_options = current_label_options
                     else:
                         new_label_options = [{'label': add_label_name,'value': add_label_name}]
 
                     if 'feature-annotation' in session_data['data']:
                         if 'labels' in session_data['data']['feature-annotation']:
-                            session_data['data']['feature-annotation']['labels'].append({
-                                'name': add_label_name,
-                                'type': 'text'
-                            })
+                            label_names = [i['name'] for i in session_data['data']['feature-annotation']['labels']]
+                            if not add_label_name in label_names:
+                                session_data['data']['feature-annotation']['labels'].append({
+                                    'name': add_label_name,
+                                    'type': 'text'
+                                })
                         else:
                             session_data['data']['feature-annotation']['labels'] = [{
                                 'name': add_label_name,
@@ -1183,17 +1204,28 @@ class FeatureAnnotation(Tool):
                     new_class_options = no_update
 
                     if not current_label_options is None:
-                        new_label_options = current_label_options + [{'label': add_label_name, 'value': add_label_name}]
+                        if not {'label': add_label_name, 'value': add_label_name} in current_label_options:
+                            new_label_options = current_label_options + [{'label': add_label_name, 'value': add_label_name}]
+                        else:
+                            new_label_options = current_label_options
                     else:
                         new_label_options = [{'label': add_label_name, 'value': add_label_name}]
 
                     if 'feature-annotation' in session_data['data']:
                         if 'labels' in session_data['data']['feature-annotation']:
-                            session_data['data']['feature-annotation']['labels'].append({
-                                'name': add_label_name,
-                                'type': 'options',
-                                'options': add_label_options
-                            })
+                            label_options = [i['name'] for i in session_data['data']['feature-annotation']['labels']]
+                            if not add_label_name in label_options:
+                                session_data['data']['feature-annotation']['labels'].append({
+                                    'name': add_label_name,
+                                    'type': 'options',
+                                    'options': add_label_options
+                                })
+                            else:
+                                session_data['data']['feature-annotation']['labels'][label_options.index(add_label_name)] = {
+                                    'name': add_label_name,
+                                    'type': 'options',
+                                    'options': add_label_options
+                                }
                         else:
                             session_data['data']['feature-annotation']['labels'] = [
                                 {
