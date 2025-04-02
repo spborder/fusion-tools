@@ -14,7 +14,6 @@ from dash_extensions.enrich import DashProxy, html, MultiplexerTransform, Prefix
 from typing_extensions import Union
 from fusion_tools.tileserver import TileServer, DSATileServer, LocalTileServer, CustomTileServer
 from fusion_tools.handler.dataset_uploader import DSAUploadHandler
-from fusion_tools.handler.dsa_handler import DSAHandler
 import threading
 
 import uvicorn
@@ -273,6 +272,7 @@ class Visualization:
                 return page_content, no_update, no_update
             
             elif 'session' in pathname:
+                from fusion_tools.handler.dsa_handler import DSAHandler
                 temp_handler = DSAHandler(
                     girderApiUrl=os.environ.get('DSA_URL')
                 )
