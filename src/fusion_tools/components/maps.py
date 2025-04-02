@@ -1147,7 +1147,10 @@ class SlideMap(MapComponent):
         
         ann_error_store = json.loads(get_pattern_matching_value(ann_error_store))
         if type(ann_error_store)==list:
-            ann_error_store = ann_error_store[0]
+            if len(ann_error_store)>0:
+                ann_error_store = ann_error_store[0]
+            else:
+                raise exceptions.PreventUpdate
 
         if len(list(ann_error_store.keys()))==0:
             raise exceptions.PreventUpdate

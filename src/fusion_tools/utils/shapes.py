@@ -1350,7 +1350,7 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                                 right_df = sq_structure, 
                                 how = 'left', 
                                 predicate = s_q['type']
-                            )
+                            ).drop_duplicates(subset = '_id_left')
 
                             # Updating include_list (removing items)
                             include_list = [i for d,i in zip(intermediate_gdf['_id_right'].isna().tolist(),include_list) if not d]
@@ -1365,20 +1365,22 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                                 right_df = sq_structure,
                                 how = 'left',
                                 predicate = s_q['type']
-                            )
-                            # Updating include_list (removing items)
-                            include_list = [i for d,i in zip(intermediate_gdf['_id_right'].isna().tolist(),include_list) if not d]
-                            include_list = [i+(True,) for i in include_list]
+                            ).drop_duplicates(subset = '_id_left')
 
-                            intermediate_gdf = intermediate_gdf.loc[intermediate_gdf['_id_right'].notna()]
+                            # Updating include_list (removing items)
+                            include_list = [i for d,i in zip(intermediate_gdf['_id_right'].notna().tolist(),include_list) if d]
+                            include_list = [i+(True,) for i in include_list]
                             
+                            intermediate_gdf = intermediate_gdf.loc[intermediate_gdf['_id_right'].notna()]
+
+
                         elif s_q['mod']=='or':
                             or_gdf = gpd.sjoin(
                                 left_df = intermediate_gdf,
                                 right_df = sq_structure,
                                 how = 'left',
                                 predicate = s_q['type']
-                            )
+                            ).drop_duplicates(subset = '_id_left')
                             current_remove = or_gdf['_id_right'].isna().tolist()
                             include_list = [i+(not j,) for i,j in list(zip(include_list,current_remove))]
                             
@@ -1388,7 +1390,7 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                             right_df = sq_structure,
                             how = 'left',
                             predicate = s_q['type']
-                        )
+                        ).drop_duplicates(subset = '_id_left')
 
                         # Updating include_list (removing items)
                         include_list = [i for d,i in zip(intermediate_gdf['_id_right'].isna().tolist(),include_list) if not d]
@@ -1450,7 +1452,6 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                         # Updating include_list (removing items)
                         include_list = [i for d,i in zip(intermediate_gdf['_id_right'].isna().tolist(),include_list) if not d]
                         include_list = [i+(True,) for i in include_list]
-
 
                         intermediate_gdf = intermediate_gdf.loc[intermediate_gdf['_id_right'].notna()]
                     
