@@ -167,6 +167,7 @@ class Visualization:
             [
                 Output('vis-container','children'),
                 Output('anchor-page-url','pathname'),
+                Output('anchor-page-url','search'),
                 Output('anchor-vis-store','data')
             ],
             prevent_initial_call = True
@@ -269,7 +270,7 @@ class Visualization:
                     session_data=session_data
                 )
 
-                return page_content, no_update, no_update
+                return page_content, no_update, no_update, no_update
             
             elif 'session' in pathname:
                 from fusion_tools.handler.dsa_handler import DSAHandler
@@ -294,7 +295,7 @@ class Visualization:
                     session_data=new_session_data
                 )
 
-                return page_content, no_update, json.dumps(new_session_data)
+                return page_content, page_pathname, '', json.dumps(new_session_data)
 
             else:
                 # Otherwise, return a list of clickable links for valid pages
@@ -306,7 +307,7 @@ class Visualization:
                     html.P(html.A(page,href=page))
                     for page in self.layout_dict
                 ])
-                return not_found_page, pathname, no_update
+                return not_found_page, pathname, '', no_update
         elif ctx.triggered_id['type']=='page-button':
             new_pathname = list(self.layout_dict.keys())[ctx.triggered_id['index']]
             # If the page needs to be updated based on changes in anchor-vis-data
@@ -316,7 +317,7 @@ class Visualization:
                 session_data=session_data
             )
 
-            return page_content, new_pathname, no_update
+            return page_content, new_pathname, '', no_update
     
     def initialize_stores(self):
 

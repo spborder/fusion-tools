@@ -3,8 +3,7 @@
 from fusion_tools.visualization import Visualization
 from fusion_tools.handler.dsa_handler import DSAHandler
 from fusion_tools.components import (
-    SlideMap,
-    MultiFrameSlideMap,
+    HybridSlideMap,
     ChannelMixer,
     OverlayOptions,
     PropertyViewer,
@@ -55,24 +54,11 @@ def get_layout(args):
         components = {
             "Visualization": [
                 [
-                    SlideMap(),
+                    HybridSlideMap(),
                     [
                         OverlayOptions(),
-                        PropertyViewer(ignore_list=['_id','_index']),
-                        GlobalPropertyPlotter(ignore_list = ['_id','_index']),
-                        HRAViewer(),
-                        BulkLabels(),
-                        DataExtractor()
-                    ]
-                ]
-            ],
-            "MultiFrame Visualization": [
-                [
-                    MultiFrameSlideMap(),
-                    [
                         ChannelMixer(),
-                        OverlayOptions(),
-                        PropertyViewer(ignore_list = ['_id','_index']),
+                        PropertyViewer(ignore_list=['_id','_index']),
                         GlobalPropertyPlotter(ignore_list = ['_id','_index']),
                         HRAViewer(),
                         BulkLabels(),

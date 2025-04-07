@@ -11,6 +11,7 @@ import requests
 import json
 from typing_extensions import Union
 
+from copy import deepcopy
 import numpy as np
 import uvicorn
 
@@ -21,7 +22,8 @@ from fusion_tools.utils.shapes import (load_annotations,
                                        detect_image_overlay, 
                                        detect_geojson, 
                                        detect_histomics,
-                                       structures_within_poly)
+                                       structures_within_poly,
+                                       extract_nested_prop)
 
 class TileServer:
     """Components which pull information from a slide(s)
@@ -73,6 +75,8 @@ class LocalTileServer(TileServer):
         self.router.add_api_route('/{image}/tiles/thumbnail',self.get_thumbnail,methods=["GET","OPTIONS"])
         self.router.add_api_route('/{image}/annotations',self.get_annotations,methods=["GET","OPTIONS"])
         self.router.add_api_route('/{image}/annotations/metadata',self.get_annotations_metadata,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/annotations/data/list',self.get_annotations_property_keys,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/annotations/data',self.get_annotations_property_data,methods=["GET","OPTIONS"])
 
     def load_annotations(self):
 
@@ -492,6 +496,179 @@ class LocalTileServer(TileServer):
                 media_type = 'application/json',
                 status_code = 400,
             )
+
+    def get_annotations_property_keys(self,image:int):
+        """Getting the names of properties stored in an image's annotations
+
+        :param image: Local image index
+        :type image: int
+        """
+        if image<len(self.names) and image>=0:
+            image_anns = self.annotations[image]
+
+            property_list = []
+            property_names = []
+            for a in image_anns:
+                features = a.get('features',[])
+                a_id = a.get('properties',{}).get('_id',None)
+                a_name = a.get('properties',{}).get('name',None)
+
+                for f in features:
+                    f_props = f.get('properties')
+                    if not f_props is None:
+                        f_main_keys = list(f_props.keys())
+                        for f_m in f_main_keys:
+                            if type(f_props[f_m]) in [list,dict]:
+                                values_list = extract_nested_prop(f_props[f_m],4)
+                            elif type(f_props[f_m]) in [str,int,float]:
+                                values_list = [{f_m: f_props[f_m]}]
+                            
+                            for v in values_list:
+                                v_key = list(v.keys())[0]
+                                v_val = list(v.values())[0]
+
+                                if v_key in property_names:
+                                    v_info = property_list[property_names.index(v_key)]
+                                    if type(v_val)==str:
+                                        if not v_val in v_info['distinct']:
+                                            v_info['distinct'].append(v_val)
+                                            v_info['distinctcount'] += 1
+                                        
+                                    elif type(v_val) in [int,float]:
+                                        if v_val>v_info['max']:
+                                            v_info['max'] = v_val
+                                        elif v_val<v_info['min']:
+                                            v_info['min'] = v_val
+                                        
+                                    v_info['count'] += 1
+
+                                    property_list[property_names.index(v_key)] = v_info
+                                else:
+                                    property_names.append(v_key)
+                                    
+                                    v_info = {
+                                        'key': v_key.lower().replace(' --> ','.'),
+                                        'title': v_key,
+                                        'count': 1
+                                    }
+
+                                    if type(v_val)==str:
+                                        v_info['type'] = 'string'
+                                        v_info['distinct'] = [v_val]
+                                        v_info['distinctcount'] = 1
+                                    else:
+                                        v_info['type'] = 'number'
+                                        v_info['max'] = v_val
+                                        v_info['min'] = v_val
+
+                                    property_list.append(v_info)
+                                        
+        
+            return Response(
+                content = json.dumps(property_list),
+                media_type='application/json',
+                status_code=200
+            )
+
+        else:                           
+            return Response(
+                content = 'invalid image index',
+                media_type = 'application/json',
+                status_code = 400,
+            )       
+
+    def get_annotations_property_data(self,image:int,include_keys:list,include_anns:Union[str,list,None]):
+        """Getting data from annotations of specified image, attempting to mirror output of https://github.com/girder/large_image/blob/master/girder_annotation/girder_large_image_annotation/utils/__init__.py
+
+        :param image: Index of local image to grab data from
+        :type image: int
+        :param include_keys: List of property names to grab from annotations
+        :type include_keys: list
+        :param include_anns: Which annotations to include (name/id or __all__ or list)
+        :type include_anns: Union[str,list,None]
+        :return: 
+        :rtype: _type_
+        """
+        
+        
+        if image<len(self.names) and image>=0:
+            image_anns = self.annotations[image]
+
+            if include_anns is None:
+                include_anns = '__all__'
+
+            bbox_list = ['bbox.x0','bbox.y0','bbox.x1','bbox.y1']
+
+            data_list = []
+            for a in image_anns:
+                features = a.get('features',[])
+                a_id = a.get('properties',{}).get('_id',None)
+                a_name = a.get('properties',{}).get('name',None)
+
+                # Accepting either annotation layer name or id
+                if not include_anns=='__all__':
+                    if type(include_anns)==str:
+                        if not include_anns==a_id and not include_anns==a_name:
+                            continue
+                    elif type(include_anns)==list:
+                        if not a_id in include_anns and not a_name in include_anns:
+                            continue
+                            
+                for f in features:
+                    f_props = f.get('properties')
+                    f_bbox = list(shape(f['geometry']).bounds)
+                    f_props_cols = []
+                    if not f_props is None:
+                        for k in include_keys:
+                            # Need to specify non-feature keys
+                            if k in ['annotation.id','annotation.name','item.id','item.name']:
+                                if k=='annotation.id':
+                                    f_props_cols.append(a_id)
+                                elif k=='annotation.name':
+                                    f_props_cols.append(a_name)
+                                elif k=='item.id':
+                                    f_props_cols.append(str(image))
+                                elif k=='item.name':
+                                    f_props_cols.append(self.names[image])
+
+                            elif k in bbox_list:
+                                # Adding bounding box coordinates
+                                f_props_cols.append(f_bbox[bbox_list.index(k)])
+
+                            else:
+                                # Getting keys and nested keys
+                                if '-->' in k:
+                                    f_sub_keys = k.split('-->')
+                                    f_sub_props = deepcopy(f_props)
+                                    for sk in f_sub_keys:
+                                        if not f_sub_props is None:
+                                            f_sub_props = f_sub_props.get(sk)
+                                else:
+                                    f_sub_props = f_props.get(k)
+
+                                # Converting to float if able
+                                try:
+                                    f_sub_props = float(f_sub_props)
+                                    f_props_cols.append(f_sub_props)
+                                except ValueError:
+                                    f_props_cols.append(f_sub_props)                                       
+                    else:
+                        f_props_cols = [None]*len(include_keys)
+
+                    data_list.append(f_props_cols)
+
+            return Response(
+                content = json.dumps({'data': data_list}),
+                media_type='application/json',
+                status_code=200
+            )
+
+        else:                           
+            return Response(
+                content = 'invalid image index',
+                media_type = 'application/json',
+                status_code = 400,
+            )     
 
     def start(self):
         """Starting tile server instance on a provided port

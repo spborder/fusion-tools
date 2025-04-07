@@ -295,7 +295,6 @@ class SlideAnnotation(MultiTool):
             ]
         )(self.download_annotations)
 
-
     def update_layout(self, session_data:dict, use_prefix:bool):
 
         # Components needed:
@@ -838,9 +837,14 @@ class SlideAnnotation(MultiTool):
         input_infos = [json.loads(i) for i in input_infos]
 
         slide_annotation_data = session_data.get('data',{}).get('slide-annotation',{}).get(schema_name)
+
+        slide_id = slide_information['metadata_url'].split('/')[-1]
+        if slide_id == 'metadata':
+            slide_id = slide_information['metadata_url'].split('/')[-2]
+
         this_slide_dict = {
             'Slide Name': slide_information['name'],
-            'Slide ID': slide_information['metadata_url'].split('/')[-1]
+            'Slide ID': slide_id
         }
 
         this_slide_dict = this_slide_dict | {info['name']: val for info,val in zip(input_infos,input_vals)}

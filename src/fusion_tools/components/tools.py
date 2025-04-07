@@ -2222,9 +2222,15 @@ class PropertyPlotter(Tool):
         :return: Figure containing violin plot data
         :rtype: go.Figure
         """
+        label_x = None
+        if not label_col is None:
+            label_x = data_df[label_col]
+            if type(label_x)==pd.DataFrame:
+                label_x = label_x.iloc[:,0]
+
         figure = go.Figure(
             data = go.Violin(
-                x = None if label_col is None else data_df[label_col],
+                x = label_x,
                 y = data_df[property_column],
                 customdata = data_df[customdata_columns] if not customdata_columns is None else None,
                 points = 'all',
@@ -2300,7 +2306,12 @@ class PropertyPlotter(Tool):
                         )
                 )
             )
-            if not data_df[label_col].dtype == np.number:
+
+            label_data = data_df[label_col]
+            if type(label_data)==pd.DataFrame:
+                label_data = label_data.iloc[:,0]
+
+            if not label_data.dtype == np.number:
                 figure.update_layout(
                     legend = dict(
                         orientation='h',
@@ -2320,13 +2331,13 @@ class PropertyPlotter(Tool):
                         customdata = data_df.iloc[:,custom_data_idx].to_dict('records'),
                         mode = 'markers',
                         marker = {
-                            'color': data_df[label_col].values,
+                            'color': label_data.values,
                             'colorbar':{
                                 'title': label_col
                             },
                             'colorscale':'jet'
                         },
-                        text = data_df[label_col].values,
+                        text = label_data.values,
                         hovertemplate = "label: %{text}"
 
                     )
@@ -2544,9 +2555,13 @@ class PropertyPlotter(Tool):
         # Property summary tab
         property_summary_children = []
         if not label_col is None:
-            unique_labels = [i for i in data_df[label_col].unique().tolist() if type(i)==str]
+            label_data = data_df[label_col]
+            if type(label_data)==pd.DataFrame:
+                label_data = label_data.iloc[:,0]
+
+            unique_labels = [i for i in label_data.unique().tolist() if type(i)==str]
             for u_idx, u in enumerate(unique_labels):
-                label_data = data_df[data_df[label_col].astype(str).str.match(u)].loc[:,[i for i in property_cols if i in data_df]]
+                label_data = data_df[label_data.astype(str).str.match(u)].loc[:,[i for i in property_cols if i in data_df]]
                 summary = label_data.describe().round(decimals=4)
                 summary.reset_index(inplace=True,drop=False)
 
@@ -2626,9 +2641,13 @@ class PropertyPlotter(Tool):
         label_stats_children = []
         if data_df.shape[0]>1:
             if not label_col is None:
-                unique_labels = data_df[label_col].unique().tolist()
+                label_data = data_df[label_col]
+                if type(label_data)==pd.DataFrame:
+                    label_data = label_data.iloc[:,0]
+
+                unique_labels = label_data.unique().tolist()
                 if len(unique_labels)>1:
-                    if any([i>1 for i in list(data_df[label_col].value_counts().to_dict().values())]):
+                    if any([i>1 for i in list(label_data.value_counts().to_dict().values())]):
 
                         p_value, results = get_label_statistics(
                             data_df = data_df.loc[:,[i for i in data_df if not i in customdata_cols]],
@@ -4728,56 +4747,129 @@ class GlobalPropertyPlotter(MultiTool):
     def __str__(self):
         return "Global Property Plotter"
 
-    def extract_all_properties(self, session_data):
-        # This function would use the session data to extract annotations, properties, and format them in a reasonable way
-        session_properties = pd.DataFrame()
-        for s in session_data['current']:
-            slide_name = s['name']
-            annotations = requests.get(s['annotations_url']).json()
-            
-            # Checking if these are histomics formatted or GeoJSON formatted
-            is_histomics = detect_histomics(annotations)
-            if is_histomics:
-                annotations = histomics_to_geojson(annotations)
+    def extract_property_keys(self, session_data:dict):
 
-            metadata = requests.get(s['metadata_url']).json()
+        all_property_keys = []
+        for slide in session_data['current']:
 
-            slide_properties = pd.DataFrame()
-            for ann in annotations:
-                ann_properties = pd.json_normalize([i['properties'] for i in ann['features']],sep=self.nested_prop_sep)
-                ann_properties['Structure'] = [ann['properties']['name']]*ann_properties.shape[0]
-                ann_properties['Slide Name'] = [slide_name]*ann_properties.shape[0]
+            # Determine whether this is a DSA slide or local
+            if 'api_url' in slide:
+                item_id = slide['metadata_url'].split('/')[-1]
+                # Setting request string
+                if 'current_user' in session_data:
+                    request_str = f'{slide["api_url"]}/annotation/item/{item_id}/plot/list?token={session_data["current_user"]["token"]}'
+                else:
+                    request_str = f'{slide["api_url"]}/annotation/item/{item_id}/plot/list'
 
-                # Pulling out slide-level metadata
-                if 'user' in metadata:
-                    ann_properties = pd.concat([ann_properties,pd.DataFrame.from_records([metadata]*ann_properties.shape[0])],axis=1,ignore_index=True)
-
-                bbox_list = []
-                for f in ann['features']:
-                    bbox = list(shape(f['geometry']).bounds)
-                    bbox_list.append({'min_x':bbox[0],'min_y':bbox[1],'max_x':bbox[2],'max_y':bbox[3]})
-
-                if len(bbox_list)>0:
-                    ann_cols = ann_properties.columns.tolist()
-                    ann_properties = pd.concat([ann_properties,pd.DataFrame.from_records(bbox_list)],axis=1,ignore_index=True)
-                    ann_properties.columns = ann_cols+['min_x','min_y','max_x','max_y']
-
-                if not ann_properties.empty:
-                    if slide_properties.empty:
-                        slide_properties = ann_properties
-                    else:
-                        slide_properties = pd.concat([slide_properties,ann_properties],axis=0,ignore_index=True)
+                sep_str = '&' if '?' in request_str else '?'
+                request_str+=f'{sep_str}adjacentItems=false&sources=item,annotation,annotationelement&annotations=["__all__"]'
                 
-            if session_properties.empty:
-                session_properties = slide_properties
-            else:
-                session_properties = pd.concat([session_properties,slide_properties],axis=0,ignore_index=True)
+                req_obj = requests.post(request_str)
+                if req_obj.ok:
+                    all_property_keys.extend(req_obj.json())
 
-        self.preloaded_properties = session_properties
-        self.preloaded_options = session_properties.select_dtypes(exclude='object').columns.tolist()
-        self.structure_column = 'Structure'
-        self.slide_column = 'Slide Name'
-        self.bbox_columns = ['min_x','min_y','max_x','max_y']
+            else:
+                item_id = slide['metadata_url'].split('/')[-2]
+                # Setting LocalTileServer request string
+                request_str = f'{slide["annotations_metadata_url"].replace("metadata","data/list")}'
+
+                req_obj = requests.get(request_str)
+                if req_obj.ok:
+                    all_property_keys.extend(req_obj.json())
+
+        property_names = []
+        property_keys = []
+        for k in all_property_keys:
+            # Ignore dimension reduction keys
+            if 'Dimension Reduction' in k['title']:
+                continue
+
+            if not k['title'] in property_names:
+                property_names.append(k['title'])
+                property_keys.append(k)
+            else:
+                p_info = property_keys[property_names.index(k['title'])]
+                p_info['count']+=k['count']
+
+                if k['type']==p_info['type']:
+                    if k['type']=='string':
+                        if not all([i in p_info['distinct'] for i in k.get('distinct',[])]):
+                            p_info['distinct'].extend([i for i in k['distinct'] if not i in p_info['distinct']])
+                            p_info['distinctcount'] = len(p_info['distinct'])
+                    elif k['type']=='number':
+                        if p_info['max']<k['max']:
+                            p_info['max'] = k['max']
+                        
+                        if p_info['min']>k['min']:
+                            p_info['min'] = k['min']
+                else:
+                    # BIG NO-NO ERROR >:o
+                    continue
+
+                property_keys[property_names.index(k['title'])] = p_info
+
+        bbox_cols = ['bbox.x0','bbox.y0','bbox.x1','bbox.y1']
+        slide_col = 'item.name'
+        structure_col = 'annotation.name'
+
+        return property_keys, property_names, structure_col, slide_col, bbox_cols
+    
+    def get_plottable_data(self, session_data, keys_list, structure_list):
+
+        
+        # Required keys for backwards identification
+        req_keys = ['item.name','annotation.name','bbox.x0','bbox.y0','bbox.x1','bbox.y1']
+        keys_list+= [i for i in req_keys if not i in keys_list]
+
+        property_data = pd.DataFrame()
+        for slide in session_data['current']:
+
+            # Determine whether this is a DSA slide or local
+            if 'api_url' in slide:
+                item_id = slide['metadata_url'].split('/')[-1]
+                if not structure_list is None and not structure_list==[]:
+                    ann_meta = requests.get(slide['annotations_metadata_url']).json()
+                    structure_names = [a['annotation']['name'] for a in ann_meta]
+                    structure_ids = []
+                    for s in structure_list:
+                        if s in structure_names:
+                            structure_ids.append(ann_meta[structure_names.index(s)]['_id'])
+                else:
+                    structure_ids = ["__all__"]
+                # Setting request string
+                if 'current_user' in session_data:
+                    request_str = f'{slide["api_url"]}annotation/item/{item_id}/plot/data?token={session_data["current_user"]["token"]}'
+                else:
+                    request_str = f'{slide["api_url"]}annotation/item/{item_id}/plot/data'
+
+                sep_str = '&' if '?' in request_str else '?'
+                request_str+=f'{sep_str}keys={",".join(keys_list)}&sources=annotationelement,item,annotation&annotations={json.dumps(structure_ids).strip()}'
+                
+                req_obj = requests.post(request_str)
+                if req_obj.ok:
+                    req_json = req_obj.json()
+                    if property_data.empty:
+                        property_data = pd.DataFrame(columns = [i['key'] for i in req_json['columns']], data = req_json['data'])
+                    else:
+                        new_df = pd.DataFrame(columns = [i['key'] for i in req_json['columns']], data = req_json['data'])
+                        property_data = pd.concat([property_data,new_df],axis=0,ignore_index=True)
+
+            else:
+                item_id = slide['metadata_url'].split('/')[-2]
+                # Setting LocalTileServer request string
+                request_str = f'{slide["annotations_metadata_url"].replace("metadata","data")}?include_keys={json.dumps(keys_list).strip()}&include_anns={json.dumps(structure_list).strip()}'
+
+                req_obj = requests.get(request_str)
+                if req_obj.ok:
+                    req_json = req_obj.json()
+                    if property_data.empty:
+                        property_data = pd.DataFrame(columns = [i['key'] for i in req_json['columns']], data = req_json['data'])
+                    else:
+                        new_df = pd.DataFrame(columns = [i['key'] for i in req_json['columns']], data = req_json['data'])
+                        property_data = pd.concat([property_data,new_df],axis=0,ignore_index=True)
+
+
+        return property_data
 
     def load(self, component_prefix: int):
         self.component_prefix = component_prefix
@@ -4791,6 +4883,7 @@ class GlobalPropertyPlotter(MultiTool):
         )        
         
         self.get_callbacks()
+        self.global_property_plotter_callbacks()
 
     def __str__(self):
         return 'Global Property Plotter'
@@ -4864,38 +4957,45 @@ class GlobalPropertyPlotter(MultiTool):
 
         return all_properties, property_keys
 
-    def extract_property_info(self):
+    def extract_property_info(self, property_data):
 
-        if not self.preloaded_properties is None:
+        #if not self.preloaded_properties is None:
             
-            property_info = {}
-            for p in self.preloaded_properties:
-                if any([i in str(self.preloaded_properties[p].dtype).lower() for i in ['object','category','string']]):
-                    property_info[p] = {
-                        'unique': self.preloaded_properties[p].unique().tolist(),
-                        'distinct': int(self.preloaded_properties[p].nunique())
-                    }
-                elif any([i in str(self.preloaded_properties[p].dtype).lower() for i in ['int','float','bool']]):
-                    property_info[p] = {
-                        'min': float(self.preloaded_properties[p].min()),
-                        'max': float(self.preloaded_properties[p].max()),
-                        'distinct': int(self.preloaded_properties[p].nunique())
-                    }
-                else:
-                    print(f'property: {p} has dtype {self.preloaded_properties[p].dtype} which is not implemented!')
+        property_info = {}
+        for p in property_data:
+            if any([i in str(property_data[p].dtype).lower() for i in ['object','category','string']]):
+                p_data = property_data[p]
+                if type(p_data)==pd.DataFrame:
+                    p_data = p_data.iloc[:,0]
 
-            return property_info
-        else:
-            return None
+                property_info[p] = {
+                    'unique': property_data[p].unique().tolist(),
+                    'distinct': int(property_data[p].nunique())
+                }
+            elif any([i in str(property_data[p].dtype).lower() for i in ['int','float','bool']]):
+                property_info[p] = {
+                    'min': float(property_data[p].min()),
+                    'max': float(property_data[p].max()),
+                    'distinct': int(property_data[p].nunique())
+                }
+            else:
+                print(f'property: {p} has dtype {property_data[p].dtype} which is not implemented!')
+
+        return property_info
+        #else:
+        #    return None
 
     def update_layout(self, session_data:dict, use_prefix:bool):
         
         
-        if self.preloaded_properties is None:
-            self.extract_all_properties(session_data)
-            self.property_tree, self.property_keys = self.generate_property_dict(self.preloaded_options)
-
-        property_info = self.extract_property_info()
+        property_keys = []
+        property_names = []
+        structure_col = []
+        slide_col = []
+        bbox_cols = []
+        property_tree = []
+        property_names_key = []
+        structure_names = []
 
         layout = html.Div([
             dbc.Card([
@@ -4912,47 +5012,61 @@ class GlobalPropertyPlotter(MultiTool):
                         dbc.Label('Select properties below: ',html_for = {'type': 'global-property-plotter-drop','index': 0}),
                         dmc.Switch(
                             id = {'type': 'global-property-plotter-drop-type','index': 0},
-                            offLabel = 'Dropdown Menu',
-                            onLabel = 'Tree View',
+                            offLabel = 'Dropdown',
+                            onLabel = 'Tree',
                             size = 'lg',
                             checked = False,
                             description = 'Select related properties in groups with "Tree View" or select properties individually with "Dropdown Menu"'
                         )
                     ]),
                     dcc.Store(
-                        id = {'type': 'global-property-plotter-session-store','index': 0},
-                        data = json.dumps(session_data),
-                        storage_type = 'memory'
+                        id = {'type': 'global-property-plotter-keys-store','index': 0},
+                        data = json.dumps({
+                            'dropdown': property_names,
+                            'tree': {
+                                'name_key': property_names_key,
+                                'full': property_tree 
+                            },
+                            'slide_col': slide_col,
+                            'structure_col': structure_col,
+                            'bbox_cols': bbox_cols,
+                        }),
+                        storage_type='memory'
                     ),
                     dcc.Store(
                         id = {'type': 'global-property-plotter-property-info','index': 0},
-                        data = json.dumps(property_info),
+                        data = json.dumps(property_keys),
                         storage_type = 'memory'
                     ),
+                    dcc.Store(
+                        id = {'type': 'global-property-plotter-fetch-error-store','index': 0},
+                        data = json.dumps({}),
+                        storage_type='memory'
+                    ),
                     dbc.Row([
-                        html.Div(
+                        dcc.Loading(html.Div(
                             dcc.Dropdown(
-                                options = [] if self.preloaded_options is None else self.preloaded_options,
+                                options = property_names,
                                 value = [],
                                 id = {'type': 'global-property-plotter-drop','index': 0},
                                 multi = True,
                                 placeholder = 'Properties'
                             ),
                             id = {'type': 'global-property-plotter-drop-div','index': 0}
-                        )
+                        ))
                     ]),
                     html.Hr(),
                     dbc.Row(
                         dbc.Label('Select structures to include: ', html_for = {'type': 'global-property-plotter-structures','index': 0})
                     ),
                     dbc.Row([
-                        dcc.Dropdown(
-                            options = [] if self.structure_column is None or self.preloaded_properties is None else self.preloaded_properties[self.structure_column].unique().tolist(),
+                        dcc.Loading(dcc.Dropdown(
+                            options = structure_names,
                             value = [],
                             id = {'type': 'global-property-plotter-structures','index': 0},
                             multi = True,
                             placeholder = 'Structures'
-                        ),
+                        )),
                     ]),
                     html.Hr(),
                     dbc.Row([
@@ -4972,43 +5086,45 @@ class GlobalPropertyPlotter(MultiTool):
                                     html.I(
                                         className = 'bi bi-filter-circle fa-2x',
                                         n_clicks = 0,
-                                        id = {'type': 'global-property-plotter-add-filter-butt','index': 0}
+                                        id = {'type': 'global-property-plotter-add-filter-butt','index': 0},
+                                        disable_n_clicks=True
                                     )
                                 ),
                                 dbc.Tooltip(
                                     target = {'type': 'global-property-plotter-add-filter-butt','index': 0},
                                     children = 'Click to add a filter.'
                                 )
-                            ])
-                        ])
-                    ],align='center',justify='center'),
+                            ],style = {'width': '100%'})
+                        ],align='center',md='auto')
+                    ],align='center',justify='center',style = {'width': '100%'}),
                     html.Hr(),
                     dbc.Row([
                         dbc.Label('Select a label to apply to points in the plot',html_for = {'type': 'global-property-plotter-label-drop','index': 0})
                     ]),
                     dbc.Row([
-                        dcc.Dropdown(
-                            options = [] if self.preloaded_properties is None else self.preloaded_properties.columns.tolist(),
+                        dcc.Loading(dcc.Dropdown(
+                            options = property_names,
                             value = [],
                             multi = False,
                             id = {'type': 'global-property-plotter-label-drop','index': 0},
                             placeholder = 'Label'
-                        )
+                        ))
                     ],style = {'marginBottom':'10px'}),
                     dbc.Row([
                         dbc.Button(
                             'Generate Plot!',
                             id = {'type': 'global-property-plotter-plot-butt','index': 0},
                             n_clicks = 0,
-                            className = 'd-grid col-12 mx-auto'
+                            className = 'd-grid col-12 mx-auto',
+                            disabled = True
                         )
                     ],style = {'marginBottom': '10px'}),
                     dbc.Row([
                         dbc.Col([
                             dcc.Loading([
                                 dcc.Store(
-                                    id = {'type': 'global-property-plotter-store','index': 0},
-                                    data = json.dumps({'property_names': [], 'structure_names': [], 'label_names': [], 'filters': [], 'data': []}),
+                                    id = {'type': 'global-property-plotter-selection-store','index': 0},
+                                    data = json.dumps({'property_names': [], 'property_keys': [], 'structure_names': [], 'label_names': [], 'filters': [], 'data': []}),
                                     storage_type = 'memory'
                                 ),
                                 html.Div(
@@ -5025,6 +5141,14 @@ class GlobalPropertyPlotter(MultiTool):
                                 )
                             )
                         ],md=6)
+                    ]),
+                    html.Hr(),
+                    dbc.Row([
+                        html.Div(
+                            id = {'type': 'global-property-plotter-plot-report-div','index': 0},
+                            children = [],
+                            style = {'marginTop': '5px'}
+                        )
                     ])
                 ])
             ])
@@ -5053,6 +5177,9 @@ class GlobalPropertyPlotter(MultiTool):
             ],
             [
                 Output({'type': 'global-property-plotter-drop-div','index': ALL},'children')
+            ],
+            [
+                State({'type': 'global-property-plotter-keys-store','index': ALL},'data')
             ]
         )(self.update_drop_type)
 
@@ -5096,11 +5223,13 @@ class GlobalPropertyPlotter(MultiTool):
                 
             ],
             [
-                Output({'type': 'global-property-plotter-store','index': ALL},'data')
+                Output({'type': 'global-property-plotter-selection-store','index': ALL},'data')
             ],
             [
                 State({'type': 'global-property-plotter-add-filter-parent','index': ALL},'children'),
-                State({'type': 'global-property-plotter-store','index': ALL},'data')
+                State({'type': 'global-property-plotter-selection-store','index': ALL},'data'),
+                State({'type': 'global-property-plotter-keys-store','index': ALL},'data'),
+                State({'type': 'global-property-plotter-property-info','index': ALL},'data')
             ]
         )(self.update_properties_and_filters)
 
@@ -5110,11 +5239,15 @@ class GlobalPropertyPlotter(MultiTool):
                 Input({'type': 'global-property-plotter-plot-butt','index':ALL},'n_clicks')
             ],
             [
-                Output({'type': 'global-property-plotter-store','index': ALL},'data'),
-                Output({'type': 'global-property-plotter-plot-div','index': ALL},'children')
+                Output({'type': 'global-property-plotter-selection-store','index': ALL},'data'),
+                Output({'type': 'global-property-plotter-plot-div','index': ALL},'children'),
+                Output({'type': 'global-property-plotter-plot-report-div','index': ALL},'children')
             ],
             [
-                State({'type': 'global-property-plotter-store','index': ALL},'data')
+                State({'type': 'global-property-plotter-selection-store','index': ALL},'data'),
+                State({'type': 'global-property-plotter-data-store','index': ALL},'data'),
+                State({'type': 'global-property-plotter-keys-store','index': ALL},'data'),
+                State('anchor-vis-store','data')
             ]
         )(self.generate_plot)
 
@@ -5127,11 +5260,212 @@ class GlobalPropertyPlotter(MultiTool):
                 Output({'type': 'global-property-plotter-selected-div','index': ALL},'children')
             ],
             [
-                State({'type': 'global-property-plotter-session-store','index':ALL},'data')
+                State('anchor-vis-store','data')
             ]
         )(self.select_data_from_plot)
 
-    def update_drop_type(self, switch_switched):
+        self.blueprint.callback(
+            [
+                Input({'type': 'global-property-plotter-property-info','index': ALL},'data')
+            ],
+            [
+                State({'type': 'global-property-plotter-keys-store','index': ALL},'data')
+            ],
+            [
+                Output({'type': 'global-property-plotter-keys-store','index': ALL},'data')
+            ],
+            prevent_initial_call = True
+        )(self.update_tree_data)
+
+    def global_property_plotter_callbacks(self):
+        
+        self.blueprint.clientside_callback(
+            """
+            async function processData(page_url,session_data,current_keys_store,current_property_info,current_structures,current_labels) {
+
+            if (!session_data) {
+                throw window.dash_clientside.PreventUpdate;
+            }
+            if (!current_property_info || !current_property_info[0]) {
+                throw window.dash_clientside.PreventUpdate;
+            }
+
+            const mergePropertyKeys = (allPropertyKeys) => {
+                const uniqueKeys = [...new Set(allPropertyKeys.filter((prop) => !(prop.key.includes('dimension.reduction'))).map((prop) => prop.key))];
+
+                return uniqueKeys.map((key) => {
+                    const props = allPropertyKeys.filter((prop) => prop.key === key);
+                    const base = {
+                        key,
+                        title: props[0].title,
+                        count: props.reduce((sum, p) => sum + p.count, 0),
+                        type: props[0].type,
+                    };
+                    if (props.length > 1) {
+                        if (props[0].type === 'string') {
+                            // Check this with your code since it's string and it can be messy sometimes for different inputs. 
+                            const distinctValues = [...new Set(props.flatMap((p) => p.distinct))];
+                            return {
+                                ...base,
+                                distinct: distinctValues,
+                                distinctcount: distinctValues.length,
+                            };
+                        } else {
+                            const mins = props.map((p) => p.min);
+                            const maxs = props.map((p) => p.max);
+                            return {
+                                ...base,
+                                min: Math.min(...mins),
+                                max: Math.max(...maxs),
+                            };
+                        }
+                    }
+                return base;
+                });
+            };
+
+            const parsedSessionData = JSON.parse(session_data);
+            const parsedPropertyInfo = JSON.parse(current_property_info[0])[0];
+
+            // Just using ternary operators for if conditions. Change it back to original if you want. 
+            const currentItems =
+                parsedPropertyInfo && parsedPropertyInfo.find((x) => x.key === 'item.id')
+                ? parsedPropertyInfo.find((x) => x.key === 'item.id').distinct
+                : [];
+
+            
+            const sessionItems = parsedSessionData.current.map((s_data) =>
+                'api_url' in s_data
+                ? s_data.metadata_url.split('/').reverse()[0]
+                : s_data.metadata_url.split('/').reverse()[1]
+            );
+
+            // If session items haven't changed, return
+            if (JSON.stringify(sessionItems) === JSON.stringify(currentItems)) {
+                return [
+                    [JSON.stringify(current_keys_store)],
+                    [JSON.stringify(parsedPropertyInfo)],
+                    [current_labels],
+                    [current_structures],
+                    [current_labels],
+                    [JSON.stringify({})],
+                    [false],
+                    [false]
+                ];
+            }
+
+            const cloudSlides = parsedSessionData.current.filter(
+                (item) => 'api_url' in item
+            );
+            const localSlides = parsedSessionData.current.filter(
+                (item) => !('api_url' in item)
+            );
+
+            const localPropUrls = localSlides.map((slide_info) =>
+                slide_info.annotations_metadata_url.replace('metadata', 'data/list')
+            );
+
+            const cloudPropUrls = cloudSlides.map((slide_info) =>
+                'current_user' in parsedSessionData
+                ? `${slide_info.annotations_url}/plot/list?token=${parsedSessionData.current_user.token}&adjacentItems=false&sources=item,annotation,annotationelement&annotations=["__all__"]`
+                : `${slide_info.annotations_url}/plot/list?adjacentItems=false&sources=item,annotation,annotationelement&annotations=["__all__"]`
+            );
+
+            // Fetch cloud data (POST) concurrently 
+            const fetchCloudData = async () => {
+                const responses = await Promise.all(
+                    cloudPropUrls.map(async (url) => {
+                        const res = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        });
+                        return res.json();
+                    })
+                );
+                return responses.flat();
+            };
+
+            // Fetch local data (GET) concurrently
+            const fetchLocalData = async () => {
+                const responses = await Promise.all(
+                    localPropUrls.map(async (url) => {
+                        const res = await fetch(url, {
+                        method: 'GET',
+                        headers: { 'Content-Type': 'application/json' },
+                        });
+                        return res.json();
+                    })
+                );
+                return responses.flat();
+            };
+
+            // Waiting for both cloud and local requests to complete before proceeding
+            // This is the main part of the code where we are fetching data from cloud and local and handling Promises
+            const [cloudData, localData] = await Promise.all([
+                fetchCloudData(),
+                fetchLocalData(),
+            ]);
+            const allPropertyKeys = [...cloudData, ...localData];
+
+            const mergedPropertyKeys = mergePropertyKeys(allPropertyKeys);
+
+            const keysStoreData = {
+                dropdown: [...new Set(mergedPropertyKeys.map((prop) => prop.title))],
+                tree: { name_key: {}, full: {} },
+                slide_col: 'item.name',
+                structure_col: 'annotation.name',
+                bbox_cols: ['bbox.x0', 'bbox.y0', 'bbox.x1', 'bbox.y1'],
+            };
+
+            let structureNames = [];
+            let labelDrop = [];
+            let propDrop = [];
+            const annotationKeyObj = mergedPropertyKeys.find(
+                (k) => k.key === 'annotation.name'
+            );
+            if (annotationKeyObj && annotationKeyObj.distinct) {
+                structureNames = annotationKeyObj.distinct;
+            }
+            labelDrop = mergedPropertyKeys.map((k) => k.title);
+            propDrop = mergedPropertyKeys.map((k) => k.title);
+
+            // Return the final JSON data for Dash
+            return [
+                [JSON.stringify(keysStoreData)],
+                [JSON.stringify(mergedPropertyKeys)],
+                [propDrop],
+                [structureNames],
+                [labelDrop],
+                [JSON.stringify({})],
+                [false],
+                [false]
+            ];
+            }
+            """,
+            [
+                Output({'type': 'global-property-plotter-keys-store','index': ALL},'data'),
+                Output({'type': 'global-property-plotter-property-info','index': ALL},'data'),
+                Output({'type': 'global-property-plotter-drop','index': ALL},'options'),
+                Output({'type': 'global-property-plotter-structures','index': ALL},'options'),
+                Output({'type': 'global-property-plotter-label-drop','index': ALL},'options'),
+                Output({'type': 'global-property-plotter-fetch-error-store','index': ALL},'data'),
+                Output({'type': 'global-property-plotter-plot-butt','index': ALL},'disabled'),
+                Output({'type': 'global-property-plotter-add-filter-butt','index': ALL},'disabled')
+            ],
+            [
+                Input('anchor-page-url','href')
+            ],
+            [
+                State('anchor-vis-store','data'),
+                State({'type': 'global-property-plotter-keys-store','index': ALL},'data'),
+                State({'type': 'global-property-plotter-property-info','index': ALL},'data'),
+                State({'type': 'global-property-plotter-structures','index': ALL},'options'),
+                State({'type': 'global-property-plotter-label-drop','index': ALL},'options'),
+            ],
+            prevent_initial_call = True
+        )
+
+    def update_drop_type(self, switch_switched, keys_info):
         """Update the property selection mode (either dropdown menu or tree view)
 
         :param switch_switched: Switch selected
@@ -5141,6 +5475,8 @@ class GlobalPropertyPlotter(MultiTool):
         """
 
         switch_switched = get_pattern_matching_value(switch_switched)
+        keys_info = json.loads(get_pattern_matching_value(keys_info))
+
         if switch_switched:
             # This is using the Tree View
             property_drop = dta.TreeView(
@@ -5150,11 +5486,11 @@ class GlobalPropertyPlotter(MultiTool):
                 checked = [],
                 selected = [],
                 expanded = [],
-                data = self.property_tree
+                data = keys_info['tree']['full']
             )
         else:
             property_drop = dcc.Dropdown(
-                options = [] if self.preloaded_options is None else self.preloaded_options,
+                options = [] if keys_info['dropdown'] is None else keys_info['dropdown'],
                 value = [],
                 id = {'type': f'{self.component_prefix}-global-property-plotter-drop','index': 0},
                 multi = True,
@@ -5163,7 +5499,7 @@ class GlobalPropertyPlotter(MultiTool):
 
         return [property_drop]
 
-    def update_properties_and_filters(self, property_selection, property_checked, structure_selection, label_selection, filter_prop_mod, filter_prop_remove, filter_prop_selector, property_divs,current_data):
+    def update_properties_and_filters(self, property_selection, property_checked, structure_selection, label_selection, filter_prop_mod, filter_prop_remove, filter_prop_selector, property_divs,current_data, keys_info, property_info):
         """Updating the properties, structures, and filters incorporated into the main plot
 
         :param property_selection: Properties selected for plotting
@@ -5187,7 +5523,9 @@ class GlobalPropertyPlotter(MultiTool):
         """
         
         current_data = json.loads(get_pattern_matching_value(current_data))
+        keys_info = json.loads(get_pattern_matching_value(keys_info))
         property_divs = get_pattern_matching_value(property_divs)
+        property_info = json.loads(get_pattern_matching_value(property_info))
 
         processed_prop_filters = self.parse_filter_divs(property_divs)
 
@@ -5195,13 +5533,26 @@ class GlobalPropertyPlotter(MultiTool):
         if not get_pattern_matching_value(property_selection) is None:
             current_data['property_names'] = get_pattern_matching_value(property_selection)
         elif not get_pattern_matching_value(property_checked) is None:
-            current_data['property_names'] = [self.property_keys[i] for i in get_pattern_matching_value(property_checked) if i in self.property_keys]
+            current_data['property_names'] = [keys_info['tree']['name_key'][i] for i in get_pattern_matching_value(property_checked) if i in keys_info['name_key']]
+        
+        current_data['property_keys'] = []
+        prop_titles = [i['title'] for i in property_info]
+        for p in current_data['property_names']:
+            if p in prop_titles:
+                current_data['property_keys'].append(property_info[prop_titles.index(p)]['key'])
+
         current_data['structure_names'] = get_pattern_matching_value(structure_selection)
-        current_data['label_names'] = get_pattern_matching_value(label_selection)
+        selected_labels = get_pattern_matching_value(label_selection)
+        if selected_labels in prop_titles:
+            current_data['label_names'] = selected_labels
+            current_data['label_keys'] = property_info[prop_titles.index(selected_labels)]['key']
+        else:
+            current_data['label_names'] = None
+            current_data['label_keys'] = None
         
         return [json.dumps(current_data)]
 
-    def generate_plot(self, butt_click, current_data):
+    def generate_plot(self, butt_click, data_selection, plottable_data, keys_info, session_data):
         """Generate a new plot based on selected properties
 
         :param butt_click: Generate Plot button clicked
@@ -5213,19 +5564,58 @@ class GlobalPropertyPlotter(MultiTool):
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
-        current_data = json.loads(get_pattern_matching_value(current_data))
-        property_names = current_data['property_names']
-        structure_names = current_data['structure_names']
-        label_names = current_data['label_names']
-        filters = current_data['filters']
+        data_selection = json.loads(get_pattern_matching_value(data_selection))
+        property_names = data_selection['property_names']
+        property_keys = data_selection['property_keys']
+        structure_names = data_selection['structure_names']
+        label_names = data_selection['label_names']
+        label_keys = data_selection['label_keys']
+        filters = data_selection['filters']
 
-        if len(property_names)==0 | len(structure_names)==0:
+        if len(property_names)==0:
             raise exceptions.PreventUpdate
+
+        session_data = json.loads(session_data)
+        keys_info = json.loads(get_pattern_matching_value(keys_info))
+
+
+        # Checking if slide_col, structure_col, or any bbox_col's are used by properties or labels
+        slide_col = keys_info['slide_col']
+        structure_col = keys_info['structure_col']
+        bbox_cols = keys_info['bbox_cols']
+       
+        if slide_col in property_keys or slide_col==label_keys:
+            if slide_col in property_keys:
+                slide_col = property_names[property_keys.index(slide_col)]
+            elif slide_col==label_keys:
+                slide_col = label_names
         
+        if structure_col in property_keys or structure_col==label_keys:
+            if structure_col in property_keys:
+                structure_col = property_names[property_keys.index(structure_col)]
+            elif structure_col==label_keys:
+                structure_col = label_names
+
+        if any([b in property_keys or b in label_keys for b in bbox_cols]):
+            if any([b in property_keys for b in bbox_cols]):
+                overlap_one = [b for b in bbox_cols if b in property_keys][0]
+                bbox_cols[bbox_cols.index(overlap_one)] = property_keys[property_keys.index(overlap_one)]
+            elif any([b==label_keys for b in bbox_cols]):
+                overlap_one = [b for b in bbox_cols if b==label_keys][0]
+                bbox_cols[bbox_cols.index(overlap_one)] = label_keys
+
+        plottable_df = self.get_plottable_data(session_data,property_keys,structure_names)
+
+        # Updating with renamed columns from labels
+        plottable_df = plottable_df.rename(columns = {k:v for k,v in zip([keys_info['structure_col']],[structure_col])} | {h:q for h,q in zip([keys_info['slide_col']],[slide_col])} | {i:r for i,r in zip(keys_info['bbox_cols'],bbox_cols)})
+
         # Applying filters to the current data
         filtered_properties = pd.DataFrame()
-        if not self.preloaded_properties is None:
-            filtered_properties = self.preloaded_properties[self.preloaded_properties[self.structure_column].isin(structure_names)]
+        if not plottable_df.empty:
+            if not structure_names is None:
+                filtered_properties = plottable_df[plottable_df[structure_col].isin(structure_names)]
+            else:
+                filtered_properties = plottable_df.copy()
 
             include_list = [(False,)]*filtered_properties.shape[0]
             if len(filters)>0:
@@ -5260,28 +5650,452 @@ class GlobalPropertyPlotter(MultiTool):
         if filtered_properties.empty:
             raise exceptions.PreventUpdate
         else:
-            current_data['data'] = filtered_properties.to_dict('records')
+            data_selection['data'] = filtered_properties.to_dict('records')
+
+            renamed_props = filtered_properties.rename(columns = {k:v for k,v in zip([label_keys],[label_names])} | {h:q for h,q in zip(property_keys,property_names)})
 
             if len(property_names)==1:
-                plot_fig = self.gen_violin_plot(filtered_properties, label_names, property_names[0], [self.slide_column]+self.bbox_columns)
+                plot_fig = self.gen_violin_plot(renamed_props, label_names, property_names[0], [slide_col]+bbox_cols)
             elif len(property_names)==2:
-                plot_fig = self.gen_scatter_plot(filtered_properties,property_names,None,[self.slide_column]+self.bbox_columns)
+                plot_fig = self.gen_scatter_plot(renamed_props,property_names,label_names,[slide_col]+bbox_cols)
             elif len(property_names)>2:
                 
-                umap_columns = self.gen_umap_cols(filtered_properties,property_names)
+                umap_columns = self.gen_umap_cols(renamed_props,property_names)
                 filtered_properties['UMAP1'] = umap_columns['UMAP1'].tolist()
                 filtered_properties['UMAP2'] = umap_columns['UMAP2'].tolist()
+                renamed_props['UMAP1'] = umap_columns['UMAP1'].tolist()
+                renamed_props['UMAP2'] = umap_columns['UMAP2'].tolist()
 
-                current_data['data'] = filtered_properties.to_dict('records')
+                data_selection['data'] = filtered_properties.to_dict('records')
  
-                plot_fig = self.gen_scatter_plot(filtered_properties,['UMAP1','UMAP2'],label_names,[self.slide_column]+self.bbox_columns)
+                plot_fig = self.gen_scatter_plot(renamed_props,['UMAP1','UMAP2'],label_names,[slide_col]+bbox_cols)
 
             return_fig = dcc.Graph(
                 id = {'type': f'{self.component_prefix}-global-property-plotter-plot','index': 0},
                 figure = plot_fig
             )
 
-        return [json.dumps(current_data)],[return_fig]
+        plot_report_tabs = self.make_property_plot_tabs(renamed_props, label_names, property_names, [slide_col,structure_col]+bbox_cols)
+
+        return [json.dumps(data_selection)],[return_fig],[plot_report_tabs]
+    
+    def make_property_plot_tabs(self, data_df:pd.DataFrame, label_col: Union[str,None],property_cols: list, customdata_cols:list)->list:
+        """Generate property plot description tabs
+
+        :param data_df: Current data used to generate the plot
+        :type data_df: pd.DataFrame
+        :param label_col: Column of data_df used to label points in the plot.
+        :type label_col: Union[str,None]
+        :param property_cols: Column(s) of data_df plotted in the plot.
+        :type property_cols: list
+        :param customdata_cols: Column(s) used in the "customdata" field of points in the plot
+        :type customdata_cols: list
+        :return: List of tabs including summary statistics, clustering options, selected data options
+        :rtype: list
+        """
+
+        # Property summary tab
+        property_summary_children = []
+        if not label_col is None:
+            label_data = data_df[label_col]
+            if type(label_data)==pd.DataFrame:
+                label_data = label_data.iloc[:,0]
+
+            unique_labels = [i for i in label_data.unique().tolist() if type(i)==str]
+
+            for u_idx, u in enumerate(unique_labels):
+                this_label_data = data_df[label_data.astype(str).str.match(u)].loc[:,[i for i in property_cols if i in data_df]]
+                
+                summary = this_label_data.describe().round(decimals=4)
+                summary.reset_index(inplace=True,drop=False)
+
+                property_summary_children.extend([
+                    html.H3(f'Samples labeled: {u}'),
+                    html.Hr(),
+                    dash_table.DataTable(
+                        id = {'type': f'{self.component_prefix}-global-property-summary-table','index': u_idx},
+                        columns = [{'name': i, 'id': i, 'deletable': False, 'selectable': True} for i in summary.columns],
+                        data = summary.to_dict('records'),
+                        editable = False,
+                        style_cell = {
+                            'overflowX': 'auto'
+                        },
+                        tooltip_data = [
+                            {
+                                column: {'value': str(value),'type': 'markdown'}
+                                for column,value in row.items()
+                            } for row in summary.to_dict('records')
+                        ],
+                        tooltip_duration = None,
+                        style_data_conditional = [
+                            {
+                                'if': {
+                                    'column_id': 'index'
+                                },
+                                'width': '35%'
+                            }
+                        ]
+                    ),
+                    html.Hr()
+                ])
+
+        else:
+            label_data = data_df.loc[:,[i for i in property_cols if i in data_df]]
+            summary = label_data.describe().round(decimals=4)
+            summary.reset_index(inplace=True,drop=False)
+
+            property_summary_children.extend([
+                html.H3('All Samples'),
+                html.Hr(),
+                dash_table.DataTable(
+                    id = {'type': f'{self.component_prefix}-global-property-summary-table','index': 0},
+                    columns = [{'name': i, 'id': i, 'deletable': False, 'selectable': True} for i in summary.columns],
+                    data = summary.to_dict('records'),
+                    editable = False,
+                    style_cell = {
+                        'overflowX': 'auto'
+                    },
+                    tooltip_data = [
+                        {
+                            column: {'value': str(value),'type': 'markdown'}
+                            for column,value in row.items()
+                        } for row in summary.to_dict('records')
+                    ],
+                    tooltip_duration = None,
+                    style_data_conditional = [
+                        {
+                            'if': {
+                                'column_id': 'index'
+                            },
+                            'width': '35%'
+                        }
+                    ]
+                ),
+                html.Hr()
+            ])
+
+        property_summary_tab = dbc.Tab(
+            id = {'type': f'{self.component_prefix}-global-property-summary-tab','index': 0},
+            children = property_summary_children,
+            tab_id = 'property-summary',
+            label = 'Property Summary'
+        )
+
+        # Property statistics
+        label_stats_children = []
+        if data_df.shape[0]>1:
+            if not label_col is None:
+                label_data = data_df[label_col]
+                if type(label_data)==pd.DataFrame:
+                    label_data = label_data.iloc[:,0]
+
+                unique_labels = label_data.unique().tolist()
+
+                if len(unique_labels)>1:
+                    
+                    multiple_members_check = any([i>1 for i in list(label_data.value_counts().to_dict().values())])
+
+                    if multiple_members_check:
+                        
+                        data_df = data_df.T.drop_duplicates().T.dropna(axis=0,how='any')
+                        p_value, results = get_label_statistics(
+                            data_df = data_df.loc[:,[i for i in data_df if not i in customdata_cols or i==label_col]],
+                            label_col=label_col
+                        )
+
+                        if not p_value is None:
+                            if len(property_cols)==1:
+                                if len(unique_labels)==2:
+                                    if p_value<0.05:
+                                        significance = dbc.Alert('Statistically significant (p<0.05)',color='success')
+                                    else:
+                                        significance = dbc.Alert('Not statistically significant (p>=0.05)',color='warning')
+                                    
+                                    label_stats_children.extend([
+                                        significance,
+                                        html.Hr(),
+                                        html.Div([
+                                            html.A('Statistical Test: t-Test',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html',target='_blank'),
+                                            html.P('Tests null hypothesis that two independent samples have identical mean values. Assumes equal variance within groups.')
+                                        ]),
+                                        html.Div(
+                                            dash_table.DataTable(
+                                                id = {'type': f'{self.component_prefix}-global-property-stats-table','index': 0},
+                                                columns = [
+                                                    {'name': i, 'id': i}
+                                                    for i in results.columns
+                                                ],
+                                                data = results.to_dict('records'),
+                                                style_cell = {
+                                                    'overflow': 'hidden',
+                                                    'textOverflow': 'ellipsis',
+                                                    'maxWidth': 0
+                                                },
+                                                tooltip_data = [
+                                                    {
+                                                        column: {'value': str(value), 'type': 'markdown'}
+                                                        for column, value in row.items()
+                                                    } for row in results.to_dict('records')
+                                                ],
+                                                tooltip_duration = None
+                                            ) if type(results)==pd.DataFrame else []
+                                        )
+                                    ])
+                            
+                                elif len(unique_labels)>2:
+
+                                    if p_value<0.05:
+                                        significance = dbc.Alert('Statistically significant! (p<0.05)',color='success')
+                                    else:
+                                        significance = dbc.Alert('Not statistically significant (p>=0.05)',color='warning')
+                                    
+                                    label_stats_children.extend([
+                                        significance,
+                                        html.Hr(),
+                                        html.Div([
+                                            html.A('Statistical Test: One-Way ANOVA',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.f_oneway.html',target='_blank'),
+                                            html.P('Tests null hypothesis that two or more groups have the same population mean. Assumes independent samples from normal, homoscedastic (equal standard deviation) populations')
+                                        ]),
+                                        html.Div(
+                                            dash_table.DataTable(
+                                                id = {'type': f'{self.component_prefix}-global-property-stats-table','index':0},
+                                                columns = [
+                                                    {'name': i, 'id': i}
+                                                    for i in results['anova'].columns
+                                                ],
+                                                data = results['anova'].to_dict('records'),
+                                                style_cell = {
+                                                    'overflow': 'hidden',
+                                                    'textOverflow': 'ellipsis',
+                                                    'maxWidth': 0
+                                                },
+                                                tooltip_data = [
+                                                    {
+                                                        column: {'value': str(value),'type': 'markdown'}
+                                                        for column, value in row.items()
+                                                    } for row in results['anova'].to_dict('records')
+                                                ],
+                                                tooltip_duration = None
+                                            )
+                                        ),
+                                        html.Hr(),
+                                        html.Div([
+                                            html.A("Statistical Test: Tukey's HSD",href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.tukey_hsd.html',target='_blank'),
+                                            html.P('Post hoc test for pairwise comparison of means from different groups. Assumes independent samples from normal, equal (finite) variance populations')
+                                        ]),
+                                        html.Div(
+                                            dash_table.DataTable(
+                                                id = {'type': f'{self.component_prefix}-global-property-stats-tukey','index': 0},
+                                                columns = [
+                                                    {'name': i,'id': i}
+                                                    for i in results['tukey'].columns
+                                                ],
+                                                data = results['tukey'].to_dict('records'),
+                                                style_cell = {
+                                                    'overflow': 'hidden',
+                                                    'textOverflow': 'ellipsis',
+                                                    'maxWidth': 0
+                                                },
+                                                tooltip_data = [
+                                                    {
+                                                        column: {'value': str(value), 'type': 'markdown'}
+                                                        for column, value in row.items()
+                                                    } for row in results['tukey'].to_dict('records')
+                                                ],
+                                                tooltip_duration = None,
+                                                style_data_conditional = [
+                                                    {
+                                                        'if': {
+                                                            'column_id': 'Comparison'
+                                                        },
+                                                        'width': '35%'
+                                                    },
+                                                    {
+                                                        'if': {
+                                                            'filter_query': '{p-value} <0.05',
+                                                            'column_id': 'p-value'
+                                                        },
+                                                        'backgroundColor': 'green',
+                                                        'color': 'white'
+                                                    },
+                                                    {
+                                                        'if': {
+                                                            'filter_query': '{p-value} >=0.05',
+                                                            'column_id': 'p-value'
+                                                        },
+                                                        'backgroundColor': 'tomato',
+                                                        'color': 'white'
+                                                    }
+                                                ]
+                                            )
+                                        )
+                                    ])
+
+                                else:
+
+                                    label_stats_children.append(
+                                        dbc.Alert('Only one unique label present!',color = 'warning')
+                                    )
+
+                            elif len(property_cols)==2:
+                                if any([i<0.05 for i in p_value]):
+                                    significance = dbc.Alert('Statistical significance found!',color='success')
+                                else:
+                                    significance = dbc.Alert('No statistical significance',color='warning')
+                                
+                                label_stats_children.extend([
+                                    significance,
+                                    html.Hr(),
+                                    html.Div([
+                                        html.A('Statistical Test: Pearson Correlation Coefficient (r)',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.mstats.pearsonr.html',target='_blank'),
+                                        html.P('Measures the linear relationship between two datasets. Assumes normally distributed data.')
+                                    ]),
+                                    html.Div(
+                                        dash_table.DataTable(
+                                            id=f'{self.component_prefix}-global-pearson-table',
+                                            columns = [{'name':i,'id':i} for i in results.columns],
+                                            data = results.to_dict('records'),
+                                            style_cell = {
+                                                'overflow':'hidden',
+                                                'textOverflow':'ellipsis',
+                                                'maxWidth':0
+                                            },
+                                            tooltip_data = [
+                                                {
+                                                    column: {'value':str(value),'type':'markdown'}
+                                                    for column,value in row.items()
+                                                } for row in results.to_dict('records')
+                                            ],
+                                            tooltip_duration = None,
+                                            style_data_conditional = [
+                                                {
+                                                    'if': {
+                                                        'filter_query': '{p-value} <0.05',
+                                                        'column_id':'p-value',
+                                                    },
+                                                    'backgroundColor':'green',
+                                                    'color':'white'
+                                                },
+                                                {
+                                                    'if':{
+                                                        'filter_query': '{p-value} >= 0.05',
+                                                        'column_id':'p-value'
+                                                    },
+                                                    'backgroundColor':'tomato',
+                                                    'color':'white'
+                                                }
+                                            ]
+                                        )
+                                    )
+                                ])
+
+                            elif len(property_cols)>2:
+                                
+                                overall_silhouette = results['overall_silhouette']
+                                if overall_silhouette>=-1 and overall_silhouette<=-0.5:
+                                    silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color='danger')
+                                elif overall_silhouette>-0.5 and overall_silhouette<=0.5:
+                                    silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color = 'primary')
+                                elif overall_silhouette>0.5 and overall_silhouette<=1:
+                                    silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color = 'success')
+                                else:
+                                    silhouette_alert = dbc.Alert(f'Weird value: {overall_silhouette}')
+
+                                label_stats_children.extend([
+                                    silhouette_alert,
+                                    html.Div([
+                                        html.A('Clustering Metric: Silhouette Coefficient',href='https://scikit-learn.org/stable/modules/generated/sklearn.metrics.silhouette_score.html#sklearn.metrics.silhouette_score',target='_blank'),
+                                        html.P('Quantifies density of distribution for each sample. Values closer to 1 indicate high class clustering. Values closer to 0 indicate mixed clustering between classes. Values closer to -1 indicate highly dispersed distribution for a class.')
+                                    ]),
+                                    html.Div(
+                                        dash_table.DataTable(
+                                            id=f'{self.component_prefix}-global-silhouette-table',
+                                            columns = [{'name':i,'id':i} for i in results['samples_silhouette'].columns],
+                                            data = results['samples_silhouette'].to_dict('records'),
+                                            style_cell = {
+                                                'overflow':'hidden',
+                                                'textOverflow':'ellipsis',
+                                                'maxWidth':0
+                                            },
+                                            tooltip_data = [
+                                                {
+                                                    column: {'value':str(value),'type':'markdown'}
+                                                    for column,value in row.items()
+                                                } for row in results['samples_silhouette'].to_dict('records')
+                                            ],
+                                            tooltip_duration = None,
+                                            style_data_conditional = [
+                                                {
+                                                    'if': {
+                                                        'filter_query': '{Silhouette Score}>0',
+                                                        'column_id':'Silhouette Score',
+                                                    },
+                                                    'backgroundColor':'green',
+                                                    'color':'white'
+                                                },
+                                                {
+                                                    'if':{
+                                                        'filter_query': '{Silhouette Score}<0',
+                                                        'column_id':'Silhouette Score'
+                                                    },
+                                                    'backgroundColor':'tomato',
+                                                    'color':'white'
+                                                }
+                                            ]
+                                        )
+                                    )
+                                ])
+                        
+                        else:
+                            label_stats_children.append(
+                                dbc.Alert(f'Property is "nan" or otherwise missing in one or more labels',color = 'warning')
+                            )
+
+                    else:
+                        label_stats_children.append(
+                            dbc.Alert(f'Only one of each label type present!',color='warning')
+                        )
+                else:
+                    label_stats_children.append(
+                        dbc.Alert(f'Only one label present! ({unique_labels[0]})',color='warning')
+                    )
+            else:
+                label_stats_children.append(
+                    dbc.Alert('No labels assigned to the plot!',color='warning')
+                )
+        else:
+            label_stats_children.append(
+                dbc.Alert('Only one sample present!',color='warning')
+            )
+
+        label_stats_tab = dbc.Tab(
+            id = {'type': f'{self.component_prefix}-global-property-stats-tab','index': 0},
+            children = label_stats_children,
+            tab_id = 'property-stats',
+            label = 'Property Statistics'
+        )
+
+        selected_data_tab = dbc.Tab(
+            id = {'type': f'{self.component_prefix}-global-property-selected-data-tab','index': 0},
+            children = html.Div(
+                id = {'type': f'{self.component_prefix}-global-property-graph-selected-div','index': 0},
+                children = ['Select data points in the plot to get started!']
+            ),
+            tab_id = 'property-selected-data',
+            label = 'Selected Data'
+        )
+
+        property_plot_tabs = dbc.Tabs(
+            id = {'type': f'{self.component_prefix}-global-property-plot-tabs','index': 0},
+            children = [
+                property_summary_tab,
+                label_stats_tab,
+                #selected_data_tab
+            ],
+            active_tab = 'property-summary'
+        )
+
+        return property_plot_tabs
 
     def gen_violin_plot(self, data_df:pd.DataFrame, label_col: Union[str,None], property_column: str, customdata_columns:list):
         """Generating a violin plot using provided data, property columns, and customdata
@@ -5298,9 +6112,17 @@ class GlobalPropertyPlotter(MultiTool):
         :return: Figure containing violin plot data
         :rtype: go.Figure
         """
+
+        label_x = None
+        if label_col is not None:
+            label_x = data_df[label_col]
+            if type(label_x)==pd.DataFrame:
+                label_x = label_x.iloc[:,0]
+
+
         figure = go.Figure(
             data = go.Violin(
-                x = None if label_col is None else data_df[label_col],
+                x = label_x,
                 y = data_df[property_column],
                 customdata = data_df[customdata_columns] if not customdata_columns is None else None,
                 points = 'all',
@@ -5360,6 +6182,9 @@ class GlobalPropertyPlotter(MultiTool):
         :return: Scatter plot figure
         :rtype: go.Figure
         """
+
+        data_df = data_df.T.drop_duplicates().T
+
         if not label_col is None:
             figure = go.Figure(
                 data = px.scatter(
@@ -5376,7 +6201,12 @@ class GlobalPropertyPlotter(MultiTool):
                         )
                 )
             )
-            if not data_df[label_col].dtype == np.number:
+
+            label_data = data_df[label_col]
+            if type(label_data)==pd.DataFrame:
+                label_data = label_data.iloc[:,0]
+
+            if not label_data.dtype == np.number:
                 figure.update_layout(
                     legend = dict(
                         orientation='h',
@@ -5396,13 +6226,13 @@ class GlobalPropertyPlotter(MultiTool):
                         customdata = data_df.iloc[:,custom_data_idx].to_dict('records'),
                         mode = 'markers',
                         marker = {
-                            'color': data_df[label_col].values,
+                            'color': label_data.values,
                             'colorbar':{
                                 'title': label_col
                             },
                             'colorscale':'jet'
                         },
-                        text = data_df[label_col].values,
+                        text = label_data.values,
                         hovertemplate = "label: %{text}"
 
                     )
@@ -5624,7 +6454,7 @@ class GlobalPropertyPlotter(MultiTool):
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
 
-        session_data = json.loads(get_pattern_matching_value(session_data))
+        session_data = json.loads(session_data)
         selected_data = get_pattern_matching_value(selected_data)
 
         session_names = [i['name'] for i in session_data['current']]
@@ -5693,6 +6523,32 @@ class GlobalPropertyPlotter(MultiTool):
             print(f'selected:{selected_data}')
 
         return [dcc.Graph(figure = selected_image)]
+
+    def update_tree_data(self, property_info, keys_info):
+
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        keys_info = json.loads(get_pattern_matching_value(keys_info))
+        property_info = json.loads(get_pattern_matching_value(property_info))
+
+        tree_data, tree_keys = self.generate_property_dict([i['key'].replace('.',self.nested_prop_sep) for i in property_info])
+
+        keys_info['tree'] = {
+            'full': tree_data,
+            'name_key': tree_keys
+        }
+
+        return [json.dumps(keys_info)]
+
+
+
+
+
+
+
+
 
 
 
