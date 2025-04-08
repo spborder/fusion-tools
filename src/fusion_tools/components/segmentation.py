@@ -165,7 +165,8 @@ class FeatureAnnotation(Tool):
                                 value = [],
                                 multi = False,
                                 placeholder = "Structure",
-                                id = {'type': 'feature-annotation-structure-drop','index': 0}
+                                id = {'type': 'feature-annotation-structure-drop','index': 0},
+                                style = {'width': '100%'}
                             )
                         ],md =7),
                         dbc.Col([
@@ -201,11 +202,18 @@ class FeatureAnnotation(Tool):
                             dcc.Input(
                                 type = 'number',
                                 value = 0,
-                                id = {'type': 'feature-annotation-bbox-padding','index': 0}
+                                id = {'type': 'feature-annotation-bbox-padding','index': 0},
+                                style = {'width': '100%'}
                             ),
                             md = 8
                         )
-                    ],style = {'marginTop':'5px','marginTop':'5px'}),
+                    ],style = {'marginTop':'5px','marginBottom':'5px'}),
+                    dbc.Row([
+                        dbc.Progress(
+                            id = {'type': 'feature-annotation-progress','index': 0},
+                            style = {'marginBottom':'5px','width': '100%'},
+                        )
+                    ]),
                     dbc.Row([
                         dbc.Col([
                             dbc.Row([
@@ -396,7 +404,10 @@ class FeatureAnnotation(Tool):
             ],
             [
                 Output({'type': 'feature-annotation-structure-drop','index': ALL},'options'),
-                Output({'type': 'feature-annotation-current-structures','index': ALL},'data')
+                Output({'type': 'feature-annotation-current-structures','index': ALL},'data'),
+                Output({'type': 'feature-annotation-progress','index': ALL},'value'),
+                Output({'type': 'feature-annotation-progress','index': ALL},'label'),
+                Output({'type': 'feature-annotation-figure','index': ALL},'figure')
             ],
             [
                 State({'type': 'map-annotations-store','index': ALL},'data'),
@@ -418,7 +429,9 @@ class FeatureAnnotation(Tool):
                 Output({'type': 'feature-annotation-figure','index': ALL},'figure'),
                 Output({'type': 'feature-annotation-save','index':ALL},'children'),
                 Output({'type':'feature-annotation-current-structures','index': ALL},'data'),
-                Output({'type': 'feature-annotation-label-text','index': ALL},'value')
+                Output({'type': 'feature-annotation-label-text','index': ALL},'value'),
+                Output({'type': 'feature-annotation-progress','index': ALL},'value'),
+                Output({'type': 'feature-annotation-progress','index': ALL},'label')
             ],
             [
                 State({'type': 'feature-annotation-current-structures','index': ALL},'data'),
@@ -545,14 +558,17 @@ class FeatureAnnotation(Tool):
             int(image_bbox[1]/slide_information['y_scale'])
         ]
 
+        save_path = os.path.join(self.storage_path,slide_information['name'],f'labels.{self.labels_format}')
         if self.labels_format == 'json': 
-            if os.path.exists(f'{self.storage_path}/labels.{self.labels_format}'):
-                with open(f'{self.storage_path}/labels.{self.labels_format}','r') as f:
+
+            if os.path.exists(save_path):
+                with open(save_path,'r') as f:
                     current_labels = json.load(f)
                     f.close()
 
                 current_labels["Labels"].append(
                     {
+                        'slide_name': slide_information['name'],
                         label_name: label_text,
                         "bbox": image_bbox
                     }
@@ -562,32 +578,33 @@ class FeatureAnnotation(Tool):
                 current_labels = {
                     "Labels": [
                         {
+                            'slide_name': slide_information['name'],
                             label_name: label_text,
                             "bbox": image_bbox
                         }
                     ]
                 }
 
-            with open(f'{self.storage_path}/labels.{self.labels_format}','w') as f:
+            with open(save_path,'w') as f:
                 json.dump(current_labels,f)
                 f.close()
         
         else:
 
-            if os.path.exists(f'{self.storage_path}/labels.{self.labels_format}'):
-                current_labels = pd.read_csv(f'{self.storage_path}/labels.{self.labels_format}').to_dict('records')
-                
+            if os.path.exists(save_path):
+                current_labels = pd.read_csv(save_path).to_dict('records')
             else:
                 current_labels = []
             
             current_labels.append(
                 {
+                    'slide_name': slide_information['name'],
                     label_name: label_text,
                     'bbox': image_bbox
                 }
             )
 
-            pd.DataFrame.from_records(current_labels).to_csv(f'{self.storage_path}/labels.{self.labels_format}')
+            pd.DataFrame.from_records(current_labels).to_csv(save_path)
 
     def save_mask(self, annotations, class_options, image_bbox, slide_information):
         """Saving annotation mask with annotated classes using pre-specified format
@@ -647,7 +664,7 @@ class FeatureAnnotation(Tool):
         # Pulling image region from slide:
         slide_image_region = self.get_structure_region(image_bbox, slide_information, False)
         # Saving annotation mask:
-        save_path = f'{self.storage_path}/Annotations/'
+        save_path = os.path.join(self.storage_path,slide_information['name'],'Annotations')
         if not os.path.exists(save_path):
             os.makedirs(save_path)
             os.makedirs(save_path+'Images/')
@@ -679,6 +696,10 @@ class FeatureAnnotation(Tool):
         """
 
         active_tab = get_pattern_matching_value(active_tab)
+        progress_value = 0
+        progress_label = '0%'
+        new_figure = go.Figure()
+
         if not active_tab is None:
             if not active_tab == 'feature-annotation':
                 raise exceptions.PreventUpdate
@@ -713,7 +734,7 @@ class FeatureAnnotation(Tool):
 
         new_structure_bboxes = json.dumps(structure_bboxes)
 
-        return [structure_options], [new_structure_bboxes]
+        return [structure_options], [new_structure_bboxes], [progress_value], [progress_label], [new_figure]
 
     def update_structure(self, structure_drop_value, prev_click, next_click, current_structure_data, current_class_value, slide_information):
         """Updating the current structure figure based on selections
@@ -739,6 +760,8 @@ class FeatureAnnotation(Tool):
         current_structure_data = json.loads(get_pattern_matching_value(current_structure_data))
         current_class_value = get_pattern_matching_value(current_class_value)
         slide_information = json.loads(get_pattern_matching_value(slide_information))
+        progress_value = 0
+        progress_label = '0%'
 
         if structure_drop_value is None or not structure_drop_value in current_structure_data:
             raise exceptions.PreventUpdate
@@ -757,6 +780,8 @@ class FeatureAnnotation(Tool):
                 current_structure_index -= 1
             
             current_structure_region = current_structure_data[structure_drop_value][current_structure_index]
+            progress_value = round(100*(current_structure_index / len(current_structure_data[structure_drop_value])))
+            progress_label = f'{progress_value}%'
 
         elif 'feature-annotation-next' in ctx.triggered_id['type']:
             # Going to next structure
@@ -767,6 +792,9 @@ class FeatureAnnotation(Tool):
                 current_structure_index += 1
 
             current_structure_region = current_structure_data[structure_drop_value][current_structure_index]
+
+            progress_value = round(100*(current_structure_index / len(current_structure_data[structure_drop_value])))
+            progress_label = f'{progress_value}%'
 
         current_structure_data[f'{structure_drop_value}_index'] = current_structure_index
         
@@ -797,7 +825,7 @@ class FeatureAnnotation(Tool):
             }
         )
 
-        return [image_figure], ['Save'], [json.dumps(current_structure_data)], [new_label_text]
+        return [image_figure], ['Save'], [json.dumps(current_structure_data)], [new_label_text], [progress_value], [progress_label]
 
     def get_structure_region(self, structure_bbox:list, slide_information: dict, scale:bool = True):
         """Using the tile server "regions_url" property to pull out a specific region of tissue
@@ -1059,7 +1087,6 @@ class FeatureAnnotation(Tool):
 
             elif add_class_value == 'Options Label':
                 # Creating a label that has a list of possible values
-                #TODO: Create component that lets you add to a list of options
                 options_div = html.Div([
                     dcc.Input(
                         type = 'text',

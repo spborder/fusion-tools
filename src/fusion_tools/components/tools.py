@@ -4818,7 +4818,7 @@ class GlobalPropertyPlotter(MultiTool):
 
         
         # Required keys for backwards identification
-        req_keys = ['item.name','annotation.name','bbox.x0','bbox.y0','bbox.x1','bbox.y1']
+        req_keys = ['item.name','annotation.name','folder.name','bbox.x0','bbox.y0','bbox.x1','bbox.y1']
         keys_list+= [i for i in req_keys if not i in keys_list]
 
         property_data = pd.DataFrame()
@@ -5291,7 +5291,7 @@ class GlobalPropertyPlotter(MultiTool):
             }
 
             const mergePropertyKeys = (allPropertyKeys) => {
-                const uniqueKeys = [...new Set(allPropertyKeys.filter((prop) => !(prop.key.includes('dimension.reduction'))).map((prop) => prop.key))];
+                const uniqueKeys = [...new Set(allPropertyKeys.filter((prop) => !(prop.key.includes('compute'))).map((prop) => prop.key))];
 
                 return uniqueKeys.map((key) => {
                     const props = allPropertyKeys.filter((prop) => prop.key === key);
