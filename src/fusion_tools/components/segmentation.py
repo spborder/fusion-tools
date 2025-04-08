@@ -536,6 +536,7 @@ class FeatureAnnotation(Tool):
         new_slide_data['regions_url'] = slide_data['regions_url']
         new_metadata = requests.get(slide_data['image_metadata_url']).json()
         new_slide_data['x_scale'], new_slide_data['y_scale'] = self.get_scale_factors(new_metadata)
+        new_slide_data['name'] = slide_data['name']
 
         new_slide_data = json.dumps(new_slide_data)
 
@@ -667,8 +668,8 @@ class FeatureAnnotation(Tool):
         save_path = os.path.join(self.storage_path,slide_information['name'],'Annotations')
         if not os.path.exists(save_path):
             os.makedirs(save_path)
-            os.makedirs(save_path+'Images/')
-            os.makedirs(save_path+'Masks/')
+            os.makedirs(save_path+'/Images/')
+            os.makedirs(save_path+'/Masks/')
 
         mask_save_path = f'{save_path}/Masks/{"_".join([str(i) for i in image_bbox])}.png'
         image_save_path = f'{save_path}/Images/{"_".join([str(i) for i in image_bbox])}.png'
