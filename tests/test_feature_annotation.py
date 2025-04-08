@@ -76,7 +76,29 @@ def main():
                     FeatureAnnotation(
                         storage_path = os.getcwd()+'\\tests\\Test_Annotations\\',
                         labels_format = 'json',
-                        annotations_format = 'rgb'
+                        annotations_format = 'rgb',
+                        preset_schema = {
+                            'classes': [
+                                {
+                                    'name': 'Test Class',
+                                    'color': 'rgb(255,0,0)'
+                                }
+                            ],
+                            'labels': [
+                                {
+                                    'name': 'Test Text Label',
+                                    'type': 'text'
+                                },
+                                {
+                                    'name': 'Test Options Label',
+                                    'type': 'options',
+                                    'options': [
+                                        'Option 1',
+                                        'Option 2'
+                                    ]
+                                }
+                            ]
+                        }
                     ),
                     BulkLabels(),
                     SlideAnnotation(

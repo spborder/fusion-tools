@@ -46,7 +46,8 @@ class FeatureAnnotation(Tool):
     def __init__(self,
                  storage_path: str,
                  labels_format: str = 'json',
-                 annotations_format: str = 'one-hot'):
+                 annotations_format: str = 'one-hot',
+                 preset_schema: Union[dict,None] = None):
         """Constructor method
 
         :param storage_path: File path to store annotated images and labels
@@ -61,6 +62,8 @@ class FeatureAnnotation(Tool):
         self.storage_path = storage_path
         self.labels_format = labels_format
         self.annotations_format = annotations_format
+
+        self.preset_schema = preset_schema
 
         assert self.labels_format in ['csv','json']
         assert self.annotations_format in ['one-hot','one-hot-labeled','rgb','index']
@@ -112,6 +115,34 @@ class FeatureAnnotation(Tool):
         """
 
         feature_annotation_session_data = session_data.get('data',{}).get('feature-annotation')
+
+        if not self.preset_schema is None:
+            if not feature_annotation_session_data is None:
+                session_classes = [i['name'] for i in feature_annotation_session_data.get('classes',[])]
+                session_labels = [i['name'] for i in feature_annotation_session_data.get('labels',[])]
+
+                if len(session_classes)>0:
+                    feature_annotation_session_data['classes'] += [
+                        i for i in self.preset_schema.get('classes',[])
+                        if not i['name'] in session_classes
+                    ]
+                else:
+                    feature_annotation_session_data['classes'] = self.preset_schema.get('classes',[])
+                
+                if len(session_labels)>0:
+                    feature_annotation_session_data['labels'] += [
+                        i for i in self.preset_schema.get('labels',[])
+                        if not i['name'] in session_labels
+                    ]
+                else:
+                    feature_annotation_session_data['labels'] = self.preset_schema.get('labels',[])
+            else:
+                feature_annotation_session_data = {
+                    'classes': self.preset_schema.get('classes',[]),
+                    'labels': self.preset_schema.get('labels',[])
+                }
+
+
         if not feature_annotation_session_data is None:
             if 'classes' in feature_annotation_session_data:
                 class_drop_vals = [
@@ -981,6 +1012,10 @@ class FeatureAnnotation(Tool):
         label_val = get_pattern_matching_value(label_val)
 
         label_info = session_data.get('data',{}).get('feature-annotation',{}).get('labels',[])
+
+        if not self.preset_schema is None:
+            label_info += self.preset_schema.get('labels',[])
+
         if not len(label_info)==0:
             label_names = [i['name'] for i in label_info]
             if label_val in label_names:
