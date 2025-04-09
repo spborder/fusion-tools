@@ -1414,7 +1414,7 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                                 right_df = sq_structure,
                                 how = 'left',
                                 max_distance = s_q['distance']
-                            )
+                            ).drop_duplicates(subset='_id_left')
 
                             # Updating include_list (removing items)
                             include_list = [i for d,i in zip(intermediate_gdf['_id_right'].isna().tolist(),include_list) if not d]
@@ -1429,7 +1429,7 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                                 right_df = sq_structure,
                                 how = 'left',
                                 max_distance = s_q['distance']
-                            )
+                            ).drop_duplicates(subset='_id_left')
 
                             # Updating include_list (removing items)
                             include_list = [i for d,i in zip(intermediate_gdf['_id_right'].isna().tolist(),include_list) if not d]
@@ -1443,7 +1443,7 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                                 right_df = sq_structure,
                                 how = 'left',
                                 max_distance = s_q['distance']
-                            )
+                            ).drop_duplicates(subset='_id_left')
 
                             current_remove = or_gdf['_id_right'].isna().tolist()
                             include_list = [i+(not j,) for i,j in list(zip(include_list,current_remove))]
@@ -1455,7 +1455,7 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                             right_df = sq_structure,
                             how = 'left',
                             max_distance = s_q['distance']
-                        )
+                        ).drop_duplicates(subset='_id_left')
 
                         # Updating include_list (removing items)
                         include_list = [i for d,i in zip(intermediate_gdf['_id_right'].isna().tolist(),include_list) if not d]

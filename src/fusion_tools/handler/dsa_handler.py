@@ -706,8 +706,13 @@ class DSAHandler(Handler):
             self.gc.setToken(user_token)
 
         # downloading session file specified by id
+        try:
+            session_item_file = self.gc.get(f'item/{session_id}/files')[0]
+        except girder_client.HttpError:
+            session_item_file = {'_id':session_id}
+            
         file_contents = self.gc.get(
-            f'file/{session_id}/download'
+            f'file/{session_item_file["_id"]}/download'
         )
 
         return file_contents

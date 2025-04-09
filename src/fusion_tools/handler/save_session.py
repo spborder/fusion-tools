@@ -133,7 +133,8 @@ class DSASession(DSATool):
         uploaded_file_details = self.handler.upload_session(saved_session_data,user_token = session_data['current_user']['token'])
         
         # Find a way to extract the window url or something
-        session_link = f'{page_url}/session?id={uploaded_file_details["_id"]}'
+        page_name = '/'+pathname.split('/')[-1]
+        session_link = f'{page_url.replace(page_name,"")}/session?id={uploaded_file_details["_id"]}'
 
         session_status_div = html.Div([
             dbc.Alert('Session Saved Successfully!',color = 'success',dismissable=True),

@@ -2075,11 +2075,14 @@ class MultiFrameSlideMap(SlideMap):
                         rgb_url = None
 
                 # Pre-determining indices:
+                # For some reason, if you create a new component with the same id index then it doesn't get updated
                 if not rgb_url is None:
-                    layer_indices = list(range(0,len(frame_names)+1))
+                    #layer_indices = list(range(0,len(frame_names)+1))
+                    layer_indices = np.random.choice(1000,len(frame_names)+1,replace=False).tolist()
                 else:
-                    layer_indices = list(range(0,len(frame_names)))
-                
+                    #layer_indices = list(range(0,len(frame_names)))
+                    layer_indices = np.random.choice(1000,len(frame_names),replace=False).tolist()
+
                 for f_idx,f in enumerate(frame_names):
                     if '?token' in tiles_url:
                         frame_url = tiles_url+'&style={"bands": [{"palette":["rgba(0,0,0,0)","rgba(255,255,255,255)"],"framedelta":'+str(f_idx)+'}]}'
