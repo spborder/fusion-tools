@@ -59,8 +59,7 @@ class DatasetBuilder(DSATool):
         )
 
         self.get_callbacks()
-
-        # This might receive the DSAResourceSelector
+        self.dataset_builder_callbacks()
        
     def gen_collections_dataframe(self,session_data:dict):
 
@@ -513,6 +512,87 @@ class DatasetBuilder(DSATool):
 
         return folder_slides, folder_folders
 
+    def dataset_builder_callbacks(self):
+
+        self.blueprint.clientside_callback(
+            """
+            async function getThumbnail(thumbs,thumb_store) {
+                if (!thumb_store) {
+                    throw window.dash_clientside.PreventUpdate;
+                }
+                
+                // Only getting not-done urls
+                // const thumb_urls = thumb_store.map((d) => JSON.parse(d.replace(/[\[\]']+/g,"")).url);
+
+                const thumbDataUrl = await Promise.all(
+                    thumb_store.map(async (t_data) => {
+                        const t_json = JSON.parse(t_data.replace(/[\[\]']+/g,""));
+                        
+                        if (!t_json.done){
+                            const res = await fetch(t_json.url,{
+                                method: 'GET',
+                                headers: { 'Content-Type': 'image/jpeg' }
+                            })
+                            .then(r => r.blob());
+
+
+                            let dataUrl = await new Promise(resolve => {
+                                let reader = new FileReader();
+                                reader.onload = () => resolve(reader.result);
+                                reader.readAsDataURL(res);
+                            })
+
+                            if (dataUrl.includes('text/html')){
+                                dataUrl.replace('text/html','image/jpeg');
+                            }
+
+                            return dataUrl;
+                        } else {
+                            let dataUrl = window.dash_clientside.no_update; 
+                            return dataUrl;
+                        }
+                    })
+                )
+                
+                //const thumbDataUrl = await Promise.all(
+                //    thumb_urls.map(async (url) => {
+                //        const res = await fetch(url, {
+                //            method: 'GET',
+                //            headers: { 'Content-Type': 'image/jpeg' }
+                //        })
+                //        .then(r => r.blob());
+//
+                //        let dataUrl = await new Promise(resolve => {
+                //            let reader = new FileReader();
+                //            reader.onload = () => resolve(reader.result);
+                //            reader.readAsDataURL(res);
+                //        });
+//
+                //        if (dataUrl.includes('text/html')){
+                //            dataUrl = dataUrl.replace('text/html','image/jpeg');
+                //        }
+//
+                //        return dataUrl;
+                //    })
+                //);
+
+                thumb_store.map(t=>t.done=true);
+                thumb_store.map(t => JSON.stringify(t));
+
+                return [thumbDataUrl, thumb_store];
+            }
+            """,
+            [
+                Output({'type': 'dataset-builder-slide-thumbnail','index': ALL},'src'),
+                Output({'type': 'dataset-builder-slide-thumb-data','index': ALL},'data')
+            ],
+            [
+                Input({'type': 'dataset-builder-selected-slides','index': ALL},'children'),
+                Input({'type': 'dataset-builder-slide-thumb-data','index': ALL},'data')
+            ],
+            prevent_initial_call = False
+        )
+
     def make_selected_slide(self, slide_id:str,idx:int,local_slide:bool = False, use_prefix:bool = True):
         """Creating a visualization session component for a selected slide
 
@@ -528,7 +608,10 @@ class DatasetBuilder(DSATool):
         if not local_slide:
             try:
                 item_info = self.handler.gc.get(f'/item/{slide_id}')
-                item_thumbnail = self.handler.get_image_thumbnail(slide_id)
+                #item_thumbnail = self.handler.get_image_thumbnail(slide_id)
+
+                thumb_url = self.handler.get_image_thumbnail(slide_id, return_url = True)
+
                 folder_info = self.handler.get_folder_info(item_info['folderId'])
                 slide_info = {
                     k:v for k,v in item_info.items() if type(v) in [int,float,str]
@@ -541,25 +624,41 @@ class DatasetBuilder(DSATool):
             item_idx = int(slide_id.split('/')[-3])
 
             try:
-                item_thumbnail = Image.open(BytesIO(requests.get(slide_id).content))
+                #item_thumbnail = Image.open(BytesIO(requests.get(slide_id).content))
+                thumb_url = slide_id
+
                 local_names = requests.get(slide_id.replace(f'{item_idx}/tiles/thumbnail','names')).json()['message']
             except (requests.exceptions.ConnectionError, requests.exceptions.RetryError):
                 # Triggered on initialization of application because the LocalTileServer instance is not running yet
-                item_thumbnail = np.zeros((256,256,3)).astype(np.uint8)
+                #item_thumbnail = np.zeros((256,256,3)).astype(np.uint8)
                 local_names = ['LOADING LOCALTILESERVER']*(item_idx+1)
 
             folder_info = {'name': 'Local Slides'}
             slide_info = {'name': local_names[item_idx]}               
-
 
         slide_card = html.Div([
             dbc.Card([
                 dbc.CardHeader(f"{folder_info['name']}/{slide_info['name']}"),
                 dbc.CardBody([
                     dbc.Stack([
-                        html.Img(
-                            src=Image.fromarray(item_thumbnail) if type(item_thumbnail)==np.ndarray else item_thumbnail
-                        ),
+                        html.Div([
+                            dcc.Loading(
+                                html.Img(
+                                    src = '',
+                                    alt = 'slide-thumbnail',
+                                    width = 256,
+                                    id = {'type': f'{self.component_prefix}-dataset-builder-slide-thumbnail','index': idx} if use_prefix else {'type': 'dataset-builder-slide-thumbnail','index': idx}
+                                )
+                            ),
+                            dcc.Store(
+                                id = {'type': f'{self.component_prefix}-dataset-builder-slide-thumb-data','index': idx} if use_prefix else {'type': 'dataset-builder-slide-thumb-data','index': idx},
+                                data = json.dumps({
+                                    "url": thumb_url,
+                                    "done": False
+                                }),
+                                storage_type='memory'
+                            )
+                        ]),
                         html.A(
                             html.I(
                                 id = {'type': f'{self.component_prefix}-dataset-builder-slide-remove-icon','index': idx} if use_prefix else {'type': 'dataset-builder-slide-remove-icon','index': idx},
@@ -1006,7 +1105,7 @@ class DatasetBuilder(DSATool):
         builder_data = json.loads(get_pattern_matching_value(builder_data))
         vis_session_data = json.loads(vis_session_data)
 
-        current_slide_indices = self.get_component_indices(current_slide_components)
+        current_slide_indices = list(set(self.get_component_indices(current_slide_components)))
         current_collection_indices = list(set(self.get_component_indices(current_collection_components)))
 
         # When slide-table is not in layout

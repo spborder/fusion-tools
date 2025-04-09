@@ -124,7 +124,7 @@ class DSAHandler(Handler):
 
         return image_array
 
-    def get_image_thumbnail(self, item_id:str, user_token:Union[str,None]=None)->np.ndarray:
+    def get_image_thumbnail(self, item_id:str, user_token:Union[str,None]=None, return_url:bool=False)->np.ndarray:
 
 
         if user_token is None or user_token=='' and self.user_token is None:
@@ -138,23 +138,26 @@ class DSAHandler(Handler):
                 request_string = self.gc.urlBase+f'/item/{item_id}/tiles/thumbnail?token={user_token}'
                 #request_string = self.gc.urlBase+f'/item/{item_id}/zxy/0/0/0?token={user_token}'
 
-        try:
-            image_array = np.uint8(
-                np.array(
-                    Image.open(
-                        BytesIO(
-                            requests.get(
-                                request_string
-                            ).content
+        if not return_url:
+            try:
+                image_array = np.uint8(
+                    np.array(
+                        Image.open(
+                            BytesIO(
+                                requests.get(
+                                    request_string
+                                ).content
+                            )
                         )
                     )
                 )
-            )
-        except:
-            print(f'Thumbnail exception encountered for item: {item_id}')
-            image_array = np.zeros((256,256,3)).astype(np.uint8)
+            except:
+                print(f'Thumbnail exception encountered for item: {item_id}')
+                image_array = np.zeros((256,256,3)).astype(np.uint8)
 
-        return image_array
+            return image_array
+        else:
+            return request_string
 
     def make_boundary_mask(self, exterior_coords: list) -> np.ndarray:
         """Making boundary mask for a set of exterior coordinates

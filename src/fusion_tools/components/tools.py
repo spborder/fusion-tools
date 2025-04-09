@@ -4814,11 +4814,13 @@ class GlobalPropertyPlotter(MultiTool):
 
         return property_keys, property_names, structure_col, slide_col, bbox_cols
     
-    def get_plottable_data(self, session_data, keys_list, structure_list):
+    def get_plottable_data(self, session_data, keys_list, label_keys, structure_list):
 
-        
+
         # Required keys for backwards identification
-        req_keys = ['item.name','annotation.name','folder.name','bbox.x0','bbox.y0','bbox.x1','bbox.y1']
+        req_keys = ['item.name','annotation.name','bbox.x0','bbox.y0','bbox.x1','bbox.y1']
+        if not label_keys is None and not label_keys in req_keys and not label_keys in keys_list:
+            keys_list += [label_keys]
         keys_list+= [i for i in req_keys if not i in keys_list]
 
         property_data = pd.DataFrame()
@@ -4844,7 +4846,7 @@ class GlobalPropertyPlotter(MultiTool):
 
                 sep_str = '&' if '?' in request_str else '?'
                 request_str+=f'{sep_str}keys={",".join(keys_list)}&sources=annotationelement,item,annotation&annotations={json.dumps(structure_ids).strip()}'
-                
+                #print(request_str)
                 req_obj = requests.post(request_str)
                 if req_obj.ok:
                     req_json = req_obj.json()
@@ -5281,7 +5283,7 @@ class GlobalPropertyPlotter(MultiTool):
         
         self.blueprint.clientside_callback(
             """
-            async function processData(page_url,session_data,current_keys_store,current_property_info,current_structures,current_labels) {
+            async function processData(page_url,page_path,page_search,session_data,current_keys_store,current_property_info,current_structures,current_labels) {
 
             if (!session_data) {
                 throw window.dash_clientside.PreventUpdate;
@@ -5453,7 +5455,9 @@ class GlobalPropertyPlotter(MultiTool):
                 Output({'type': 'global-property-plotter-add-filter-butt','index': ALL},'disabled')
             ],
             [
-                Input('anchor-page-url','href')
+                Input('anchor-page-url','href'),
+                Input('anchor-page-url','pathname'),
+                Input('anchor-page-url','search')
             ],
             [
                 State('anchor-vis-store','data'),
@@ -5578,7 +5582,6 @@ class GlobalPropertyPlotter(MultiTool):
         session_data = json.loads(session_data)
         keys_info = json.loads(get_pattern_matching_value(keys_info))
 
-
         # Checking if slide_col, structure_col, or any bbox_col's are used by properties or labels
         slide_col = keys_info['slide_col']
         structure_col = keys_info['structure_col']
@@ -5596,15 +5599,14 @@ class GlobalPropertyPlotter(MultiTool):
             elif structure_col==label_keys:
                 structure_col = label_names
 
-        if any([b in property_keys or b in label_keys for b in bbox_cols]):
-            if any([b in property_keys for b in bbox_cols]):
-                overlap_one = [b for b in bbox_cols if b in property_keys][0]
-                bbox_cols[bbox_cols.index(overlap_one)] = property_keys[property_keys.index(overlap_one)]
-            elif any([b==label_keys for b in bbox_cols]):
-                overlap_one = [b for b in bbox_cols if b==label_keys][0]
-                bbox_cols[bbox_cols.index(overlap_one)] = label_keys
+        if any([b in property_keys for b in bbox_cols]):
+            overlap_one = [b for b in bbox_cols if b in property_keys][0]
+            bbox_cols[bbox_cols.index(overlap_one)] = property_keys[property_keys.index(overlap_one)]
+        elif any([b==label_keys for b in bbox_cols]):
+            overlap_one = [b for b in bbox_cols if b==label_keys][0]
+            bbox_cols[bbox_cols.index(overlap_one)] = label_keys
 
-        plottable_df = self.get_plottable_data(session_data,property_keys,structure_names)
+        plottable_df = self.get_plottable_data(session_data,property_keys,label_keys,structure_names)
 
         # Updating with renamed columns from labels
         plottable_df = plottable_df.rename(columns = {k:v for k,v in zip([keys_info['structure_col']],[structure_col])} | {h:q for h,q in zip([keys_info['slide_col']],[slide_col])} | {i:r for i,r in zip(keys_info['bbox_cols'],bbox_cols)})
@@ -6185,6 +6187,8 @@ class GlobalPropertyPlotter(MultiTool):
 
         data_df = data_df.T.drop_duplicates().T
 
+        title_width = 30
+
         if not label_col is None:
             figure = go.Figure(
                 data = px.scatter(
@@ -6196,7 +6200,7 @@ class GlobalPropertyPlotter(MultiTool):
                     title = '<br>'.join(
                         textwrap.wrap(
                             f'Scatter plot of {plot_cols[0]} and {plot_cols[1]} labeled by {label_col}',
-                            width = 60
+                            width = title_width
                             )
                         )
                 )
@@ -6250,7 +6254,7 @@ class GlobalPropertyPlotter(MultiTool):
                     title = '<br>'.join(
                         textwrap.wrap(
                             f'Scatter plot of {plot_cols[0]} and {plot_cols[1]}',
-                            width = 60
+                            width = title_width
                             )
                         )
                 )
@@ -6546,6 +6550,161 @@ class GlobalPropertyPlotter(MultiTool):
 
 
 
+class CustomFunction(Tool):
+    def __init__(self,
+                 component_title = 'Custom Function',
+                 description = '',
+                 urls = [],
+                 function = None,
+                 input_spec = [],
+                 output_spec = []
+                 ):
+        
+        super().__init__()
+        self.title = component_title
+        self.description = description
+        self.urls = urls
+        self.function = function
+        self.input_spec = input_spec
+        self.output_spec = output_spec
+
+    def __str__(self):
+        return self.title
+    
+    def load(self, component_prefix:int):
+
+        self.component_prefix = component_prefix
+        self.blueprint = DashBlueprint(
+            transforms = [
+                PrefixIdTransform(prefix = f'{self.component_prefix}'),
+                MultiplexerTransform()
+            ]
+        )
+
+        self.get_callbacks()
+
+    def get_callbacks(self):
+        pass
+
+    def update_layout(self, session_data:dict, use_prefix:bool):
+        
+        # Hard to save session data for custom functions since the components might have the same name?
+        # Maybe just create a unique id for each one
+
+        layout = html.Div([
+            dbc.Card([
+                dbc.CardBody([
+                    dbc.Row(
+                        dbc.Col(
+                            html.H3(self.title)
+                        )
+                    ),
+                    html.Hr(),
+                    dbc.Row(
+                        dbc.Col(
+                            self.description
+                        )
+                    ),
+                    dbc.Modal(
+                        id = {'type': 'custom-function-modal','index': 0},
+                        is_open = False,
+                        size = 'xl',
+                        children = []
+                    ),
+                    html.Hr(),
+                    dbc.Row([
+                        self.make_input_component(i,idx)
+                        for idx,i in enumerate(self.input_spec)
+                    ],style = {'maxHeight':'50vh','overflow': 'scroll'}
+                    ),
+                    dbc.Row(
+                        dbc.Button(
+                            'Run it!',
+                            id = {'type': 'custom-function-run','index': 0},
+                            className = 'd-grid col-12 mx-auto',
+                            color = 'primary',
+                            n_clicks = 0
+                        ),
+                        style = {'marginTop': '5px','marginBottom':'5px'}
+                    ),
+                    html.Hr(),
+                    dbc.Row([
+                        self.make_output(o,odx)
+                        for odx,o in enumerate(self.output_spec)
+                    ],style = {'maxHeight': '30vh','overflow':'scroll'}),
+                    html.Hr(),
+                    dbc.Row(
+                        dbc.Button(
+                            'Download Results',
+                            id = {'type': 'custom-function-download-results','index': 0},
+                            color = 'success',
+                            className = 'd-grid col-12 mx-auto',
+                            n_clicks = 0
+                        )
+                    )
+                ])
+            ])
+        ])
+
+        if use_prefix:
+            PrefixIdTransform(prefix = f'{self.component_prefix}').transform_layout(layout)
+
+        return layout
+
+    def gen_layout(self, session_data:dict):
+
+        self.blueprint.layout = self.update_layout(session_data,use_prefix=False)
+
+    def make_input_component(self, input_spec, input_index):
+        
+        input_desc_column = [
+            dbc.Row(html.H6(input_spec['name'])),
+            dbc.Row(html.P(input_spec['description'])),
+            dcc.Store(
+                id = {'type': 'custom-function-input-info','index': input_index},
+                data = json.dumps(input_spec),
+                storage_type = 'memory'
+            )
+        ]
+
+        input_component = html.Div(
+            dbc.Row([
+                dbc.Col(input_desc_column,md=5),
+                dbc.Col([
+                    dbc.InputGroup([])
+                ],md = 7)
+            ]),
+            html.Hr()
+        )
+
+        return input_component
+
+    def make_output(self, output_spec,output_index):
+        
+        output_desc_column = [
+            dbc.Row(html.H6(output_spec['name'])),
+            dbc.Row(html.P(output_spec['description'])),
+            dcc.Store(
+                id = {'type': 'custom-function-output-info','index': output_index},
+                data = json.dumps(output_spec),
+                storage_type = 'memory'
+            )
+        ]
+
+        output_component = html.Div(
+            dbc.Row([
+                dbc.Col(output_desc_column,md=5),
+                dbc.Col([
+                    'And some output would go here'
+                ],md = 7)
+            ]),
+            html.Hr()
+        )
+
+        return output_component
+
+    def download_results(self, download_click, output_data):
+        pass
 
 
 

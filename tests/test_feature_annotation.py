@@ -47,7 +47,28 @@ test_schema = SlideAnnotationSchema(
     }
 )
 
-
+test_feature_schema = {
+    'classes': [
+        {
+            'name': 'Test Class',
+            'color': 'rgb(255,0,0)'
+        }
+    ],
+    'labels': [
+        {
+            'name': 'Test Text Label',
+            'type': 'text'
+        },
+        {
+            'name': 'Test Options Label',
+            'type': 'options',
+            'options': [
+                'Option 1',
+                'Option 2'
+            ]
+        }
+    ]
+}
 
 def main():
 
@@ -77,28 +98,7 @@ def main():
                         storage_path = os.getcwd()+'\\tests\\Test_Annotations\\',
                         labels_format = 'json',
                         annotations_format = 'rgb',
-                        preset_schema = {
-                            'classes': [
-                                {
-                                    'name': 'Test Class',
-                                    'color': 'rgb(255,0,0)'
-                                }
-                            ],
-                            'labels': [
-                                {
-                                    'name': 'Test Text Label',
-                                    'type': 'text'
-                                },
-                                {
-                                    'name': 'Test Options Label',
-                                    'type': 'options',
-                                    'options': [
-                                        'Option 1',
-                                        'Option 2'
-                                    ]
-                                }
-                            ]
-                        }
+                        preset_schema = test_feature_schema
                     ),
                     BulkLabels(),
                     SlideAnnotation(
