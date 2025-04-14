@@ -5,10 +5,10 @@ Using the SegmentationDataset for segmenting cells using cellpose
 """
 # This is for running with pipx environment, $ pipx run test_segmentation.py
 # /// script
-# dependencies = ["cellpose","fusion-tools[interactive]"]
+# dependencies = ["numpy","cellpose==3.1.0","fusion-tools[interactive]"]
 # ///
 
-with_predictions = False
+with_predictions = True
 
 import os
 import sys
@@ -59,8 +59,8 @@ def mask_to_shape(mask: np.ndarray, bbox: list)->list:
 def main():
 
     slides = [
-        #'C:\\Users\\samuelborder\\Desktop\\HIVE_Stuff\\FUSION\\Test Upload\\Cropped_15-1 new merged.tiff'
-        'C:\\Users\\samuelborder\\Desktop\\HIVE_Stuff\\FUSION\\Test Upload\\XY01_IU-21-015F.svs'
+        'C:\\Users\\samuelborder\\Desktop\\HIVE_Stuff\\FUSION\\Test Upload\\Cropped_15-1 new merged.tiff'
+        #'C:\\Users\\samuelborder\\Desktop\\HIVE_Stuff\\FUSION\\Test Upload\\XY01_IU-21-015F.svs'
     ]
 
     seg_dataset = SegmentationDataset(
@@ -69,25 +69,24 @@ def main():
         use_parallel=False,
         verbose = True,
         patch_mode = 'all',
-        patch_region = 'tissue',
-        patch_size = [2*224,2*224]
+        patch_region = 'all',
+        patch_size = [224,224]
     )
 
     print(seg_dataset.slide_data[0]['metadata'])
     print(f'Number of patches = {len(seg_dataset)}')
     
     if with_predictions:
-        cell_model = models.CellposeModel(model_type='tissuenet_cp3',gpu=False)
+        cell_model = models.CellposeModel(model_type='cyto3',gpu=False)
 
     all_cells_gdf = gpd.GeoDataFrame()
     if with_predictions:
+        #import matplotlib.pyplot as plt
         with tqdm(seg_dataset, total = len(seg_dataset)) as pbar:
-            pbar.set_description('Predicting on patches in SegmentationDataset')
             for idx, (patch,_) in enumerate(seg_dataset):
-                
-                masks, _, _ = cell_model.eval(patch, diameter=10, cellprob_threshold = 0.0, channels=[0,0])
-
-
+                pbar.set_description(f'Predicting on patches in SegmentationDataset ({all_cells_gdf.shape[0]})')
+                masks, _, _ = cell_model.eval([patch[:,:,0:2]], channel_axis = 2)
+                masks = masks[0]
                 if max(np.unique(masks))>0:
                     # Converting masks to annotations
                     mask_bbox = seg_dataset.data[idx]['bbox']

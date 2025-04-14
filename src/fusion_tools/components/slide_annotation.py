@@ -698,7 +698,6 @@ class SlideAnnotation(MultiTool):
                             roi_button,
                             edit_button                           
                         ])
-
                     ],md=7)
                 ]),
                 html.Hr()
@@ -735,7 +734,6 @@ class SlideAnnotation(MultiTool):
                             roi_button,
                             edit_button                            
                         ])
-
                     ],md=7)
                 ]),
                 html.Hr()

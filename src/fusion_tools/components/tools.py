@@ -6557,7 +6557,8 @@ class CustomFunction(Tool):
                  urls = [],
                  function = None,
                  input_spec = [],
-                 output_spec = []
+                 output_spec = [],
+                 forEach:bool = False
                  ):
         
         super().__init__()
@@ -6567,6 +6568,7 @@ class CustomFunction(Tool):
         self.function = function
         self.input_spec = input_spec
         self.output_spec = output_spec
+        self.forEach = forEach
 
     def __str__(self):
         return self.title
@@ -6584,12 +6586,93 @@ class CustomFunction(Tool):
         self.get_callbacks()
 
     def get_callbacks(self):
-        pass
+        
+        # Running function with specified inputs
+        self.blueprint.callback(
+            [
+                Input({'type': 'custom-function-run','index': ALL},'n_clicks')
+            ],
+            [
+                Output({'type': 'custom-function-output-div','index': ALL},'children')
+            ],
+            [
+                State({'type': 'custom-function-input','index': ALL},'value'),
+                State({'type': 'custom-function-input-info','index': ALL},'data'),
+                State({'type': 'custom-function-structure-drop','index': ALL},'value'),
+                State({'type': 'custom-function-structure-number','index': ALL},'value'),
+                State({'type': 'map-annotations-store','index': ALL},'data'),
+                State({'type': 'map-slide-information','index': ALL},'data'),
+                State({'type': 'feature-overlay','index': ALL},'name'),
+                State('anchor-vis-store','data')
+            ]
+        )(self.run_function)
+
+        # Updating available structure names
+        self.blueprint.callback(
+            [
+                Input({'type': 'custom-function-refresh-icon','index': ALL},'n_clicks')
+            ],
+            [
+                Output({'type': 'custom-function-structure-drop','index': ALL},'options')
+            ],
+            [
+                State({'type': 'feature-overlay','index':ALL},'name')
+            ]
+        )(self.update_structures)
+
+        # Downloading derived data
+
+
 
     def update_layout(self, session_data:dict, use_prefix:bool):
         
         # Hard to save session data for custom functions since the components might have the same name?
         # Maybe just create a unique id for each one
+
+        # Adding components for whether this is a "forEach"
+        if self.forEach:
+            for_each_components = html.Div([
+                dbc.Row([
+                    dbc.Col(dbc.Label('Structure: '),md = 3),
+                    dbc.Col(
+                        dcc.Dropdown(
+                            options = [],
+                            value = [],
+                            id = {'type': 'custom-function-structure-drop','index': 0},
+                            multi = True
+                        ),
+                        md = 7
+                    ),
+                    dbc.Col([
+                        html.A(
+                            html.I(
+                                className = 'fa-solid fa-rotate fa-xl',
+                                n_clicks = 0,
+                                id = {'type': 'custom-function-refresh-icon','index': 0}
+                            )
+                        ),
+                        dbc.Tooltip(
+                            target = {'type': 'custom-function-refresh-icon','index': 0},
+                            children = 'Click to reset labeling components'
+                        )
+                    ],md=2)
+                ],style = {'marginBottom':'5px'}),
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col(
+                        dbc.InputGroup([
+                            dbc.InputGroupText('Number of Structures:'),
+                            dbc.Input(
+                                id = {'type': 'custom-function-structure-number','index': 0},
+                                type = 'number',
+                                min = 0
+                            )
+                        ])
+                    )
+                ],style = {'marginBottom':'5px'})
+            ])
+        else:
+            for_each_components = html.Div()
 
         layout = html.Div([
             dbc.Card([
@@ -6612,6 +6695,9 @@ class CustomFunction(Tool):
                         children = []
                     ),
                     html.Hr(),
+                    dbc.Row(
+                        for_each_components
+                    ),
                     dbc.Row([
                         self.make_input_component(i,idx)
                         for idx,i in enumerate(self.input_spec)
@@ -6629,19 +6715,24 @@ class CustomFunction(Tool):
                     ),
                     html.Hr(),
                     dbc.Row([
-                        self.make_output(o,odx)
-                        for odx,o in enumerate(self.output_spec)
+                        html.Div(
+                            id = {'type': 'custom-function-output-div','index': 0},
+                            children = []
+                        )
                     ],style = {'maxHeight': '30vh','overflow':'scroll'}),
                     html.Hr(),
-                    dbc.Row(
+                    dbc.Row([
                         dbc.Button(
                             'Download Results',
-                            id = {'type': 'custom-function-download-results','index': 0},
+                            id = {'type': 'custom-function-download-button','index': 0},
                             color = 'success',
                             className = 'd-grid col-12 mx-auto',
                             n_clicks = 0
+                        ),
+                        dcc.Download(
+                            id = {'type': 'custom-function-download-data','index': 0}
                         )
-                    )
+                    ])
                 ])
             ])
         ])
@@ -6658,28 +6749,96 @@ class CustomFunction(Tool):
     def make_input_component(self, input_spec, input_index):
         
         input_desc_column = [
-            dbc.Row(html.H6(input_spec['name'])),
-            dbc.Row(html.P(input_spec['description'])),
+            dbc.Row(html.H6(input_spec.get('name'))),
+            dbc.Row(html.P(input_spec.get('description'))),
             dcc.Store(
                 id = {'type': 'custom-function-input-info','index': input_index},
                 data = json.dumps(input_spec),
                 storage_type = 'memory'
-            )
+            ) if not input_spec['type'] in ['image','mask','annotation'] else None
         ]
 
-        input_component = html.Div(
-            dbc.Row([
-                dbc.Col(input_desc_column,md=5),
-                dbc.Col([
-                    dbc.InputGroup([])
-                ],md = 7)
-            ]),
-            html.Hr()
-        )
+        if input_spec['type']=='text':
+            input_component = html.Div([
+                dbc.Row([
+                    dbc.Col(input_desc_column,md=5),
+                    dbc.Col([
+                        dbc.InputGroup([
+                            dbc.Input(
+                                type = 'text',
+                                id = {'type': 'custom-function-input','index': input_index},
+                            ),                       
+                        ])
+                    ],md=7)
+                ]),
+                html.Hr()
+            ])
+        
+        elif input_spec['type']=='boolean':
+            input_component = html.Div([
+                dbc.Row([
+                    dbc.Col(input_desc_column,md=5),
+                    dbc.Col([
+                        dcc.RadioItems(
+                            options = [
+                                {'label': 'True', 'value': 1},
+                                {'label': 'False', 'value': 0}
+                            ],
+                            id = {'type': 'custom-function-input','index': input_index}
+                        )
+                    ],md=7)
+                ])
+            ])
+
+        elif input_spec['type']=='numeric':
+            input_component = html.Div([
+                dbc.Row([
+                    dbc.Col(input_desc_column,md=5),
+                    dbc.Col([
+                        dbc.InputGroup([
+                            dbc.Input(
+                                type = 'number',
+                                id = {'type': 'custom-function-input','index': input_index},
+                            )                       
+                        ])
+                    ],md=7)
+                ]),
+                html.Hr()
+            ])
+
+        elif input_spec['type']=='options':
+            input_component = html.Div([
+                dbc.Row([
+                    dbc.Col(input_desc_column,md=5),
+                    dbc.Col([
+                        dbc.InputGroup([
+                            dbc.Select(
+                                options = input_spec['options'],
+                                id = {'type': 'custom-function-input','index': input_index}
+                            ),
+                        ])
+                    ],md=7)
+                ]),
+                html.Hr()
+            ])
+
+        elif input_spec['type'] in ['image','mask','annotation']:
+
+            input_component = html.Div([
+                dbc.Row([
+                    dbc.Col(input_desc_column,md=5),
+                    dbc.Col([
+                        dbc.InputGroup([
+                            dbc.InputGroupText(f'{input_spec["type"]} passed as input to function')
+                        ])
+                    ],md=7)
+                ]),
+                html.Hr()
+            ])
 
         return input_component
 
-    def make_output(self, output_spec,output_index):
+    def make_output(self, output, output_spec,output_index):
         
         output_desc_column = [
             dbc.Row(html.H6(output_spec['name'])),
@@ -6691,22 +6850,229 @@ class CustomFunction(Tool):
             )
         ]
 
-        output_component = html.Div(
-            dbc.Row([
-                dbc.Col(output_desc_column,md=5),
-                dbc.Col([
-                    'And some output would go here'
-                ],md = 7)
-            ]),
-            html.Hr()
-        )
+        if output_spec['type']=='image':
+            
+            if type(output)==list:
+                image_dims = [i.shape if type(i)==np.ndarray else np.array(i).shape for i in output]
+                max_height = max([i[0] for i in image_dims])
+                max_width = max([i[1] for i in image_dims])
+
+                modded_images = []
+                for img in output:
+                    if type(img)==np.ndarray:
+                        img = Image.fromarray(img)                    
+                    
+                    img_width, img_height = img.size
+                    
+                    delta_width = max_width - img_width
+                    delta_height = max_height - img_height
+
+                    pad_width = delta_width // 2
+                    pad_height = delta_height //2
+
+                    mod_img = np.array(
+                        ImageOps.expand(
+                            img,
+                            border = (
+                                pad_width,
+                                pad_height,
+                                delta_width - pad_width,
+                                delta_height - pad_height
+                            ),
+                            fill = 0
+                        )
+                    )
+                    modded_images.append(mod_img)
+
+                image_data = px.imshow(np.stack(modded_images,axis=0),animation_frame=0,binary_string=True)
+
+            else:
+                if type(output)==np.ndarray:
+                    image_data = px.imshow(Image.fromarray(output))
+                else:
+                    image_data = px.imshow(output)                   
+
+            output_component = html.Div([
+                dbc.Row([
+                    dbc.Col(output_desc_column,md=5),
+                    dbc.Col([
+                        dcc.Graph(
+                            figure = go.Figure(
+                                data = image_data,
+                                layout = {
+                                    'margin': {'t': 0,'b':0,'l':0,'r':0}
+                                }
+                            )
+                        )
+                    ],md = 7)
+                ]),
+                html.Hr()
+            ])
+        elif output_spec['type']=='numeric':
+
+            if type(output)==list:
+                pass
+            elif type(output)==np.ndarray:
+                pass
+            elif type(output) in [int,float,bool]:
+                pass
+            
+            output_component = html.Div([
+                dbc.Row([
+                    dbc.Col(output_desc_column,md=5),
+                    dbc.Col(
+                        'placeholder with numeric output',
+                        md = 7
+                    )
+                ])
+            ])
+        elif output_spec['type']=='annotation':
+
+            output_component = html.Div([
+                dbc.Row([
+                    dbc.Col(output_desc_column,md=5),
+                    dbc.Col(
+                        'Placeholder for map with annotations',
+                        md = 7
+                    )
+                ])
+            ])
+
+        elif output_spec['type']=='string':
+
+            output_component = html.Div([
+                dbc.Row([
+                    dbc.Col(output_desc_column,md=5),
+                    dbc.Col(
+                        output,
+                        md = 7
+                    )
+                ])
+            ])
 
         return output_component
 
     def download_results(self, download_click, output_data):
         pass
 
+    def update_structures(self, clicked, overlay_names):
 
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        overlay_names = [
+            {
+                'label': i,
+                'value': i
+            }
+            for i in overlay_names
+        ]
+
+        return [overlay_names]
+
+    def get_feature_image(self, feature, slide_information, return_mask = False, return_image = True, frame_index = None, frame_colors = None):
+        
+        # Scaling feature geometry to original slide CRS
+        feature = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/slide_information['x_scale'],c[1]/slide_information['y_scale']),g),feature)
+        
+        if return_image and not return_mask:
+            feature_mask = None
+            feature_image = get_feature_image(
+                feature,
+                slide_information['regions_url'],
+                return_mask = return_mask,
+                return_image = return_image,
+                frame_index = frame_index,
+                frame_colors = frame_colors
+            )
+        elif return_image and return_mask:
+            feature_image, feature_mask = get_feature_image(
+                feature,
+                slide_information['regions_url'],
+                return_mask = return_mask,
+                return_image = return_image,
+                frame_index = frame_index,
+                frame_colors = frame_colors
+            )
+        elif return_mask and not return_image:
+            feature_image = None
+            feature_mask = get_feature_image(
+                feature,
+                slide_information['regions_url'],
+                return_mask = return_mask,
+                return_image = return_image,
+                frame_index = frame_index,
+                frame_colors = frame_colors
+            )
+
+        return feature_image, feature_mask
+
+    def run_function(self, clicked, function_inputs, function_input_info, structure_names, structure_number, current_annotations, current_slide_information, overlay_names, session_data):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        current_annotations = json.loads(get_pattern_matching_value(current_annotations))
+        structure_names = get_pattern_matching_value(structure_names)
+        structure_number = get_pattern_matching_value(structure_number)
+        current_slide_information = json.loads(get_pattern_matching_value(current_slide_information))
+        session_data = json.loads(session_data)
+
+        # Assigning kwarg vals from input components
+        kwarg_inputs = {}
+        for i_spec, i_val in zip(function_input_info,function_inputs):
+            i_spec = json.loads(i_spec)
+            kwarg_inputs[i_spec['name']] = i_val
+
+        all_input_names = [i['name'] for i in self.input_spec]
+        all_input_types = [i['type'] for i in self.input_spec]
+
+        selected_structure_indices = [idx for idx,i in enumerate(overlay_names) if i in structure_names]
+        current_annotations = [current_annotations[i] for i in selected_structure_indices]
+
+        if self.forEach:
+            ann_output = []
+            for a in current_annotations:
+                f_output = []
+                for f in a['features'][:structure_number]:
+                    #TODO: Update function inputs so that it's only from input_spec
+                    if any([i in all_input_types for i in ['image','mask']]):
+                        f_img, f_mask = self.get_feature_image(
+                            feature = f,
+                            slide_information = current_slide_information,
+                            return_mask = 'mask' in all_input_types,
+                            return_image = 'image' in all_input_types
+                        )
+                        if not f_img is None:
+                            kwarg_inputs[all_input_names[all_input_types.index('image')]] = f_img
+                        
+                        if not f_mask is None:
+                            kwarg_inputs[all_input_names[all_input_types.index('mask')]] = f_mask
+
+                    function_output = self.function(**kwarg_inputs)
+                    f_output.append(function_output)
+                ann_output.append(f_output)
+        else:
+            subset_annotations = [
+                i['features'][:structure_number]
+                for i in current_annotations
+            ]
+            #TODO: Specify schema for how to incorporate image/mask/annotation here
+            if 'annotation' in all_input_types:
+                kwarg_inputs[all_input_names[all_input_types.index('annotation')]] = subset_annotations
+
+            function_output = self.function(**kwarg_inputs)
+
+        if not type(function_output)==tuple:
+            function_output = (function_output,)
+
+        output_children = []
+        for o_idx, (output,spec) in enumerate(zip(list(function_output),self.output_spec)):
+            output_children.append(
+                self.make_output(output,spec,o_idx)
+            )
+
+        return [output_children]
 
 
 

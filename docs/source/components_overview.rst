@@ -156,6 +156,18 @@ DSALoginComponent
 .. autoclass:: fusion_tools.handler.login::DSALoginComponent
    :members:
 
+
+DSASession
+^^^^^^^^^^
+
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/iL24kA1iMV4?si=BDTeGQWlc2h6deJG" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+.. autoclass:: fusion_tools.handler.save_session::DSASession
+   :members:
+
+
 DatasetBuilder
 ^^^^^^^^^^^^^^
 

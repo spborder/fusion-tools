@@ -1060,6 +1060,7 @@ class SlideMap(MapComponent):
         new_slide_info['image_overlays'] = image_overlay_annotations
         new_slide_info['annotations_metadata'] = annotations_metadata
         new_slide_info['metadata'] = new_metadata
+        new_slide_info['tiles_metadata'] = new_image_metadata
         new_slide_info = new_slide_info | new_slide
 
         new_slide_info = json.dumps(new_slide_info)
@@ -1961,6 +1962,7 @@ class MultiFrameSlideMap(SlideMap):
         new_slide_info['image_overlays'] = image_overlay_annotations
         new_slide_info['annotations_metadata'] = annotations_metadata
         new_slide_info['metadata'] = new_metadata
+        new_slide_info['tiles_metadata'] = new_image_metadata
         new_slide_info = new_slide_info | new_slide
 
         new_slide_info = json.dumps(new_slide_info)
@@ -3341,6 +3343,7 @@ class HybridSlideMap(MultiFrameSlideMap):
         new_slide_info['image_overlays'] = image_overlay_annotations
         new_slide_info['annotations_metadata'] = annotations_metadata
         new_slide_info['metadata'] = new_metadata
+        new_slide_info['tiles_metadata'] = new_image_metadata
         new_slide_info = new_slide_info | new_slide
 
         new_slide_info = json.dumps(new_slide_info)
