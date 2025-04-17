@@ -7382,7 +7382,12 @@ class CustomFunction(Tool):
                 scaled_intersecting_anns = []
                 for s in scaled_annotations:
                     s_gdf = gpd.GeoDataFrame.from_features(s['features'])
-                    s_gdf = s_gdf.intersection(shape(main_roi['features'][0]['geometry']))
+                    try:
+                        s_gdf = s_gdf.intersection(shape(main_roi['features'][0]['geometry']))
+                    except:
+                        s_gdf = s_gdf.make_valid()
+                        s_gdf = s_gdf.intersection(shape(main_roi['features'][0]['geometry']))
+
                     s_gdf = s_gdf[~s_gdf.is_empty]
 
                     s_geo = s_gdf.__geo_interface__

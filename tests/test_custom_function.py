@@ -7,7 +7,7 @@ import threading
 sys.path.append('./src/')
 from fusion_tools.visualization import Visualization
 from fusion_tools.handler.dsa_handler import DSAHandler
-from fusion_tools.components import SlideMap, CustomFunction, FUSIONFunction
+from fusion_tools.components import SlideMap, CustomFunction, FUSIONFunction, OverlayOptions
 
 import geojson
 import rasterio.features
@@ -242,10 +242,10 @@ def make_interstitium_dt_map(annotations, image):
 
     bin_d_mask = im_mask>0
     slide_tissue_mask = find_tissue(image)>0
-    non_structure_tissue = 255*np.uint8(slide_tissue_mask) - 255*np.uint8(bin_d_mask)
+    non_structure_tissue = 255*np.uint8(np.bitwise_and(slide_tissue_mask,~bin_d_mask))
 
     heat_data = ndi.distance_transform_edt(non_structure_tissue)
-    
+
     # Colormapping distance transform and converting to RGBA
     c_map = cm.get_cmap('jet')
 
@@ -287,6 +287,7 @@ def make_interstitium_dt_output(output,output_index):
     ])
 
     dt_component = html.Div([
+        html.H5('Interstitial Distance Transform'),
         tissue_img_base_div,
         dcc.Slider(
             min = 0,
@@ -367,20 +368,28 @@ def main():
     
     vis_session = Visualization(
         tileservers=[dsa_handler.get_tile_server(i) for i in item_id],
-        components = [
-            [
-                SlideMap(),
-                CustomFunction(
-                    title = 'Test Functions',
-                    description='Testing out different input/output types',
-                    custom_function=[
-                        buffer_shapes_component,
-                        stain_mask_component,
-                        interstitium_thickness
+        components = {
+            'Visualization': [
+                [
+                    SlideMap(),
+                    [
+                        CustomFunction(
+                            title = 'Test Functions',
+                            description='Testing out different input/output types',
+                            custom_function=[
+                                buffer_shapes_component,
+                                stain_mask_component,
+                                interstitium_thickness
+                            ]
+                        ),
+                        OverlayOptions()
                     ]
-                ),
+                ],
             ],
-        ]
+            'Dataset Builder': [
+                dsa_handler.create_dataset_builder()
+            ]
+        }
     )
 
     vis_session.start()
