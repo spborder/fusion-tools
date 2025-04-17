@@ -5,7 +5,7 @@ from fusion_tools.components.maps import (
 from fusion_tools.components.tools import (
     OverlayOptions, PropertyViewer, PropertyPlotter, 
     HRAViewer, DataExtractor, GlobalPropertyPlotter,
-    CustomFunction
+    CustomFunction, FUSIONFunction
 )
 from fusion_tools.components.segmentation import FeatureAnnotation, BulkLabels
 from fusion_tools.components.slide_annotation import SlideAnnotation, SlideAnnotationSchema
