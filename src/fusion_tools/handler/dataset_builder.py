@@ -1267,6 +1267,9 @@ class DatasetBuilder(DSATool):
                 slide_info = self.handler.gc.get(f'/item/{s}')
                 annotations_metadata_url = f'{self.handler.girderApiUrl}/annotation/?itemId={s}'
                 annotations_metadata = requests.get(annotations_metadata_url).json()
+                if not type(annotations_metadata)==list:
+                    annotations_metadata = [annotations_metadata]
+                    
                 annotations_geojson_url = [f'{self.handler.girderApiUrl}/annotation/{a["_id"]}/geojson' for a in annotations_metadata]
 
 
