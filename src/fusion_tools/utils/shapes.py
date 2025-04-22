@@ -1115,7 +1115,7 @@ def extract_nested_prop(main_prop_dict: dict, depth: int, path: tuple = (), valu
                     })
 
                 elif type(values)==list:
-                    values_list.extend(extract_listed_prop,path+(keys,),[])
+                    values_list.extend(extract_listed_prop(values,path+(keys,),[]))
 
                 else:
                     # Skipping properties that are still nested 
@@ -1124,7 +1124,7 @@ def extract_nested_prop(main_prop_dict: dict, depth: int, path: tuple = (), valu
                 if type(values)==dict:
                     extract_nested_prop(values, depth-1, path+ (keys,), values_list)
                 elif type(values)==list:
-                    values_list.extend(extract_listed_prop,path+(keys,),[])
+                    values_list.extend(extract_listed_prop(values,path+(keys,),[]))
                 elif type(values) in [int,float,str]:
                     # Only adding properties to the list one time
                     if not any([' --> '.join(list(path+(keys,))) in list(i.keys()) for i in values_list]):

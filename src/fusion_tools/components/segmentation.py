@@ -1076,6 +1076,10 @@ class FeatureAnnotation(Tool):
         :return: Updating the label and class dropdown options
         :rtype: tuple
         """
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+                
         add_class_value = get_pattern_matching_value(add_class_value)
         add_class_color = get_pattern_matching_value(add_class_color)
         add_class_name = get_pattern_matching_value(add_class_name)
@@ -1086,6 +1090,8 @@ class FeatureAnnotation(Tool):
 
         session_data = json.loads(session_data)
         options_div = []
+
+
 
         if 'feature-annotation-add-class' in ctx.triggered_id['type']:
 
