@@ -88,7 +88,7 @@ class DSALoginComponent(DSATool):
                     ],direction='horizontal',gap=2)
                 ]
             )
-        ],style = {'marginTop':'10px','marginBottom':'10px','marginLeft':'10px','marginRight':'10px'})
+        ],style = {'padding': '10px 10px 10px 10px'})
 
         if use_prefix:
             PrefixIdTransform(prefix=self.component_prefix).transform_layout(layout)

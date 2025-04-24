@@ -31,10 +31,14 @@ def get_label_statistics(data_df:pd.DataFrame, label_col:str):
         # This means there is one property and the label column
         if len(unique_labels)==2:
             # This is a t-test
-            group_a = data_df[data_df[label_col].str.match(unique_labels[0])].loc[:,[i for i in data_df if not i==label_col]].values
-            group_b = data_df[data_df[label_col].str.match(unique_labels[1])].loc[:,[i for i in data_df if not i==label_col]].values
+            group_a = data_df[data_df[label_col].str.match(unique_labels[0])].loc[:,[i for i in data_df if not i==label_col]].values.astype(float)
+            group_b = data_df[data_df[label_col].str.match(unique_labels[1])].loc[:,[i for i in data_df if not i==label_col]].values.astype(float)
 
-            stats_result = stats.ttest_ind(group_a,group_b)
+            try:
+                stats_result = stats.ttest_ind(group_a,group_b)
+            except TypeError:
+                return p_value, results
+            
             t_statistic = stats_result.statistic
             p_value = stats_result.pvalue
             confidence_interval = stats_result.confidence_interval(confidence_level=0.95)
@@ -51,7 +55,7 @@ def get_label_statistics(data_df:pd.DataFrame, label_col:str):
             group_data = []
             for u in unique_labels:
                 group_data.append(
-                    data_df[data_df[label_col].str.match(u)].loc[:,[i for i in data_df if not i==label_col]].values.flatten()
+                    data_df[data_df[label_col].str.match(u)].loc[:,[i for i in data_df if not i==label_col]].values.flatten().tolist()
                 )
             
             stats_result = stats.f_oneway(*group_data)

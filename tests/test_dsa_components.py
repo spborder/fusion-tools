@@ -6,7 +6,7 @@ import sys
 sys.path.append('./src/')
 
 from fusion_tools.visualization import Visualization
-from fusion_tools.components import SlideMap, MultiFrameSlideMap, ChannelMixer, OverlayOptions, BulkLabels, PropertyViewer, PropertyPlotter, FeatureAnnotation, HRAViewer
+from fusion_tools.components import SlideMap, MultiFrameSlideMap, ChannelMixer, OverlayOptions, BulkLabels, PropertyViewer, PropertyPlotter, FeatureAnnotation, HRAViewer, DataExtractor
 from fusion_tools.handler.dsa_handler import DSAHandler
 from fusion_tools.handler.dataset_uploader import DSAUploadType
 from fusion_tools.handler.survey import SurveyType
@@ -279,7 +279,8 @@ def main():
                             storage_path = os.getcwd()+'\\tests\\Test_Annotations\\',
                             annotations_format = 'rgb'
                         ),
-                        BulkLabels()
+                        BulkLabels(),
+                        DataExtractor()
                     ]
                 ]   
             ],

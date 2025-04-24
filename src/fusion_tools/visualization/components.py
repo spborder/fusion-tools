@@ -120,14 +120,13 @@ class Visualization:
                 dbc.themes.BOOTSTRAP,
                 dbc.icons.BOOTSTRAP,
                 dbc.icons.FONT_AWESOME,
-                dmc.styles.ALL,
+                dmc.styles.ALL
             ],
             'transforms': [
                 MultiplexerTransform()
             ],
             'external_scripts': [
                 'https://cdnjs.cloudflare.com/ajax/libs/chroma-js/2.1.0/chroma.min.js',
-                "https://cdn.jsdelivr.net/npm/@turf/turf@7/turf.min.js"
             ]
         }
 
@@ -158,7 +157,8 @@ class Visualization:
 
         self.viewer_app.callback(
             [
-                Input('page-url','pathname'),
+                Input('anchor-page-url','pathname'),
+                Input('anchor-page-url','search'),
                 Input({'type':'page-button','index': ALL},'n_clicks')
             ],
             [
@@ -166,7 +166,9 @@ class Visualization:
             ],
             [
                 Output('vis-container','children'),
-                Output('page-url','pathname')
+                Output('anchor-page-url','pathname'),
+                Output('anchor-page-url','search'),
+                Output('anchor-vis-store','data')
             ],
             prevent_initial_call = True
         )(self.update_page)
@@ -249,7 +251,7 @@ class Visualization:
         else:
             raise exceptions.PreventUpdate
 
-    def update_page(self, pathname, path_button, session_data):
+    def update_page(self, pathname, path_search, path_button, session_data):
         """Updating page in multi-page application
 
         :param pathname: Pathname or suffix of current url which is a key to the page name
@@ -257,7 +259,7 @@ class Visualization:
         """
 
         session_data = json.loads(session_data)
-        if ctx.triggered_id=='page-url':
+        if ctx.triggered_id=='anchor-page-url':
             if pathname in self.layout_dict:
                 # If that path is in the layout dict, return that page content
 
@@ -268,7 +270,33 @@ class Visualization:
                     session_data=session_data
                 )
 
-                return page_content, no_update
+                return page_content, no_update, no_update, no_update
+            
+            elif 'session' in pathname:
+                from fusion_tools.handler.dsa_handler import DSAHandler
+                temp_handler = DSAHandler(
+                    girderApiUrl=os.environ.get('DSA_URL')
+                )
+                session_content = temp_handler.get_session_data(path_search.replace('?id=',''))
+                new_session_data = {
+                    'current': session_content['current'],
+                    'local': session_data['local'],
+                    'data': session_content['data'],
+                }
+
+                if 'current_user' in session_data:
+                    new_session_data['current_user'] = session_data['current_user']
+                
+                page_pathname = session_content['page'].replace('/app/','').replace('-',' ')
+
+                page_content = self.update_page_layout(
+                    page_components_list = self.components[page_pathname],
+                    use_prefix=True,
+                    session_data=new_session_data
+                )
+
+                return page_content, page_pathname, '', json.dumps(new_session_data)
+
             else:
                 # Otherwise, return a list of clickable links for valid pages
                 not_found_page = html.Div([
@@ -279,7 +307,7 @@ class Visualization:
                     html.P(html.A(page,href=page))
                     for page in self.layout_dict
                 ])
-                return not_found_page, pathname
+                return not_found_page, pathname, '', no_update
         elif ctx.triggered_id['type']=='page-button':
             new_pathname = list(self.layout_dict.keys())[ctx.triggered_id['index']]
             # If the page needs to be updated based on changes in anchor-vis-data
@@ -289,14 +317,15 @@ class Visualization:
                 session_data=session_data
             )
 
-            return page_content, new_pathname
+            return page_content, new_pathname, '', no_update
     
     def initialize_stores(self):
 
         # This should be all the information necessary to reproduce the tileservers and annotations for each image
         slide_store = {
             "current": [],
-            "local": []
+            "local": [],
+            "data": {}
         }
         s_idx = 0
         t_idx = 0
@@ -413,7 +442,7 @@ class Visualization:
 
         title_nav_bar = dbc.Navbar(
             dbc.Container([
-                dcc.Location(id='page-url',refresh=False),
+                dcc.Location(id='anchor-page-url',refresh=False),
                 dbc.Row([
                     dbc.Col([
                         html.Div([

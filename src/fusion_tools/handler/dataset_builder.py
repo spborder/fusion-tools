@@ -59,8 +59,7 @@ class DatasetBuilder(DSATool):
         )
 
         self.get_callbacks()
-
-        # This might receive the DSAResourceSelector
+        self.dataset_builder_callbacks()
        
     def gen_collections_dataframe(self,session_data:dict):
 
@@ -513,6 +512,62 @@ class DatasetBuilder(DSATool):
 
         return folder_slides, folder_folders
 
+    def dataset_builder_callbacks(self):
+
+        self.blueprint.clientside_callback(
+            """
+            async function getThumbnail(thumbs,thumb_store) {
+                if (!thumb_store) {
+                    throw window.dash_clientside.PreventUpdate;
+                }
+
+                const thumbDataUrl = await Promise.all(
+                    thumb_store.map(async (t_data) => {
+                        const t_json = JSON.parse(t_data.replace(/[\[\]']+/g,""));
+                        
+                        if (!t_json.done){
+                            const res = await fetch(t_json.url,{
+                                method: 'GET',
+                                headers: { 'Content-Type': 'image/jpeg' }
+                            })
+                            .then(r => r.blob());
+
+
+                            let dataUrl = await new Promise(resolve => {
+                                let reader = new FileReader();
+                                reader.onload = () => resolve(reader.result);
+                                reader.readAsDataURL(res);
+                            })
+
+                            if (dataUrl.includes('text/html')){
+                                dataUrl.replace('text/html','image/jpeg');
+                            }
+
+                            return dataUrl;
+                        } else {
+                            let dataUrl = window.dash_clientside.no_update; 
+                            return dataUrl;
+                        }
+                    })
+                )
+
+                thumb_store.map(t=>t.done=true);
+                thumb_store.map(t => JSON.stringify(t));
+
+                return [thumbDataUrl, thumb_store];
+            }
+            """,
+            [
+                Output({'type': 'dataset-builder-slide-thumbnail','index': ALL},'src'),
+                Output({'type': 'dataset-builder-slide-thumb-data','index': ALL},'data')
+            ],
+            [
+                Input({'type': 'dataset-builder-selected-slides','index': ALL},'children'),
+                Input({'type': 'dataset-builder-slide-thumb-data','index': ALL},'data')
+            ],
+            prevent_initial_call = False
+        )
+
     def make_selected_slide(self, slide_id:str,idx:int,local_slide:bool = False, use_prefix:bool = True):
         """Creating a visualization session component for a selected slide
 
@@ -524,11 +579,11 @@ class DatasetBuilder(DSATool):
         :param use_prefix: bool
         """
         
-        #TODO: Getting individual thumbnails is slow, see if this can be switched to async
         if not local_slide:
             try:
                 item_info = self.handler.gc.get(f'/item/{slide_id}')
-                item_thumbnail = self.handler.get_image_thumbnail(slide_id)
+                thumb_url = self.handler.get_image_thumbnail(slide_id, return_url = True)
+
                 folder_info = self.handler.get_folder_info(item_info['folderId'])
                 slide_info = {
                     k:v for k,v in item_info.items() if type(v) in [int,float,str]
@@ -541,25 +596,39 @@ class DatasetBuilder(DSATool):
             item_idx = int(slide_id.split('/')[-3])
 
             try:
-                item_thumbnail = Image.open(BytesIO(requests.get(slide_id).content))
+                thumb_url = slide_id
+
                 local_names = requests.get(slide_id.replace(f'{item_idx}/tiles/thumbnail','names')).json()['message']
             except (requests.exceptions.ConnectionError, requests.exceptions.RetryError):
                 # Triggered on initialization of application because the LocalTileServer instance is not running yet
-                item_thumbnail = np.zeros((256,256,3)).astype(np.uint8)
                 local_names = ['LOADING LOCALTILESERVER']*(item_idx+1)
 
             folder_info = {'name': 'Local Slides'}
             slide_info = {'name': local_names[item_idx]}               
-
 
         slide_card = html.Div([
             dbc.Card([
                 dbc.CardHeader(f"{folder_info['name']}/{slide_info['name']}"),
                 dbc.CardBody([
                     dbc.Stack([
-                        html.Img(
-                            src=Image.fromarray(item_thumbnail) if type(item_thumbnail)==np.ndarray else item_thumbnail
-                        ),
+                        html.Div([
+                            dcc.Loading(
+                                html.Img(
+                                    src = '',
+                                    alt = 'slide-thumbnail',
+                                    width = 256,
+                                    id = {'type': f'{self.component_prefix}-dataset-builder-slide-thumbnail','index': idx} if use_prefix else {'type': 'dataset-builder-slide-thumbnail','index': idx}
+                                )
+                            ),
+                            dcc.Store(
+                                id = {'type': f'{self.component_prefix}-dataset-builder-slide-thumb-data','index': idx} if use_prefix else {'type': 'dataset-builder-slide-thumb-data','index': idx},
+                                data = json.dumps({
+                                    "url": thumb_url,
+                                    "done": False
+                                }),
+                                storage_type='memory'
+                            )
+                        ]),
                         html.A(
                             html.I(
                                 id = {'type': f'{self.component_prefix}-dataset-builder-slide-remove-icon','index': idx} if use_prefix else {'type': 'dataset-builder-slide-remove-icon','index': idx},
@@ -1006,8 +1075,10 @@ class DatasetBuilder(DSATool):
         builder_data = json.loads(get_pattern_matching_value(builder_data))
         vis_session_data = json.loads(vis_session_data)
 
-        current_slide_indices = self.get_component_indices(current_slide_components)
+        current_slide_indices = list(set(self.get_component_indices(current_slide_components)))
         current_collection_indices = list(set(self.get_component_indices(current_collection_components)))
+        slide_table_data = [i for i in slide_table_data if not len(i)==0]
+        slide_rows = [i for i in slide_rows if not len(i)==0]
 
         # When slide-table is not in layout
         if not ctx.triggered_id:
@@ -1032,7 +1103,6 @@ class DatasetBuilder(DSATool):
                     not_selected_slides.extend([slide_table[i] for i in range(len(slide_table)) if not i in s_r])
 
             new_slides = list(set([i['Slide ID'] for i in table_selected_slides]).difference(current_selected_slides))
-            
             for s_idx,s in enumerate(new_slides):
                 if not 'local' in s:
                     new_slide_component = self.make_selected_slide(
@@ -1050,8 +1120,8 @@ class DatasetBuilder(DSATool):
                 selected_slides.append(new_slide_component)
 
             current_selected_slides.extend(new_slides)
-
             new_rem_slides = list(set(current_selected_slides) & set([i['Slide ID'] for i in not_selected_slides]))
+
             for d_idx,d in enumerate(new_rem_slides):
                 del selected_slides[current_selected_slides.index(d)]
                 del current_selected_slides[current_selected_slides.index(d)]           
@@ -1061,8 +1131,8 @@ class DatasetBuilder(DSATool):
             if any([i['value'] for i in ctx.triggered]):
                 select_all_idx = ctx.triggered_id['index']
                 select_all_slides = slide_table_data[current_collection_indices.index(select_all_idx)]
-
                 new_slides = list(set([i['Slide ID'] for i in select_all_slides]).difference(current_selected_slides))
+                
                 selected_slides.extend([
                     self.make_selected_slide(
                         slide_id = s,
@@ -1195,15 +1265,25 @@ class DatasetBuilder(DSATool):
         for s in new_slide_data['selected_slides']:
             if not 'local' in s:
                 slide_info = self.handler.gc.get(f'/item/{s}')
+                annotations_metadata_url = f'{self.handler.girderApiUrl}/annotation/?itemId={s}'
+                annotations_metadata = requests.get(annotations_metadata_url).json()
+                if not type(annotations_metadata)==list:
+                    annotations_metadata = [annotations_metadata]
+                    
+                annotations_geojson_url = [f'{self.handler.girderApiUrl}/annotation/{a["_id"]}/geojson' for a in annotations_metadata]
+
+
                 new_slide_info.append(
                     {
                         'name': slide_info['name'],
                         'api_url': self.handler.girderApiUrl,
                         'tiles_url': f'{self.handler.girderApiUrl}/item/{s}/tiles/zxy'+'/{z}/{x}/{y}',
                         'regions_url': f'{self.handler.girderApiUrl}/item/{s}/tiles/region',
-                        'metadata_url': f'{self.handler.girderApiUrl}/item/{s}/tiles',
+                        'image_metadata_url': f'{self.handler.girderApiUrl}/item/{s}/tiles',
+                        'metadata_url': f'{self.handler.girderApiUrl}/item/{s}',
                         'annotations_url': f'{self.handler.girderApiUrl}/annotation/item/{s}',
-                        'annotations_metadata_url': f'{self.handler.girderApiUrl}/annotation/?itemId={s}',
+                        'annotations_metadata_url': annotations_metadata_url,
+                        'annotations_geojson_url': annotations_geojson_url,
                         'annotations_region_url': f'{self.handler.girderApiUrl}/annotation/'
                     }
                 )

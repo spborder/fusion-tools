@@ -7,6 +7,8 @@ import json
 import numpy as np
 import pandas as pd
 
+import uuid
+
 from typing_extensions import Union
 from shapely.geometry import box, shape
 import geopandas as gpd
@@ -46,7 +48,8 @@ class FeatureAnnotation(Tool):
     def __init__(self,
                  storage_path: str,
                  labels_format: str = 'json',
-                 annotations_format: str = 'one-hot'):
+                 annotations_format: str = 'one-hot',
+                 preset_schema: Union[dict,None] = None):
         """Constructor method
 
         :param storage_path: File path to store annotated images and labels
@@ -54,15 +57,25 @@ class FeatureAnnotation(Tool):
         """
 
         super().__init__()
+
+        # Overruling inherited session_update prop
+        self.session_update = True
+
         self.storage_path = storage_path
         self.labels_format = labels_format
         self.annotations_format = annotations_format
 
+        self.preset_schema = preset_schema
+
         assert self.labels_format in ['csv','json']
         assert self.annotations_format in ['one-hot','one-hot-labeled','rgb','index']
 
+        self.assets_folder = os.getcwd()+'/.fusion_assets/'
+
         if not os.path.exists(self.storage_path):
             os.makedirs(self.storage_path)
+
+        self.get_namespace()
     
     def __str__(self):
         return 'Feature Annotation'
@@ -103,9 +116,66 @@ class FeatureAnnotation(Tool):
 
         return x_scale, y_scale
 
-    def gen_layout(self, session_data:dict):
+    def update_layout(self, session_data:dict, use_prefix:bool):
         """Generating layout for component
         """
+
+        feature_annotation_session_data = session_data.get('data',{}).get('feature-annotation')
+
+        if not self.preset_schema is None:
+            if not feature_annotation_session_data is None:
+                session_classes = [i['name'] for i in feature_annotation_session_data.get('classes',[])]
+                session_labels = [i['name'] for i in feature_annotation_session_data.get('labels',[])]
+
+                if len(session_classes)>0:
+                    feature_annotation_session_data['classes'] += [
+                        i for i in self.preset_schema.get('classes',[])
+                        if not i['name'] in session_classes
+                    ]
+                else:
+                    feature_annotation_session_data['classes'] = self.preset_schema.get('classes',[])
+                
+                if len(session_labels)>0:
+                    feature_annotation_session_data['labels'] += [
+                        i for i in self.preset_schema.get('labels',[])
+                        if not i['name'] in session_labels
+                    ]
+                else:
+                    feature_annotation_session_data['labels'] = self.preset_schema.get('labels',[])
+            else:
+                feature_annotation_session_data = {
+                    'classes': self.preset_schema.get('classes',[]),
+                    'labels': self.preset_schema.get('labels',[])
+                }
+
+
+        if not feature_annotation_session_data is None:
+            if 'classes' in feature_annotation_session_data:
+                class_drop_vals = [
+                    {
+                        'label': html.Div(c['name'],style={'color': c['color']}),
+                        'value': c['color']
+                    }
+                    for c in
+                    feature_annotation_session_data['classes']
+                ]
+            else:
+                class_drop_vals = []
+
+            if 'labels' in feature_annotation_session_data:
+                label_drop_vals = [
+                    {
+                        'label': i['name'],
+                        'value': i['name']
+                    }
+                    for i in 
+                    feature_annotation_session_data['labels']
+                ]
+            else:
+                label_drop_vals = []
+        else:
+            class_drop_vals = []
+            label_drop_vals = []
 
         layout = html.Div([
             dbc.Card([
@@ -132,13 +202,14 @@ class FeatureAnnotation(Tool):
                                 value = [],
                                 multi = False,
                                 placeholder = "Structure",
-                                id = {'type': 'feature-annotation-structure-drop','index': 0}
+                                id = {'type': 'feature-annotation-structure-drop','index': 0},
+                                style = {'width': '100%'}
                             )
                         ],md =7),
                         dbc.Col([
                             html.A(
                                 html.I(
-                                    className = 'fa-solid fa-rotate fa-xl',
+                                    className = 'fa-solid fa-rotate fa-2x',
                                     n_clicks = 0,
                                     id = {'type': 'feature-annotation-refresh-icon','index': 0}
                                 )
@@ -147,7 +218,7 @@ class FeatureAnnotation(Tool):
                                 target = {'type': 'feature-annotation-refresh-icon','index': 0},
                                 children = 'Click to refresh available structures'
                             )
-                        ],md = 2),
+                        ],md = 2,align='center'),
                         dcc.Store(
                             id = {'type': 'feature-annotation-current-structures','index': 0},
                             storage_type='memory',
@@ -158,7 +229,28 @@ class FeatureAnnotation(Tool):
                             storage_type = 'memory',
                             data = json.dumps({})
                         )
-                    ],style = {'marginBottom': '10px'}),
+                    ],style = {'marginBottom': '10px'},align='center'),
+                    dbc.Row([
+                        dbc.Col(
+                            dbc.Label('Bounding Box Padding:'),
+                            md = 4
+                        ),
+                        dbc.Col(
+                            dcc.Input(
+                                type = 'number',
+                                value = 0,
+                                id = {'type': 'feature-annotation-bbox-padding','index': 0},
+                                style = {'width': '100%'}
+                            ),
+                            md = 8
+                        )
+                    ],style = {'marginTop':'5px','marginBottom':'5px'}),
+                    dbc.Row([
+                        dbc.Progress(
+                            id = {'type': 'feature-annotation-progress','index': 0},
+                            style = {'marginBottom':'5px','width': '100%'},
+                        )
+                    ]),
                     dbc.Row([
                         dbc.Col([
                             dbc.Row([
@@ -231,7 +323,7 @@ class FeatureAnnotation(Tool):
                         ],md = 3),
                         dbc.Col([
                             dcc.Dropdown(
-                                options = [],
+                                options = class_drop_vals,
                                 value = [],
                                 multi = False,
                                 placeholder = 'Class',
@@ -254,31 +346,33 @@ class FeatureAnnotation(Tool):
                         ],md = 2),
                         dbc.Col([
                             dcc.Dropdown(
-                                options = [],
+                                options = label_drop_vals,
                                 value = [],
                                 multi = False,
                                 placeholder = 'Label',
                                 id = {'type': 'feature-annotation-label-drop','index': 0}
                             )
+                        ], md = 3),
+                        dbc.Col([
+                            html.Div([
+                                dcc.Textarea(
+                                    id = {'type': 'feature-annotation-label-text','index': 0},
+                                    maxLength = 1000,
+                                    placeholder = 'Label Value',
+                                    style = {'width': '100%','height': '100px'}
+                                )
+                            ], id = {'type': 'feature-annotation-label-input-div','index': 0})
                         ], md = 4),
                         dbc.Col([
-                            dcc.Textarea(
-                                id = {'type': 'feature-annotation-label-text','index': 0},
-                                maxLength = 1000,
-                                placeholder = 'Label Value',
-                                style = {'width': '100%','height': '100px'}
+                            dbc.Button(
+                                'Save',
+                                id = {'type': 'feature-annotation-label-submit','index': 0},
+                                color = 'success',
+                                n_clicks = 0,
+                                style = {'width': '100%'}
                             )
-                        ], md = 5),
-                        dbc.Col([
-                            html.A(
-                                html.I(
-                                    id = {'type': 'feature-annotation-label-submit','index': 0},
-                                    className = 'bi bi-check-circle-fill fa-lg',
-                                    style = {'color': 'rgb(0,255,0)'}
-                                )
-                            )
-                        ],md = 1)
-                    ],style = {'marginTop':'10px'}),
+                        ],md = 3)
+                    ],style = {'marginTop':'10px'}, align = 'center',justify='center'),
                     html.Hr(),
                     dbc.Row([
                         dbc.Col([
@@ -286,7 +380,7 @@ class FeatureAnnotation(Tool):
                         ],md = 2),
                         dbc.Col([
                             dcc.Dropdown(
-                                options = ['Class','Label'],
+                                options = ['Class','Text Label','Options Label'],
                                 value = [],
                                 placeholder = 'New Type',
                                 id = {'type': 'feature-annotation-add-class','index': 0}
@@ -313,7 +407,14 @@ class FeatureAnnotation(Tool):
             ])
         ],style = {'maxHeight': '100vh','overflow': 'scroll'})
 
-        self.blueprint.layout = layout
+        if use_prefix:
+            PrefixIdTransform(prefix=f'{self.component_prefix}').transform_layout(layout)
+
+        return layout
+
+    def gen_layout(self, session_data:dict):
+
+        self.blueprint.layout = self.update_layout(session_data,use_prefix=False)
 
     def get_callbacks(self):
         """Initializing callbacks and adding to DashBlueprint
@@ -340,11 +441,16 @@ class FeatureAnnotation(Tool):
             ],
             [
                 Output({'type': 'feature-annotation-structure-drop','index': ALL},'options'),
-                Output({'type': 'feature-annotation-current-structures','index': ALL},'data')
+                Output({'type': 'feature-annotation-current-structures','index': ALL},'data'),
+                Output({'type': 'feature-annotation-progress','index': ALL},'value'),
+                Output({'type': 'feature-annotation-progress','index': ALL},'label'),
+                Output({'type': 'feature-annotation-figure','index': ALL},'figure')
             ],
             [
                 State({'type': 'map-annotations-store','index': ALL},'data'),
                 State({'type': 'slide-map','index':ALL},'bounds'),
+                State({'type': 'feature-annotation-bbox-padding','index': ALL},'value'),
+                State({'type': 'feature-annotation-slide-information','index': ALL},'data'),
                 State({'type': 'vis-layout-tabs','index': ALL},'active_tab')
             ]
         )(self.update_structure_options)
@@ -360,7 +466,10 @@ class FeatureAnnotation(Tool):
                 Output({'type': 'feature-annotation-figure','index': ALL},'figure'),
                 Output({'type': 'feature-annotation-save','index':ALL},'children'),
                 Output({'type':'feature-annotation-current-structures','index': ALL},'data'),
-                Output({'type': 'feature-annotation-label-text','index': ALL},'value')
+                Output({'type': 'feature-annotation-label-text','index': ALL},'value'),
+                Output({'type': 'feature-annotation-progress','index': ALL},'value'),
+                Output({'type': 'feature-annotation-progress','index': ALL},'label'),
+                Output({'type': 'map-marker-div','index': ALL},'children')
             ],
             [
                 State({'type': 'feature-annotation-current-structures','index': ALL},'data'),
@@ -380,14 +489,17 @@ class FeatureAnnotation(Tool):
                 Output({'type': 'feature-annotation-add-options','index': ALL},'children'),
                 Output({'type': 'feature-annotation-add-submit','index': ALL},'disabled'),
                 Output({'type': 'feature-annotation-class-drop','index':ALL},'options'),
-                Output({'type': 'feature-annotation-label-drop','index': ALL},'options')
+                Output({'type': 'feature-annotation-label-drop','index': ALL},'options'),
+                Output('anchor-vis-store','data')
             ],
             [
                 State({'type': 'feature-annotation-add-class-color', 'index': ALL},'value'),
                 State({'type': 'feature-annotation-add-class-name','index':ALL},'value'),
                 State({'type': 'feature-annotation-add-label-name', 'index': ALL},'value'),
                 State({'type': 'feature-annotation-class-drop','index': ALL},'options'),
-                State({'type': 'feature-annotation-label-drop','index': ALL},'options')
+                State({'type': 'feature-annotation-label-drop','index': ALL},'options'),
+                State({'type': 'feature-annotation-add-label-option','index': ALL},'value'),
+                State('anchor-vis-store','data')
             ]
         )(self.create_class_label)
 
@@ -398,7 +510,7 @@ class FeatureAnnotation(Tool):
                 Input({'type': 'feature-annotation-label-submit','index': ALL},'n_clicks')
             ],
             [
-                Output({'type': 'feature-annotation-figure','index': ALL},'figure')
+                Output({'type': 'feature-annotation-figure','index': ALL},'figure'),
             ],
             [
                 State({'type': 'feature-annotation-class-drop','index': ALL},'value'),
@@ -406,7 +518,7 @@ class FeatureAnnotation(Tool):
                 State({'type': 'feature-annotation-label-text','index': ALL},'value'),
                 State({'type': 'feature-annotation-current-structures','index': ALL},'data'),
                 State({'type': 'feature-annotation-structure-drop','index': ALL},'value'),
-                State({'type': 'feature-annotation-slide-information','index': ALL},'data')
+                State({'type': 'feature-annotation-slide-information','index': ALL},'data'),
             ]
         )(self.add_new_class_label)
 
@@ -419,13 +531,79 @@ class FeatureAnnotation(Tool):
                 Output({'type': 'feature-annotation-save','index': ALL},'children')
             ],
             [
-                State({'type': 'feature-annotation-figure','index': ALL},'relayoutData'),
+                State({'type': 'feature-annotation-figure','index': ALL},'figure'),
                 State({'type': 'feature-annotation-class-drop','index': ALL},'options'),
                 State({'type': 'feature-annotation-current-structures','index': ALL},'data'),
                 State({'type': 'feature-annotation-structure-drop','index': ALL},'value'),
                 State({'type':'feature-annotation-slide-information','index':ALL},'data')
             ]
         )(self.save_annotation)
+
+        # Callback for adding label option
+        self.blueprint.callback(
+            [
+                Input({'type': 'feature-annotation-add-label-option-icon','index': ALL},'n_clicks'),
+                Input({'type': 'feature-annotation-remove-label-option-icon','index': ALL},'n_clicks')
+            ],
+            [
+                Output({'type': 'feature-annotation-add-label-option-parent','index': ALL},'children')
+            ]
+        )(self.add_label_option)
+
+        # Callback for differentiating between a text and an options label
+        self.blueprint.callback(
+            [
+                Input({'type': 'feature-annotation-label-drop','index': ALL},'value')
+            ],
+            [
+                State('anchor-vis-store','data')
+            ],
+            [
+                Output({'type': 'feature-annotation-label-input-div','index': ALL},'children')
+            ]
+        )(self.update_text_label)
+
+    def get_namespace(self):
+        """Adding JavaScript functions to the BulkLabels Namespace
+        """
+        self.js_namespace = Namespace(
+            "fusionTools","featureAnnotation"
+        )
+
+        self.js_namespace.add(
+            name = 'removeMarker',
+            src = """
+                function(e,ctx){
+                    e.target.removeLayer(e.layer._leaflet_id);
+                    ctx.data.features.splice(ctx.data.features.indexOf(e.layer.feature),1);
+                }
+            """
+        )
+
+        self.js_namespace.add(
+            name = 'tooltipMarker',
+            src = 'function(feature,layer,ctx){layer.bindTooltip("Double-click to remove")}'
+        )
+
+        self.js_namespace.add(
+            name = "markerRender",
+            src = """
+                function(feature,latlng,context) {
+                    marker = L.marker(latlng, {
+                        title: "FeatureAnnotation Marker",
+                        alt: "FeatureAnnotation Marker",
+                        riseOnHover: true,
+                        draggable: false,
+                    });
+
+                    return marker;
+                }
+            """
+        )
+
+        self.js_namespace.dump(
+            assets_folder = self.assets_folder
+        )
 
     def update_slide(self, slide_selection,vis_data):
 
@@ -438,6 +616,7 @@ class FeatureAnnotation(Tool):
         new_slide_data['regions_url'] = slide_data['regions_url']
         new_metadata = requests.get(slide_data['image_metadata_url']).json()
         new_slide_data['x_scale'], new_slide_data['y_scale'] = self.get_scale_factors(new_metadata)
+        new_slide_data['name'] = slide_data['name']
 
         new_slide_data = json.dumps(new_slide_data)
 
@@ -460,14 +639,17 @@ class FeatureAnnotation(Tool):
             int(image_bbox[1]/slide_information['y_scale'])
         ]
 
+        save_path = os.path.join(self.storage_path,slide_information['name'],f'labels.{self.labels_format}')
         if self.labels_format == 'json': 
-            if os.path.exists(f'{self.storage_path}/labels.{self.labels_format}'):
-                with open(f'{self.storage_path}/labels.{self.labels_format}','r') as f:
+
+            if os.path.exists(save_path):
+                with open(save_path,'r') as f:
                     current_labels = json.load(f)
                     f.close()
 
                 current_labels["Labels"].append(
                     {
+                        'slide_name': slide_information['name'],
                         label_name: label_text,
                         "bbox": image_bbox
                     }
@@ -477,32 +659,33 @@ class FeatureAnnotation(Tool):
                 current_labels = {
                     "Labels": [
                         {
+                            'slide_name': slide_information['name'],
                             label_name: label_text,
                             "bbox": image_bbox
                         }
                     ]
                 }
 
-            with open(f'{self.storage_path}/labels.{self.labels_format}','w') as f:
+            with open(save_path,'w') as f:
                 json.dump(current_labels,f)
                 f.close()
         
         else:
 
-            if os.path.exists(f'{self.storage_path}/labels.{self.labels_format}'):
-                current_labels = pd.read_csv(f'{self.storage_path}/labels.{self.labels_format}').to_dict('records')
-                
+            if os.path.exists(save_path):
+                current_labels = pd.read_csv(save_path).to_dict('records')
             else:
                 current_labels = []
             
             current_labels.append(
                 {
+                    'slide_name': slide_information['name'],
                     label_name: label_text,
                     'bbox': image_bbox
                 }
             )
 
-            pd.DataFrame.from_records(current_labels).to_csv(f'{self.storage_path}/labels.{self.labels_format}')
+            pd.DataFrame.from_records(current_labels).to_csv(save_path)
 
     def save_mask(self, annotations, class_options, image_bbox, slide_information):
         """Saving annotation mask with annotated classes using pre-specified format
@@ -560,13 +743,13 @@ class FeatureAnnotation(Tool):
                 formatted_mask+=combined_mask[:,:,c_idx]
 
         # Pulling image region from slide:
-        slide_image_region = self.get_structure_region(image_bbox, slide_information, False)
+        slide_image_region, marker_centroid = self.get_structure_region(image_bbox, slide_information, False)
         # Saving annotation mask:
-        save_path = f'{self.storage_path}/Annotations/'
+        save_path = os.path.join(self.storage_path,slide_information['name'],'Annotations')
         if not os.path.exists(save_path):
             os.makedirs(save_path)
-            os.makedirs(save_path+'Images/')
-            os.makedirs(save_path+'Masks/')
+            os.makedirs(save_path+'/Images/')
+            os.makedirs(save_path+'/Masks/')
 
         mask_save_path = f'{save_path}/Masks/{"_".join([str(i) for i in image_bbox])}.png'
         image_save_path = f'{save_path}/Images/{"_".join([str(i) for i in image_bbox])}.png'
@@ -580,7 +763,7 @@ class FeatureAnnotation(Tool):
             np.save(mask_save_path.replace('.png','.npy'),np.uint8(formatted_mask))
             slide_image_region.save(image_save_path)
 
-    def update_structure_options(self, overlay_names, refresh_clicked, current_features, slide_bounds, active_tab):
+    def update_structure_options(self, overlay_names, refresh_clicked, current_features, slide_bounds, bbox_padding, slide_information, active_tab):
         """Updating the structure options based on updated slide bounds
 
         :param slide_bounds: Current slide bounds
@@ -594,6 +777,10 @@ class FeatureAnnotation(Tool):
         """
 
         active_tab = get_pattern_matching_value(active_tab)
+        progress_value = 0
+        progress_label = '0%'
+        new_figure = go.Figure()
+
         if not active_tab is None:
             if not active_tab == 'feature-annotation':
                 raise exceptions.PreventUpdate
@@ -604,9 +791,15 @@ class FeatureAnnotation(Tool):
             raise exceptions.PreventUpdate
 
         slide_map_bounds = get_pattern_matching_value(slide_bounds)
+        if slide_map_bounds is None:
+            raise exceptions.PreventUpdate
+        
         slide_map_box = box(slide_map_bounds[0][1],slide_map_bounds[0][0],slide_map_bounds[1][1],slide_map_bounds[1][0])
-
+        bbox_padding = get_pattern_matching_value(bbox_padding)
         current_features = json.loads(get_pattern_matching_value(current_features))
+        slide_information = json.loads(get_pattern_matching_value(slide_information))
+        x_scale = slide_information['x_scale']
+        y_scale = slide_information['y_scale']
 
         structure_options = []
         structure_bboxes = {}
@@ -616,13 +809,13 @@ class FeatureAnnotation(Tool):
                 structure_options.append(g['properties']['name'])
 
                 structure_bboxes[g['properties']['name']] = [
-                    list(shape(f['geometry']).bounds) for f in intersecting_shapes['features']
+                    list(shape(f['geometry']).buffer(bbox_padding*x_scale).bounds) for f in intersecting_shapes['features']
                 ]
                 structure_bboxes[f'{g["properties"]["name"]}_index'] = 0
 
         new_structure_bboxes = json.dumps(structure_bboxes)
 
-        return [structure_options], [new_structure_bboxes]
+        return [structure_options], [new_structure_bboxes], [progress_value], [progress_label], [new_figure]
 
     def update_structure(self, structure_drop_value, prev_click, next_click, current_structure_data, current_class_value, slide_information):
         """Updating the current structure figure based on selections
@@ -648,6 +841,8 @@ class FeatureAnnotation(Tool):
         current_structure_data = json.loads(get_pattern_matching_value(current_structure_data))
         current_class_value = get_pattern_matching_value(current_class_value)
         slide_information = json.loads(get_pattern_matching_value(slide_information))
+        progress_value = 0
+        progress_label = '0%'
 
         if structure_drop_value is None or not structure_drop_value in current_structure_data:
             raise exceptions.PreventUpdate
@@ -666,6 +861,8 @@ class FeatureAnnotation(Tool):
                 current_structure_index -= 1
             
             current_structure_region = current_structure_data[structure_drop_value][current_structure_index]
+            progress_value = round(100*(current_structure_index / len(current_structure_data[structure_drop_value])))
+            progress_label = f'{progress_value}%'
 
         elif 'feature-annotation-next' in ctx.triggered_id['type']:
             # Going to next structure
@@ -676,6 +873,9 @@ class FeatureAnnotation(Tool):
                 current_structure_index += 1
 
             current_structure_region = current_structure_data[structure_drop_value][current_structure_index]
+
+            progress_value = round(100*(current_structure_index / len(current_structure_data[structure_drop_value])))
+            progress_label = f'{progress_value}%'
 
         current_structure_data[f'{structure_drop_value}_index'] = current_structure_index
         
@@ -691,7 +891,7 @@ class FeatureAnnotation(Tool):
         new_label_text = []
 
         # Pulling out the desired region:
-        image_region = self.get_structure_region(current_structure_region, slide_information)
+        image_region, marker_centroid = self.get_structure_region(current_structure_region, slide_information)
         image_figure = go.Figure(px.imshow(np.array(image_region)))
         image_figure.update_layout(
             {
@@ -706,7 +906,35 @@ class FeatureAnnotation(Tool):
             }
         )
 
-        return [image_figure], ['Save'], [json.dumps(current_structure_data)], [new_label_text]
+        new_markers_div = [
+            dl.GeoJSON(
+                data = {
+                    'type': 'FeatureCollection',
+                    'features': [
+                        {
+                            'type': 'Feature',
+                            'geometry': {
+                                'type': 'Point',
+                                'coordinates': marker_centroid
+                            },
+                            'properties': {
+                                'name': 'featureAnnotation Marker',
+                                '_id': uuid.uuid4().hex[:24]
+                            }
+                        }
+                    ]
+                },
+                pointToLayer=self.js_namespace("markerRender"),
+                onEachFeature = self.js_namespace("tooltipMarker"),
+                id = {'type': f'{self.component_prefix}-feature-annotation-markers','index': 0},
+                eventHandlers = {
+                    'dblclick': self.js_namespace('removeMarker')
+                }
+            )
+        ]
+
+
+        return [image_figure], ['Save'], [json.dumps(current_structure_data)], [new_label_text], [progress_value], [progress_label], new_markers_div
 
     def get_structure_region(self, structure_bbox:list, slide_information: dict, scale:bool = True):
         """Using the tile server "regions_url" property to pull out a specific region of tissue
@@ -728,6 +956,11 @@ class FeatureAnnotation(Tool):
         else:
             slide_coordinates = structure_bbox
 
+        # Finding centroid of coordinates for marker point
+        marker_centroid = [
+            (structure_bbox[0]+structure_bbox[2])/2, (structure_bbox[1]+structure_bbox[3])/2
+        ]
+
         #TODO: Update this function for multi-frame images
         image_region = Image.open(
             BytesIO(
@@ -737,9 +970,7 @@ class FeatureAnnotation(Tool):
             )
         )
 
-        
-
-        return image_region
+        return image_region, marker_centroid
     
     def add_new_class_label(self, add_class, add_label, new_class, new_label, label_text, current_structure_data, current_structure, slide_information):
         """Adding a new class or label to the current structure
@@ -795,7 +1026,117 @@ class FeatureAnnotation(Tool):
         
         return [figure_update]
     
-    def create_class_label(self, add_class_value, add_submit_click, add_class_color, add_class_name, add_label_name, current_class_options, current_label_options):
+    def add_label_option(self, add_clicked, rem_clicked):
+        """Adding an option for a new Option Label
+
+        :param add_clicked: Add icon was clicked
+        :type add_clicked: list
+        :param rem_clicked: One of the added options remove icon was clicked
+        :type rem_clicked: list
+        """
+        
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        add_clicked = get_pattern_matching_value(add_clicked)
+
+        label_options = Patch()
+        if 'feature-annotation-remove-label-option-icon' in ctx.triggered_id['type']:
+            
+            values_to_remove = []
+            for i,val in enumerate(rem_clicked):
+                if val:
+                    values_to_remove.insert(0,i)
+
+            for v in values_to_remove:
+                del label_options[v]
+
+        elif 'feature-annotation-add-label-option-icon' in ctx.triggered_id['type']:
+            
+            def new_label_option():
+                return html.Div([
+                    dbc.Row([
+                        dbc.Col([
+                            dcc.Input(
+                                type = 'text',
+                                maxLength = 1000,
+                                placeholder='New Option',
+                                id = {'type': f'{self.component_prefix}-feature-annotation-add-label-option','index': add_clicked}
+                            )
+                        ],md = 10),
+                        dbc.Col([
+                            html.A(
+                                html.I(
+                                    id = {'type': f'{self.component_prefix}-feature-annotation-remove-label-option-icon','index': add_clicked},
+                                    n_clicks = 0,
+                                    className = 'bi bi-x-circle-fill fa-xl',
+                                    style = {'color': 'rgb(255,0,0)'}
+                                ),
+                            ),
+                            dbc.Tooltip(
+                                target = {'type': f'{self.component_prefix}-feature-annotation-remove-label-option-icon','index': add_clicked},
+                                children = 'Remove Option'
+                            )
+                        ],md = 2)
+                    ],align = 'center',justify='center')
+                ],style = {'marginBottom': '2px'})
+            
+            label_options.append(new_label_option())
+
+        return [label_options]
+
+    def update_text_label(self, label_val, session_data):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        session_data = json.loads(session_data)
+        label_val = get_pattern_matching_value(label_val)
+
+        label_info = session_data.get('data',{}).get('feature-annotation',{}).get('labels',[])
+
+        if not self.preset_schema is None:
+            label_info += self.preset_schema.get('labels',[])
+
+        if not len(label_info)==0:
+            label_names = [i['name'] for i in label_info]
+            if label_val in label_names:
+                matching_label = label_info[label_names.index(label_val)]
+
+                if matching_label['type']=='text':
+                    return_component = dcc.Textarea(
+                        id = {'type': f'{self.component_prefix}-feature-annotation-label-text','index': 0},
+                        maxLength = 1000,
+                        placeholder = 'Label Value',
+                        style = {'width': '100%','height': '100px'}
+                    )
+                elif matching_label['type']=='options': 
+                    return_component = dcc.Checklist(
+                        options = list(set(matching_label['options'])),
+                        id = {'type': f'{self.component_prefix}-feature-annotation-label-text','index': 0}
+                    )
+            
+            else:
+                # This shouldn't be possible, but record the label anyways
+                return_component = dcc.Textarea(
+                    id = {'type': f'{self.component_prefix}-feature-annotation-label-text','index': 0},
+                    maxLength = 1000,
+                    placeholder = 'Label Value',
+                    style = {'width': '100%','height': '100px'}
+                )
+        
+        else:
+            # This one also shouldn't be possible since you have to add to the session data when you add a new label
+            return_component = dcc.Textarea(
+                id = {'type': f'{self.component_prefix}-feature-annotation-label-text','index': 0},
+                maxLength = 1000,
+                placeholder = 'Label Value',
+                style = {'width': '100%','height': '100px'}
+            )
+
+        return [return_component]
+
+    def create_class_label(self, add_class_value, add_submit_click, add_class_color, add_class_name, add_label_name, current_class_options, current_label_options, add_label_options, session_data):
         """Creating a new class or label to add to the session
 
         :param add_class_value: Dropdown value for adding either a class or label
@@ -812,9 +1153,15 @@ class FeatureAnnotation(Tool):
         :type current_class_options: list
         :param current_label_options: Current options in the label dropdown menu
         :type current_label_options: list
+        :param session_data: Current session data, used for storing classes and labels added during this session
+        :type session_data: dict
         :return: Updating the label and class dropdown options
         :rtype: tuple
         """
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+                
         add_class_value = get_pattern_matching_value(add_class_value)
         add_class_color = get_pattern_matching_value(add_class_color)
         add_class_name = get_pattern_matching_value(add_class_name)
@@ -822,6 +1169,9 @@ class FeatureAnnotation(Tool):
 
         current_class_options = get_pattern_matching_value(current_class_options)
         current_label_options = get_pattern_matching_value(current_label_options)
+
+        session_data = json.loads(session_data)
+        options_div = []
 
         if 'feature-annotation-add-class' in ctx.triggered_id['type']:
 
@@ -846,7 +1196,7 @@ class FeatureAnnotation(Tool):
                     )                       
                 ])
 
-            elif add_class_value == 'Label':
+            elif add_class_value == 'Text Label':
                 # Getting the new label name input
                 options_div = html.Div([
                     dcc.Input(
@@ -857,6 +1207,45 @@ class FeatureAnnotation(Tool):
                     )
                 ],style = {'width': '100%'})
 
+            elif add_class_value == 'Options Label':
+                # Creating a label that has a list of possible values
+                options_div = html.Div([
+                    dcc.Input(
+                        type = 'text',
+                        maxLength=1000,
+                        placeholder = 'New Label Name',
+                        id = {'type': f'{self.component_prefix}-feature-annotation-add-label-name','index': 0},
+                        style = {'marginBottom': '2px','width': '100%'}
+                    ),
+                    html.Div(
+                        children = [
+                            dbc.Row(
+                                dbc.Col(
+                                    html.A(
+                                        html.I(
+                                            className = 'fa-solid fa-square-plus fa-xl'
+                                        ),
+                                        id = {'type': f'{self.component_prefix}-feature-annotation-add-label-option-icon','index': 0},
+                                        n_clicks=0
+                                    ),
+                                    md = 'auto',
+                                    align = 'center'
+                                ),
+                                align = 'center',
+                                justify='center'
+                            ),
+                            html.Div(
+                                children = [],
+                                id = {'type': f'{self.component_prefix}-feature-annotation-add-label-option-parent','index': 0},
+                            )
+                        ],
+                        style = {
+                            'maxHeight': '30vh',
+                            'width': '100%',
+                            'overflow': 'scroll',
+                        }
+                    )
+                ])
 
             add_submit_disabled = False
             new_class_options = no_update
@@ -871,57 +1260,181 @@ class FeatureAnnotation(Tool):
                     options_div = []
                     add_submit_disabled = True
                     if not current_class_options is None:
-                        new_class_options = current_class_options + [{'label': html.Div(add_class_name,style = {'color': add_class_color}), 'value': add_class_color}]
+                        current_classes = [i['label']['props']['children'] for i in current_class_options]
+                        if not add_class_name in current_classes:
+                            new_class_options = current_class_options + [{'label': html.Div(add_class_name,style = {'color': add_class_color}), 'value': add_class_color}]
+                        else:
+                            # Updating the color if class already exists
+                            new_class_options[current_classes.index(add_class_name)] = {
+                                'label': html.Div(add_class_name,style = {'color': add_class_color}),
+                                'value': add_class_name
+                            }
+
                     else:
                         new_class_options = [{'label': html.Div(add_class_name,style={'color': add_class_color}),'value': add_class_color}]
                     new_label_options = no_update
+
+                    # Adding to the session data
+                    if 'feature-annotation' in session_data['data']:
+                        if 'classes' in session_data['data']['feature-annotation']:
+                            class_names = [i['name'] for i in session_data['data']['feature-annotation']['classes']]
+                            if not add_class_name in class_names:
+                                session_data['data']['feature-annotation']['classes'].append({
+                                    'name': add_class_name,
+                                    'color': add_class_color
+                                })
+                            else:
+                                session_data['data']['feature-annotation']['classes'][class_names.index(add_class_name)] = {
+                                    'name': add_class_name,
+                                    'color': add_class_color
+                                }
+                        else:
+                            session_data['data']['feature-annotation']['classes'] = [
+                                {
+                                    'name': add_class_name,
+                                    'color': add_class_color
+                                }
+                            ]
+                    else:
+                        session_data['data']['feature-annotation'] = {
+                            'classes': [
+                                {
+                                    'name': add_class_name,
+                                    'color': add_class_color
+                                }
+                            ]
+                        }
                 
                 else:
                     raise exceptions.PreventUpdate
-            elif add_class_value == 'Label':
+            elif add_class_value == 'Text Label':
                 if not add_label_name is None:
                     options_div = []
                     add_submit_disabled = True
                     new_class_options = no_update
                     if not current_label_options is None:
-                        new_label_options = current_label_options + [{'label': add_label_name, 'value': add_label_name}]
+                        if not {'label': add_label_name,'value': add_label_name} in current_label_options:
+                            new_label_options = current_label_options + [{'label': add_label_name, 'value': add_label_name}]
+                        else:
+                            new_label_options = current_label_options
                     else:
                         new_label_options = [{'label': add_label_name,'value': add_label_name}]
+
+                    if 'feature-annotation' in session_data['data']:
+                        if 'labels' in session_data['data']['feature-annotation']:
+                            label_names = [i['name'] for i in session_data['data']['feature-annotation']['labels']]
+                            if not add_label_name in label_names:
+                                session_data['data']['feature-annotation']['labels'].append({
+                                    'name': add_label_name,
+                                    'type': 'text'
+                                })
+                        else:
+                            session_data['data']['feature-annotation']['labels'] = [{
+                                'name': add_label_name,
+                                'type': 'text'
+                            }]
+                    else:
+                        session_data['data']['feature-annotation'] = {
+                            'labels': [
+                                {
+                                    'name': add_label_name,
+                                    'type': 'text'
+                                }
+                            ]
+                        }
                 
+                else:
+                    raise exceptions.PreventUpdate
+                
+            elif add_class_value == 'Options Label': 
+                if not add_label_name is None and not add_label_options is None:
+                    options_div = []
+                    add_submit_disabled = True
+                    new_class_options = no_update
+
+                    if not current_label_options is None:
+                        if not {'label': add_label_name, 'value': add_label_name} in current_label_options:
+                            new_label_options = current_label_options + [{'label': add_label_name, 'value': add_label_name}]
+                        else:
+                            new_label_options = current_label_options
+                    else:
+                        new_label_options = [{'label': add_label_name, 'value': add_label_name}]
+
+                    if 'feature-annotation' in session_data['data']:
+                        if 'labels' in session_data['data']['feature-annotation']:
+                            label_options = [i['name'] for i in session_data['data']['feature-annotation']['labels']]
+                            if not add_label_name in label_options:
+                                session_data['data']['feature-annotation']['labels'].append({
+                                    'name': add_label_name,
+                                    'type': 'options',
+                                    'options': add_label_options
+                                })
+                            else:
+                                session_data['data']['feature-annotation']['labels'][label_options.index(add_label_name)] = {
+                                    'name': add_label_name,
+                                    'type': 'options',
+                                    'options': add_label_options
+                                }
+                        else:
+                            session_data['data']['feature-annotation']['labels'] = [
+                                {
+                                    'name': add_label_name,
+                                    'type': 'options',
+                                    'options': add_label_options
+                                }
+                            ]
+                    else:
+                        session_data['data']['feature-annotation'] = {
+                            'labels': [
+                                {
+                                    'name': add_label_name,
+                                    'type': 'options',
+                                    'options': add_label_options
+                                }
+                            ]
+                        }
+
                 else:
                     raise exceptions.PreventUpdate
                 
             add_class_drop_value = []
 
+        return [add_class_drop_value], [options_div], [add_submit_disabled], [new_class_options], [new_label_options], json.dumps(session_data)
 
-        return [add_class_drop_value], [options_div], [add_submit_disabled], [new_class_options], [new_label_options]
-
-    def save_annotation(self, save_click, current_annotations, current_classes, current_structure_data, current_structure, slide_information):
+    def save_annotation(self, save_click, current_figure, current_classes, current_structure_data, current_structure, slide_information):
         """Saving the current annotation in image format
 
         :param save_click: Save button is clicked
         :type save_click: list
-        :param current_annotations: Current annotations (in SVG path format)
-        :type current_annotations: list
+        :param current_figure: Figure information which includes current annotated shapes
+        :type current_figure: list
+        :param current_classes: List of classes available for saving
+        :type current_classes: list
+        :param current_structure_data: Bounding boxes for current structure as well as current index
+        :param current_structure_data: list
+        :param current_structure: Currently selected structure
+        :param current_structure: list
+        :param slide_information: Information on the current slide (such as x and y scale)
+        :param slide_information: list
         """
 
 
         if not any([i['value'] for i in ctx.triggered]) or current_classes is None:
             raise exceptions.PreventUpdate
 
-        current_annotations = get_pattern_matching_value(current_annotations)
         current_classes = get_pattern_matching_value(current_classes)
         current_structure_data = json.loads(get_pattern_matching_value(current_structure_data))
         current_structure = get_pattern_matching_value(current_structure)
         slide_information = json.loads(get_pattern_matching_value(slide_information))
 
-        annotations = []
-        if not current_annotations is None:
-            if 'shapes' in current_annotations.keys():
-                annotations += current_annotations['shapes']
+        current_shapes = get_pattern_matching_value(current_figure)['layout'].get('shapes')
+        current_lines = get_pattern_matching_value(current_figure)['layout'].get('line')
 
-                if 'line' in current_annotations.keys():
-                    annotations += current_annotations['line']
+        annotations = []
+        if not current_shapes is None:
+            annotations += current_shapes
+        if not current_lines is None:
+            annotations += current_lines
             
         image_bbox = current_structure_data[current_structure][current_structure_data[f'{current_structure}_index']]
 
@@ -929,6 +1442,8 @@ class FeatureAnnotation(Tool):
         self.save_mask(annotations, current_classes, image_bbox, slide_information)
 
         return ['Saved!']
+
+
 
 class BulkLabels(Tool):
     """Add labels to many structures at the same time
@@ -1028,12 +1543,19 @@ class BulkLabels(Tool):
             assets_folder = self.assets_folder
         )
 
-    def gen_layout(self, session_data:dict):
+    def update_layout(self, session_data:dict, use_prefix:bool):
         """Generating layout for BulkLabels component
 
         :return: BulkLabels layout
         :rtype: html.Div
         """
+        # Using .get method to get bulk-labels session data, if not present use default empty data with labels and labels_metadata keys
+        bulk_labels_store_data = session_data.get('data',{}).get('bulk-labels',{'labels': [], 'labels_metadata': []})
+        if len(bulk_labels_store_data['labels'])>0:
+            label_table_div = self.make_label_table(bulk_labels_store_data['labels'],use_prefix = use_prefix)
+        else:
+            label_table_div = []
+
         layout = html.Div([
             dbc.Card([
                 dbc.CardBody([
@@ -1043,13 +1565,6 @@ class BulkLabels(Tool):
                     html.Hr(),
                     dbc.Row(
                         'Apply labels to structures based on several different inclusion and exclusion criteria.'
-                    ),
-                    html.Div(
-                        dcc.Store(
-                            id = {'type': 'bulk-annotation-property-info','index': 0},
-                            storage_type='memory',
-                            data = json.dumps({})
-                        )
                     ),
                     html.Hr(),
                     dbc.Row([
@@ -1117,7 +1632,7 @@ class BulkLabels(Tool):
                     dcc.Store(
                         id = {'type': 'bulk-labels-labels-store','index': 0},
                         storage_type = 'memory',
-                        data = json.dumps({'labels': [], 'labels_metadata': []})
+                        data = json.dumps(bulk_labels_store_data)
                     ),
                     dcc.Store(
                         id = {'type': 'bulk-labels-filter-data','index': 0},
@@ -1306,7 +1821,7 @@ class BulkLabels(Tool):
                         dbc.Col([
                             html.Div(
                                 id = {'type': 'bulk-labels-label-stats-div','index': 0},
-                                children = []
+                                children = label_table_div
                             )
                         ])
                     ],style = {'marginTop': '10px'})
@@ -1314,7 +1829,14 @@ class BulkLabels(Tool):
             ])
         ],style = {'maxHeight': '100vh','overflow': 'scroll'})
 
-        self.blueprint.layout = layout
+        if use_prefix:
+            PrefixIdTransform(prefix = f'{self.component_prefix}').transform_layout(layout)
+
+        return layout
+
+    def gen_layout(self, session_data:dict):
+
+        self.blueprint.layout = self.update_layout(session_data,use_prefix=False)
 
     def get_callbacks(self):
         """Adding callbacks to DashBlueprint object
@@ -2177,6 +2699,13 @@ class BulkLabels(Tool):
         new_data = json.dumps(current_data)
 
         # Creating a table for count of unique labels:
+        label_count_table = self.make_label_table(labeled_items)
+
+        return [new_data], ['success'], [label_count_table]
+
+    def make_label_table(self, labeled_items, use_prefix:bool = True):
+        
+        # Creating a table for count of unique labels:
         labels = []
         for l in labeled_items['labels']:
             for m in l['labels']:
@@ -2214,10 +2743,10 @@ class BulkLabels(Tool):
                 } for row in label_counts.to_dict('records')
             ],
             tooltip_duration = None,
-            id = {'type': f'{self.component_prefix}-bulk-labels-label-table','index':0}
+            id = {'type': f'{self.component_prefix}-bulk-labels-label-table','index':0} if use_prefix else {'type': 'bulk-labels-label-table','index': 0}
         )
 
-        return [new_data], ['success'], [label_count_table]
+        return label_count_table
 
     def refresh_labels(self, refresh_click, structure_options):
         """Clear current label components and start over

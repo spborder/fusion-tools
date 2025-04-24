@@ -1732,7 +1732,7 @@ class DSAUploader(DSATool):
                             user_info = session_data['current_user'],
                             idx = f_idx
                         ) if f['type']=='item' else 
-                        dbc.Alert(f'This uploaded will be created when: {f["parent"]} is uploaded',color='warning'),
+                        dbc.Alert(f'This upload will be created when: {f["parent"]} is uploaded',color='warning'),
                         id = {'type': f'{self.component_prefix}-dsa-uploader-file-upload-div','index': f_idx},
                         style = {'width': '100%'}
                     ),

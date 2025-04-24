@@ -24,7 +24,7 @@ from shapely.geometry import shape, box, Polygon
 from shapely.validation import make_valid
 from shapely.ops import unary_union
 from skimage.filters import threshold_otsu
-from skimage.morphology import remove_small_holes
+from skimage.morphology import remove_small_holes, remove_small_objects
 from skimage.measure import label, find_contours
 from skimage.draw import polygon2mask
 from PIL import Image
@@ -332,7 +332,8 @@ class SegmentationDataset:
             slide_annotations_gdf = gpd.GeoDataFrame.from_features(filtered_slide_annotations['features'])
             # Finding patch coordinates
             if self.patch_mode=='all':
-                available_bbox = gpd.GeoDataFrame.from_features(available_regions['features']).total_bounds
+                available_regions_gdf = gpd.GeoDataFrame.from_features(available_regions['features'])
+                available_bbox = available_regions_gdf.total_bounds
 
                 x_start = np.maximum(int(self.patch_size[0]/2),int(available_bbox[0]+(self.patch_size[0]/2)))
                 y_start = np.maximum(int(self.patch_size[1]/2),int(available_bbox[1]+(self.patch_size[1]/2)))
@@ -350,7 +351,10 @@ class SegmentationDataset:
                             int(x_start+(self.patch_size[0]/2)),
                             int(y_start+(self.patch_size[1]/2))
                         ]
-                        bbox_list.append(bbox)
+
+                        if any(available_regions_gdf.intersects(box(*bbox)).tolist()):
+                            bbox_list.append(bbox)
+
                         y_start+=self.patch_size[1]
 
                     bottom_row_bbox = [
@@ -359,7 +363,9 @@ class SegmentationDataset:
                         int(x_start + (self.patch_size[0]/2)),
                         int(available_bbox[3])
                     ]
-                    bbox_list.append(bottom_row_bbox)
+
+                    if any(available_regions_gdf.intersects(box(*bottom_row_bbox)).tolist()):
+                        bbox_list.append(bottom_row_bbox)
                     x_start += self.patch_size[0]
                     y_start = np.maximum(self.patch_size[1]/2,available_bbox[1]-(self.patch_size[1]/2))
 
@@ -371,7 +377,9 @@ class SegmentationDataset:
                         int(available_bbox[2]),
                         int(y_start + (self.patch_size[1]/2))
                     ]
-                    bbox_list.append(right_column_bbox)
+
+                    if any(available_regions_gdf.intersects(box(*right_column_bbox)).tolist()):
+                        bbox_list.append(right_column_bbox)
                     y_start+=self.patch_size[1]
 
                 # Adding bottom-right corner
@@ -381,7 +389,9 @@ class SegmentationDataset:
                     int(available_bbox[2]),
                     int(available_bbox[3])
                 ]
-                bbox_list.append(bottom_right_bbox)
+
+                if any(available_regions_gdf.intersects(box(*bottom_right_bbox)).tolist()):
+                    bbox_list.append(bottom_right_bbox)
 
             if self.patch_mode=='overlap':
                 #TODO: add overlap patch_mode
@@ -526,17 +536,17 @@ class SegmentationDataset:
         scale_x = slide_metadata['sizeX']/thumbX
         scale_y = slide_metadata['sizeY']/thumbY
 
-        thumb_array = 255-thumb_array
+        #thumb_array = 255-thumb_array
 
         # Mean of all channels/frames to make grayscale mask
         gray_mask = np.squeeze(np.mean(thumb_array,axis=-1))
-        print(f'shape of grayscale mask: {np.shape(gray_mask)}')
 
         threshold_val = threshold_otsu(gray_mask)
         tissue_mask = gray_mask <= threshold_val
 
         print(f'threshold: {threshold_val}')
         tissue_mask = remove_small_holes(tissue_mask,area_threshold=150)
+        tissue_mask = remove_small_objects(tissue_mask)
 
         labeled_mask = label(tissue_mask)
         tissue_pieces = np.unique(labeled_mask).tolist()
@@ -573,7 +583,7 @@ class SegmentationDataset:
         thumbnail_geojson = {
             'type': 'FeatureCollection',
             'features': [
-                {'type':'Feature','geometry': {'type': 'Polygon','coordinates': [list(i.exterior.coords)]}}
+                {'type':'Feature','properties': {}, 'geometry': {'type': 'Polygon','coordinates': [list(i.exterior.coords)]}}
                 for i in merged_tissue if i.geom_type=='Polygon'
             ]
         }

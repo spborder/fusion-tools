@@ -33,9 +33,8 @@ def main(args):
             plugin_add_list = args[2:]
         else:
             plugin_add_list = [
-                'fusionplugins/codex:latest',
-                'fusionplugins/general:latest',
-                'fusionplugins/visium:latest'
+                'fusionplugins/phenocycler:latest',
+                #'fusionplugins/general:latest',
             ]
         
         # This adds the plugins in plugin_add_list, removing previous versions if they are present

@@ -23,6 +23,8 @@ import pandas as pd
 import anndata as ad
 import large_image
 
+from tqdm import tqdm
+
 import uuid
 
 from typing_extensions import Union
@@ -331,7 +333,7 @@ def load_label_mask(label_mask: np.ndarray, name: str) -> dict:
 
     return full_geo
 
-def load_visium(visium_path:str, include_var_names:list = [], include_obs: list = [], mpp:Union[float,None]=None, scale_factor: Union[float,str,None] = None):
+def load_visium(visium_path:str, include_var_names:list = [], include_obs: list = [], mpp:Union[float,None]=None, scale_factor: Union[float,str,None] = None, verbose:bool = True):
     """Loading 10x Visium Spot annotations from an h5ad file or csv file containing spot center coordinates. Adds any of the variables
     listed in var_names and also the barcodes associated with each spot (if the path is an h5ad file).
 
@@ -399,6 +401,8 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
 
     # Quick way to calculate how large the radius of each spot should be (minimum distance will be 100um between adjacent spot centroids )
     if mpp is None:
+        if verbose:
+            print(f'Finding MPP scale for {spot_coords.shape[0]} spots')
         spot_centers = spot_coords.values[:,:2].astype(float)
         distance = np.sqrt(
             np.square(
@@ -411,7 +415,10 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
 
         min_dist = np.min(distance[distance>0])
         mpp = 1 / (min_dist/100)
-    
+
+        if verbose:
+            print(f'MPP Found! {mpp}')
+
     # For 55um spot radius
     spot_pixel_radius = int((1/mpp)*55*0.5)
 
@@ -439,52 +446,104 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
         include_vars = [i for i in include_var_names if i in spot_coords]
     
     barcodes = list(spot_coords.index)
-    for idx in range(spot_coords.shape[0]):
-        spot = Point(*spot_coords.iloc[idx,0:2].tolist()).buffer(spot_pixel_radius)
+    if not verbose:
+        for idx in range(spot_coords.shape[0]):
+            spot = Point(*spot_coords.iloc[idx,0:2].tolist()).buffer(spot_pixel_radius)
 
-        additional_props = {}
-        for i in include_vars:
-            if not anndata_object is None:
-                additional_props[i] = float(anndata_object.X[idx,list(anndata_object.var_names).index(i)])
-            else:
-                try:
-                    additional_props[i] = float(spot_coords.loc[barcodes[idx],i])
-                except ValueError:
-                    if not '{' in spot_coords.loc[barcodes[idx],i]:
-                        additional_props[i] = spot_coords.loc[barcodes[idx],i]
-                    else:
-                        additional_props[i] = json.loads(spot_coords.loc[barcodes[idx],i].replace("'",'"'))
-        
-        for j in include_obs:
-            if not anndata_object is None:
-                add_prop = anndata_object.obs[j].iloc[idx]
-            else:
-                add_prop = spot_coords.loc[idx,j].values
-
-            try:
-                additional_props[i] = float(add_prop)
-            except ValueError:
-                if not '{' in add_prop:
-                    additional_props[i] = add_prop
+            additional_props = {}
+            for i in include_vars:
+                if not anndata_object is None:
+                    additional_props[i] = float(anndata_object.X[idx,list(anndata_object.var_names).index(i)])
                 else:
-                    additional_props[i] = json.loads(add_prop.replace("'",'"'))
+                    try:
+                        additional_props[i] = float(spot_coords.loc[barcodes[idx],i])
+                    except ValueError:
+                        if not '{' in spot_coords.loc[barcodes[idx],i]:
+                            additional_props[i] = spot_coords.loc[barcodes[idx],i]
+                        else:
+                            additional_props[i] = json.loads(spot_coords.loc[barcodes[idx],i].replace("'",'"'))
+            
+            for j in include_obs:
+                if not anndata_object is None:
+                    add_prop = anndata_object.obs[j].iloc[idx]
+                else:
+                    add_prop = spot_coords.loc[idx,j].values
 
+                try:
+                    additional_props[i] = float(add_prop)
+                except ValueError:
+                    if not '{' in add_prop:
+                        additional_props[i] = add_prop
+                    else:
+                        additional_props[i] = json.loads(add_prop.replace("'",'"'))
+        
+            spot_feature = {
+                'type': 'Feature',
+                'geometry': {
+                    'type': 'Polygon',
+                    'coordinates': [list(spot.exterior.coords)]
+                },
+                'properties': {
+                    'name': 'Spots',
+                    '_id': uuid.uuid4().hex[:24],
+                    '_index': idx,
+                    'barcode': barcodes[idx]
+                } | additional_props
+            }
 
-        spot_feature = {
-            'type': 'Feature',
-            'geometry': {
-                'type': 'Polygon',
-                'coordinates': [list(spot.exterior.coords)]
-            },
-            'properties': {
-                'name': 'Spots',
-                '_id': uuid.uuid4().hex[:24],
-                '_index': idx,
-                'barcode': barcodes[idx]
-            } | additional_props
-        }
+            spot_annotations['features'].append(spot_feature)
+    else:
+        with tqdm(range(spot_coords.shape[0])) as pbar:
+            for idx in range(spot_coords.shape[0]):
+                pbar.set_description(f'Working on Spot: {idx+1}/{spot_coords.shape[0]}')
 
-        spot_annotations['features'].append(spot_feature)
+                spot = Point(*spot_coords.iloc[idx,0:2].tolist()).buffer(spot_pixel_radius)
+
+                additional_props = {}
+                for i in include_vars:
+                    if not anndata_object is None:
+                        additional_props[i] = float(anndata_object.X[idx,list(anndata_object.var_names).index(i)])
+                    else:
+                        try:
+                            additional_props[i] = float(spot_coords.loc[barcodes[idx],i])
+                        except ValueError:
+                            if not '{' in spot_coords.loc[barcodes[idx],i]:
+                                additional_props[i] = spot_coords.loc[barcodes[idx],i]
+                            else:
+                                additional_props[i] = json.loads(spot_coords.loc[barcodes[idx],i].replace("'",'"'))
+                
+                for j in include_obs:
+                    if not anndata_object is None:
+                        add_prop = anndata_object.obs[j].iloc[idx]
+                    else:
+                        add_prop = spot_coords.loc[idx,j].values
+
+                    try:
+                        additional_props[i] = float(add_prop)
+                    except ValueError:
+                        if not '{' in add_prop:
+                            additional_props[i] = add_prop
+                        else:
+                            additional_props[i] = json.loads(add_prop.replace("'",'"'))
+
+                spot_feature = {
+                    'type': 'Feature',
+                    'geometry': {
+                        'type': 'Polygon',
+                        'coordinates': [list(spot.exterior.coords)]
+                    },
+                    'properties': {
+                        'name': 'Spots',
+                        '_id': uuid.uuid4().hex[:24],
+                        '_index': idx,
+                        'barcode': barcodes[idx]
+                    } | additional_props
+                }
+
+                spot_annotations['features'].append(spot_feature)
+
+                pbar.update(1)
+
 
     if not scale_factor_hires is None:
         spot_properties = spot_annotations['properties']
@@ -624,7 +683,16 @@ def geojson_to_histomics(geojson_anns: Union[list,dict]):
                     {
                         'type': 'polyline',
                         'user': f['properties'],
+                        'closed': True,
                         'points': [list(i)+[0] if type(i)==tuple else i+[0] for i in f['geometry']['coordinates'][0]]
+                    }
+                    if all([len(i)==2 for i in f['geometry']['coordinates'][0]])
+                    else
+                    {
+                        'type': 'polyline',
+                        'user': f['properties'],
+                        'closed': True,
+                        'points': [list(i) if type(i)==tuple else i for i in f['geometry']['coordinates'][0]]
                     }
                     for f in g['features']
                 ]
@@ -746,6 +814,7 @@ def export_annotations(
                     ann_dict['annotation']['elements'].append(
                         {
                             'type': 'polyline',
+                            'closed': True,
                             'points': [i+[0] for i in f['geometry']['coordinates']],
                             'user': f['properties']
                         }
@@ -1046,7 +1115,7 @@ def extract_nested_prop(main_prop_dict: dict, depth: int, path: tuple = (), valu
                     })
 
                 elif type(values)==list:
-                    values_list.extend(extract_listed_prop,path+(keys,),[])
+                    values_list.extend(extract_listed_prop(values,path+(keys,),[]))
 
                 else:
                     # Skipping properties that are still nested 
@@ -1055,7 +1124,7 @@ def extract_nested_prop(main_prop_dict: dict, depth: int, path: tuple = (), valu
                 if type(values)==dict:
                     extract_nested_prop(values, depth-1, path+ (keys,), values_list)
                 elif type(values)==list:
-                    values_list.extend(extract_listed_prop,path+(keys,),[])
+                    values_list.extend(extract_listed_prop(values,path+(keys,),[]))
                 elif type(values) in [int,float,str]:
                     # Only adding properties to the list one time
                     if not any([' --> '.join(list(path+(keys,))) in list(i.keys()) for i in values_list]):
@@ -1119,12 +1188,23 @@ def extract_geojson_properties(geo_list: list, reference_object: Union[str,None]
 
     if type(geo_list)==dict:
         geo_list = [geo_list]
-
+    elif type(geo_list)==list:
+        if not all([type(i)==dict for i in geo_list]):
+            fixed_list = []
+            for a in geo_list:
+                if type(a)==dict:
+                    fixed_list.append(a)
+                elif type(a)==list:
+                    fixed_list.extend(a)
+            geo_list = fixed_list
+            
     start = time.time()
     geojson_properties = []
     feature_names = []
     property_info = {}
     for ann in geo_list:
+        if ann is None:
+            continue
         if not 'properties' in ann:
             continue
         if len(list(ann['properties'].keys()))==0:
@@ -1135,83 +1215,78 @@ def extract_geojson_properties(geo_list: list, reference_object: Union[str,None]
             for p in f_props:
                 # Checking for sub-properties
                 sub_props = []
-                if not p in property_info:
-                    if type(f['properties'][p]) in [dict,list]:
-                        # Pulling out nested properties (either dictionaries or lists or lists of dictionaries or dictionaries of lists, etc.)
-                        if type(f['properties'][p]) ==dict:
-                            nested_value = extract_nested_prop({p: f['properties'][p]}, nested_depth, (), [])
-                        elif type(f['properties'][p])==list:
-                            nested_value = extract_listed_prop(f['properties'][p],(p,),[])
+                if type(f['properties'][p]) in [dict,list]:
+                    # Pulling out nested properties (either dictionaries or lists or lists of dictionaries or dictionaries of lists, etc.)
+                    if type(f['properties'][p]) ==dict:
+                        nested_value = extract_nested_prop({p: f['properties'][p]}, nested_depth, (), [])
+                    elif type(f['properties'][p])==list:
+                        nested_value = extract_listed_prop(f['properties'][p],(p,),[])
 
-                        if len(nested_value)>0:
-                            all_nested_keys = []
-                            for j in nested_value:
-                                all_nested_keys.extend(list(j.keys()))
-                            if not all([i in property_info for i in all_nested_keys]):
-                                for n in nested_value:
-                                    n_key = list(n.keys())[0]
-                                    n_value = list(n.values())[0]
-                                    if not n_key in property_info:
-                                        sub_props.append(n_key)
-                                        if type(n_value) in [int,float]:
-                                            property_info[n_key] = {
-                                                'min': n_value,
-                                                'max': n_value,
-                                                'distinct': 1
-                                            }
-                                        elif type(n_value) in [str]:
-                                            property_info[n_key] = {
-                                                'unique': [n_value],
-                                                'distinct': 1
-                                            }
-                                    else:
-                                        if type(n_value) in [int,float]:
-                                            if n_value < property_info[n_key]['min']:
-                                                property_info[n_key]['min'] = n_value
-                                                property_info[n_key]['distinct'] +=1
-                                            
-                                            if n_value > property_info[n_key]['max']:
-                                                property_info[n_key]['max'] = n_value
-                                                property_info[n_key]['distinct'] +=1
-
-                                        elif type(n_value) in [str]:
-                                            if not n_value in property_info[n_key]['unique']:
-                                                property_info[n_key]['unique'].append(n_value)
-                                                property_info[n_key]['distinct'] +=1
-
-                    elif type(f['properties'][p]) in [int,float,str]:
-                        f_sup_val = f['properties'][p]
-
-                        if not p in property_info:
-                            sub_props = [p]
-                            if type(f_sup_val) in [int,float]:
-                                property_info[p] = {
-                                    'min': f_sup_val,
-                                    'max': f_sup_val,
-                                    'distinct': 1
-                                }
+                    if len(nested_value)>0:
+                        for n in nested_value:
+                            n_key = list(n.keys())[0]
+                            n_value = list(n.values())[0]
+                            if not n_key in property_info:
+                                sub_props.append(n_key)
+                                if type(n_value) in [int,float]:
+                                    property_info[n_key] = {
+                                        'min': n_value,
+                                        'max': n_value,
+                                        'distinct': 1
+                                    }
+                                elif type(n_value) in [str]:
+                                    property_info[n_key] = {
+                                        'unique': [n_value],
+                                        'distinct': 1
+                                    }
                             else:
-                                property_info[p] = {
-                                    'unique': [f_sup_val],
-                                    'distinct': 1
-                                }
+                                if type(n_value) in [int,float]:
+                                    if n_value < property_info[n_key]['min']:
+                                        property_info[n_key]['min'] = n_value
+                                        property_info[n_key]['distinct'] +=1
+                                    
+                                    if n_value > property_info[n_key]['max']:
+                                        property_info[n_key]['max'] = n_value
+                                        property_info[n_key]['distinct'] +=1
+
+                                elif type(n_value) in [str]:
+                                    if not n_value in property_info[n_key]['unique']:
+                                        property_info[n_key]['unique'].append(n_value)
+                                        property_info[n_key]['distinct'] +=1
+
+                elif type(f['properties'][p]) in [int,float,str]:
+                    f_sup_val = f['properties'][p]
+
+                    if not p in property_info:
+                        sub_props = [p]
+                        if type(f_sup_val) in [int,float]:
+                            property_info[p] = {
+                                'min': f_sup_val,
+                                'max': f_sup_val,
+                                'distinct': 1
+                            }
                         else:
-                            if type(f_sup_val) in [int,float]:
-                                if f_sup_val < property_info[p]['min']:
-                                    property_info[p]['min'] = f_sup_val
-                                    property_info[p]['distinct'] += 1
-                                
-                                elif f_sup_val > property_info[p]['max']:
-                                    property_info[p]['max'] = f_sup_val
-                                    property_info[p]['distinct']+=1
+                            property_info[p] = {
+                                'unique': [f_sup_val],
+                                'distinct': 1
+                            }
+                    else:
+                        if type(f_sup_val) in [int,float]:
+                            if f_sup_val < property_info[p]['min']:
+                                property_info[p]['min'] = f_sup_val
+                                property_info[p]['distinct'] += 1
+                            
+                            elif f_sup_val > property_info[p]['max']:
+                                property_info[p]['max'] = f_sup_val
+                                property_info[p]['distinct']+=1
 
-                            elif type(f_sup_val) in [str]:
-                                if not f_sup_val in property_info[p]['unique']:
-                                    property_info[p]['unique'].append(f_sup_val)
-                                    property_info[p]['distinct']+=1
+                        elif type(f_sup_val) in [str]:
+                            if not f_sup_val in property_info[p]['unique']:
+                                property_info[p]['unique'].append(f_sup_val)
+                                property_info[p]['distinct']+=1
 
-                    new_props = [i for i in sub_props if not i in geojson_properties and not i in ignore_list]
-                    geojson_properties.extend(new_props)
+                new_props = [i for i in sub_props if not i in geojson_properties and not i in ignore_list]
+                geojson_properties.extend(new_props)
 
     #TODO: After loading an experiment, reference the file here for additional properties
     
@@ -1283,7 +1358,7 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                                 right_df = sq_structure, 
                                 how = 'left', 
                                 predicate = s_q['type']
-                            )
+                            ).drop_duplicates(subset = '_id_left')
 
                             # Updating include_list (removing items)
                             include_list = [i for d,i in zip(intermediate_gdf['_id_right'].isna().tolist(),include_list) if not d]
@@ -1298,20 +1373,22 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                                 right_df = sq_structure,
                                 how = 'left',
                                 predicate = s_q['type']
-                            )
-                            # Updating include_list (removing items)
-                            include_list = [i for d,i in zip(intermediate_gdf['_id_right'].isna().tolist(),include_list) if not d]
-                            include_list = [i+(True,) for i in include_list]
+                            ).drop_duplicates(subset = '_id_left')
 
-                            intermediate_gdf = intermediate_gdf.loc[intermediate_gdf['_id_right'].notna()]
+                            # Updating include_list (removing items)
+                            include_list = [i for d,i in zip(intermediate_gdf['_id_right'].notna().tolist(),include_list) if d]
+                            include_list = [i+(True,) for i in include_list]
                             
+                            intermediate_gdf = intermediate_gdf.loc[intermediate_gdf['_id_right'].notna()]
+
+
                         elif s_q['mod']=='or':
                             or_gdf = gpd.sjoin(
                                 left_df = intermediate_gdf,
                                 right_df = sq_structure,
                                 how = 'left',
                                 predicate = s_q['type']
-                            )
+                            ).drop_duplicates(subset = '_id_left')
                             current_remove = or_gdf['_id_right'].isna().tolist()
                             include_list = [i+(not j,) for i,j in list(zip(include_list,current_remove))]
                             
@@ -1321,7 +1398,7 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                             right_df = sq_structure,
                             how = 'left',
                             predicate = s_q['type']
-                        )
+                        ).drop_duplicates(subset = '_id_left')
 
                         # Updating include_list (removing items)
                         include_list = [i for d,i in zip(intermediate_gdf['_id_right'].isna().tolist(),include_list) if not d]
@@ -1337,7 +1414,7 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                                 right_df = sq_structure,
                                 how = 'left',
                                 max_distance = s_q['distance']
-                            )
+                            ).drop_duplicates(subset='_id_left')
 
                             # Updating include_list (removing items)
                             include_list = [i for d,i in zip(intermediate_gdf['_id_right'].isna().tolist(),include_list) if not d]
@@ -1352,7 +1429,7 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                                 right_df = sq_structure,
                                 how = 'left',
                                 max_distance = s_q['distance']
-                            )
+                            ).drop_duplicates(subset='_id_left')
 
                             # Updating include_list (removing items)
                             include_list = [i for d,i in zip(intermediate_gdf['_id_right'].isna().tolist(),include_list) if not d]
@@ -1366,7 +1443,7 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                                 right_df = sq_structure,
                                 how = 'left',
                                 max_distance = s_q['distance']
-                            )
+                            ).drop_duplicates(subset='_id_left')
 
                             current_remove = or_gdf['_id_right'].isna().tolist()
                             include_list = [i+(not j,) for i,j in list(zip(include_list,current_remove))]
@@ -1378,12 +1455,11 @@ def process_filters_queries(filter_list:list, spatial_list:list, structures:list
                             right_df = sq_structure,
                             how = 'left',
                             max_distance = s_q['distance']
-                        )
+                        ).drop_duplicates(subset='_id_left')
 
                         # Updating include_list (removing items)
                         include_list = [i for d,i in zip(intermediate_gdf['_id_right'].isna().tolist(),include_list) if not d]
                         include_list = [i+(True,) for i in include_list]
-
 
                         intermediate_gdf = intermediate_gdf.loc[intermediate_gdf['_id_right'].notna()]
                     

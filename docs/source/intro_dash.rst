@@ -28,16 +28,16 @@ An example simple *Dash* application is provided below (curtesy of `the Dash web
     # Defining layout for the application
     app.layout = [
         html.H1(
-        children = "Title of Dash App",
-        style = {'textAlign': 'center'}
+            children = "Title of Dash App",
+            style = {'textAlign': 'center'}
         ),
         dcc.Dropdown(
-        options = df.country.unique(),
-        value = 'Canada',
-        id = 'dropdown-selection'
+            options = df.country.unique(),
+            value = 'Canada',
+            id = 'dropdown-selection'
         ),
         dcc.Graph(
-        id = 'graph-content'
+            id = 'graph-content'
         )
     ]
 
@@ -141,7 +141,7 @@ This can then be added into a *fusion-tools* *Visualization* as below:
 
     new_vis = Visualization(
         components = [
-        BasicTool()
+            BasicTool()
         ]
     )
 

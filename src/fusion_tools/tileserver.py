@@ -5,11 +5,13 @@ Tile server components
 """
 import os
 from fastapi import FastAPI, APIRouter, Response
+from fastapi.middleware.cors import CORSMiddleware
 import large_image
 import requests
 import json
 from typing_extensions import Union
 
+from copy import deepcopy
 import numpy as np
 import uvicorn
 
@@ -20,7 +22,8 @@ from fusion_tools.utils.shapes import (load_annotations,
                                        detect_image_overlay, 
                                        detect_geojson, 
                                        detect_histomics,
-                                       structures_within_poly)
+                                       structures_within_poly,
+                                       extract_nested_prop)
 
 class TileServer:
     """Components which pull information from a slide(s)
@@ -35,7 +38,8 @@ class LocalTileServer(TileServer):
                  local_image_annotations: Union[str,list] = [],
                  local_metadata: Union[dict,list] = [],
                  tile_server_port:int = 8050,
-                 host: str = 'localhost'
+                 host: str = 'localhost',
+                 cors_options: dict = {'origins': ['*'], 'allow_methods': ['*'], 'allow_headers': ['*'], 'expose_headers': ['*'], 'max_age': '36000000'}
                  ):
         """Constructor method
 
@@ -50,6 +54,7 @@ class LocalTileServer(TileServer):
         self.local_metadata = local_metadata
         self.tile_server_port = tile_server_port
         self.host = host
+        self.cors_options = cors_options
 
         self.names = [i.split(os.sep)[-1] for i in self.local_image_paths]
    
@@ -59,28 +64,80 @@ class LocalTileServer(TileServer):
         self.metadata = self.local_metadata if not self.local_metadata is None else [{} for i in self.local_image_paths]
 
         self.app = FastAPI()
+
         self.router = APIRouter()
-        self.router.add_api_route('/',self.root,methods=["GET"])
-        self.router.add_api_route('/names',self.get_names,methods=["GET"])
-        self.router.add_api_route('/{image}/tiles/{z}/{x}/{y}',self.get_tile,methods=["GET"])
-        self.router.add_api_route('/{image}/image_metadata',self.get_image_metadata,methods=["GET"])
-        self.router.add_api_route('/{image}/metadata',self.get_metadata,methods=["GET"])
-        self.router.add_api_route('/{image}/tiles/region',self.get_region,methods=["GET"])
-        self.router.add_api_route('/{image}/tiles/thumbnail',self.get_thumbnail,methods=["GET"])
-        self.router.add_api_route('/{image}/annotations',self.get_annotations,methods=["GET"])
-        self.router.add_api_route('/{image}/annotations/metadata',self.get_annotations_metadata,methods=["GET"])
+        self.router.add_api_route('/',self.root,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/names',self.get_names,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/tiles/{z}/{x}/{y}',self.get_tile,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/image_metadata',self.get_image_metadata,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/metadata',self.get_metadata,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/tiles/region',self.get_region,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/tiles/thumbnail',self.get_thumbnail,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/annotations',self.get_annotations,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/annotations/metadata',self.get_annotations_metadata,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/annotations/data/list',self.get_annotations_property_keys,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/annotations/data',self.get_annotations_property_data,methods=["GET","OPTIONS"])
 
     def load_annotations(self):
 
         geojson_annotations = []
         annotations_metadata = []
-        for a in self.local_image_annotations:
-            loaded_annotations = load_annotations(a)
-            if not loaded_annotations is None:
-                geojson_annotations.append(loaded_annotations)
-                annotations_metadata.append(self.extract_meta_dict(loaded_annotations))
-            else:
-                print(f'Invalid annotations format found: {a}')
+        if not self.local_image_annotations is None:
+            if type(self.local_image_annotations)==str:
+                new_loaded_annotations = load_annotations(self.local_image_annotations)
+                if not new_loaded_annotations is None:
+                    geojson_annotations.append(new_loaded_annotations)
+                    annotations_metadata.append(self.extract_meta_dict(new_loaded_annotations))
+                else:
+                    print(f'Unrecognized annotation format: {self.local_image_annotations}')
+                    geojson_annotations.append([])
+                    annotations_metadata.append([])
+
+            elif hasattr(self.local_image_annotations,"to_dict"):
+                geojson_annotations.append([self.local_image_annotations.to_dict()])
+                annotations_metadata.append(self.extract_meta_dict(self.local_image_annotations))
+
+            elif type(self.local_image_annotations)==list:
+                for n in self.local_image_annotations:
+                    processed_anns = []
+                    if not n is None:
+                        if hasattr(n,"to_dict"):
+                            processed_anns.append(n.to_dict())
+                        elif type(n)==dict:
+                            if 'annotation' in n:
+                                converted = histomics_to_geojson(n)
+                                processed_anns.append(converted)
+                            else:
+                                processed_anns.append(n)
+                        elif type(n)==str:
+                            loaded_anns = load_annotations(n)
+                            if not loaded_anns is None:
+                                if type(loaded_anns)==list:
+                                    processed_anns.extend(loaded_anns)
+                                elif type(loaded_anns)==dict:
+                                    processed_anns.append(loaded_anns)
+                            else:
+                                print(f'Unrecognized Format: {n}')
+
+                        elif type(n)==np.ndarray:
+                            print(f'Found annotations of type: {type(n)}, make sure to specify if this is an overlay image (use fusion_tools.SlideImageOverlay) or a label mask (use fusion_tools.utils.shapes.load_label_mask)')
+                        else:
+                            print(f'Unknown annotations type found: {n}')
+                    
+                    geojson_annotations.append(processed_anns)
+                    annotations_metadata.append(self.extract_meta_dict(processed_anns))
+                        
+            elif type(self.local_image_annotations)==dict:
+                if 'annotation' in self.local_image_annotations:
+                    converted_annotations = histomics_to_geojson(self.local_image_annotations)
+                    geojson_annotations.append([converted_annotations])
+                    annotations_metadata.append(self.extract_meta_dict([converted_annotations]))
+                else:
+                    geojson_annotations.append([self.local_image_annotations])
+                    annotations_metadata.append(self.extract_meta_dict([self.local_image_annotations]))
+        else:
+            geojson_annotations.append([])
+            annotations_metadata.append([])
 
         return geojson_annotations, annotations_metadata
 
@@ -105,7 +162,7 @@ class LocalTileServer(TileServer):
         return ann_metadata
 
     def __str__(self):
-        return f'TileServer class for {self.local_image_path} to {self.host}:{self.tile_server_port}'
+        return f'TileServer class for {self.local_image_paths} to {self.host}:{self.tile_server_port}'
 
     def __len__(self):
         return len(self.tile_sources)
@@ -159,25 +216,29 @@ class LocalTileServer(TileServer):
             elif type(new_annotations)==list:
                 processed_anns = []
                 for n in new_annotations:
-                    if hasattr(n,"to_dict"):
-                        processed_anns.append(n.to_dict())
-                    elif type(n)==dict:
-                        if 'annotation' in n:
-                            converted = histomics_to_geojson(n)
-                            processed_anns.append(converted)
-                        else:
-                            processed_anns.append(n)
-                    elif type(n)==str:
-                        loaded_anns = load_annotations(n)
-                        if type(loaded_anns)==list:
-                            processed_anns.extend(loaded_anns)
-                        elif type(loaded_anns)==dict:
-                            processed_anns.append(loaded_anns)
+                    if not n is None:
+                        if hasattr(n,"to_dict"):
+                            processed_anns.append(n.to_dict())
+                        elif type(n)==dict:
+                            if 'annotation' in n:
+                                converted = histomics_to_geojson(n)
+                                processed_anns.append(converted)
+                            else:
+                                processed_anns.append(n)
+                        elif type(n)==str:
+                            loaded_anns = load_annotations(n)
+                            if not loaded_anns is None:
+                                if type(loaded_anns)==list:
+                                    processed_anns.extend(loaded_anns)
+                                elif type(loaded_anns)==dict:
+                                    processed_anns.append(loaded_anns)
+                            else:
+                                print(f'Unrecognized format: {n}')
 
-                    elif type(n)==np.ndarray:
-                        print(f'Found annotations of type: {type(n)}, make sure to specify if this is an overlay image (use fusion_tools.SlideImageOverlay) or a label mask (use fusion_tools.utils.shapes.load_label_mask)')
-                    else:
-                        print(f'Unknown annotations type found: {n}')
+                        elif type(n)==np.ndarray:
+                            print(f'Found annotations of type: {type(n)}, make sure to specify if this is an overlay image (use fusion_tools.SlideImageOverlay) or a label mask (use fusion_tools.utils.shapes.load_label_mask)')
+                        else:
+                            print(f'Unknown annotations type found: {n}')
                 
                 self.annotations.append(processed_anns)
                 self.annotations_metadata.append(self.extract_meta_dict(processed_anns))
@@ -371,7 +432,10 @@ class LocalTileServer(TileServer):
         if image<len(self.names) and image>=0:
             if all([i is None for i in [top,left,bottom,right]]):
                 # Returning all annotations by default
-                return Response(content = json.dumps(self.annotations[image]),media_type='application/json')
+                return Response(
+                    content = json.dumps(self.annotations[image]),
+                    media_type='application/json'
+                )
             else:
                 # Parsing region of annotations:
                 if all([not i is None for i in [top,left,bottom,right]]):
@@ -407,17 +471,204 @@ class LocalTileServer(TileServer):
                                         image_region_anns.append(filtered_g)
                         else:
                             print(f'Unrecognized annotation format found for image: {image}, {self.names[image]}')
-                    return Response(content = json.dumps(image_region_anns), media_type='application/json')
+                    return Response(
+                        content = json.dumps(image_region_anns), 
+                        media_type='application/json'
+                    )
 
         else:
-            return Response(content = 'invalid image index', media_type = 'application/json', status_code = 400)
+            return Response(
+                content = 'invalid image index',
+                media_type = 'application/json', 
+                status_code = 400
+            )
 
     def get_annotations_metadata(self,image:int):
         
         if image<len(self.names) and image>=0:
-            return Response(content = json.dumps(self.annotations_metadata[image]),media_type='application/json')
+            return Response(
+                content = json.dumps(self.annotations_metadata[image]),
+                media_type='application/json'
+            )
         else:
-            return Response(content = 'invalid image index',media_type = 'application/json',status_code = 400)
+            return Response(
+                content = 'invalid image index',
+                media_type = 'application/json',
+                status_code = 400,
+            )
+
+    def get_annotations_property_keys(self,image:int):
+        """Getting the names of properties stored in an image's annotations
+
+        :param image: Local image index
+        :type image: int
+        """
+        if image<len(self.names) and image>=0:
+            image_anns = self.annotations[image]
+
+            property_list = []
+            property_names = []
+            for a in image_anns:
+                features = a.get('features',[])
+                a_id = a.get('properties',{}).get('_id',None)
+                a_name = a.get('properties',{}).get('name',None)
+
+                for f in features:
+                    f_props = f.get('properties')
+                    if not f_props is None:
+                        f_main_keys = list(f_props.keys())
+                        for f_m in f_main_keys:
+                            if type(f_props[f_m]) in [list,dict]:
+                                values_list = extract_nested_prop(f_props[f_m],4)
+                            elif type(f_props[f_m]) in [str,int,float]:
+                                values_list = [{f_m: f_props[f_m]}]
+                            
+                            for v in values_list:
+                                v_key = list(v.keys())[0]
+                                v_val = list(v.values())[0]
+
+                                if v_key in property_names:
+                                    v_info = property_list[property_names.index(v_key)]
+                                    if type(v_val)==str:
+                                        if not v_val in v_info['distinct']:
+                                            v_info['distinct'].append(v_val)
+                                            v_info['distinctcount'] += 1
+                                        
+                                    elif type(v_val) in [int,float]:
+                                        if v_val>v_info['max']:
+                                            v_info['max'] = v_val
+                                        elif v_val<v_info['min']:
+                                            v_info['min'] = v_val
+                                        
+                                    v_info['count'] += 1
+
+                                    property_list[property_names.index(v_key)] = v_info
+                                else:
+                                    property_names.append(v_key)
+                                    
+                                    v_info = {
+                                        'key': v_key.lower().replace(' --> ','.'),
+                                        'title': v_key,
+                                        'count': 1
+                                    }
+
+                                    if type(v_val)==str:
+                                        v_info['type'] = 'string'
+                                        v_info['distinct'] = [v_val]
+                                        v_info['distinctcount'] = 1
+                                    else:
+                                        v_info['type'] = 'number'
+                                        v_info['max'] = v_val
+                                        v_info['min'] = v_val
+
+                                    property_list.append(v_info)
+                                        
+        
+            return Response(
+                content = json.dumps(property_list),
+                media_type='application/json',
+                status_code=200
+            )
+
+        else:                           
+            return Response(
+                content = 'invalid image index',
+                media_type = 'application/json',
+                status_code = 400,
+            )       
+
+    def get_annotations_property_data(self,image:int,include_keys:list,include_anns:Union[str,list,None]):
+        """Getting data from annotations of specified image, attempting to mirror output of https://github.com/girder/large_image/blob/master/girder_annotation/girder_large_image_annotation/utils/__init__.py
+
+        :param image: Index of local image to grab data from
+        :type image: int
+        :param include_keys: List of property names to grab from annotations
+        :type include_keys: list
+        :param include_anns: Which annotations to include (name/id or __all__ or list)
+        :type include_anns: Union[str,list,None]
+        :return: 
+        :rtype: _type_
+        """
+        
+        
+        if image<len(self.names) and image>=0:
+            image_anns = self.annotations[image]
+
+            if include_anns is None:
+                include_anns = '__all__'
+
+            bbox_list = ['bbox.x0','bbox.y0','bbox.x1','bbox.y1']
+
+            data_list = []
+            for a in image_anns:
+                features = a.get('features',[])
+                a_id = a.get('properties',{}).get('_id',None)
+                a_name = a.get('properties',{}).get('name',None)
+
+                # Accepting either annotation layer name or id
+                if not include_anns=='__all__':
+                    if type(include_anns)==str:
+                        if not include_anns==a_id and not include_anns==a_name:
+                            continue
+                    elif type(include_anns)==list:
+                        if not a_id in include_anns and not a_name in include_anns:
+                            continue
+                            
+                for f in features:
+                    f_props = f.get('properties')
+                    f_bbox = list(shape(f['geometry']).bounds)
+                    f_props_cols = []
+                    if not f_props is None:
+                        for k in include_keys:
+                            # Need to specify non-feature keys
+                            if k in ['annotation.id','annotation.name','item.id','item.name']:
+                                if k=='annotation.id':
+                                    f_props_cols.append(a_id)
+                                elif k=='annotation.name':
+                                    f_props_cols.append(a_name)
+                                elif k=='item.id':
+                                    f_props_cols.append(str(image))
+                                elif k=='item.name':
+                                    f_props_cols.append(self.names[image])
+
+                            elif k in bbox_list:
+                                # Adding bounding box coordinates
+                                f_props_cols.append(f_bbox[bbox_list.index(k)])
+
+                            else:
+                                # Getting keys and nested keys
+                                if '-->' in k:
+                                    f_sub_keys = k.split('-->')
+                                    f_sub_props = deepcopy(f_props)
+                                    for sk in f_sub_keys:
+                                        if not f_sub_props is None:
+                                            f_sub_props = f_sub_props.get(sk)
+                                else:
+                                    f_sub_props = f_props.get(k)
+
+                                # Converting to float if able
+                                try:
+                                    f_sub_props = float(f_sub_props)
+                                    f_props_cols.append(f_sub_props)
+                                except ValueError:
+                                    f_props_cols.append(f_sub_props)                                       
+                    else:
+                        f_props_cols = [None]*len(include_keys)
+
+                    data_list.append(f_props_cols)
+
+            return Response(
+                content = json.dumps({'data': data_list}),
+                media_type='application/json',
+                status_code=200
+            )
+
+        else:                           
+            return Response(
+                content = 'invalid image index',
+                media_type = 'application/json',
+                status_code = 400,
+            )     
 
     def start(self):
         """Starting tile server instance on a provided port
@@ -426,6 +677,18 @@ class LocalTileServer(TileServer):
         :type port: str, optional
         """
         self.app.include_router(self.router)
+        
+        # Enabling CORS (https://fastapi.tiangolo.com/tutorial/cors/#use-corsmiddleware)
+        self.app.add_middleware(
+            CORSMiddleware,
+            allow_origins=self.cors_options['origins'],
+            allow_methods=self.cors_options['allow_methods'],
+            allow_credentials = True,
+            allow_headers=self.cors_options['allow_headers'],
+            expose_headers=self.cors_options['expose_headers'],
+            max_age=self.cors_options['max_age']
+        )
+
         uvicorn.run(self.app,host=self.host,port=self.tile_server_port)
 
 class DSATileServer(TileServer):

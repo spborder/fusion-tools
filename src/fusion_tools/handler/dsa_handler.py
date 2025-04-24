@@ -21,6 +21,7 @@ from fusion_tools.handler.login import DSALoginComponent
 from fusion_tools.handler.dataset_uploader import DSAUploader
 from fusion_tools.handler.dataset_builder import DatasetBuilder
 from fusion_tools.handler.plugin import DSAPluginProgress, DSAPluginRunner
+from fusion_tools.handler.save_session import DSASession
 from fusion_tools import Handler
 
 #TODO: Consider making a function decorator for authentication just to clean up all the 
@@ -123,7 +124,7 @@ class DSAHandler(Handler):
 
         return image_array
 
-    def get_image_thumbnail(self, item_id:str, user_token:Union[str,None]=None)->np.ndarray:
+    def get_image_thumbnail(self, item_id:str, user_token:Union[str,None]=None, return_url:bool=False)->np.ndarray:
 
 
         if user_token is None or user_token=='' and self.user_token is None:
@@ -137,23 +138,26 @@ class DSAHandler(Handler):
                 request_string = self.gc.urlBase+f'/item/{item_id}/tiles/thumbnail?token={user_token}'
                 #request_string = self.gc.urlBase+f'/item/{item_id}/zxy/0/0/0?token={user_token}'
 
-        try:
-            image_array = np.uint8(
-                np.array(
-                    Image.open(
-                        BytesIO(
-                            requests.get(
-                                request_string
-                            ).content
+        if not return_url:
+            try:
+                image_array = np.uint8(
+                    np.array(
+                        Image.open(
+                            BytesIO(
+                                requests.get(
+                                    request_string
+                                ).content
+                            )
                         )
                     )
                 )
-            )
-        except:
-            print(f'Thumbnail exception encountered for item: {item_id}')
-            image_array = np.zeros((256,256,3)).astype(np.uint8)
+            except:
+                print(f'Thumbnail exception encountered for item: {item_id}')
+                image_array = np.zeros((256,256,3)).astype(np.uint8)
 
-        return image_array
+            return image_array
+        else:
+            return request_string
 
     def make_boundary_mask(self, exterior_coords: list) -> np.ndarray:
         """Making boundary mask for a set of exterior coordinates
@@ -589,6 +593,132 @@ class DSAHandler(Handler):
         collections = self.gc.get('/collection')
 
         return collections
+    
+    def create_collection(self, collection_name:str, collection_description:Union[str,None]=None,public:bool=True,user_token:Union[str,None]=None):
+
+        if not user_token is None:
+            self.gc.setToken(user_token)
+
+        collection_post = self.gc.post(
+            'collection',
+            parameters={
+                'name': collection_name,
+                'description': collection_description if not collection_description is None else '',
+                'public': public
+            }
+        )
+
+        return collection_post
+
+    def create_folder(self, parentId:str, parentType:str, folder_name:str, folder_description:Union[str,None]=None,public:bool=True,user_token:Union[str,None]=None):
+
+        if not user_token is None:
+            self.gc.setToken(user_token)
+
+        folder_post_response = self.gc.post(
+            'folder',
+            parameters={
+                'parentType':parentType,
+                'parentId':parentId,
+                'name': folder_name,
+                'description': folder_description if not folder_description is None else '',
+                'reuseExisting': True,
+                'public': public
+            }
+        )
+
+        return folder_post_response
+
+    def upload_session(self, session_data:dict, user_token:Union[str,None]=None):
+        """Upload session data to dedicated fusion-tools sessions collection
+
+        :param session_data: Visualization session data to be saved on DSA instance
+        :type session_data: dict
+        :param user_token: user token, defaults to None
+        :type user_token: Union[str,None], optional
+        """
+
+        if not user_token is None:
+            self.gc.setToken(user_token)
+
+        collections = self.get_collections(user_token)
+        collection_names = [i['name'] for i in collections]
+
+        if not 'fusion-tools Sessions' in collection_names:
+            # Creating the collection/folder if it's not there already
+            collection_post_result = self.create_collection(
+                collection_name = 'fusion-tools Sessions',
+                collection_description='Session information related to fusion-tools uploaded by users.',
+                user_token = user_token
+            )
+
+            folder_post_response = self.create_folder(
+                parentId = collection_post_result['_id'],
+                parentType='collection',
+                folder_name = 'fusion-tools Sessions',
+                folder_description = 'Saved Sessions',
+                user_token = user_token
+            )
+
+            session_collection_id = collection_post_result['_id']
+            folder_id = folder_post_response['_id']
+
+        else:
+            # Grabbing the folder id that is already present
+            session_collection_id = collections[collection_names.index('fusion-tools Sessions')]['_id']
+
+            session_folders = self.get_folder_folders(
+                folder_id = session_collection_id,
+                folder_type = 'collection',
+                user_token=user_token
+            )
+            folder_names = [i['name'] for i in session_folders]
+            folder_id = session_folders[folder_names.index('fusion-tools Sessions')]['_id']
+
+        session_data_data = json.dumps(session_data)
+        session_data_size = len(session_data_data.encode('utf-8'))
+
+        # Making new item
+        make_file_response = self.gc.post(
+            'file',
+            parameters={
+                'parentType':'folder',
+                'parentId': folder_id,
+                'name': 'fusion-tools session.json',
+                'size': session_data_size
+            }
+        )
+
+        post_response = self.gc.post(f'/file/chunk',
+            parameters={
+                'size':session_data_size,
+                'offset':0,
+                'uploadId':make_file_response['_id']
+                },
+            data = session_data_data
+        )
+
+        return post_response
+
+    def get_session_data(self, session_id:str, user_token:Union[str,None]=None):
+
+        if not user_token is None:
+            self.gc.setToken(user_token)
+
+        # downloading session file specified by id
+        try:
+            session_item_file = self.gc.get(f'item/{session_id}/files')[0]
+        except girder_client.HttpError:
+            session_item_file = {'_id':session_id}
+            
+        file_contents = self.gc.get(
+            f'file/{session_item_file["_id"]}/download'
+        )
+
+        return file_contents
+
+    def create_save_session(self):
+        return DSASession(handler = self)
 
     def create_survey(self, survey_args:dict):
         """Create a survey component which will route collected data to a specific file in the connected DSA instance.
