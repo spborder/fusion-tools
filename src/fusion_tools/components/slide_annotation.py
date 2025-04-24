@@ -114,7 +114,7 @@ class SlideAnnotationSchema:
         allowed_annotation_keys = ["name","description","type","options","multi","roi","editable","min","max"]
 
         allowed_key_vals = {
-            "type": ["text","numeric","options","roi"],
+            "type": ["text","numeric","options","boolean","roi"],
             "editable": [True, False, "admins"],
             "multi": [True, False],
         }
@@ -704,15 +704,20 @@ class SlideAnnotation(MultiTool):
             ])
         elif input_spec['type']=='boolean':
 
+            level_names = input_spec.get('levels',['True','False'])
+            if len(level_names)<2:
+                level_names = ['True','False']
+
             input_component = html.Div([
                 dbc.Row([
                     dbc.Col(input_desc_column,md=5),
                     dbc.Col([
                         dcc.RadioItems(
                             options = [
-                                {'label': 'True', 'value': 1},
-                                {'label': 'False', 'value': 0}
+                                {'label': level_names[0], 'value': 1},
+                                {'label': level_names[1], 'value': 0}
                             ],
+                            inline = True,
                             value = use_val,
                             id = {'type': 'slide-annotation-input','index': input_index}
                         )

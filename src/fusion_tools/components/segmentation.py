@@ -7,6 +7,8 @@ import json
 import numpy as np
 import pandas as pd
 
+import uuid
+
 from typing_extensions import Union
 from shapely.geometry import box, shape
 import geopandas as gpd
@@ -68,8 +70,12 @@ class FeatureAnnotation(Tool):
         assert self.labels_format in ['csv','json']
         assert self.annotations_format in ['one-hot','one-hot-labeled','rgb','index']
 
+        self.assets_folder = os.getcwd()+'/.fusion_assets/'
+
         if not os.path.exists(self.storage_path):
             os.makedirs(self.storage_path)
+
+        self.get_namespace()
     
     def __str__(self):
         return 'Feature Annotation'
@@ -462,7 +468,8 @@ class FeatureAnnotation(Tool):
                 Output({'type':'feature-annotation-current-structures','index': ALL},'data'),
                 Output({'type': 'feature-annotation-label-text','index': ALL},'value'),
                 Output({'type': 'feature-annotation-progress','index': ALL},'value'),
-                Output({'type': 'feature-annotation-progress','index': ALL},'label')
+                Output({'type': 'feature-annotation-progress','index': ALL},'label'),
+                Output({'type': 'map-marker-div','index': ALL},'children')
             ],
             [
                 State({'type': 'feature-annotation-current-structures','index': ALL},'data'),
@@ -555,6 +562,48 @@ class FeatureAnnotation(Tool):
                 Output({'type': 'feature-annotation-label-input-div','index': ALL},'children')
             ]
         )(self.update_text_label)
+
+    def get_namespace(self):
+        """Adding JavaScript functions to the BulkLabels Namespace
+        """
+        self.js_namespace = Namespace(
+            "fusionTools","featureAnnotation"
+        )
+
+        self.js_namespace.add(
+            name = 'removeMarker',
+            src = """
+                function(e,ctx){
+                    e.target.removeLayer(e.layer._leaflet_id);
+                    ctx.data.features.splice(ctx.data.features.indexOf(e.layer.feature),1);
+                }
+            """
+        )
+
+        self.js_namespace.add(
+            name = 'tooltipMarker',
+            src = 'function(feature,layer,ctx){layer.bindTooltip("Double-click to remove")}'
+        )
+
+        self.js_namespace.add(
+            name = "markerRender",
+            src = """
+                function(feature,latlng,context) {
+                    marker = L.marker(latlng, {
+                        title: "FeatureAnnotation Marker",
+                        alt: "FeatureAnnotation Marker",
+                        riseOnHover: true,
+                        draggable: false,
+                    });
+
+                    return marker;
+                }
+            """
+        )
+
+        self.js_namespace.dump(
+            assets_folder = self.assets_folder
+        )
 
     def update_slide(self, slide_selection,vis_data):
 
@@ -694,7 +743,7 @@ class FeatureAnnotation(Tool):
                 formatted_mask+=combined_mask[:,:,c_idx]
 
         # Pulling image region from slide:
-        slide_image_region = self.get_structure_region(image_bbox, slide_information, False)
+        slide_image_region, marker_centroid = self.get_structure_region(image_bbox, slide_information, False)
         # Saving annotation mask:
         save_path = os.path.join(self.storage_path,slide_information['name'],'Annotations')
         if not os.path.exists(save_path):
@@ -842,7 +891,7 @@ class FeatureAnnotation(Tool):
         new_label_text = []
 
         # Pulling out the desired region:
-        image_region = self.get_structure_region(current_structure_region, slide_information)
+        image_region, marker_centroid = self.get_structure_region(current_structure_region, slide_information)
         image_figure = go.Figure(px.imshow(np.array(image_region)))
         image_figure.update_layout(
             {
@@ -857,7 +906,35 @@ class FeatureAnnotation(Tool):
             }
         )
 
-        return [image_figure], ['Save'], [json.dumps(current_structure_data)], [new_label_text], [progress_value], [progress_label]
+        new_markers_div = [
+            dl.GeoJSON(
+                data = {
+                    'type': 'FeatureCollection',
+                    'features': [
+                        {
+                            'type': 'Feature',
+                            'geometry': {
+                                'type': 'Point',
+                                'coordinates': marker_centroid
+                            },
+                            'properties': {
+                                'name': 'featureAnnotation Marker',
+                                '_id': uuid.uuid4().hex[:24]
+                            }
+                        }
+                    ]
+                },
+                pointToLayer=self.js_namespace("markerRender"),
+                onEachFeature = self.js_namespace("tooltipMarker"),
+                id = {'type': f'{self.component_prefix}-feature-annotation-markers','index': 0},
+                eventHandlers = {
+                    'dblclick': self.js_namespace('removeMarker')
+                }
+            )
+        ]
+
+
+        return [image_figure], ['Save'], [json.dumps(current_structure_data)], [new_label_text], [progress_value], [progress_label], new_markers_div
 
     def get_structure_region(self, structure_bbox:list, slide_information: dict, scale:bool = True):
         """Using the tile server "regions_url" property to pull out a specific region of tissue
@@ -879,6 +956,11 @@ class FeatureAnnotation(Tool):
         else:
             slide_coordinates = structure_bbox
 
+        # Finding centroid of coordinates for marker point
+        marker_centroid = [
+            (structure_bbox[0]+structure_bbox[2])/2, (structure_bbox[1]+structure_bbox[3])/2
+        ]
+
         #TODO: Update this function for multi-frame images
         image_region = Image.open(
             BytesIO(
@@ -888,7 +970,7 @@ class FeatureAnnotation(Tool):
             )
         )
 
-        return image_region
+        return image_region, marker_centroid
     
     def add_new_class_label(self, add_class, add_label, new_class, new_label, label_text, current_structure_data, current_structure, slide_information):
         """Adding a new class or label to the current structure
@@ -1090,8 +1172,6 @@ class FeatureAnnotation(Tool):
 
         session_data = json.loads(session_data)
         options_div = []
-
-
 
         if 'feature-annotation-add-class' in ctx.triggered_id['type']:
 
