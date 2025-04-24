@@ -28,7 +28,7 @@ setuptools.setup(
         "umap-learn>=0.5.6",
         "statsmodels>=0.14.0",
         "typing-extensions>=4.8.0",
-        "girder-job-sequence>=0.2.7"
+        "girder-job-sequence>=0.2.7",
     ],
     extras_require = {
         'interactive': [
@@ -40,7 +40,8 @@ setuptools.setup(
             "dash-bootstrap-components>=1.6.0",
             "dash_treeview_antd>=0.0.1",
             "fastapi>=0.103.2",
-            "uvicorn>=0.30.6"
+            "uvicorn>=0.30.6",
+            "python-multipart"
         ]
     },
     packages=setuptools.find_packages(where = 'src',include=["fusion_tools*"]),

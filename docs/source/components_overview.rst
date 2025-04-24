@@ -58,7 +58,9 @@ Channel Mixer
 Slide Image Overlay
 ^^^^^^^^^^^^^^^^^^^
 
-
+.. raw:: html
+   
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/8F7HcBhLvh0?si=tSc-Hu2YhIhyShma" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
 
 .. autoclass:: fusion_tools.components.maps::SlideImageOverlay
    :members:
@@ -221,6 +223,11 @@ DSAResourceSelector
 
 Designing Custom Components
 ---------------------------
+
+Custom components can be integrated into *fusion-tools* layouts by defining *DashBlueprint* objects inside a class which inherits from *Tool* which can be imported from *fusion_tools*.
+
+
+
 
 
 

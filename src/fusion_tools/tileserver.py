@@ -577,7 +577,7 @@ class LocalTileServer(TileServer):
                 status_code = 400,
             )       
 
-    def get_annotations_property_data(self,image:int,include_keys:list,include_anns:Union[str,list,None]):
+    def get_annotations_property_data(self,image:int,include_keys:Union[str,list,None],include_anns:Union[str,list,None]):
         """Getting data from annotations of specified image, attempting to mirror output of https://github.com/girder/large_image/blob/master/girder_annotation/girder_large_image_annotation/utils/__init__.py
 
         :param image: Index of local image to grab data from

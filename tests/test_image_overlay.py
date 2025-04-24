@@ -19,7 +19,7 @@ def main():
 
     annotations = [
         SlideImageOverlay(
-            image_path = 'C:\\Users\\samuelborder\\Downloads\\20250224_095335.jpg'
+            image_path = 'C:\\Users\\samuelborder\\Downloads\\screenshot.jpg',
         )
     ]
     
@@ -32,7 +32,7 @@ def main():
             ]
         ],
         app_options = {
-            'port': 8060
+            'port': 8050
         }
     )
 
