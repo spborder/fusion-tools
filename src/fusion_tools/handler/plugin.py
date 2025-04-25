@@ -1534,7 +1534,7 @@ class DSAPluginProgress(DSATool):
             job_logs_div = html.Div(
                 [
                     html.Div([html.P(i) for i in line.split('\n')])
-                    for line in job_logs['log']
+                    for line in job_logs.get('log',[])
                 ],
                 style = {'maxHeight': '20vh','overflow': 'scroll'}
             )

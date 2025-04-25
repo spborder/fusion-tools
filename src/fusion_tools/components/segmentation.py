@@ -194,7 +194,7 @@ class FeatureAnnotation(Tool):
                     html.Hr(),
                     dbc.Row([
                         dbc.Col([
-                            dbc.Label('Select structure in current viewport: ',html_for = {'type': 'feature-annotation-structure-drop','index': 0})
+                            dbc.Label('Select structure: ',html_for = {'type': 'feature-annotation-structure-drop','index': 0})
                         ], md = 3),
                         dbc.Col([
                             dcc.Dropdown(
@@ -231,6 +231,17 @@ class FeatureAnnotation(Tool):
                         )
                     ],style = {'marginBottom': '10px'},align='center'),
                     dbc.Row([
+                        dmc.Switch(
+                            id = {'type':'feature-annotation-grab-viewport','index': 0},
+                            size = 'lg',
+                            onLabel = 'ON',
+                            offLabel = 'OFF',
+                            checked = False,
+                            label = 'Grab structures in Viewport',
+                            description = 'Select whether or not to only grab structures in the current viewport.'
+                        )
+                    ]),
+                    dbc.Row([
                         dbc.Col(
                             dbc.Label('Bounding Box Padding:'),
                             md = 4
@@ -238,7 +249,7 @@ class FeatureAnnotation(Tool):
                         dbc.Col(
                             dcc.Input(
                                 type = 'number',
-                                value = 0,
+                                value = 50,
                                 id = {'type': 'feature-annotation-bbox-padding','index': 0},
                                 style = {'width': '100%'}
                             ),
@@ -324,7 +335,7 @@ class FeatureAnnotation(Tool):
                         dbc.Col([
                             dcc.Dropdown(
                                 options = class_drop_vals,
-                                value = [],
+                                value = [] if len(class_drop_vals)==0 else class_drop_vals[0].get('value',[]),
                                 multi = False,
                                 placeholder = 'Class',
                                 id = {'type': 'feature-annotation-class-drop','index': 0}
@@ -347,7 +358,7 @@ class FeatureAnnotation(Tool):
                         dbc.Col([
                             dcc.Dropdown(
                                 options = label_drop_vals,
-                                value = [],
+                                value = [] if len(label_drop_vals)==0 else label_drop_vals[0].get('value',[]),
                                 multi = False,
                                 placeholder = 'Label',
                                 id = {'type': 'feature-annotation-label-drop','index': 0}
@@ -451,7 +462,8 @@ class FeatureAnnotation(Tool):
                 State({'type': 'slide-map','index':ALL},'bounds'),
                 State({'type': 'feature-annotation-bbox-padding','index': ALL},'value'),
                 State({'type': 'feature-annotation-slide-information','index': ALL},'data'),
-                State({'type': 'vis-layout-tabs','index': ALL},'active_tab')
+                State({'type': 'vis-layout-tabs','index': ALL},'active_tab'),
+                State({'type': 'feature-annotation-grab-viewport','index':ALL},'checked')
             ]
         )(self.update_structure_options)
 
@@ -763,7 +775,7 @@ class FeatureAnnotation(Tool):
             np.save(mask_save_path.replace('.png','.npy'),np.uint8(formatted_mask))
             slide_image_region.save(image_save_path)
 
-    def update_structure_options(self, overlay_names, refresh_clicked, current_features, slide_bounds, bbox_padding, slide_information, active_tab):
+    def update_structure_options(self, overlay_names, refresh_clicked, current_features, slide_bounds, bbox_padding, slide_information, active_tab, get_viewport):
         """Updating the structure options based on updated slide bounds
 
         :param slide_bounds: Current slide bounds
@@ -790,6 +802,7 @@ class FeatureAnnotation(Tool):
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
 
+        get_viewport = get_pattern_matching_value(get_viewport)
         slide_map_bounds = get_pattern_matching_value(slide_bounds)
         if slide_map_bounds is None:
             raise exceptions.PreventUpdate
@@ -804,7 +817,10 @@ class FeatureAnnotation(Tool):
         structure_options = []
         structure_bboxes = {}
         for g in current_features:
-            intersecting_shapes, intersecting_properties = find_intersecting(g,slide_map_box)
+            if get_viewport:
+                intersecting_shapes, intersecting_properties = find_intersecting(g,slide_map_box)
+            else:
+                intersecting_shapes = g
             if len(intersecting_shapes['features'])>0:
                 structure_options.append(g['properties']['name'])
 

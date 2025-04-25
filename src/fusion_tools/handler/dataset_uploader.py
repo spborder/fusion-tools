@@ -172,7 +172,6 @@ class RequestData:
         # Get the chunk data.
         # Type of `chunk_data`: werkzeug.datastructures.FileStorage
         self.chunk_data = request.files["file"]
-
         self.upload_id = request.form.get("upload_id", default="", type=str)
 
 class DSAUploadHandler:
@@ -180,6 +179,9 @@ class DSAUploadHandler:
         self.server = server
         self.upload_folder = upload_folder
         self.use_upload_id = use_upload_id
+
+        # 2**20 is 1MB in binary
+        self.min_chunk_size = MIN_UPLOAD_SIZE * (2**20)
 
     def post_before(self,req_data):
         # Creating item to upload to
@@ -209,7 +211,7 @@ class DSAUploadHandler:
             params={
                 'token': token,
                 'uploadId': parentId,
-                'offset': offset
+                'offset': offset * self.min_chunk_size
             },
             data = chunk
         )
@@ -292,7 +294,7 @@ class DSAUploadHandler:
 
         if r.chunk_number==1:
             self.post_before(r)
-
+        
         if upload_info['fusion_upload_type'] in ['item','file']:
             post_response = self.post_file_chunk(
                 api_url=upload_info['api_url'],
