@@ -44,7 +44,7 @@ def main():
         components = [
             [
                 LargeSlideMap(
-                    min_zoom = 4
+                    min_zoom = 2
                 ),
                 [
                     OverlayOptions()

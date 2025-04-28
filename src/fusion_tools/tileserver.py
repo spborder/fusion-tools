@@ -441,7 +441,8 @@ class LocalTileServer(TileServer):
                 if all([not i is None for i in [top,left,bottom,right]]):
                     image_anns = self.annotations[image]
                     image_region_anns = []
-                    query_poly = box(top,left,bottom,right)
+                    # Shapely box requires minx, miny, maxx, maxy
+                    query_poly = box(left,top,right,bottom)
 
                     if type(image_anns)==dict:
                         image_anns = [image_anns]
@@ -460,7 +461,14 @@ class LocalTileServer(TileServer):
                                     query= query_poly
                                 )
                                 if len(filtered_anns['features'])>0:
+                                    filtered_anns['properties'] = ann['properties']
                                     image_region_anns.append(filtered_anns)
+                                else:
+                                    image_region_anns.append({
+                                        'type': 'FeatureCollection',
+                                        'features':[],
+                                        'properties':ann['properties']
+                                    })
                             elif type(ann)==list:
                                 for g in ann:
                                     filtered_g = structures_within_poly(
@@ -468,7 +476,15 @@ class LocalTileServer(TileServer):
                                         query=query_poly
                                     )
                                     if len(filtered_g['features'])>0:
+                                        filtered_g['properties'] = g['properties']
                                         image_region_anns.append(filtered_g)
+                                    else:
+                                        image_region_anns.append({
+                                            'type': 'FeatureCollection',
+                                            'features':[],
+                                            'properties':g['properties']
+                                        })
+
                         else:
                             print(f'Unrecognized annotation format found for image: {image}, {self.names[image]}')
                     return Response(

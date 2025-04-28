@@ -2345,11 +2345,12 @@ class LargeSlideMap(SlideMap):
 
                 // Run annotation region request, return annotations within that region
                 // Reading in map-slide-information
+                // scaled_map_bounds = [top,left,bottom,right]
                 var map_slide_information = JSON.parse(slide_information);
                 var scaled_map_bounds = [
-                    Math.floor(map_bounds[0][1][0] / map_slide_information.y_scale),
-                    Math.floor(map_bounds[0][0][1] / map_slide_information.x_scale),
                     Math.floor(map_bounds[0][0][0] / map_slide_information.y_scale),
+                    Math.floor(map_bounds[0][0][1] / map_slide_information.x_scale),
+                    Math.floor(map_bounds[0][1][0] / map_slide_information.y_scale),
                     Math.floor(map_bounds[0][1][1] / map_slide_information.x_scale)
                 ];
 
@@ -2367,7 +2368,7 @@ class LargeSlideMap(SlideMap):
                         var annotation = map_slide_information.annotations_metadata[ann];
 
                         try {
-                            let ann_url = map_slide_information.annotations_region_url + annotation._id+"?top="+scaled_map_bounds[0]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[2]+"&right="+scaled_map_bounds[3]
+                            let ann_url = map_slide_information.annotations_region_url + annotation._id+"?top="+scaled_map_bounds[2]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[0]+"&right="+scaled_map_bounds[3]
                             var ann_response = await fetch(
                                 ann_url, {
                                 method: 'GET',
@@ -2504,16 +2505,19 @@ class LargeSlideMap(SlideMap):
             new_annotations_region_url = new_slide['annotations_region_url']
             new_annotations_metadata_url = new_slide['annotations_metadata_url']
             new_metadata_url = new_slide['metadata_url']
+            new_image_metadata_url = new_slide['image_metadata_url']
         else:
             new_tile_url = new_slide['tiles_url']+f'?token={vis_data["current_user"]["token"]}'
             new_annotations_url = new_slide['annotations_url']+f'?token={vis_data["current_user"]["token"]}'
             new_annotations_metadata_url = new_slide['annotations_metadata_url']+f'?token={vis_data["current_user"]["token"]}'
             new_metadata_url = new_slide['metadata_url']+f'?token={vis_data["current_user"]["token"]}'
+            new_image_metadata_url = new_slide['image_metadata_url']+f'?token={vis_data["current_user"]["token"]}'
 
+        new_image_metadata = requests.get(new_image_metadata_url).json()
         new_metadata = requests.get(new_metadata_url).json()
         new_annotations_metadata = requests.get(new_annotations_metadata_url).json()
-        new_tile_size = new_metadata['tileHeight']
-        x_scale, y_scale = self.get_scale_factors(new_metadata)
+        new_tile_size = new_image_metadata['tileHeight']
+        x_scale, y_scale = self.get_scale_factors(new_image_metadata)
 
         annotation_names = []
         image_overlays = []
@@ -2624,7 +2628,7 @@ class LargeSlideMap(SlideMap):
             id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
             url = new_tile_url,
             tileSize = new_tile_size,
-            maxNativeZoom=new_metadata['levels']-2 if new_metadata['levels']>=2 else 0,
+            maxNativeZoom=new_image_metadata['levels']-2 if new_image_metadata['levels']>=2 else 0,
             minZoom = 0
         )
 
@@ -2634,10 +2638,14 @@ class LargeSlideMap(SlideMap):
         new_slide_info['image_overlays'] = image_overlays
         new_slide_info['slide_info'] = new_slide
         new_slide_info['tiles_url'] = new_tile_url
+        new_slide_info['tiles_metadata'] = new_image_metadata
+        new_slide_info['metadata'] = new_metadata
         new_slide_info['annotations_url'] = new_annotations_url
         new_slide_info['annotations_region_url'] = new_annotations_region_url
         new_slide_info['annotations_metadata'] = new_annotations_metadata
         new_slide_info['minZoom'] = self.min_zoom
+
+        new_slide_info = new_slide_info | new_slide
 
         geo_annotations = json.dumps(initial_anns)
         new_slide_info = json.dumps(new_slide_info)
@@ -2646,7 +2654,65 @@ class LargeSlideMap(SlideMap):
         manual_rois = []
         gen_rois = []
 
-        return new_layer_children, manual_rois, gen_rois, geo_annotations, new_tile_layer, new_slide_info
+        remove_old_edits = {
+            'mode': 'remove',
+            'n_clicks': 0,
+            'action': 'clear all'
+        }
+
+        if 'meta' in new_metadata:
+            display_metadata = {
+                k: v
+                for k,v in new_metadata['meta'].items()
+                if not type(v)==dict
+            }
+        else:
+            display_metadata = {}
+
+        for k,v in new_metadata.items():
+            if not k=='meta':
+                if not type(v)==dict:
+                    display_metadata[k] = v
+
+        slide_metadata_div = html.Div(
+            dbc.Accordion(
+                children = [
+                    dbc.AccordionItem(
+                        title = 'Image Metadata',
+                        children = [
+                            self.make_dash_table(
+                                pd.DataFrame.from_records([
+                                    {
+                                        'Key': k,
+                                        'Value': v
+                                    }
+                                    for k,v in new_image_metadata.items()
+                                    if not type(v) in [list,dict]
+                                ])
+                            )
+                        ]
+                    ),
+                    dbc.AccordionItem(
+                        title = 'Case Metadata',
+                        children = [
+                            self.make_dash_table(
+                                pd.DataFrame.from_records([
+                                    {
+                                        'Key': k,
+                                        'Value': v
+                                    }
+                                    for k,v in display_metadata.items()
+                                ])
+                            )
+                        ]
+                    )
+                ]
+            )
+        )
+
+        fetch_data_store = json.dumps({})
+
+        return new_layer_children, remove_old_edits, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
 
 class LargeMultiFrameSlideMap(MultiFrameSlideMap):
     """This is a sub-class of MultiFrameSlideMap used for LARGE amounts of annotations (>50k)
@@ -2850,11 +2916,12 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
 
                 // Run annotation region request, return annotations within that region
                 // Reading in map-slide-information
+                // scaled_map_bounds = [top,left,bottom,right]
                 var map_slide_information = JSON.parse(slide_information);
                 var scaled_map_bounds = [
-                    Math.floor(map_bounds[0][1][0] / map_slide_information.y_scale),
-                    Math.floor(map_bounds[0][0][1] / map_slide_information.x_scale),
                     Math.floor(map_bounds[0][0][0] / map_slide_information.y_scale),
+                    Math.floor(map_bounds[0][0][1] / map_slide_information.x_scale),
+                    Math.floor(map_bounds[0][1][0] / map_slide_information.y_scale),
                     Math.floor(map_bounds[0][1][1] / map_slide_information.x_scale)
                 ];
 
@@ -2872,7 +2939,7 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
                         var annotation = map_slide_information.annotations_metadata[ann];
 
                         try {
-                            let ann_url = map_slide_information.annotations_region_url + annotation._id+"?top="+scaled_map_bounds[0]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[2]+"&right="+scaled_map_bounds[3]
+                            let ann_url = map_slide_information.annotations_region_url + annotation._id+"?top="+scaled_map_bounds[2]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[0]+"&right="+scaled_map_bounds[3]
                             var ann_response = await fetch(
                                 ann_url, {
                                 method: 'GET',
@@ -2896,17 +2963,24 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
                                 }
                             };
                             for (let i = 0; i<new_annotations.annotation.elements.length; i++){
+
+                                if ("user" in new_annotations.annotation.elements[i]) {
+                                    var user_properties = new_annotations.annotation.elements[i].user;
+                                } else {
+                                    var user_properties = new Object;
+                                }
+                                user_properties["id"] = i;
+                                user_properties["cluster"] = false;
+                                user_properties["name"] = annotation.annotation.name;
+
                                 let new_feature = {
                                     "type": "Feature",
-                                    "properties": new_annotations.annotation.elements[i].user,
+                                    "properties": user_properties,
                                     "geometry": {
                                         "type": "Polygon",
                                         "coordinates": [[]]
                                     }
                                 };
-
-                                new_feature["properties"]["id"] = i;
-                                new_feature["properties"]["cluster"] = false;
 
                                 for (let j = 0; j<new_annotations.annotation.elements[i].points.length;j++){
                                     let these_coords = new_annotations.annotation.elements[i].points[j];
@@ -2924,7 +2998,7 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
                 } else {
                     // General case.
                     try {
-                        let ann_url = map_slide_information.annotations_region_url+"?top="+scaled_map_bounds[0]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[2]+"&right="+scaled_map_bounds[3]
+                        let ann_url = map_slide_information.annotations_region_url+"?top="+scaled_map_bounds[0]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[2]+"&right="+scaled_map_bounds[3];
                         var ann_response = await fetch(
                             ann_url, {
                             method: 'GET',
@@ -2995,23 +3069,25 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
         vis_data = json.loads(vis_data)
         new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
 
-        # Getting data from the tileservers:
         if not 'current_user' in vis_data or not 'api_url' in new_slide:
             new_tile_url = new_slide['tiles_url']
             new_annotations_url = new_slide['annotations_url']
             new_annotations_region_url = new_slide['annotations_region_url']
             new_annotations_metadata_url = new_slide['annotations_metadata_url']
             new_metadata_url = new_slide['metadata_url']
+            new_image_metadata_url = new_slide['image_metadata_url']
         else:
             new_tile_url = new_slide['tiles_url']+f'?token={vis_data["current_user"]["token"]}'
             new_annotations_url = new_slide['annotations_url']+f'?token={vis_data["current_user"]["token"]}'
             new_annotations_metadata_url = new_slide['annotations_metadata_url']+f'?token={vis_data["current_user"]["token"]}'
             new_metadata_url = new_slide['metadata_url']+f'?token={vis_data["current_user"]["token"]}'
+            new_image_metadata_url = new_slide['image_metadata_url']+f'?token={vis_data["current_user"]["token"]}'
 
+        new_image_metadata = requests.get(new_image_metadata_url).json()
         new_metadata = requests.get(new_metadata_url).json()
         new_annotations_metadata = requests.get(new_annotations_metadata_url).json()
-        new_tile_size = new_metadata['tileHeight']
-        x_scale, y_scale = self.get_scale_factors(new_metadata)
+        new_tile_size = new_image_metadata['tileHeight']
+        x_scale, y_scale = self.get_scale_factors(new_image_metadata)
 
         annotation_names = []
         image_overlays = []
@@ -3118,12 +3194,12 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
             ])
 
         # For MultiFrameSlideMap, add frame BaseLayers and RGB layer (if present)
-        new_layer_children.extend(self.process_frames(new_metadata, new_tile_url))
+        new_layer_children.extend(self.process_frames(new_image_metadata, new_tile_url))
         new_tile_layer = dl.TileLayer(
             id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
             url = '',                
             tileSize=new_tile_size,
-            maxNativeZoom=new_metadata['levels']-2 if new_metadata['levels']>=2 else 0,
+            maxNativeZoom=new_image_metadata['levels']-2 if new_image_metadata['levels']>=2 else 0,
             minZoom = 0
         )
 
@@ -3133,6 +3209,8 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
         new_slide_info['image_overlays'] = image_overlays
         new_slide_info['slide_info'] = new_slide
         new_slide_info['tiles_url'] = new_tile_url
+        new_slide_info['tiles_metadata'] = new_image_metadata
+        new_slide_info['metadata'] = new_metadata
         new_slide_info['annotations_url'] = new_annotations_url
         new_slide_info['annotations_region_url'] = new_annotations_region_url
         new_slide_info['annotations_metadata'] = new_annotations_metadata
@@ -3144,10 +3222,66 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
         # Updating manual and generated ROIs divs
         manual_rois = []
         gen_rois = []
+        remove_old_edits = {
+            'mode': 'remove',
+            'n_clicks': 0,
+            'action': 'clear all'
+        }
 
-        return new_layer_children, manual_rois, gen_rois, geo_annotations, new_tile_layer, new_slide_info
+        if 'meta' in new_metadata:
+            display_metadata = {
+                k: v
+                for k,v in new_metadata['meta'].items()
+                if not type(v)==dict
+            }
+        else:
+            display_metadata = {}
 
-    
+        for k,v in new_metadata.items():
+            if not k=='meta':
+                if not type(v)==dict:
+                    display_metadata[k] = v
+
+        slide_metadata_div = html.Div(
+            dbc.Accordion(
+                children = [
+                    dbc.AccordionItem(
+                        title = 'Image Metadata',
+                        children = [
+                            self.make_dash_table(
+                                pd.DataFrame.from_records([
+                                    {
+                                        'Key': k,
+                                        'Value': v
+                                    }
+                                    for k,v in new_image_metadata.items()
+                                    if not type(v) in [list,dict]
+                                ])
+                            )
+                        ]
+                    ),
+                    dbc.AccordionItem(
+                        title = 'Case Metadata',
+                        children = [
+                            self.make_dash_table(
+                                pd.DataFrame.from_records([
+                                    {
+                                        'Key': k,
+                                        'Value': v
+                                    }
+                                    for k,v in display_metadata.items()
+                                ])
+                            )
+                        ]
+                    )
+                ]
+            )
+        )
+
+        fetch_data_store = json.dumps({})
+
+        return new_layer_children, remove_old_edits, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
+
 class HybridSlideMap(MultiFrameSlideMap):
     """This is a version of SlideMap that combines SlideMap and MultiFrameSlideMap so you only need to initialize one
 

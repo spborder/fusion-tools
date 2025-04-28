@@ -437,7 +437,7 @@ class FeatureAnnotation(Tool):
                 Input({'type': 'slide-select-drop','index':ALL},'value')
             ],
             [
-                Output({'type': 'feature-annotation-slide-information','index':ALL},'data')
+                Output({'type': 'feature-annotation-slide-information','index':ALL},'data'),
             ],
             [
                 State('anchor-vis-store','data')
@@ -631,6 +631,10 @@ class FeatureAnnotation(Tool):
         new_slide_data['name'] = slide_data['name']
 
         new_slide_data = json.dumps(new_slide_data)
+        new_structure_data = json.dumps({})
+        new_structure_progress_val = 0
+        new_structure_progress_label = '0%'
+        new_structure_figure = go.Figure()
 
         return [new_slide_data]
 
@@ -804,10 +808,14 @@ class FeatureAnnotation(Tool):
 
         get_viewport = get_pattern_matching_value(get_viewport)
         slide_map_bounds = get_pattern_matching_value(slide_bounds)
-        if slide_map_bounds is None:
+        if slide_map_bounds is None and get_viewport:
             raise exceptions.PreventUpdate
         
-        slide_map_box = box(slide_map_bounds[0][1],slide_map_bounds[0][0],slide_map_bounds[1][1],slide_map_bounds[1][0])
+        if not slide_map_bounds is None:
+            slide_map_box = box(slide_map_bounds[0][1],slide_map_bounds[0][0],slide_map_bounds[1][1],slide_map_bounds[1][0])
+        else:
+            slide_map_box = None
+            
         bbox_padding = get_pattern_matching_value(bbox_padding)
         current_features = json.loads(get_pattern_matching_value(current_features))
         slide_information = json.loads(get_pattern_matching_value(slide_information))
