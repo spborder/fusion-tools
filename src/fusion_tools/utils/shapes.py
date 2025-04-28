@@ -9,6 +9,7 @@ import json
 import geojson
 import lxml.etree as ET
 from copy import deepcopy
+from math import floor, pi
 
 import numpy as np
 
@@ -551,6 +552,115 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
         spot_annotations['properties'] = spot_properties
 
     return spot_annotations
+
+def load_visiumhd(visiumhd_path:str, resolution_level:int,include_analysis_path:Union[str,list,None]=None, include_analysis_name:Union[str,list,None]=None, verbose:bool = True):
+    """Generating annotations for a VisiumHD dataset
+
+    :param visiumhd_path: Path to "binned_outputs"
+    :type visiumhd_path: str
+    :param resolution_level: Number representing the length of one side of the square
+    :type resolution_level: int
+    :param include_analysis_path: Path to various analyses performed on these ROIs, can either be output of spaceranger or any csv file with "barcode" column to be used for alignment., defaults to None
+    :type include_analysis_path: Union[str,list,None], optional
+    :param include_analysis_name: Name to use for each included analysis, if none are provided, name is inferred from {path}.split(os.sep)[-2]., defaults to None
+    :type include_analysis_name: Union[str,list,None], optional
+    """
+
+    # Creating the path for one resolution level
+    visiumhd_path = os.path.join(visiumhd_path,f'square_{"".join(["0"]*(3-len(str(resolution_level)))+[i for i in str(resolution_level)])}')
+
+    # Loading analyses
+    if not include_analysis_path is None:
+        if type(include_analysis_path)==str:
+            include_analysis_path = [include_analysis_path]
+        
+        if include_analysis_name is None:
+            include_analysis_name = [j.split(os.sep)[-2] for j in include_analysis_path]
+        elif type(include_analysis_name)==str:
+            include_analysis_name = [include_analysis_name]
+        elif type(include_analysis_name)==list:
+            if not len(include_analysis_name)==len(include_analysis_path):
+                raise ValueError('Number of analysis names is not equal to the number of analyses provided')
+
+        analysis_list = []
+        for u,n in zip(include_analysis_path,include_analysis_name):
+            analysis_data = pd.read_csv(u)
+            analysis_list.append({
+                'name': n,
+                'data': analysis_data
+            })
+
+    tissue_positions_path = os.path.join(visiumhd_path,'spatial','tissue_positions.parquet')
+    scale_factors_path = os.path.join(visiumhd_path,'spatial','scalefactors_json.json')
+
+    with open(scale_factors_path,'r') as f:
+        scale_factors = json.load(f)
+        f.close()
+
+    tissue_positions = pd.read_parquet(tissue_positions_path)
+
+    for an in analysis_list:
+        an_data = an['data']
+        an_data.columns = ['barcode',an['name']]
+        tissue_positions = pd.merge(tissue_positions,an_data)
+
+    square_um_area = resolution_level**2
+    square_pixel_area = square_um_area * (1/(scale_factors['microns_per_pixel']**2))
+    square_radius = floor((square_pixel_area/pi)**0.5)
+
+    if verbose:
+        visiumhd_geos = {
+            'type': 'FeatureCollection',
+            'features': [
+                {
+                    'type': 'Feature',
+                    'geometry': {
+                        'type': 'Polygon',
+                        'coordinates': [
+                            list(Point(f['pxl_col_in_fullres'],f['pxl_row_in_fullres']).buffer(square_radius,cap_style=3).simplify(0.5).exterior.coords)
+                        ]
+                    },
+                    'properties': {
+                        'name': resolution_level,
+                        '_id': uuid.uuid4().hex[:24],
+                        '_index': f_idx
+                    } | {k['name']: f.get(k['name']) for k in analysis_list}
+                }
+                for f_idx,f in tqdm(tissue_positions.iterrows(),total = tissue_positions.shape[0])
+            ],
+            'properties':{
+                'name': resolution_level,
+                '_id': uuid.uuid4().hex[:24]
+            }
+        }
+    else:
+        visiumhd_geos = {
+            'type': 'FeatureCollection',
+            'features': [
+                {
+                    'type': 'Feature',
+                    'geometry': {
+                        'type': 'Polygon',
+                        'coordinates': [
+                            list(Point(f['pxl_col_in_fullres'],f['pxl_row_in_fullres']).buffer(square_radius,cap_style=3).simplify(0.5).exterior.coords)
+                        ]
+                    },
+                    'properties': {
+                        'name': resolution_level,
+                        '_id': uuid.uuid4().hex[:24],
+                        '_index': f_idx
+                    } | {k['name']: f.get(k['name']) for k in analysis_list}
+                }
+                for f_idx,f in tissue_positions.iterrows()
+            ],
+            'properties':{
+                'name': resolution_level,
+                '_id': uuid.uuid4().hex[:24]
+            }
+        }
+
+
+    return visiumhd_geos
 
 def detect_histomics(query_annotations:Union[list,dict]):
     """Check whether a list/dict of annotations are in histomics format
