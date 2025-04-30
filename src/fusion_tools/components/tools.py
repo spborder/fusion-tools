@@ -2075,7 +2075,10 @@ class PropertyPlotter(Tool):
 
         current_plot_data = json.dumps(current_plot_data)
 
-        property_graph_tabs_div = self.make_property_plot_tabs(data_df,label_names,property_names,['bbox','point_info'])
+        try:
+            property_graph_tabs_div = self.make_property_plot_tabs(data_df,label_names,property_names,['bbox','point_info'])
+        except:
+            property_graph_tabs_div = dbc.Alert('Error generating property statistics tabs',color = 'danger')
 
         return [plot_figure], [property_graph_tabs_div], [current_plot_data]
 
@@ -2561,8 +2564,12 @@ class PropertyPlotter(Tool):
 
             unique_labels = [i for i in label_data.unique().tolist() if type(i)==str]
             for u_idx, u in enumerate(unique_labels):
-                label_data = data_df[label_data.astype(str).str.match(u)].loc[:,[i for i in property_cols if i in data_df]]
-                summary = label_data.describe().round(decimals=4)
+                try:
+                    u_label_data = data_df[label_data.astype(str).str.match(u)].loc[:,[i for i in property_cols if i in data_df]]
+                except:
+                    u_label_data = data_df[label_data.str.match(u)].loc[:,[i for i in property_cols if i in data_df]]
+
+                summary = u_label_data.describe().round(decimals=4)
                 summary.reset_index(inplace=True,drop=False)
 
                 property_summary_children.extend([

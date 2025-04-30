@@ -542,6 +542,7 @@ class SlideMap(MapComponent):
             [
                 Output({'type': 'map-initial-annotations','index': MATCH},'children'),
                 Output({'type': 'edit-control','index': MATCH},'editToolbar'),
+                Output({'type': 'map-marker-div','index': MATCH},'children'),
                 Output({'type': 'map-manual-rois','index': MATCH},'children'),
                 Output({'type': 'map-generated-rois','index': MATCH},'children'),
                 Output({'type': 'map-tile-layer-holder','index': MATCH},'children'),
@@ -1087,7 +1088,7 @@ class SlideMap(MapComponent):
 
         for k,v in new_metadata.items():
             if not k=='meta':
-                if not type(v)==dict:
+                if not type(v) in [dict,list]:
                     display_metadata[k] = v
 
         slide_metadata_div = html.Div(
@@ -1129,7 +1130,10 @@ class SlideMap(MapComponent):
         # Updating fetch error store to be empty again
         fetch_data_store = json.dumps({})
 
-        return new_layer_children, remove_old_edits, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
+        # Clearing markers from previous slide
+        new_marker_div = html.Div()
+
+        return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
 
     def get_annotations_backup(self, ann_error_store, vis_data):
 
@@ -2031,7 +2035,10 @@ class MultiFrameSlideMap(SlideMap):
         # Updating fetch error store to be empty again
         fetch_data_store = json.dumps({})
 
-        return new_layer_children, remove_old_edits, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
+        # Clearing marker div
+        new_marker_div = html.Div()
+
+        return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
 
     def process_frames(self,image_metadata,tiles_url):
         """Create BaseLayer and TileLayer components for each of the different frames present in a multi-frame image
@@ -2712,7 +2719,9 @@ class LargeSlideMap(SlideMap):
 
         fetch_data_store = json.dumps({})
 
-        return new_layer_children, remove_old_edits, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
+        new_marker_div = html.Div()
+
+        return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
 
 class LargeMultiFrameSlideMap(MultiFrameSlideMap):
     """This is a sub-class of MultiFrameSlideMap used for LARGE amounts of annotations (>50k)
@@ -3280,7 +3289,9 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
 
         fetch_data_store = json.dumps({})
 
-        return new_layer_children, remove_old_edits, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
+        new_marker_div = html.Div()
+
+        return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
 
 class HybridSlideMap(MultiFrameSlideMap):
     """This is a version of SlideMap that combines SlideMap and MultiFrameSlideMap so you only need to initialize one
@@ -3546,7 +3557,9 @@ class HybridSlideMap(MultiFrameSlideMap):
         # Updating fetch error store to be empty again
         fetch_data_store = json.dumps({})
 
-        return new_layer_children, remove_old_edits, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
+        new_marker_div = html.Div()
+
+        return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
 
 
 #TODO: This can be rewritten as its own embeddable blueprint

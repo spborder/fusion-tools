@@ -33,7 +33,8 @@ def main(args):
             plugin_add_list = args[2:]
         else:
             plugin_add_list = [
-                'fusionplugins/phenocycler:latest',
+                #'fusionplugins/phenocycler:latest',
+                'fusionplugins/visium:latest'
                 #'fusionplugins/general:latest',
             ]
         

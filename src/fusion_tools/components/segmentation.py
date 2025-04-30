@@ -38,6 +38,9 @@ from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 from fusion_tools.utils.shapes import find_intersecting, extract_geojson_properties, path_to_mask, process_filters_queries
 from fusion_tools import Tool
 
+#TODO: Need some kind of handler for handling where/how data is stored
+#TODO: Add schema selection for FeatureAnnotation and BulkLabels
+
 
 class FeatureAnnotation(Tool):
     """Enables annotation (drawing) on top of structures in the SlideMap using a separate interface.
@@ -94,6 +97,7 @@ class FeatureAnnotation(Tool):
 
         # Add callbacks here
         self.get_callbacks()
+        self.feature_annotation_callbacks()
 
     def get_scale_factors(self, image_metadata: dict):
         """Function used to initialize scaling factors applied to GeoJSON annotations to project annotations into the SlideMap CRS (coordinate reference system)
@@ -438,6 +442,7 @@ class FeatureAnnotation(Tool):
             ],
             [
                 Output({'type': 'feature-annotation-slide-information','index':ALL},'data'),
+                Output({'type': 'feature-annotation-figure','index': ALL},'figure')
             ],
             [
                 State('anchor-vis-store','data')
@@ -447,8 +452,8 @@ class FeatureAnnotation(Tool):
         # Updating which structures are available in the dropdown menu
         self.blueprint.callback(
             [
+                Input({'type': 'feature-annotation-refresh-icon','index': ALL},'n_clicks'),
                 Input({'type': 'feature-overlay','index':ALL},'name'),
-                Input({'type': 'feature-annotation-refresh-icon','index': ALL},'n_clicks')
             ],
             [
                 Output({'type': 'feature-annotation-structure-drop','index': ALL},'options'),
@@ -547,7 +552,8 @@ class FeatureAnnotation(Tool):
                 State({'type': 'feature-annotation-class-drop','index': ALL},'options'),
                 State({'type': 'feature-annotation-current-structures','index': ALL},'data'),
                 State({'type': 'feature-annotation-structure-drop','index': ALL},'value'),
-                State({'type':'feature-annotation-slide-information','index':ALL},'data')
+                State({'type':'feature-annotation-slide-information','index':ALL},'data'),
+                State({'type':'feature-annotation-bbox-padding','index': ALL},'value')
             ]
         )(self.save_annotation)
 
@@ -574,6 +580,76 @@ class FeatureAnnotation(Tool):
                 Output({'type': 'feature-annotation-label-input-div','index': ALL},'children')
             ]
         )(self.update_text_label)
+
+    def feature_annotation_callbacks(self):
+
+        self.blueprint.clientside_callback(
+            """
+            function(structure_options, slide_annotations, bbox_padding, get_viewport, slide_information){
+                
+                if (bbox_padding[0]==undefined){
+                    throw window.dash_clientside.PreventUpdate;
+                } else if (slide_annotations[0]==undefined || slide_annotations[0]==='{}'){
+                    throw window.dash_clientside.PreventUpdate;
+                } else if (slide_information[0]==undefined){
+                    throw window.dash_clientside.PreventUpdate;
+                } else if (get_viewport[0]){
+                    throw window.dash_clientside.PreventUpdate;
+                }
+
+                const annotations_array = JSON.parse(slide_annotations[0]);
+                slide_information = JSON.parse(slide_information[0]);
+                bbox_padding = bbox_padding[0] * slide_information.x_scale;
+
+                const getBBox = (coords, padding = 0) => {
+                    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                    for (const [x, y] of coords) {
+                        if (x < minX) minX = x;
+                        if (y < minY) minY = y;
+                        if (x > maxX) maxX = x;
+                        if (y > maxY) maxY = y;
+                    }
+                    return [
+                        minX - padding,
+                        minY - padding,
+                        maxX + padding, 
+                        maxY + padding
+                    ];
+                };
+
+                const computeBBoxes = (featureCollection, padding = 0) =>
+                    Array.isArray(featureCollection?.features)
+                        ? featureCollection.features
+                            .filter(f => f.geometry?.type === 'Polygon' && Array.isArray(f.geometry.coordinates?.[0]))
+                            .map(f => getBBox(f.geometry.coordinates[0], padding))
+                        : [];
+                
+                const current_structure_bbox = annotations_array.map(featureCollection => {
+                    const fc_name = featureCollection.properties.name;
+                    return {
+                        'name': fc_name,
+                        'index': 0,
+                        'bboxes': computeBBoxes(featureCollection, bbox_padding)
+                    };
+                });
+            
+                return[JSON.stringify(current_structure_bbox)];
+            }
+            """,
+            [
+                Input({'type':'feature-annotation-structure-drop','index': ALL},'options'),
+                Input({'type': 'map-annotations-store','index': ALL},'data'),
+
+            ],
+            [
+                Output({'type': 'feature-annotation-current-structures','index': ALL},'data')
+            ],
+            [
+                State({'type': 'feature-annotation-bbox-padding','index': ALL},'value'),
+                State({'type': 'feature-annotation-grab-viewport','index': ALL},'checked'),
+                State({'type': 'feature-annotation-slide-information','index': ALL},'data')
+            ]
+        )
 
     def get_namespace(self):
         """Adding JavaScript functions to the BulkLabels Namespace
@@ -631,12 +707,9 @@ class FeatureAnnotation(Tool):
         new_slide_data['name'] = slide_data['name']
 
         new_slide_data = json.dumps(new_slide_data)
-        new_structure_data = json.dumps({})
-        new_structure_progress_val = 0
-        new_structure_progress_label = '0%'
-        new_structure_figure = go.Figure()
+        new_figure = go.Figure()
 
-        return [new_slide_data]
+        return [new_slide_data], [new_figure]
 
     def save_label(self, label_name, label_text, image_bbox, slide_information):
         """Save new label to current save folder.
@@ -771,15 +844,13 @@ class FeatureAnnotation(Tool):
         image_save_path = f'{save_path}/Images/{"_".join([str(i) for i in image_bbox])}.png'
 
         if formatted_mask.shape[-1] in [1,3]:
-            
             Image.fromarray(np.uint8(formatted_mask)).save(mask_save_path)
             slide_image_region.save(image_save_path)
-
         else:
             np.save(mask_save_path.replace('.png','.npy'),np.uint8(formatted_mask))
             slide_image_region.save(image_save_path)
 
-    def update_structure_options(self, overlay_names, refresh_clicked, current_features, slide_bounds, bbox_padding, slide_information, active_tab, get_viewport):
+    def update_structure_options(self,refresh_clicked, overlay_names, current_features, slide_bounds, bbox_padding, slide_information, active_tab, get_viewport):
         """Updating the structure options based on updated slide bounds
 
         :param slide_bounds: Current slide bounds
@@ -807,35 +878,36 @@ class FeatureAnnotation(Tool):
             raise exceptions.PreventUpdate
 
         get_viewport = get_pattern_matching_value(get_viewport)
-        slide_map_bounds = get_pattern_matching_value(slide_bounds)
-        if slide_map_bounds is None and get_viewport:
-            raise exceptions.PreventUpdate
-        
-        if not slide_map_bounds is None:
-            slide_map_box = box(slide_map_bounds[0][1],slide_map_bounds[0][0],slide_map_bounds[1][1],slide_map_bounds[1][0])
-        else:
-            slide_map_box = None
-            
-        bbox_padding = get_pattern_matching_value(bbox_padding)
-        current_features = json.loads(get_pattern_matching_value(current_features))
-        slide_information = json.loads(get_pattern_matching_value(slide_information))
-        x_scale = slide_information['x_scale']
-        y_scale = slide_information['y_scale']
 
-        structure_options = []
+        structure_options = overlay_names
         structure_bboxes = {}
-        for g in current_features:
-            if get_viewport:
-                intersecting_shapes, intersecting_properties = find_intersecting(g,slide_map_box)
+        if get_viewport:
+            slide_map_bounds = get_pattern_matching_value(slide_bounds)
+            if slide_map_bounds is None:
+                raise exceptions.PreventUpdate
+            
+            if not slide_map_bounds is None:
+                slide_map_box = box(slide_map_bounds[0][1],slide_map_bounds[0][0],slide_map_bounds[1][1],slide_map_bounds[1][0])
             else:
-                intersecting_shapes = g
-            if len(intersecting_shapes['features'])>0:
-                structure_options.append(g['properties']['name'])
+                slide_map_box = None
+                
+            bbox_padding = get_pattern_matching_value(bbox_padding)
+            current_features = json.loads(get_pattern_matching_value(current_features))
+            slide_information = json.loads(get_pattern_matching_value(slide_information))
+            x_scale = slide_information['x_scale']
+            y_scale = slide_information['y_scale']
 
-                structure_bboxes[g['properties']['name']] = [
-                    list(shape(f['geometry']).buffer(bbox_padding*x_scale).bounds) for f in intersecting_shapes['features']
-                ]
-                structure_bboxes[f'{g["properties"]["name"]}_index'] = 0
+            for g in current_features:
+                if get_viewport:
+                    intersecting_shapes, intersecting_properties = find_intersecting(g,slide_map_box)
+                else:
+                    intersecting_shapes = g
+                if len(intersecting_shapes['features'])>0:
+
+                    structure_bboxes[g['properties']['name']] = [
+                        list(shape(f['geometry']).buffer(bbox_padding*x_scale).bounds) for f in intersecting_shapes['features']
+                    ]
+                    structure_bboxes[f'{g["properties"]["name"]}_index'] = 0
 
         new_structure_bboxes = json.dumps(structure_bboxes)
 
@@ -868,40 +940,42 @@ class FeatureAnnotation(Tool):
         progress_value = 0
         progress_label = '0%'
 
-        if structure_drop_value is None or not structure_drop_value in current_structure_data:
+        structure_names = [i['name'] for i in current_structure_data]
+
+        if structure_drop_value is None or not structure_drop_value in structure_names:
             raise exceptions.PreventUpdate
 
         if any([i in ctx.triggered_id['type'] for i in ['feature-annotation-structure-drop','feature-annotation-class-new']]):
             # Getting a new structure:
-            current_structure_index = current_structure_data[f'{structure_drop_value}_index']
-            current_structure_region = current_structure_data[structure_drop_value][current_structure_index]
+            current_structure_index = current_structure_data[structure_names.index(structure_drop_value)]['index']
+            current_structure_region = current_structure_data[structure_names.index(structure_drop_value)]['bboxes'][current_structure_index]
 
         elif 'feature-annotation-previous' in ctx.triggered_id['type']:
             # Going to previous structure
-            current_structure_index = current_structure_data[f'{structure_drop_value}_index']
+            current_structure_index = current_structure_data[structure_names.index(structure_drop_value)]['index']
             if current_structure_index==0:
-                current_structure_index = len(current_structure_data[structure_drop_value])-1
+                current_structure_index = len(current_structure_data[structure_names.index(structure_drop_value)]['bboxes'])-1
             else:
                 current_structure_index -= 1
             
-            current_structure_region = current_structure_data[structure_drop_value][current_structure_index]
-            progress_value = round(100*(current_structure_index / len(current_structure_data[structure_drop_value])))
+            current_structure_region = current_structure_data[structure_names.index(structure_drop_value)]['bboxes'][current_structure_index]
+            progress_value = round(100*((current_structure_index+1) / len(current_structure_data[structure_names.index(structure_drop_value)]['bboxes'])))
             progress_label = f'{progress_value}%'
 
         elif 'feature-annotation-next' in ctx.triggered_id['type']:
             # Going to next structure
-            current_structure_index = current_structure_data[f'{structure_drop_value}_index']
-            if current_structure_index==len(current_structure_data[structure_drop_value])-1:
+            current_structure_index = current_structure_data[structure_names.index(structure_drop_value)]['index']
+            if current_structure_index==len(current_structure_data[structure_names.index(structure_drop_value)]['bboxes'])-1:
                 current_structure_index = 0
             else:
                 current_structure_index += 1
 
-            current_structure_region = current_structure_data[structure_drop_value][current_structure_index]
+            current_structure_region = current_structure_data[structure_names.index(structure_drop_value)]['bboxes'][current_structure_index]
 
-            progress_value = round(100*(current_structure_index / len(current_structure_data[structure_drop_value])))
+            progress_value = round(100*((current_structure_index+1) / len(current_structure_data[structure_names.index(structure_drop_value)]['bboxes'])))
             progress_label = f'{progress_value}%'
 
-        current_structure_data[f'{structure_drop_value}_index'] = current_structure_index
+        current_structure_data[structure_names.index(structure_drop_value)]['index'] = current_structure_index
         
         # Getting the current selected class
         if not current_class_value is None:
@@ -1425,7 +1499,7 @@ class FeatureAnnotation(Tool):
 
         return [add_class_drop_value], [options_div], [add_submit_disabled], [new_class_options], [new_label_options], json.dumps(session_data)
 
-    def save_annotation(self, save_click, current_figure, current_classes, current_structure_data, current_structure, slide_information):
+    def save_annotation(self, save_click, current_figure, current_classes, current_structure_data, current_structure, slide_information, bbox_pad):
         """Saving the current annotation in image format
 
         :param save_click: Save button is clicked
@@ -1440,6 +1514,8 @@ class FeatureAnnotation(Tool):
         :param current_structure: list
         :param slide_information: Information on the current slide (such as x and y scale)
         :param slide_information: list
+        :param bbox_pad: Amount of padding applied to image bounding boxes
+        :param bbox_pad: list
         """
 
 
@@ -1450,6 +1526,7 @@ class FeatureAnnotation(Tool):
         current_structure_data = json.loads(get_pattern_matching_value(current_structure_data))
         current_structure = get_pattern_matching_value(current_structure)
         slide_information = json.loads(get_pattern_matching_value(slide_information))
+        bbox_pad = get_pattern_matching_value(bbox_pad)
 
         current_shapes = get_pattern_matching_value(current_figure)['layout'].get('shapes')
         current_lines = get_pattern_matching_value(current_figure)['layout'].get('line')
@@ -1461,6 +1538,11 @@ class FeatureAnnotation(Tool):
             annotations += current_lines
             
         image_bbox = current_structure_data[current_structure][current_structure_data[f'{current_structure}_index']]
+        # Applying padding
+        image_bbox[0] -= int(bbox_pad/2)
+        image_bbox[1] -= int(bbox_pad/2)
+        image_bbox[2] += int(bbox_pad/2)
+        image_bbox[3] += int(bbox_pad/2)
 
         # Saving annotation to storage_path
         self.save_mask(annotations, current_classes, image_bbox, slide_information)
