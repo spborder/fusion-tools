@@ -14,7 +14,7 @@ from fusion_tools.components import (
 )
 
 from fusion_tools.fusion.data_types import get_upload_types
-
+from fusion_tools.fusion.welcome import WelcomePage
 
 def get_layout(args):
 
@@ -52,6 +52,7 @@ def get_layout(args):
             #dsa_user_surveys
         ],
         components = {
+            "Welcome": [WelcomePage()],
             "Visualization": [
                 [
                     HybridSlideMap(),
