@@ -225,11 +225,11 @@ class WelcomePage(Tool):
                                 'width': '100%'
                             }
                         )
-                    ],md=6),
+                    ],md=8),
                     dbc.Col([
                         'Simpler layouts which include locally stored data can be defined using a subset of available components. ',
                         'You can also create FUSION visualizations inline with Jupyter Notebooks by adding "jupyter": True to the "app_options" argument. '
-                    ])
+                    ],md=4)
                 ])
             ])
         }
