@@ -38,6 +38,7 @@ class WelcomePage(Tool):
                     dbc.Col(
                         html.Img(
                             src = 'https://github.com/spborder/fusion-tools/blob/main/docs/images/background-flowchart.png?raw=true',
+                            alt = 'FUSION background diagram',
                             style = {
                                 'width': '100%'
                             }
@@ -55,6 +56,7 @@ class WelcomePage(Tool):
                     dbc.Col([
                         html.Img(
                             src = 'https://github.com/spborder/fusion-tools/blob/main/docs/images/page-menu.png?raw=true',
+                            alt = 'FUSION PageMenu',
                             style = {
                                 'width': '100%'
                             }
@@ -80,6 +82,7 @@ class WelcomePage(Tool):
                     dbc.Col([
                         html.Img(
                             src = 'https://github.com/spborder/fusion-tools/blob/main/docs/images/slidemap/slidemap-tile-coordinates.png?raw=true',
+                            alt = 'High-resolution tiled images',
                             style = {
                                 'width': '100%'
                             }
@@ -96,6 +99,7 @@ class WelcomePage(Tool):
                     dbc.Col([
                         html.Img(
                             src = 'https://github.com/spborder/fusion-tools/blob/main/docs/images/slidemap/slidemap-dropdown.png?raw=true',
+                            alt = 'SlideMap dropdown',
                             style = {
                                 'width': '100%'
                             }
@@ -112,6 +116,7 @@ class WelcomePage(Tool):
                     dbc.Col([
                         html.Img(
                             src = 'https://github.com/spborder/fusion-tools/blob/main/docs/images/slidemap/slidemap-layers.png?raw=true',
+                            alt = 'SlideMap layers',
                             style = {
                                 'width': '100%'
                             }
@@ -126,6 +131,7 @@ class WelcomePage(Tool):
                     dbc.Col([
                         html.Img(
                             src = 'https://github.com/spborder/fusion-tools/blob/main/docs/images/slidemap/slidemap-multiframe.png?raw=true',
+                            alt = 'MxIF image channels',
                             style = {
                                 'width': '100%'
                             }
@@ -147,6 +153,7 @@ class WelcomePage(Tool):
                     dbc.Col([
                         html.Img(
                             src = 'https://github.com/spborder/fusion-tools/blob/main/docs/images/geojson-example.png?raw=true',
+                            alt = 'GeoJSON example',
                             style = {
                                 'width':'100%'
                             }
@@ -170,6 +177,7 @@ class WelcomePage(Tool):
                     dbc.Col([
                         html.Img(
                             src = 'https://github.com/spborder/fusion-tools/blob/main/docs/images/properties/property-accessors.png?raw=true',
+                            alt = 'Property accessors in FUSION',
                             style = {
                                 'width':'100%'
                             }
@@ -194,15 +202,34 @@ class WelcomePage(Tool):
                 dbc.Row([
                     dbc.Col([
                         html.Img(
-                            src = '',
+                            src = 'https://github.com/spborder/fusion-tools/blob/main/docs/images/fusion-tools/fusion-layout.png?raw=true',
+                            alt = 'FUSION layout in fusion-tools',
                             style = {
                                 'width':'100%'
                             }
                         )
                     ],md=6),
                     dbc.Col([
-
+                        'The Visualization object in fusion-tools lets users define which data they would like to initially load as well as which components should be added to the layout. ',
+                        'Multi-page layouts can be created by passing a dictionary with the name of each page to the "components" argument. ',
+                        'The "start()" method initializes the application server where it is then accessible at the localhost:\{port\} address. '
                     ],md=6)
+                ]),
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col([
+                        html.Img(
+                            src = 'https://github.com/spborder/fusion-tools/blob/main/docs/images/fusion-tools/simple-layout.png?raw=true',
+                            alt= 'simple fusion-tools layout',
+                            style = {
+                                'width': '100%'
+                            }
+                        )
+                    ],md=6),
+                    dbc.Col([
+                        'Simpler layouts which include locally stored data can be defined using a subset of available components. ',
+                        'You can also create FUSION visualizations inline with Jupyter Notebooks by adding "jupyter": True to the "app_options" argument. '
+                    ])
                 ])
             ])
         }
