@@ -54,7 +54,7 @@ class WelcomePage(Tool):
                 dbc.Row([
                     dbc.Col([
                         html.Img(
-                            src = '',
+                            src = 'https://github.com/spborder/fusion-tools/blob/main/docs/images/page-menu.png?raw=true',
                             style = {
                                 'width': '100%'
                             }
@@ -146,14 +146,15 @@ class WelcomePage(Tool):
                 dbc.Row([
                     dbc.Col([
                         html.Img(
-                            src = '',
+                            src = 'https://github.com/spborder/fusion-tools/blob/main/docs/images/geojson-example.png?raw=true',
                             style = {
                                 'width':'100%'
                             }
                         )
                     ],md=6),
                     dbc.Col([
-                        ''
+                        'Following GeoJSON conventions, each annotation is defined as a FeatureCollection consisting of one or more Features containing a type, geometry, and properties field. ',
+                        'FUSION accesses structure-level features from the properties field and incorporates them into visualizations and analyses dynamically. '
                     ],md=6)
                 ],align='center')
             ]),
@@ -164,7 +165,20 @@ class WelcomePage(Tool):
                     'Data for each slide can be accessed through a variety of interactive components in the "Tools" tabs to the right of the SlideMap.',
                     style={'marginBottom':'5px','marginTop':'5px'}
                 ),
-                dbc.Row([])
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col([
+                        html.Img(
+                            src = '',
+                            style = {
+                                'width':'100%'
+                            }
+                        )
+                    ],md=6),
+                    dbc.Col([
+                        
+                    ],md=6)
+                ])
             ]),
             'Getting Started with fusion-tools': html.Div([
                 dbc.Row(html.H5('Getting Started with fusion-tools')),
@@ -173,7 +187,20 @@ class WelcomePage(Tool):
                     'This FUSION visualization is constructed using the fusion-tools Python library, which includes a variety of additional functionality for generating customizable dashboards locally.',
                     style={'marginBottom':'5px','marginTop':'5px'}
                 ),
-                dbc.Row([])
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col([
+                        html.Img(
+                            src = '',
+                            style = {
+                                'width':'100%'
+                            }
+                        )
+                    ],md=6),
+                    dbc.Col([
+
+                    ],md=6)
+                ])
             ])
         }
 
