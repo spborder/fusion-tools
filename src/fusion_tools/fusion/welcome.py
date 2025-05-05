@@ -49,7 +49,26 @@ class WelcomePage(Tool):
                             'Digital Slide Archive (DSA) is here used as a "backend" for organization of files and running Dockerized plugins formatted using Slicer CLI specifications. '
                         ],md = 6)
                     ], align='center'
-                )
+                ),
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col([
+                        html.Img(
+                            src = '',
+                            style = {
+                                'width': '100%'
+                            }
+                        )
+                    ],md=6),
+                    dbc.Col([
+                        'Navigate to different pages in FUSION using the PAGES MENU in the navigation bar at the top of your screen. ',
+                        'There you will see a few different buttons with page addresses on them like this: "/APP/VISUALIZATION", "/APP/DATASET BUILDER", etc. ',
+                        'The Visualization and Dataset Builder pages are openly accessible to everyone. ',
+                        'The Dataset Uploader page requires creating an account in order to associate any uploaded data to each user\'s quota. ',
+                        'You can make a new account (100% free!), using the "DSA LOGIN" button underneath the navigation bar. ',
+                        'Follow the instructions to create a new account or login using your username and password and navigate to the Dataset Uploader page to start uploading your own data. '
+                    ],md=6)
+                ])
             ]),
             'The SlideMap Component': html.Div([
                 dbc.Row(html.H5('The SlideMap Component')),
@@ -60,11 +79,11 @@ class WelcomePage(Tool):
                 dbc.Row([
                     dbc.Col([
                         html.Img(
-                            src = 'https://github.com/spborder/fusion-tools/blob/main/docs/images/slidemap/slidemap-dropdown.png?raw=true',
+                            src = 'https://github.com/spborder/fusion-tools/blob/main/docs/images/slidemap/slidemap-tile-coordinates.png?raw=true',
                             style = {
                                 'width': '100%'
                             }
-                        )
+                        ),
                     ], md = 6),
                     dbc.Col([
                         'Since high-resolution images are very large files, they are typically not loaded into memory at the highest resolution all at once, especially for web-applications. ',
@@ -72,9 +91,50 @@ class WelcomePage(Tool):
                         'For cloud-stored images in FUSION, this is facilitated by the large-image Girder plugin. ',
                     ],md = 6)
                 ],style={'marginBottom':'5px','marginTop':'5px'}),
+                html.Hr(),
                 dbc.Row([
-                    'Multi-plexed immunofluorescence images which contain multiple channels for each fluorescent marker, can either be viewed individually in grayscale, or combined with manually selected colors using the ChannelMixer component.'
-                ],style = {'marginBottom':'5px'})
+                    dbc.Col([
+                        html.Img(
+                            src = 'https://github.com/spborder/fusion-tools/blob/main/docs/images/slidemap/slidemap-dropdown.png?raw=true',
+                            style = {
+                                'width': '100%'
+                            }
+                        )
+                    ], md = 6),
+                    dbc.Col([
+                        'To load a slide in FUSION, first navigate to the visualization page containing the SlideMap component. ',
+                        'Next, select the slide you would like to view from the dropdown menu at the top of the SlideMap component. ',
+                        'This will trigger FUSION collecting the necessary rendering information for that slide, including the tiles URL, annotations, and any other slide metadata. '
+                    ])
+                ]),
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col([
+                        html.Img(
+                            src = 'https://github.com/spborder/fusion-tools/blob/main/docs/images/slidemap/slidemap-layers.png?raw=true',
+                            style = {
+                                'width': '100%'
+                            }
+                        )
+                    ],md=6),
+                    dbc.Col([
+                        'Use the layers selector in the top right of the map to turn different overlaid annotations off and on. '
+                    ],md=6)
+                ],align='center',style = {'marginBottom':'5px'}),
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col([
+                        html.Img(
+                            src = 'https://github.com/spborder/fusion-tools/blob/main/docs/images/slidemap/slidemap-multiframe.png?raw=true',
+                            style = {
+                                'width': '100%'
+                            }
+                        )
+                    ],md=6),
+                    dbc.Col([
+                        'Multi-plexed immunofluorescence images which contain multiple channels for each fluorescent marker, can either be viewed individually in grayscale, or combined with manually selected colors using the ChannelMixer component. '
+                    ],md=6)
+                ],align='center',style = {'marginBottom':'5px'})
             ]),
             'Structure-level Properties': html.Div([
                 dbc.Row(html.H5('Structure-level Properties')),
@@ -84,8 +144,17 @@ class WelcomePage(Tool):
                     style={'marginBottom':'5px','marginTop':'5px'}
                 ),
                 dbc.Row([
-                    dbc.Col([],md=6),
-                    dbc.Col([],md=6)
+                    dbc.Col([
+                        html.Img(
+                            src = '',
+                            style = {
+                                'width':'100%'
+                            }
+                        )
+                    ],md=6),
+                    dbc.Col([
+                        ''
+                    ],md=6)
                 ],align='center')
             ]),
             'Accessing Data with Tools': html.Div([
