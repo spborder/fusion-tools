@@ -21,6 +21,7 @@ src/fusion_tools/fusion/__init__.py
 src/fusion_tools/fusion/data_types.py
 src/fusion_tools/fusion/surveys.py
 src/fusion_tools/fusion/vis.py
+src/fusion_tools/fusion/welcome.py
 src/fusion_tools/handler/__init__.py
 src/fusion_tools/handler/dataset_builder.py
 src/fusion_tools/handler/dataset_uploader.py
@@ -79,3 +80,4 @@ tests/test_slide_annotations.py
 tests/test_spatial_aggregation.py
 tests/test_tile_server.py
 tests/test_visualization_component.py
+tests/test_welcome.py

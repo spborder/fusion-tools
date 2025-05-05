@@ -34,11 +34,21 @@ class WelcomePage(Tool):
                     'FUSION is an interactive analysis tool which enables integrated analysis of histology images with or without spatial --omics data.',
                     style={'marginBottom':'5px','marginTop':'5px'}
                 ),
-                dbc.Row(
-                    html.Img(
-                        src = 'https://github.com/spborder/fusion-tools/blob/main/docs/images/background-flowchart.png?raw=true'
+                dbc.Row([
+                    dbc.Col(
+                        html.Img(
+                            src = 'https://github.com/spborder/fusion-tools/blob/main/docs/images/background-flowchart.png?raw=true',
+                            style = {
+                                'width': '100%'
+                            }
+                        ),
+                        md = 6
                     ),
-                    align='center'
+                    dbc.Col([
+                            'This cloud implementation of FUSION demonstrates the ability of FUSION to leverage cloud resources for storage and running jobs with high computational complexity. ',
+                            'Digital Slide Archive (DSA) is here used as a "backend" for organization of files and running Dockerized plugins formatted using Slicer CLI specifications. '
+                        ],md = 6)
+                    ], align='center'
                 )
             ]),
             'The SlideMap Component': html.Div([
@@ -50,14 +60,17 @@ class WelcomePage(Tool):
                 dbc.Row([
                     dbc.Col([
                         html.Img(
-                            src = ''
+                            src = 'https://github.com/spborder/fusion-tools/blob/main/docs/images/slidemap/slidemap-dropdown.png?raw=true',
+                            style = {
+                                'width': '100%'
+                            }
                         )
-                    ], md = 4),
+                    ], md = 6),
                     dbc.Col([
-                        'Since high-resolution images are very large files, they are typically not loaded into memory at the highest resolution all at once, especially for web-applications.',
-                        'Therefore, smaller tiles are accessed from varying resolution levels using an application programming interface (API) request.',
-                        'For cloud-stored images in FUSION, this is facilitated by the large-image Girder plugin.'
-                    ],md = 8)
+                        'Since high-resolution images are very large files, they are typically not loaded into memory at the highest resolution all at once, especially for web-applications. ',
+                        'Therefore, smaller tiles are accessed from varying resolution levels using an application programming interface (API) request. ',
+                        'For cloud-stored images in FUSION, this is facilitated by the large-image Girder plugin. ',
+                    ],md = 6)
                 ],style={'marginBottom':'5px','marginTop':'5px'}),
                 dbc.Row([
                     'Multi-plexed immunofluorescence images which contain multiple channels for each fluorescent marker, can either be viewed individually in grayscale, or combined with manually selected colors using the ChannelMixer component.'
@@ -70,7 +83,10 @@ class WelcomePage(Tool):
                     'One of the key concepts behind FUSION is the incorporation of structure-level properties. These comprise any kind of derived data or identifying information for structures in a slide which can be used in downstream analysis or visualization',
                     style={'marginBottom':'5px','marginTop':'5px'}
                 ),
-                dbc.Row([])
+                dbc.Row([
+                    dbc.Col([],md=6),
+                    dbc.Col([],md=6)
+                ],align='center')
             ]),
             'Accessing Data with Tools': html.Div([
                 dbc.Row(html.H5('Accessing Data with Tools')),

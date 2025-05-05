@@ -6620,9 +6620,8 @@ class CustomFunction(Tool):
             if c.output_callbacks is not None:
                 for callback in c.output_callbacks:
                     self.blueprint.callback(
-                        inputs = callback.get('inputs'),
+                        inputs = callback.get('inputs')+callback.get('states',[]),
                         output = callback.get('outputs'),
-                        states = callback.get('states')
                     )(callback.get('function'))
 
     def get_callbacks(self):
