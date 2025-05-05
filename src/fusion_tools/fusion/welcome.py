@@ -26,6 +26,8 @@ class WelcomePage(Tool):
     def __init__(self):
         super().__init__()
 
+        #TODO: Just a note, these image addresses get rate-limited pretty quickly from GitHub, ideally these 
+        # images would be locally accessible but I think that would make the package much heavier.
         self.content_dict = {
             'Background': html.Div([
                 dbc.Row(html.H5('Background Information')),
