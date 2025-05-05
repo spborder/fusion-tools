@@ -23,8 +23,8 @@ def main():
 
     args_dict = {
         'girderApiUrl': dsa_url,
-        'user': dsa_user,
-        'pword': dsa_pword,
+        'user': dsa_user,# Optional
+        'pword': dsa_pword,# Optional
         'initialItems': initial_items,
         'app_options': {
             'port': 8050
@@ -32,7 +32,6 @@ def main():
     }
 
     fusion_vis = get_layout(args_dict)
-
     fusion_vis.start()
 
 if __name__=='__main__':
