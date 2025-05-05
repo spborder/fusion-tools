@@ -37,9 +37,6 @@ def get_layout(args):
 
     dsa_save_session = dsa_handler.create_save_session()
 
-    user_surveys = []
-    #dsa_user_surveys = [dsa_handler.create_survey(i) for i in user_surveys]
-
     initial_items = args['initialItems']
 
     fusion_vis = Visualization(
@@ -49,10 +46,11 @@ def get_layout(args):
             dsa_login_component,
             dsa_plugin_progress,
             dsa_save_session,
-            #dsa_user_surveys
         ],
         components = {
-            "Welcome": [WelcomePage()],
+            "Welcome": [
+                WelcomePage()
+            ],
             "Visualization": [
                 [
                     HybridSlideMap(),

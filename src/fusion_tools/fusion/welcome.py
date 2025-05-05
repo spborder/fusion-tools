@@ -169,14 +169,17 @@ class WelcomePage(Tool):
                 dbc.Row([
                     dbc.Col([
                         html.Img(
-                            src = '',
+                            src = 'https://github.com/spborder/fusion-tools/blob/main/docs/images/properties/property-accessors.png?raw=true',
                             style = {
                                 'width':'100%'
                             }
                         )
                     ],md=6),
                     dbc.Col([
-                        
+                        'The GlobalPropertyPlotter, PropertyPlotter, and PropertyViewer components access structural properties at 3 different levels. ',
+                        'The PropertyViewer component loads properties from only the structures within the current viewport and can be used for assessing whether a given property is localized to particular regions. ',
+                        'The PropertyPlotter accesses all of the properties for all of the structures in the current slide regardless of where they are. ',
+                        'The GlobalPropertyPlotter accesses all of the properties from all of the structures from all of the slides in your current Visualization Session. To modify the slides in your Visualization Session, use the Dataset Builder page. '
                     ],md=6)
                 ])
             ]),
