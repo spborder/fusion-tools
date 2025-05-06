@@ -719,11 +719,17 @@ def histomics_to_geojson(json_anns: Union[list,dict]):
 
     geojson_list = []
     for ann in json_anns:
+        ann_id = uuid.uuid4().hex[:24]
+        if '_id' in ann:
+            ann_id = ann['_id']
+        elif '_id' in ann['annotation']:
+            ann_id = ann['annotation']['_id']
+
         geojson_anns = {
             'type': 'FeatureCollection',
             'properties': {
                 'name': ann['annotation']['name'],
-                '_id': uuid.uuid4().hex[:24] if not '_id' in ann['annotation'] else ann['annotation']['_id']
+                '_id': ann_id
             },
             'features': []
         }
@@ -828,6 +834,8 @@ def align_object_props(
     :type prop_cols: Union[list,str]
     :param alignment_type: Process to use for aligning rows of property DataFrame to GeoJSON
     :type alignment_type: str
+    :param prop_key: Name of property to assign to the new aligned property (only one)
+    :param prop_key: Union[None,str], optional
     :return: GeoJSON annotations with aligned properties applied
     :rtype: dict
     """

@@ -15,7 +15,7 @@ from PIL import Image
 from io import BytesIO
 
 from fusion_tools.tileserver import DSATileServer
-from fusion_tools.utils.shapes import load_annotations, detect_histomics
+from fusion_tools.utils.shapes import load_annotations, detect_histomics, histomics_to_geojson
 
 from fusion_tools.handler.login import DSALoginComponent
 from fusion_tools.handler.dataset_uploader import DSAUploader
@@ -467,45 +467,55 @@ class DSAHandler(Handler):
         if annotation_id is None:
             # Grab all annotations for that item
             if format in [None, 'geojson']:
-                annotation_ids = self.gc.get(
-                    f'/annotation',
-                    parameters = {
-                        'itemId': item
-                    }
-                )
-                annotations = []
-                for a in annotation_ids:
-                    if '_id' in a['annotation']:
-                        a_id = a['annotation']['_id']
-                        ann_geojson = self.gc.get(
-                            f'/annotation/{a["annotation"]["_id"]}/geojson'
-                        )
-                    elif '_id' in a:
-                        a_id = a['_id']
-                        ann_geojson = self.gc.get(
-                            f'/annotation/{a["_id"]}/geojson'
-                        )
 
-                    for f in ann_geojson['features']:
-                        if 'properties' in f:
-                            if 'user' in f['properties']:
-                                f['properties'] = f['properties']['user']
-
-                            f['properties']['name'] = a['annotation']['name']
-                        else:
-                            f['properties'] = {'name': a['annotation']['name']}
-
-
-                    if 'properties' not in ann_geojson:
-                        ann_geojson['properties'] = {
-                            'name': a['annotation']['name']
+                try:
+                    annotation_ids = self.gc.get(
+                        f'/annotation',
+                        parameters = {
+                            'itemId': item
                         }
+                    )
+                    annotations = []
+                    for a in annotation_ids:
+                        if '_id' in a['annotation']:
+                            a_id = a['annotation']['_id']
+                            ann_geojson = self.gc.get(
+                                f'/annotation/{a["annotation"]["_id"]}/geojson'
+                            )
+                        elif '_id' in a:
+                            a_id = a['_id']
+                            ann_geojson = self.gc.get(
+                                f'/annotation/{a["_id"]}/geojson'
+                            )
 
-                    ann_geojson['properties']['_id'] = a_id
-                    for f_idx, f in enumerate(ann_geojson['features']):
-                        f['properties'] = f['properties'] | {'_index': f_idx, '_id': uuid.uuid4().hex[:24],'name': ann_geojson['properties']['name']}
+                        for f in ann_geojson['features']:
+                            if 'properties' in f:
+                                if 'user' in f['properties']:
+                                    f['properties'] = f['properties']['user']
 
-                    annotations.append(ann_geojson)
+                                f['properties']['name'] = a['annotation']['name']
+                            else:
+                                f['properties'] = {'name': a['annotation']['name']}
+
+
+                        if 'properties' not in ann_geojson:
+                            ann_geojson['properties'] = {
+                                'name': a['annotation']['name']
+                            }
+
+                        ann_geojson['properties']['_id'] = a_id
+                        for f_idx, f in enumerate(ann_geojson['features']):
+                            f['properties'] = f['properties'] | {'_index': f_idx, '_id': uuid.uuid4().hex[:24],'name': ann_geojson['properties']['name']}
+
+                        annotations.append(ann_geojson)
+                except:
+                    # Bug if polyline annotations are uploaded without "closed": True set then it yields a ChunkedEncodingError since it fails validation converting to GeoJSON
+                    annotations = self.gc.get(
+                        f'/annotation/item/{item}'
+                    )
+                    annotations = histomics_to_geojson(annotations)
+
+
             elif format=='histomics':
 
                 annotations = self.gc.get(
