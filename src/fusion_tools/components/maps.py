@@ -1077,51 +1077,75 @@ class SlideMap(MapComponent):
         }
 
         #TODO: Add something else to make sure that "Filtered" annotations are removed after loading a new slide
+        non_nested_display_metadata = {}
+        nested_display_metadata = []
+        non_nested_image_metadata = {}
+        nested_image_metadata = []
+
         if 'meta' in new_metadata:
-            display_metadata = {
-                k: v
-                for k,v in new_metadata['meta'].items()
-                if not type(v)==dict
-            }
-        else:
-            display_metadata = {}
+            for k,v in new_metadata['meta'].items():
+                if not type(v) in [list,dict]:
+                    non_nested_display_metadata[k] = v
+                else:
+                    nested_display_metadata.append({
+                        k: v
+                    })
 
         for k,v in new_metadata.items():
             if not k=='meta':
-                if not type(v) in [dict,list]:
-                    display_metadata[k] = v
+                if not type(v) in [list,dict]:
+                    non_nested_display_metadata[k] = v
+                else:
+                    nested_display_metadata.append({
+                        k:v
+                    })
+
+
+        for k,v in new_image_metadata.items():
+            if not type(v) in [list,dict]:
+                non_nested_image_metadata[k] = v
+            else:
+                nested_image_metadata.append({
+                    k:v
+                })
+
+        image_nested_accordions = self.make_sub_accordion(nested_image_metadata)
+        case_nested_accordions = self.make_sub_accordion(nested_display_metadata)
+
+        non_nested_image_metadata_table = [
+            self.make_dash_table(
+                pd.DataFrame.from_records([
+                    {
+                        'Key': k,
+                        'Value': v
+                    }
+                    for k,v in non_nested_image_metadata.items()
+                ])
+            )
+        ]
+
+        non_nested_case_metadata_table = [
+            self.make_dash_table(
+                pd.DataFrame.from_records([
+                    {
+                        'Key': k,
+                        'Value': v
+                    }
+                    for k,v in non_nested_display_metadata.items()
+                ])
+            )
+        ]
 
         slide_metadata_div = html.Div(
             dbc.Accordion(
                 children = [
                     dbc.AccordionItem(
                         title = 'Image Metadata',
-                        children = [
-                            self.make_dash_table(
-                                pd.DataFrame.from_records([
-                                    {
-                                        'Key': k,
-                                        'Value': v
-                                    }
-                                    for k,v in new_image_metadata.items()
-                                    if not type(v) in [list,dict]
-                                ])
-                            )
-                        ]
+                        children = non_nested_image_metadata_table + image_nested_accordions
                     ),
                     dbc.AccordionItem(
                         title = 'Case Metadata',
-                        children = [
-                            self.make_dash_table(
-                                pd.DataFrame.from_records([
-                                    {
-                                        'Key': k,
-                                        'Value': v
-                                    }
-                                    for k,v in display_metadata.items()
-                                ])
-                            )
-                        ]
+                        children = non_nested_case_metadata_table + case_nested_accordions
                     )
                 ]
             )
@@ -1270,34 +1294,47 @@ class SlideMap(MapComponent):
         main_list = []
         sub_list = []
         for idx,in_data in enumerate(input_data):
-            title = list(in_data.keys())[0]
-            non_nested_data = [{'Sub-Property':key, 'Value': val} for key,val in in_data[title].items() if not type(val) in [list,dict]]
-            nested_data = [{key:val} for key,val in in_data[title].items() if type(val)==dict]
-            if len(non_nested_data)>0:
-                main_list.append(
-                    dbc.AccordionItem([
-                        html.Div([
-                            self.make_dash_table(pd.DataFrame.from_records(non_nested_data))
-                        ])
-                    ],title = title)
-                )
-            if len(nested_data)>0:
-                nested_list = self.make_sub_accordion(nested_data)
-                sub_list.extend(nested_list)
-        
-            if len(sub_list)>0:
-                main_list.append(
-                    dbc.Accordion(
-                        dbc.AccordionItem(
-                            dbc.Accordion(
-                                sub_list
-                            ),
-                            title = title
+            if type(in_data)==dict:
+                title = list(in_data.keys())[0]
+                if type(in_data[title])==dict:
+                    non_nested_data = [{'Sub-Property':key, 'Value': val} for key,val in in_data[title].items() if not type(val) in [list,dict]]
+                    nested_data = [{key:val} for key,val in in_data[title].items() if type(val) in [list,dict]]
+                elif type(in_data[title])==list:
+                    list_in_data = {f'Value {l_idx}': l for l_idx,l in enumerate(in_data[title])}
+
+                    non_nested_data = [{'Sub-Property':key, 'Value': val} for key,val in list_in_data.items() if not type(val) in [list,dict]]
+                    nested_data = [{key:val} for key,val in list_in_data.items() if type(val) in [list,dict]]
+
+                if len(non_nested_data)>0:
+                    main_list.append(
+                        dbc.AccordionItem([
+                            html.Div([
+                                self.make_dash_table(pd.DataFrame.from_records(non_nested_data))
+                            ])
+                        ],title = title)
+                    )
+                if len(nested_data)>0:
+                    nested_list = self.make_sub_accordion(nested_data)
+                    sub_list.extend(nested_list)
+            
+                if len(sub_list)>0:
+                    main_list.append(
+                        dbc.Accordion(
+                            dbc.AccordionItem(
+                                dbc.Accordion(
+                                    sub_list
+                                ),
+                                title = title
+                            )
                         )
                     )
-                )
-                sub_list = []
-        
+                    sub_list = []
+
+            elif type(in_data)==list:
+                nested_list = self.make_sub_accordion(in_data)
+                sub_list.extend(nested_list)
+
+
         return main_list
 
     def get_click_popup(self, clicked):
@@ -1982,51 +2019,75 @@ class MultiFrameSlideMap(SlideMap):
         }
 
         #TODO: Add something else to make sure that "Filtered" annotations are removed after loading a new slide
+        non_nested_display_metadata = {}
+        nested_display_metadata = []
+        non_nested_image_metadata = {}
+        nested_image_metadata = []
+
         if 'meta' in new_metadata:
-            display_metadata = {
-                k: v
-                for k,v in new_metadata['meta'].items()
-                if not type(v)==dict
-            }
-        else:
-            display_metadata = {}
+            for k,v in new_metadata['meta'].items():
+                if not type(v) in [list,dict]:
+                    non_nested_display_metadata[k] = v
+                else:
+                    nested_display_metadata.append({
+                        k: v
+                    })
 
         for k,v in new_metadata.items():
             if not k=='meta':
-                if not type(v)==dict:
-                    display_metadata[k] = v
+                if not type(v) in [list,dict]:
+                    non_nested_display_metadata[k] = v
+                else:
+                    nested_display_metadata.append({
+                        k:v
+                    })
+
+
+        for k,v in new_image_metadata.items():
+            if not type(v) in [list,dict]:
+                non_nested_image_metadata[k] = v
+            else:
+                nested_image_metadata.append({
+                    k:v
+                })
+
+        image_nested_accordions = self.make_sub_accordion(nested_image_metadata)
+        case_nested_accordions = self.make_sub_accordion(nested_display_metadata)
+
+        non_nested_image_metadata_table = [
+            self.make_dash_table(
+                pd.DataFrame.from_records([
+                    {
+                        'Key': k,
+                        'Value': v
+                    }
+                    for k,v in non_nested_image_metadata.items()
+                ])
+            )
+        ]
+
+        non_nested_case_metadata_table = [
+            self.make_dash_table(
+                pd.DataFrame.from_records([
+                    {
+                        'Key': k,
+                        'Value': v
+                    }
+                    for k,v in non_nested_display_metadata.items()
+                ])
+            )
+        ]
 
         slide_metadata_div = html.Div(
             dbc.Accordion(
                 children = [
                     dbc.AccordionItem(
                         title = 'Image Metadata',
-                        children = [
-                            self.make_dash_table(
-                                pd.DataFrame.from_records([
-                                    {
-                                        'Key': k,
-                                        'Value': v
-                                    }
-                                    for k,v in new_image_metadata.items()
-                                    if not type(v) in [list,dict]
-                                ])
-                            )
-                        ]
+                        children = non_nested_image_metadata_table + image_nested_accordions
                     ),
                     dbc.AccordionItem(
                         title = 'Case Metadata',
-                        children = [
-                            self.make_dash_table(
-                                pd.DataFrame.from_records([
-                                    {
-                                        'Key': k,
-                                        'Value': v
-                                    }
-                                    for k,v in display_metadata.items()
-                                ])
-                            )
-                        ]
+                        children = non_nested_case_metadata_table + case_nested_accordions
                     )
                 ]
             )
@@ -2667,51 +2728,75 @@ class LargeSlideMap(SlideMap):
             'action': 'clear all'
         }
 
+        non_nested_display_metadata = {}
+        nested_display_metadata = []
+        non_nested_image_metadata = {}
+        nested_image_metadata = []
+
         if 'meta' in new_metadata:
-            display_metadata = {
-                k: v
-                for k,v in new_metadata['meta'].items()
-                if not type(v)==dict
-            }
-        else:
-            display_metadata = {}
+            for k,v in new_metadata['meta'].items():
+                if not type(v) in [list,dict]:
+                    non_nested_display_metadata[k] = v
+                else:
+                    nested_display_metadata.append({
+                        k: v
+                    })
 
         for k,v in new_metadata.items():
             if not k=='meta':
-                if not type(v)==dict:
-                    display_metadata[k] = v
+                if not type(v) in [list,dict]:
+                    non_nested_display_metadata[k] = v
+                else:
+                    nested_display_metadata.append({
+                        k:v
+                    })
+
+
+        for k,v in new_image_metadata.items():
+            if not type(v) in [list,dict]:
+                non_nested_image_metadata[k] = v
+            else:
+                nested_image_metadata.append({
+                    k:v
+                })
+
+        image_nested_accordions = self.make_sub_accordion(nested_image_metadata)
+        case_nested_accordions = self.make_sub_accordion(nested_display_metadata)
+
+        non_nested_image_metadata_table = [
+            self.make_dash_table(
+                pd.DataFrame.from_records([
+                    {
+                        'Key': k,
+                        'Value': v
+                    }
+                    for k,v in non_nested_image_metadata.items()
+                ])
+            )
+        ]
+
+        non_nested_case_metadata_table = [
+            self.make_dash_table(
+                pd.DataFrame.from_records([
+                    {
+                        'Key': k,
+                        'Value': v
+                    }
+                    for k,v in non_nested_display_metadata.items()
+                ])
+            )
+        ]
 
         slide_metadata_div = html.Div(
             dbc.Accordion(
                 children = [
                     dbc.AccordionItem(
                         title = 'Image Metadata',
-                        children = [
-                            self.make_dash_table(
-                                pd.DataFrame.from_records([
-                                    {
-                                        'Key': k,
-                                        'Value': v
-                                    }
-                                    for k,v in new_image_metadata.items()
-                                    if not type(v) in [list,dict]
-                                ])
-                            )
-                        ]
+                        children = non_nested_image_metadata_table + image_nested_accordions
                     ),
                     dbc.AccordionItem(
                         title = 'Case Metadata',
-                        children = [
-                            self.make_dash_table(
-                                pd.DataFrame.from_records([
-                                    {
-                                        'Key': k,
-                                        'Value': v
-                                    }
-                                    for k,v in display_metadata.items()
-                                ])
-                            )
-                        ]
+                        children = non_nested_case_metadata_table + case_nested_accordions
                     )
                 ]
             )
@@ -3237,51 +3322,75 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
             'action': 'clear all'
         }
 
+        non_nested_display_metadata = {}
+        nested_display_metadata = []
+        non_nested_image_metadata = {}
+        nested_image_metadata = []
+
         if 'meta' in new_metadata:
-            display_metadata = {
-                k: v
-                for k,v in new_metadata['meta'].items()
-                if not type(v)==dict
-            }
-        else:
-            display_metadata = {}
+            for k,v in new_metadata['meta'].items():
+                if not type(v) in [list,dict]:
+                    non_nested_display_metadata[k] = v
+                else:
+                    nested_display_metadata.append({
+                        k: v
+                    })
 
         for k,v in new_metadata.items():
             if not k=='meta':
-                if not type(v)==dict:
-                    display_metadata[k] = v
+                if not type(v) in [list,dict]:
+                    non_nested_display_metadata[k] = v
+                else:
+                    nested_display_metadata.append({
+                        k:v
+                    })
+
+
+        for k,v in new_image_metadata.items():
+            if not type(v) in [list,dict]:
+                non_nested_image_metadata[k] = v
+            else:
+                nested_image_metadata.append({
+                    k:v
+                })
+
+        image_nested_accordions = self.make_sub_accordion(nested_image_metadata)
+        case_nested_accordions = self.make_sub_accordion(nested_display_metadata)
+
+        non_nested_image_metadata_table = [
+            self.make_dash_table(
+                pd.DataFrame.from_records([
+                    {
+                        'Key': k,
+                        'Value': v
+                    }
+                    for k,v in non_nested_image_metadata.items()
+                ])
+            )
+        ]
+
+        non_nested_case_metadata_table = [
+            self.make_dash_table(
+                pd.DataFrame.from_records([
+                    {
+                        'Key': k,
+                        'Value': v
+                    }
+                    for k,v in non_nested_display_metadata.items()
+                ])
+            )
+        ]
 
         slide_metadata_div = html.Div(
             dbc.Accordion(
                 children = [
                     dbc.AccordionItem(
                         title = 'Image Metadata',
-                        children = [
-                            self.make_dash_table(
-                                pd.DataFrame.from_records([
-                                    {
-                                        'Key': k,
-                                        'Value': v
-                                    }
-                                    for k,v in new_image_metadata.items()
-                                    if not type(v) in [list,dict]
-                                ])
-                            )
-                        ]
+                        children = non_nested_image_metadata_table + image_nested_accordions
                     ),
                     dbc.AccordionItem(
                         title = 'Case Metadata',
-                        children = [
-                            self.make_dash_table(
-                                pd.DataFrame.from_records([
-                                    {
-                                        'Key': k,
-                                        'Value': v
-                                    }
-                                    for k,v in display_metadata.items()
-                                ])
-                            )
-                        ]
+                        children = non_nested_case_metadata_table + case_nested_accordions
                     )
                 ]
             )
@@ -3504,51 +3613,75 @@ class HybridSlideMap(MultiFrameSlideMap):
         }
 
         #TODO: Add something else to make sure that "Filtered" annotations are removed after loading a new slide
+        non_nested_display_metadata = {}
+        nested_display_metadata = []
+        non_nested_image_metadata = {}
+        nested_image_metadata = []
+
         if 'meta' in new_metadata:
-            display_metadata = {
-                k: v
-                for k,v in new_metadata['meta'].items()
-                if not type(v)==dict
-            }
-        else:
-            display_metadata = {}
+            for k,v in new_metadata['meta'].items():
+                if not type(v) in [list,dict]:
+                    non_nested_display_metadata[k] = v
+                else:
+                    nested_display_metadata.append({
+                        k: v
+                    })
 
         for k,v in new_metadata.items():
             if not k=='meta':
-                if not type(v)==dict:
-                    display_metadata[k] = v
+                if not type(v) in [list,dict]:
+                    non_nested_display_metadata[k] = v
+                else:
+                    nested_display_metadata.append({
+                        k:v
+                    })
+
+
+        for k,v in new_image_metadata.items():
+            if not type(v) in [list,dict]:
+                non_nested_image_metadata[k] = v
+            else:
+                nested_image_metadata.append({
+                    k:v
+                })
+
+        image_nested_accordions = self.make_sub_accordion(nested_image_metadata)
+        case_nested_accordions = self.make_sub_accordion(nested_display_metadata)
+
+        non_nested_image_metadata_table = [
+            self.make_dash_table(
+                pd.DataFrame.from_records([
+                    {
+                        'Key': k,
+                        'Value': v
+                    }
+                    for k,v in non_nested_image_metadata.items()
+                ])
+            )
+        ]
+
+        non_nested_case_metadata_table = [
+            self.make_dash_table(
+                pd.DataFrame.from_records([
+                    {
+                        'Key': k,
+                        'Value': v
+                    }
+                    for k,v in non_nested_display_metadata.items()
+                ])
+            )
+        ]
 
         slide_metadata_div = html.Div(
             dbc.Accordion(
                 children = [
                     dbc.AccordionItem(
                         title = 'Image Metadata',
-                        children = [
-                            self.make_dash_table(
-                                pd.DataFrame.from_records([
-                                    {
-                                        'Key': k,
-                                        'Value': v
-                                    }
-                                    for k,v in new_image_metadata.items()
-                                    if not type(v) in [list,dict]
-                                ])
-                            )
-                        ]
+                        children = non_nested_image_metadata_table + image_nested_accordions
                     ),
                     dbc.AccordionItem(
                         title = 'Case Metadata',
-                        children = [
-                            self.make_dash_table(
-                                pd.DataFrame.from_records([
-                                    {
-                                        'Key': k,
-                                        'Value': v
-                                    }
-                                    for k,v in display_metadata.items()
-                                ])
-                            )
-                        ]
+                        children = non_nested_case_metadata_table + case_nested_accordions
                     )
                 ]
             )
