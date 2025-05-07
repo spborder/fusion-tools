@@ -515,7 +515,6 @@ class DSAHandler(Handler):
                     )
                     annotations = histomics_to_geojson(annotations)
 
-
             elif format=='histomics':
 
                 annotations = self.gc.get(
