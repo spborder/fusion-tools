@@ -392,6 +392,7 @@ class Visualization:
                     slide_store['current'].extend([
                         {
                             'name': j,
+                            'id': f'local{j_idx}',
                             'tiles_url': t.get_name_tiles_url(j),
                             'regions_url': t.get_name_regions_url(j),
                             'image_metadata_url': t.get_name_image_metadata_url(j),
@@ -400,11 +401,12 @@ class Visualization:
                             'annotations_metadata_url': t.get_name_annotations_metadata_url(j),
                             'annotations_region_url': t.get_name_annotations_url(j)
                         }
-                        for j in t['names']
+                        for j_idx,j in enumerate(t['names'])
                     ])
                     slide_store['local'].extend([
                         {
                             'name': j,
+                            'id': f'local{j_idx}',
                             'tiles_url': t.get_name_tiles_url(j),
                             'regions_url': t.get_name_regions_url(j),
                             'image_metadata_url': t.get_name_image_metadata_url(j),
@@ -413,12 +415,13 @@ class Visualization:
                             'annotations_metadata_url': t.get_name_annotations_metadata_url(j),
                             'annotations_region_url': t.get_name_annotations_url(j)
                         }
-                        for j in t['names']
+                        for j_idx,j in enumerate(t['names'])
                     ])
 
                 elif type(t)==DSATileServer:
                     slide_store['current'].append({
                         'name': t.name,
+                        'id': t.item_id,
                         'api_url': t.base_url,
                         'tiles_url': t.tiles_url,
                         'regions_url': t.regions_url,
@@ -432,6 +435,7 @@ class Visualization:
                 elif type(t)==CustomTileServer:
                     slide_store['current'].append({
                         'name': t.name,
+                        'id': t.id,
                         'tiles_url': t.tiles_url,
                         'regions_url': t.regions_url if hasattr(t,'regions_url') else None,
                         'image_metadata_url': t.image_metadata_url if hasattr(t,'image_metadata_url') else None,
@@ -901,6 +905,7 @@ class Visualization:
                 app.include_router(self.local_tile_server.router)
             
             app.mount(path = self.app_options.get('requests_pathname_prefix','/'), app=WSGIMiddleware(self.viewer_app.server))
+
             uvicorn.run(app,host=self.app_options['host'],port=self.app_options['port'])
 
         else:

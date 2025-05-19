@@ -33,6 +33,7 @@ def main():
 
     fusion_vis = get_layout(args_dict)
     fusion_vis.start()
+    
 
 if __name__=='__main__':
     main()

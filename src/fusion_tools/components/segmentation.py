@@ -652,7 +652,7 @@ class FeatureAnnotation(Tool):
         )
 
     def get_namespace(self):
-        """Adding JavaScript functions to the BulkLabels Namespace
+        """Adding JavaScript functions to the FeatureAnnotation Namespace
         """
         self.js_namespace = Namespace(
             "fusionTools","featureAnnotation"
