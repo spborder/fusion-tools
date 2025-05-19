@@ -44,7 +44,7 @@ from fusion_tools.utils.shapes import (
 )
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 
-
+import time
 
 
 class SlideMap(MapComponent):
@@ -1239,8 +1239,9 @@ class SlideMap(MapComponent):
         
         annotations_geojson = json.loads(get_pattern_matching_value(annotations_geojson))
 
+        start = time.time()
         new_available_properties, new_feature_names, new_property_info = extract_geojson_properties(annotations_geojson,None,['_id','_index'],4)
-
+        #print(f'Getting geojson properties: {time.time() - start}')
         annotations_info_store = json.dumps({
             'available_properties': new_available_properties,
             'feature_names': new_feature_names,

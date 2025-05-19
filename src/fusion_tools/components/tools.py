@@ -39,7 +39,7 @@ from dash.dash_table.Format import Format, Scheme
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
 import dash_treeview_antd as dta
-from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform
+from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform, BlockingCallbackTransform
 from dash_extensions.javascript import Namespace, arrow_function
 
 # fusion-tools imports
@@ -1059,7 +1059,8 @@ class PropertyViewer(Tool):
         self.blueprint = DashBlueprint(
             transforms = [
                 PrefixIdTransform(prefix = f'{self.component_prefix}'),
-                MultiplexerTransform()
+                MultiplexerTransform(),
+                BlockingCallbackTransform()
             ]
         )
 
@@ -1163,7 +1164,8 @@ class PropertyViewer(Tool):
                 State({'type':'property-view-subtype-parent','index':ALL},'children'),
                 State({'type': 'map-annotations-store','index': ALL},'data'),
                 State({'type': 'property-viewer-available-properties','index': ALL},'data')
-            ]
+            ],
+            blocking = True
         )(self.update_property_viewer)
 
     def update_slide(self, new_annotations_info: list):
@@ -1217,9 +1219,9 @@ class PropertyViewer(Tool):
 
         if not active_tab is None:
             if not active_tab=='property-viewer':
-                raise exceptions.PreventUpdate
+                return [no_update], [no_update]
         else:
-            raise exceptions.PreventUpdate
+            return [no_update], [no_update]
         
         slide_map_bounds = get_pattern_matching_value(slide_map_bounds)
         view_type_value = get_pattern_matching_value(view_type_value)
