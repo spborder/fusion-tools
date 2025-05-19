@@ -27,7 +27,7 @@ def main():
         'pword': dsa_pword,# Optional
         'initialItems': initial_items,
         'app_options': {
-            'port': 8050
+            'port': 8050,
         }
     }
 

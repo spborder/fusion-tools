@@ -221,7 +221,7 @@ class SlideMap(MapComponent):
                     'dblclick': self.js_namespace('sendPosition')
                 },
                 zoom = 0,
-                zoomDelta = 0.25,
+                #zoomDelta = 0.25,
                 style = {'height': '90vh','width': '100%','margin': 'auto','display': 'inline-block'},
                 children = [
                     html.Div(

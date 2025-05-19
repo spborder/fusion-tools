@@ -7112,17 +7112,17 @@ class CustomFunction(Tool):
         elif output_spec['type']=='numeric':
 
             if type(output)==list:
-                pass
+                number_output = f'Click "Download" to download array. shapes: {[o.shape for o in output if type(o)==np.ndarray]}'
             elif type(output)==np.ndarray:
-                pass
+                number_output = f'Click "Download" to download array. shape: {output.shape}'
             elif type(output) in [int,float,bool]:
-                pass
+                number_output = output
             
             output_component = html.Div([
                 dbc.Row([
                     dbc.Col(output_desc_column,md=5),
                     dbc.Col(
-                        'placeholder with numeric output',
+                        number_output,
                         md = 7
                     )
                 ])

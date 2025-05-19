@@ -108,6 +108,7 @@ class Visualization:
         self.default_options = {
             'title': 'FUSION',
             'assets_folder': '/.fusion_assets/',
+            'requests_pathname_prefix':'/',
             'server': 'default',
             'server_options': {},
             'port': 8080,
@@ -133,14 +134,16 @@ class Visualization:
         # Where default options are merged with user-added options
         self.app_options = self.default_options | self.app_options
 
+        self.default_page = self.app_options.get('default_page')
+
         self.assets_folder = os.getcwd()+self.app_options['assets_folder']
 
         self.vis_store_content = self.initialize_stores()
 
         self.viewer_app = DashProxy(
             __name__,
-            url_base_pathname = None if not self.app_options['jupyter'] else self.app_options.get('url_base_pathname'),
-            requests_pathname_prefix = '/app/' if not self.app_options['jupyter'] else None,
+            url_base_pathname = None if not self.app_options['jupyter'] else self.app_options.get('url_base_pathname',None),
+            requests_pathname_prefix = self.app_options.get('requests_pathname_prefix','/'),
             suppress_callback_exceptions = True,
             external_stylesheets = self.app_options['external_stylesheets'],
             external_scripts = self.app_options['external_scripts'],
@@ -265,7 +268,7 @@ class Visualization:
 
                 # If the page needs to be updated based on changes in anchor-vis-data
                 page_content = self.update_page_layout(
-                    page_components_list = self.components[pathname.replace('/app/','').replace('-',' ')],
+                    page_components_list = self.components[pathname.replace(self.app_options.get('requests_pathname_prefix',''),'').replace('-',' ')],
                     use_prefix = True,
                     session_data=session_data
                 )
@@ -287,7 +290,7 @@ class Visualization:
                 if 'current_user' in session_data:
                     new_session_data['current_user'] = session_data['current_user']
                 
-                page_pathname = session_content['page'].replace('/app/','').replace('-',' ')
+                page_pathname = session_content['page'].replace(self.app_options.get('requests_pathname_prefix',''),'').replace('-',' ')
 
                 page_content = self.update_page_layout(
                     page_components_list = self.components[page_pathname],
@@ -298,21 +301,31 @@ class Visualization:
                 return page_content, page_pathname, '', json.dumps(new_session_data)
 
             else:
-                # Otherwise, return a list of clickable links for valid pages
-                not_found_page = html.Div([
-                    html.H1('Uh oh!'),
-                    html.H2(f'The page: {pathname}, is not in the current layout!'),
-                    html.Hr()
-                ] + [
-                    html.P(html.A(page,href=page))
-                    for page in self.layout_dict
-                ])
-                return not_found_page, pathname, '', no_update
+                if self.default_page is None:
+                    # Otherwise, return a list of clickable links for valid pages
+                    not_found_page = html.Div([
+                        html.H1('Uh oh!'),
+                        html.H2(f'The page: {pathname}, is not in the current layout!'),
+                        html.Hr()
+                    ] + [
+                        html.P(html.A(page,href=page))
+                        for page in self.layout_dict
+                    ])
+                    return not_found_page, pathname, '', no_update
+                else:
+                    page_content = self.update_page_layout(
+                        page_components_list = self.components[self.default_page.replace(self.app_options.get('requests_pathname_prefix',''),'').replace('-',' ')],
+                        use_prefix = True,
+                        session_data=session_data
+                    )
+
+                    return page_content, no_update, no_update, no_update
+
         elif ctx.triggered_id['type']=='page-button':
             new_pathname = list(self.layout_dict.keys())[ctx.triggered_id['index']]
             # If the page needs to be updated based on changes in anchor-vis-data
             page_content = self.update_page_layout(
-                page_components_list = self.components[new_pathname.replace('/app/','').replace('-',' ')],
+                page_components_list = self.components[new_pathname.replace(self.app_options.get('requests_pathname_prefix',''),'').replace('-',' ')],
                 use_prefix = True,
                 session_data=session_data
             )
@@ -810,7 +823,7 @@ class Visualization:
                 )
 
             page_components.append(row_components)
-            self.layout_dict['/app/'+page.replace(" ","-")] = page_children
+            self.layout_dict[self.app_options.get('requests_pathname_prefix','')+page.replace(" ","-")] = page_children
 
         upload_check = self.check_for_uploader(page_components)
         if upload_check:
@@ -887,7 +900,7 @@ class Visualization:
             if not self.local_tile_server is None:
                 app.include_router(self.local_tile_server.router)
             
-            app.mount(path='/app',app=WSGIMiddleware(self.viewer_app.server))
+            app.mount(path = self.app_options.get('requests_pathname_prefix','/'), app=WSGIMiddleware(self.viewer_app.server))
             uvicorn.run(app,host=self.app_options['host'],port=self.app_options['port'])
 
         else:

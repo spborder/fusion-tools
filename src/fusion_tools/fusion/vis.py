@@ -39,6 +39,9 @@ def get_layout(args):
 
     initial_items = args['initialItems']
 
+    if not 'default_page' in args['app_options']:
+        args['app_options']['default_page'] = 'Welcome'
+
     fusion_vis = Visualization(
         tileservers=[dsa_handler.get_tile_server(i) for i in initial_items],
         linkage = 'page',
