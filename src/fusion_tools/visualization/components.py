@@ -367,6 +367,7 @@ class Visualization:
 
                     slide_dict = {
                         'name': s.split(os.sep)[-1],
+                        'id': f'local{s_idx}',
                         'tiles_url': self.local_tile_server.get_name_tiles_url(s.split(os.sep)[-1]),
                         'regions_url': self.local_tile_server.get_name_regions_url(s.split(os.sep)[-1]),
                         'image_metadata_url': self.local_tile_server.get_name_image_metadata_url(s.split(os.sep)[-1]),

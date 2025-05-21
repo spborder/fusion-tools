@@ -53,6 +53,7 @@ tests/test_feature_extraction.py
 tests/test_file_selector.py
 tests/test_format_intersecting_masks.py
 tests/test_fusion_layout.py
+tests/test_fusion_multiworker.py
 tests/test_generate_property_dict.py
 tests/test_get_gene_info.py
 tests/test_global_property_plotter.py
