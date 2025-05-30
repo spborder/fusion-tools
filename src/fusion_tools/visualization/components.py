@@ -2,6 +2,8 @@ import os
 import pandas as pd
 import numpy as np
 import json
+import uuid
+
 
 # Dash imports
 import dash
@@ -14,6 +16,7 @@ from dash_extensions.enrich import DashProxy, html, MultiplexerTransform, Prefix
 from typing_extensions import Union
 from fusion_tools.tileserver import TileServer, DSATileServer, LocalTileServer, CustomTileServer
 from fusion_tools.handler.dataset_uploader import DSAUploadHandler
+from fusion_tools.visualization.database import fusionDB
 import threading
 
 import uvicorn
@@ -59,6 +62,7 @@ class Visualization:
                  local_annotations: Union[list,dict,None] = None,
                  slide_metadata: Union[list,dict,None] = None,
                  tileservers: Union[list,TileServer,None] = None,
+                 database: Union[fusionDB, None] = None,
                  components: Union[list,dict] = [],
                  header: list = [],
                  app_options: dict = {},
@@ -87,6 +91,7 @@ class Visualization:
         self.local_slides = local_slides
         self.slide_metadata = slide_metadata
         self.tileservers = tileservers
+        self.database = database
         self.local_annotations = local_annotations
         self.components = components
         self.header = header
@@ -359,7 +364,9 @@ class Visualization:
                 slide_dict = {}
                 if not s is None:
                     # Adding this slide to list of local slides
+                    local_slide_id = uuid.uuid4().hex[:24]
                     self.local_tile_server.add_new_image(
+                        new_image_id = local_slide_id,
                         new_image_path = s,
                         new_annotations = anns,
                         new_metadata = meta
@@ -367,7 +374,7 @@ class Visualization:
 
                     slide_dict = {
                         'name': s.split(os.sep)[-1],
-                        'id': f'local{s_idx}',
+                        'id': local_slide_id,
                         'tiles_url': self.local_tile_server.get_name_tiles_url(s.split(os.sep)[-1]),
                         'regions_url': self.local_tile_server.get_name_regions_url(s.split(os.sep)[-1]),
                         'image_metadata_url': self.local_tile_server.get_name_image_metadata_url(s.split(os.sep)[-1]),

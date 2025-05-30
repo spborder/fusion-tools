@@ -3747,8 +3747,10 @@ class SlideImageOverlay(MapComponent):
             'image_crs': self.image_crs,
             'image_properties': self.image_properties,
             'image_bounds': self.image_bounds,
-            'name': self.name,
-            '_id': self._id
+            'properties': {
+                'name': self.name,
+                '_id': self._id
+            }
         }
 
         return overlay_info_dict

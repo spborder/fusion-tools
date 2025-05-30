@@ -17,88 +17,119 @@ import uvicorn
 
 from shapely.geometry import box, shape
 
-from fusion_tools.utils.shapes import (load_annotations,
-                                       histomics_to_geojson, 
-                                       detect_image_overlay, 
-                                       detect_geojson, 
-                                       detect_histomics,
-                                       structures_within_poly,
-                                       extract_nested_prop)
+from fusion_tools.visualization.database import (
+    fusionDB, User, VisSession, Item, Layer, Structure,
+    ImageOverlay, Annotation) 
+from fusion_tools.utils.shapes import (
+    load_annotations,
+    histomics_to_geojson, 
+    detect_image_overlay, 
+    detect_geojson, 
+    detect_histomics,
+    structures_within_poly,
+    extract_nested_prop)
 
-class TileServer:
-    """Components which pull information from a slide(s)
-    """
-    pass
 
-class LocalTileServer(TileServer):
-    """Tile server from image saved locally. Uses large-image to read and parse image formats (default: [common])
+class Slide:
+    """Local slide object with built-in methods for checking paths, loading annotations
     """
     def __init__(self,
-                 local_image_path: Union[str,list,None] = [],
-                 local_image_annotations: Union[str,list] = [],
-                 local_metadata: Union[dict,list] = [],
-                 tile_server_port:int = 8050,
-                 host: str = 'localhost',
-                 cors_options: dict = {'origins': ['*'], 'allow_methods': ['*'], 'allow_headers': ['*'], 'expose_headers': ['*'], 'max_age': '36000000'}
-                 ):
-        """Constructor method
+                 image_filepath: Union[str,None] = None,
+                 annotations: Union[str,list,dict,None] = None,
+                 metadata: Union[dict,None] = None,
+                 image_style: Union[dict,None] = None):
+        
+        self.image_filepath = image_filepath
+        self.annotations = annotations
+        self.metadata = metadata
+        self.image_style = image_style
 
-        :param local_image_path: File path for image saved locally
-        :type local_image_path: str
-        :param tile_server_port: Tile server path where tiles are accessible from, defaults to '8050'
-        :type tile_server_port: str, optional
-        """
+        # Checking path exists
+        assert(os.path.exists(self.image_filepath))
+        
+        # Checking image is readable by large_image
+        if image_style is None:
+            img_source = large_image.open(self.image_filepath)
+        else:
+            img_source = large_image.open(
+                self.image_filepath,
+                style = self.image_style
+            )
 
-        self.local_image_paths = local_image_path if type(local_image_path)==list else [local_image_path]
-        self.local_image_annotations = local_image_annotations if type(local_image_annotations)==list else [local_image_annotations]
-        self.local_metadata = local_metadata
-        self.tile_server_port = tile_server_port
-        self.host = host
-        self.cors_options = cors_options
+        self.image_metadata = img_source.getMetadata()
 
-        self.names = [i.split(os.sep)[-1] for i in self.local_image_paths]
-   
-        self.tile_sources = [large_image.open(i,encoding='PNG') for i in self.local_image_paths]
-        self.tiles_metadatas = [i.getMetadata() for i in self.tile_sources]
-        self.annotations, self.annotations_metadata = self.load_annotations()
-        self.metadata = self.local_metadata if not self.local_metadata is None else [{} for i in self.local_image_paths]
+        # Treating 3-frame images as RGB by default
+        if 'frames' in self.image_metadata:
+            if len(self.image_metadata['frames'])==3:
+                new_tile_source = large_image.open(
+                    self.image_filepath,
+                    style = {
+                        "bands": [
+                            {
+                                "framedelta": c_idx,
+                                "palette": ["rgba(0,0,0,0)","rgba("+",".join(["255" if i==c_idx else "0" for i in range(3)]+["255"])+")"]
+                            }
+                            for c_idx in range(3)
+                        ]
+                    }
+                )
+                self.image_style = {
+                    "bands": [
+                        {
+                            "framedelta": c_idx,
+                            "palette": ["rgba(0,0,0,0)","rgba("+",".join(["255" if i==c_idx else "0" for i in range(3)]+["255"])+")"]
+                        }
+                        for c_idx in range(3)
+                    ]
+                }
 
-        self.app = FastAPI()
 
-        self.router = APIRouter()
-        self.router.add_api_route('/',self.root,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/names',self.get_names,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{image}/tiles/{z}/{x}/{y}',self.get_tile,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{image}/image_metadata',self.get_image_metadata,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{image}/metadata',self.get_metadata,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{image}/tiles/region',self.get_region,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{image}/tiles/thumbnail',self.get_thumbnail,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{image}/annotations',self.get_annotations,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{image}/annotations/metadata',self.get_annotations_metadata,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{image}/annotations/data/list',self.get_annotations_property_keys,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{image}/annotations/data',self.get_annotations_property_data,methods=["GET","OPTIONS"])
+        if type(self.annotations)==str:
+            assert(os.path.exists(self.annotations))
 
-    def load_annotations(self):
+        self.processed_annotations, self.annotations_metadata = self.load_annotations(self.annotations)
+
+    def extract_meta_dict(self, annotations):
+
+        if not type(annotations)==list:
+            annotations = [annotations]
+
+        ann_metadata = []
+        for a in annotations:
+            if hasattr(a,'to_dict'):
+                a = a.to_dict()
+                
+            if 'properties' in a:
+                ann_metadata.append({
+                    'name': a['properties']['name'],
+                    '_id': a['properties']['_id'] 
+                })
+            elif 'image_path' in a:
+                ann_metadata.append(a)
+
+        return ann_metadata
+
+    def load_annotations(self, annotations):
 
         geojson_annotations = []
         annotations_metadata = []
-        if not self.local_image_annotations is None:
-            if type(self.local_image_annotations)==str:
-                new_loaded_annotations = load_annotations(self.local_image_annotations)
+        if not annotations is None:
+            if type(annotations)==str:
+                new_loaded_annotations = load_annotations(annotations)
                 if not new_loaded_annotations is None:
                     geojson_annotations.append(new_loaded_annotations)
                     annotations_metadata.append(self.extract_meta_dict(new_loaded_annotations))
                 else:
-                    print(f'Unrecognized annotation format: {self.local_image_annotations}')
+                    print(f'Unrecognized annotation format: {annotations}')
                     geojson_annotations.append([])
                     annotations_metadata.append([])
 
-            elif hasattr(self.local_image_annotations,"to_dict"):
-                geojson_annotations.append([self.local_image_annotations.to_dict()])
-                annotations_metadata.append(self.extract_meta_dict(self.local_image_annotations))
+            elif hasattr(annotations,"to_dict"):
+                geojson_annotations.append([annotations.to_dict()])
+                annotations_metadata.append(self.extract_meta_dict(annotations))
 
-            elif type(self.local_image_annotations)==list:
-                for n in self.local_image_annotations:
+            elif type(annotations)==list:
+                for n in annotations:
                     processed_anns = []
                     if not n is None:
                         if hasattr(n,"to_dict"):
@@ -127,204 +158,133 @@ class LocalTileServer(TileServer):
                     geojson_annotations.append(processed_anns)
                     annotations_metadata.append(self.extract_meta_dict(processed_anns))
                         
-            elif type(self.local_image_annotations)==dict:
-                if 'annotation' in self.local_image_annotations:
-                    converted_annotations = histomics_to_geojson(self.local_image_annotations)
+            elif type(annotations)==dict:
+                if 'annotation' in annotations:
+                    converted_annotations = histomics_to_geojson(annotations)
                     geojson_annotations.append([converted_annotations])
                     annotations_metadata.append(self.extract_meta_dict([converted_annotations]))
                 else:
-                    geojson_annotations.append([self.local_image_annotations])
-                    annotations_metadata.append(self.extract_meta_dict([self.local_image_annotations]))
+                    geojson_annotations.append([annotations])
+                    annotations_metadata.append(self.extract_meta_dict([annotations]))
         else:
             geojson_annotations.append([])
             annotations_metadata.append([])
 
-        return geojson_annotations, annotations_metadata
+        return geojson_annotations, annotations_metadata    
 
-    def extract_meta_dict(self, annotations):
 
-        if not type(annotations)==list:
-            annotations = [annotations]
+class TileServer:
+    """Components which pull information from a slide(s)
+    """
+    pass
 
-        ann_metadata = []
-        for a in annotations:
-            if hasattr(a,'to_dict'):
-                a = a.to_dict()
-                
-            if 'properties' in a:
-                ann_metadata.append({
-                    'name': a['properties']['name'],
-                    '_id': a['properties']['_id'] 
-                })
-            elif 'image_path' in a:
-                ann_metadata.append(a)
+class LocalTileServer(TileServer):
+    """Tile server from image saved locally. Uses large-image to read and parse image formats (default: [common])
+    """
+    def __init__(self,
+                 database: Union[fusionDB,None] = None,
+                 tile_server_port:int = 8050,
+                 host: str = 'localhost',
+                 protocol: str = 'http',
+                 cors_options: dict = {'origins': ['*'], 'allow_methods': ['*'], 'allow_headers': ['*'], 'expose_headers': ['*'], 'max_age': '36000000'}
+                 ):
+        """Constructor method
 
-        return ann_metadata
+        :param local_image_path: File path for image saved locally
+        :type local_image_path: str
+        :param tile_server_port: Tile server path where tiles are accessible from, defaults to '8050'
+        :type tile_server_port: str, optional
+        """
+
+        self.database = database
+        self.tile_server_port = tile_server_port
+        self.host = host
+        self.protocol = protocol
+        self.cors_options = cors_options
+
+        self.app = FastAPI()
+
+        self.router = APIRouter()
+        self.router.add_api_route('/',self.root,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/names',self.get_names,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/tiles/{z}/{x}/{y}',self.get_tile,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/image_metadata',self.get_image_metadata,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/metadata',self.get_metadata,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/tiles/region',self.get_region,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/tiles/thumbnail',self.get_thumbnail,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/annotations',self.get_annotations,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/annotations/metadata',self.get_annotations_metadata,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/annotations/data/list',self.get_annotations_property_keys,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{image}/annotations/data',self.get_annotations_property_data,methods=["GET","OPTIONS"])
+
 
     def __str__(self):
-        return f'TileServer class for {self.local_image_paths} to {self.host}:{self.tile_server_port}'
+        return f'TileServer class to {self.host}:{self.tile_server_port}'
 
     def __len__(self):
-        return len(self.tile_sources)
+        """Return number of items 
+
+        :return: Count of items in local database
+        :rtype: int
+        """
+        count = self.database.count(
+            table_name = 'item'
+        )
+
+        return count
     
-    def add_new_image(self,new_image_path:str, new_annotations:Union[str,list,dict,None], new_metadata:Union[dict,None] = None):
+    def add_new_image(self,new_image_id:str, new_image_path:str, new_annotations:Union[str,list,dict,None] = None, new_metadata:Union[dict,None] = None, new_image_style:Union[dict,None] = None):
 
-        self.local_image_paths.append(new_image_path)
-        self.names.append(new_image_path.split(os.sep)[-1])
-        new_tile_source = large_image.open(new_image_path)
-        new_tiles_metadata = new_tile_source.getMetadata()
+        # Verifying filepaths and loading annotations
+        new_local_item = Slide(
+            image_filepath=new_image_path,
+            annotations = new_annotations,
+            metadata = new_metadata,
+            image_style=new_image_style
+        )
 
-        # Treating 3-frame images as RGB by default
-        if 'frames' in new_tiles_metadata:
-            if len(new_tiles_metadata['frames'])==3:
-                new_tile_source = large_image.open(
-                    new_image_path,
-                    style = {
-                        "bands": [
-                            {
-                                "framedelta": c_idx,
-                                "palette": ["rgba(0,0,0,0)","rgba("+",".join(["255" if i==c_idx else "0" for i in range(3)]+["255"])+")"]
-                            }
-                            for c_idx in range(3)
-                        ]
-                    }
-                )
-
-        self.tile_sources.append(new_tile_source)
-        self.tiles_metadatas.append(new_tiles_metadata)
-
-        if not new_metadata is None:
-            self.metadata.append(new_metadata)
-        else:
-            self.metadata.append({})
-
-        if not new_annotations is None:
-            if type(new_annotations)==str:
-                new_loaded_annotations = load_annotations(new_annotations)
-                if not new_loaded_annotations is None:
-                    self.annotations.append(new_loaded_annotations)
-                    self.annotations_metadata.append(self.extract_meta_dict(new_loaded_annotations))
-                else:
-                    print(f'Unrecognized annotation format: {new_annotations}')
-                    self.annotations.append([])
-                    self.annotations_metadata.append([])
-
-            elif hasattr(new_annotations,"to_dict"):
-                self.annotations.append([new_annotations.to_dict()])
-                self.annotations_metadata.append(self.extract_meta_dict(new_annotations))
-
-            elif type(new_annotations)==list:
-                processed_anns = []
-                for n in new_annotations:
-                    if not n is None:
-                        if hasattr(n,"to_dict"):
-                            processed_anns.append(n.to_dict())
-                        elif type(n)==dict:
-                            if 'annotation' in n:
-                                converted = histomics_to_geojson(n)
-                                processed_anns.append(converted)
-                            else:
-                                processed_anns.append(n)
-                        elif type(n)==str:
-                            loaded_anns = load_annotations(n)
-                            if not loaded_anns is None:
-                                if type(loaded_anns)==list:
-                                    processed_anns.extend(loaded_anns)
-                                elif type(loaded_anns)==dict:
-                                    processed_anns.append(loaded_anns)
-                            else:
-                                print(f'Unrecognized format: {n}')
-
-                        elif type(n)==np.ndarray:
-                            print(f'Found annotations of type: {type(n)}, make sure to specify if this is an overlay image (use fusion_tools.SlideImageOverlay) or a label mask (use fusion_tools.utils.shapes.load_label_mask)')
-                        else:
-                            print(f'Unknown annotations type found: {n}')
-                
-                self.annotations.append(processed_anns)
-                self.annotations_metadata.append(self.extract_meta_dict(processed_anns))
-                    
-            elif type(new_annotations)==dict:
-                if 'annotation' in new_annotations:
-                    converted_annotations = histomics_to_geojson(new_annotations)
-                    self.annotations.append([converted_annotations])
-                    self.annotations_metadata.append(self.extract_meta_dict([converted_annotations]))
-                else:
-                    self.annotations.append([new_annotations])
-                    self.annotations_metadata.append(self.extract_meta_dict([new_annotations]))
-        else:
-            self.annotations.append([])
-            self.annotations_metadata.append([])
+        slide_name = new_image_path.split(os.sep)[-1]
+        # Adding information to database
+        self.database.add_slide(new_image_id,slide_name,new_local_item)
 
     def root(self):
         return {'message': "Oh yeah, now we're cooking"}
 
     def get_names(self):
-        return {'message': self.names}
+        """Get names of items in fusionDB
 
-    def get_name_tiles_url(self,name):
+        :return: Message dictionary containing list of all item names
+        :rtype: dict
+        """
+        item_names = self.database.get_names(
+            table_name = 'item'
+        )
 
-        if name in self.names:
-            name_index = self.names.index(name)
+        return {'message': item_names}
 
-            name_meta = self.tiles_metadatas[name_index]
-            if 'frames' in name_meta:
-                if len(name_meta['frames'])==3:
-                    tiles_url = f'http://{self.host}:{self.tile_server_port}/{name_index}/tiles/'+'{z}/{x}/{y}'
-                    #tiles_url += '/?style={"bands": [{"framedelta":0,"palette":"rgba(255,0,0,255)"},{"framedelta":1,"palette":"rgba(0,255,0,255)"},{"framedelta":2,"palette":"rgba(0,0,255,255)"}]}'
-                else:
-                    tiles_url = f'http://{self.host}:{self.tile_server_port}/{name_index}/tiles/'+'{z}/{x}/{y}'
-            else:
-                tiles_url = f'http://{self.host}:{self.tile_server_port}/{name_index}/tiles/'+'{z}/{x}/{y}'
+    def get_tiles_url(self,slide_id):
+        tiles_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/tiles/'+'{z}/{x}/{y}'
+        return tiles_url
 
-            return tiles_url
-        else:
-            return None
+    def get_regions_url(self,slide_id):
+        regions_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/tiles/region'
+        return regions_url
 
-    def get_name_regions_url(self,name):
+    def get_annotations_url(self,slide_id):
+        annotations_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/annotations'
+        return annotations_url
 
-        if name in self.names:
-            name_index = self.names.index(name)
+    def get_annotations_metadata_url(self,slide_id):
+        annotations_metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/annotations/metadata'
+        return annotations_metadata_url
 
-            return f'http://{self.host}:{self.tile_server_port}/{name_index}/tiles/region'
-        else:
-            return None
-
-    def get_name_annotations_url(self,name):
-
-        if name in self.names:
-            name_index = self.names.index(name)
-
-            return f'http://{self.host}:{self.tile_server_port}/{name_index}/annotations'
-        else:
-            return None
-
-    def get_name_annotations_metadata_url(self,name):
-
-        if name in self.names:
-            name_index = self.names.index(name)
-
-            return f'http://{self.host}:{self.tile_server_port}/{name_index}/annotations/metadata'
-        else:
-            return None
-
-    def get_name_metadata_url(self,name):
+    def get_metadata_url(self,slide_id):
+        metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/metadata'
+        return metadata_url
         
-        if name in self.names:
-            name_index = self.names.index(name)
-
-            return f'http://{self.host}:{self.tile_server_port}/{name_index}/metadata'
-        else:
-            return None
-        
-    def get_name_image_metadata_url(self,name):
-
-        if name in self.names:
-            name_index = self.names.index(name)
-
-            return f'http://{self.host}:{self.tile_server_port}/{name_index}/image_metadata'
-
-        else:
-            return None
+    def get_image_metadata_url(self,slide_id):
+        image_metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/image_metadata'
+        return image_metadata_url
 
     def get_tile(self,image:int,z:int, x:int, y:int, style:str = ''):
         """Tiles endpoint, returns an image tyle based on provided coordinates
@@ -519,6 +479,7 @@ class LocalTileServer(TileServer):
         :param image: Local image index
         :type image: int
         """
+
         if image<len(self.names) and image>=0:
             image_anns = self.annotations[image]
 
@@ -605,8 +566,7 @@ class LocalTileServer(TileServer):
         :return: 
         :rtype: _type_
         """
-        
-        
+                
         if image<len(self.names) and image>=0:
             image_anns = self.annotations[image]
 

@@ -393,7 +393,9 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
             # This is the tissue_positions.csv file that is output by spaceranger
             spot_coords = pd.read_csv(visium_path,index_col=0)
             spot_coords = spot_coords[spot_coords["in_tissue"]==1].loc[:,['pxl_col_in_fullres','pxl_row_in_fullres']]
-        
+            spot_df = spot_df[spot_df["in_tissue"]==1]
+            spot_df = spot_df.reset_index(drop=True)
+
         spot_df.index = spot_coords.index
         # Adding other columns in the provided CSV file 
         spot_coords = pd.concat([spot_coords,spot_df.loc[:,[i for i in spot_df if not i in spot_coords.columns.tolist()+['Unnamed: 0']]]],axis=1,ignore_index=True)

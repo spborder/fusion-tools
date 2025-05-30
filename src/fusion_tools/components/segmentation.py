@@ -1114,7 +1114,10 @@ class FeatureAnnotation(Tool):
         elif 'feature-annotation-label-submit' in ctx.triggered_id['type']:
             figure_update = no_update
 
-            image_bbox = current_structure_data[current_structure][current_structure_data[f'{current_structure}_index']]
+            structure_names = [i['name'] for i in current_structure_data]
+            current_structure_index = current_structure_data[structure_names.index(current_structure)]['index']
+
+            image_bbox = current_structure_data[structure_names.index(current_structure)]['bboxes'][current_structure_index]
 
             if not new_label is None:
                 # Saving label to running file
