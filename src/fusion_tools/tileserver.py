@@ -117,16 +117,17 @@ class Slide:
             if type(annotations)==str:
                 new_loaded_annotations = load_annotations(annotations)
                 if not new_loaded_annotations is None:
-                    geojson_annotations.append(new_loaded_annotations)
-                    annotations_metadata.append(self.extract_meta_dict(new_loaded_annotations))
+                    if not type(new_loaded_annotations)==list:
+                        new_loaded_annotations = [new_loaded_annotations]
+
+                    geojson_annotations.extend(new_loaded_annotations)
+                    annotations_metadata.extend(self.extract_meta_dict(new_loaded_annotations))
                 else:
                     print(f'Unrecognized annotation format: {annotations}')
-                    geojson_annotations.append([])
-                    annotations_metadata.append([])
 
             elif hasattr(annotations,"to_dict"):
-                geojson_annotations.append([annotations.to_dict()])
-                annotations_metadata.append(self.extract_meta_dict(annotations))
+                geojson_annotations.append(annotations.to_dict())
+                annotations_metadata.extend(self.extract_meta_dict(annotations))
 
             elif type(annotations)==list:
                 for n in annotations:
@@ -155,20 +156,17 @@ class Slide:
                         else:
                             print(f'Unknown annotations type found: {n}')
                     
-                    geojson_annotations.append(processed_anns)
-                    annotations_metadata.append(self.extract_meta_dict(processed_anns))
+                    geojson_annotations.extend(processed_anns)
+                    annotations_metadata.extend(self.extract_meta_dict(processed_anns))
                         
             elif type(annotations)==dict:
                 if 'annotation' in annotations:
                     converted_annotations = histomics_to_geojson(annotations)
-                    geojson_annotations.append([converted_annotations])
-                    annotations_metadata.append(self.extract_meta_dict([converted_annotations]))
+                    geojson_annotations.append(converted_annotations)
+                    annotations_metadata.extend(self.extract_meta_dict([converted_annotations]))
                 else:
-                    geojson_annotations.append([annotations])
-                    annotations_metadata.append(self.extract_meta_dict([annotations]))
-        else:
-            geojson_annotations.append([])
-            annotations_metadata.append([])
+                    geojson_annotations.append(annotations)
+                    annotations_metadata.extend(self.extract_meta_dict([annotations]))
 
         return geojson_annotations, annotations_metadata    
 
@@ -207,16 +205,15 @@ class LocalTileServer(TileServer):
         self.router = APIRouter()
         self.router.add_api_route('/',self.root,methods=["GET","OPTIONS"])
         self.router.add_api_route('/names',self.get_names,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{image}/tiles/{z}/{x}/{y}',self.get_tile,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{image}/image_metadata',self.get_image_metadata,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{image}/metadata',self.get_metadata,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{image}/tiles/region',self.get_region,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{image}/tiles/thumbnail',self.get_thumbnail,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{image}/annotations',self.get_annotations,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{image}/annotations/metadata',self.get_annotations_metadata,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{image}/annotations/data/list',self.get_annotations_property_keys,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{image}/annotations/data',self.get_annotations_property_data,methods=["GET","OPTIONS"])
-
+        self.router.add_api_route('/{id}/tiles/{z}/{x}/{y}',self.get_tile,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{id}/image_metadata',self.get_image_metadata,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{id}/metadata',self.get_metadata,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{id}/tiles/region',self.get_region,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{id}/tiles/thumbnail',self.get_thumbnail,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{id}/annotations',self.get_annotations,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{id}/annotations/metadata',self.get_annotations_metadata,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{id}/annotations/data/list',self.get_annotations_property_keys,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{id}/annotations/data',self.get_annotations_property_data,methods=["GET","OPTIONS"])
 
     def __str__(self):
         return f'TileServer class to {self.host}:{self.tile_server_port}'
@@ -250,6 +247,126 @@ class LocalTileServer(TileServer):
     def root(self):
         return {'message': "Oh yeah, now we're cooking"}
 
+    def get_item(self,item_id:str):
+        """Grabbing item from database
+
+        :param item_id: String uuid for local item
+        :type item_id: str
+        :return: Item instance
+        :rtype: None
+        """
+        image_item = self.database.search(
+            search_kwargs = {
+                'type': 'item',
+                'filters': {
+                    'item': {
+                        'id': item_id
+                    }
+                }
+            }
+        )
+
+        return image_item
+    
+    def get_tile_source(self,item_id:str,style:Union[str,None]=None):
+        """Getting large-image tile source for a given id+style combo. 
+
+        :param item_id: String uuid for local image
+        :type item_id: str
+        :param style: Style dict for large-image reader, specifying bands/palettes, etc., defaults to None
+        :type style: Union[str,None], optional
+        :return: Tile source
+        :rtype: None
+        """
+        image_item = self.get_item(item_id)
+        if len(image_item)==0:
+            return None
+        else:
+            image_item = image_item[0]
+            image_filepath = image_item.get('filepath')
+
+            tile_source = large_image.open(
+                image_filepath,
+                style = json.loads(style) if type(style)==str else None
+            )
+
+            return tile_source
+        
+    def get_item_annotations(self, item_id:str):
+        """Loading annotations from item database
+
+        :param item_id: String uuid for local image
+        :type item_id: str
+        """
+
+        item_annotations = []
+
+        item_layers = self.database.search(
+            search_kwargs = {
+                'type': 'layer',
+                'filters': {
+                    'item': {
+                        'id': item_id
+                    }
+                }
+            }
+        )
+
+        for l in item_layers:
+            layer_name = l.get('name')
+            layer_id = l.get('id')
+
+            layer_structures = self.database.search(
+                search_kwargs={
+                    'type': 'structure',
+                    'filters': {
+                        'layer': {
+                            'id': layer_id
+                        }
+                    }
+                }
+            )
+
+            if len(layer_structures)>0:
+                item_annotations.append(
+                    {
+                        'type': 'FeatureCollection',
+                        'properties': {
+                            'name': layer_name,
+                            '_id': layer_id
+                        },
+                        'features': [
+                            {
+                                'type': 'Feature',
+                                'geometry': s.get('geom'),
+                                'properties': s.get('properties')
+                            }
+                            for s in layer_structures
+                        ]
+                    }
+                )
+            else:
+                # This could be an ImageOverlay layer
+                image_overlays = self.database.search(
+                    search_kwargs = {
+                        'type': 'image_overlay',
+                        'filters': {
+                            'layer': {
+                                'id': layer_id
+                            }
+                        }
+                    }
+                )
+
+                if len(image_overlays)>0:
+                    item_annotations.extend(
+                        [
+                            i.to_dict() for i in image_overlays
+                        ]
+                    )
+
+        return item_annotations
+
     def get_names(self):
         """Get names of items in fusionDB
 
@@ -261,6 +378,29 @@ class LocalTileServer(TileServer):
         )
 
         return {'message': item_names}
+    
+    def get_item_names_ids(self, filters = None, size = None, offset = 0):
+        """Get list of names and ids of all locally stored images in this tileserver
+        """
+
+        item_names_ids = self.database.search(
+            search_kwargs={
+                'type': 'item',
+                'filters': filters
+            },
+            size = size,
+            offset = offset
+        )
+
+        item_names_ids = [
+            {
+                'name': i.name,
+                'id': i.id
+            }
+            for i in item_names_ids
+        ]
+
+        return item_names_ids
 
     def get_tiles_url(self,slide_id):
         tiles_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/tiles/'+'{z}/{x}/{y}'
@@ -286,9 +426,11 @@ class LocalTileServer(TileServer):
         image_metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/image_metadata'
         return image_metadata_url
 
-    def get_tile(self,image:int,z:int, x:int, y:int, style:str = ''):
+    def get_tile(self,id:str,z:int, x:int, y:int, style:Union[None,str] = None):
         """Tiles endpoint, returns an image tyle based on provided coordinates
 
+        :param id: Local item id
+        :type id: str
         :param z: Zoom level for tile
         :type z: int
         :param x: X tile coordinate
@@ -300,55 +442,62 @@ class LocalTileServer(TileServer):
         :return: Image tile containing bytes encoded pixel information
         :rtype: Response
         """
-        
-        if image<len(self.tile_sources) and image>=0:
-            try:
-                if not style=='':
-                    self.tile_sources[image] = large_image.open(self.local_image_paths[image],style=json.loads(style))
+        tile_source = self.get_tile_source(id,style)
 
-                raw_tile = self.tile_sources[image].getTile(
-                            x = x,
-                            y = y,
-                            z = z,
-                        )
-                
-            except large_image.exceptions.TileSourceXYZRangeError:
-                # This error appears for any negative tile coordinates
-                raw_tile = np.zeros(
-                    (
-                        self.tiles_metadatas[image]['tileHeight'],
-                        self.tiles_metadatas[image]['tileWidth']
-                    ),
-                    dtype=np.uint8
-                ).tobytes()
+        if tile_source is None:
+            return Response(content = 'invalid image id', media_type='application/json',status_code=400)
 
-            return Response(content = raw_tile, media_type='image/png')
-        else:
-            return Response(content = 'invalid image index', media_type='application/json',status_code=400)
+        tile_metadata = tile_source.getMetadata()
+
+        try:
+            raw_tile = tile_source.getTile(
+                x = x,
+                y = y,
+                z = z,
+            )
     
-    def get_image_metadata(self,image:int):
+        except large_image.exceptions.TileSourceXYZRangeError:
+            # This error appears for any negative tile coordinates
+            raw_tile = np.zeros(
+                (
+                    tile_metadata['tileHeight'],
+                    tile_metadata['tileWidth']
+                ),
+                dtype=np.uint8
+            ).tobytes()
+
+        return Response(content = raw_tile, media_type='image/png')
+    
+    def get_image_metadata(self,id:str):
         """Getting large-image metadata for image
 
         :return: Dictionary containing metadata for local image
         :rtype: Response
         """
-        if image<len(self.tiles_metadatas) and image>=0:
-            return Response(content = json.dumps(self.tiles_metadatas[image]),media_type = 'application/json')
+
+        image_item = self.get_item(id)
+
+        if len(image_item)>0:
+            image_meta = image_item[0].get('image_meta',{})
+            return Response(content = json.dumps(image_meta),media_type = 'application/json')
         else:
-            return Response(content = 'invalid image index',media_type='application/json', status_code=400)
+            return Response(content = 'invalid image id',media_type='application/json', status_code=400)
         
-    def get_metadata(self, image:int):
+    def get_metadata(self, id:str):
         """Getting metadata associated with slide/case/patient
 
         :param image: Index of local image
         :type image: int
         """
-        if image<len(self.metadata) and image>=0:
-            return Response(content = json.dumps(self.metadata[image]),media_type = 'application/json')
+        image_item = self.get_item(id)
+
+        if len(image_item)>0:
+            item_meta = image_item[0].get('meta',{})
+            return Response(content = json.dumps(item_meta),media_type = 'application/json')
         else:
-            return Response(content = 'invalid image index',media_type='application/json',status_code=400)
+            return Response(content = 'invalid image id',media_type='application/json',status_code=400)
     
-    def get_region(self, image:int, top: int, left: int, bottom:int, right:int,style:str = ''):
+    def get_region(self, id:str, top: int, left: int, bottom:int, right:int,style:Union[None,str] = None):
         """
         Grabbing a specific region in the image based on bounding box coordinates
         """
@@ -357,55 +506,72 @@ class LocalTileServer(TileServer):
         :return: Image region (bytes encoded)
         :rtype: Response
         """
-        if image<len(self.tile_sources) and image>=0:
-            if not style=='':
-                self.tile_sources[image] = large_image.open(self.local_image_paths[image],style = json.loads(style))
-            image_region, mime_type = self.tile_sources[image].getRegion(
-                region = {
-                    'left': left,
-                    'top': top,
-                    'right': right,
-                    'bottom': bottom
-                },
-            )
+        tile_source = self.get_tile_source(id,style)
 
-            return Response(content = image_region, media_type = 'image/png')
-        else:
-            return Response(content = 'invalid image index', media_type = 'application/json', status_code = 400)
+        if tile_source is None:
+            return Response(content = 'invalid image id', media_type = 'application/json', status_code = 400)
 
-    def get_thumbnail(self, image:int):
+        image_region, mime_type = tile_source.getRegion(
+            region = {
+                'left': left,
+                'top': top,
+                'right': right,
+                'bottom': bottom
+            },
+        )
+
+        return Response(content = image_region, media_type = 'image/png')
+
+    def get_thumbnail(self, id:str, style:Union[None,str] = None):
         """Grabbing an image thumbnail
 
         :param image: _description_
         :type image: int
         """
 
-        if image<len(self.names) and image>=0:
-            thumbnail,mime_type = large_image.open(self.local_image_paths[image]).getThumbnail(encoding='PNG')
-            return Response(content = thumbnail, media_type = 'image/png')
-        else:
+        tile_source = self.get_tile_source(id,style)
+
+        if tile_source is None:
             return Response(content = 'invalid image index', media_type = 'application/json', status_code=400)
 
-    def get_annotations(self,image:int, top:Union[int,None]=None, left:Union[int,None]=None, bottom: Union[int,None]=None, right: Union[int,None]=None):
+        thumbnail, mime_type = tile_source.getThumbnail(encoding='PNG')
         
-        #TODO: Add region parameters here. Enable grabbing annotations only from certain regions.
-        if image<len(self.names) and image>=0:
+        return Response(content = thumbnail, media_type = 'image/png')
+
+    def get_annotations(self,id:str, top:Union[int,None]=None, left:Union[int,None]=None, bottom: Union[int,None]=None, right: Union[int,None]=None):
+        """Getting annotations for a given item id, optionally specifying a region within which to grab annotations.
+
+        :param id: String uuid for local image
+        :type id: str
+        :param top: Y-coordinates for top-left corner of region, defaults to None
+        :type top: Union[int,None], optional
+        :param left: X-coordinates for top-left corner of region, defaults to None
+        :type left: Union[int,None], optional
+        :param bottom: Y-coordinates for bottom-right corner of region, defaults to None
+        :type bottom: Union[int,None], optional
+        :param right: X-coordinates for bottom-right corner of region, defaults to None
+        :type right: Union[int,None], optional
+        :return: Annotations for item (optionally within a specified region)
+        """
+
+        image_annotations = self.get_item_annotations(id)
+        
+        if len(image_annotations)>0:
             if all([i is None for i in [top,left,bottom,right]]):
                 # Returning all annotations by default
                 return Response(
-                    content = json.dumps(self.annotations[image]),
+                    content = json.dumps(image_annotations),
                     media_type='application/json'
                 )
             else:
                 # Parsing region of annotations:
                 if all([not i is None for i in [top,left,bottom,right]]):
-                    image_anns = self.annotations[image]
                     image_region_anns = []
                     # Shapely box requires minx, miny, maxx, maxy
                     query_poly = box(left,top,right,bottom)
 
-                    if type(image_anns)==dict:
-                        image_anns = [image_anns]
+                    if type(image_annotations)==dict:
+                        image_anns = [image_annotations]
                     for ann in image_anns:
                         if detect_image_overlay(ann):
                             image_bounds_box = box(*ann['image_bounds'])
@@ -446,7 +612,7 @@ class LocalTileServer(TileServer):
                                         })
 
                         else:
-                            print(f'Unrecognized annotation format found for image: {image}, {self.names[image]}')
+                            print(f'Unrecognized annotation format found for image: {id}')
                     return Response(
                         content = json.dumps(image_region_anns), 
                         media_type='application/json'
@@ -454,111 +620,111 @@ class LocalTileServer(TileServer):
 
         else:
             return Response(
-                content = 'invalid image index',
+                content = 'invalid image id',
                 media_type = 'application/json', 
                 status_code = 400
             )
 
-    def get_annotations_metadata(self,image:int):
-        
-        if image<len(self.names) and image>=0:
+    def get_annotations_metadata(self,id:str):
+        """Getting metadata for annotations for an item
+
+        :param id: String uuid for locally stored image
+        :type id: str
+        :return: Metadata associated with annotations for that image
+        """
+        image_item = self.get_item(id)
+        if len(image_item)==0:
             return Response(
-                content = json.dumps(self.annotations_metadata[image]),
-                media_type='application/json'
-            )
-        else:
-            return Response(
-                content = 'invalid image index',
+                content = 'invalid image id',
                 media_type = 'application/json',
                 status_code = 400,
             )
+        
+        image_item = image_item[0]
 
-    def get_annotations_property_keys(self,image:int):
+        ann_meta = image_item.get('ann_meta',[])
+        return Response(
+            content = json.dumps(ann_meta),
+            media_type='application/json'
+        )
+
+    def get_annotations_property_keys(self,id:str):
         """Getting the names of properties stored in an image's annotations
 
-        :param image: Local image index
-        :type image: int
+        :param id: String uuid for locally stored image
+        :type id: int
         """
 
-        if image<len(self.names) and image>=0:
-            image_anns = self.annotations[image]
+        image_anns = self.get_item_annotations(id)
+        property_list = []
+        property_names = []
+        for a in image_anns:
+            features = a.get('features',[])
+            a_id = a.get('properties',{}).get('_id',None)
+            a_name = a.get('properties',{}).get('name',None)
 
-            property_list = []
-            property_names = []
-            for a in image_anns:
-                features = a.get('features',[])
-                a_id = a.get('properties',{}).get('_id',None)
-                a_name = a.get('properties',{}).get('name',None)
+            for f in features:
+                f_props = f.get('properties')
+                if not f_props is None:
+                    f_main_keys = list(f_props.keys())
+                    for f_m in f_main_keys:
+                        if type(f_props[f_m]) in [list,dict]:
+                            values_list = extract_nested_prop(f_props[f_m],4)
+                        elif type(f_props[f_m]) in [str,int,float]:
+                            values_list = [{f_m: f_props[f_m]}]
+                        
+                        for v in values_list:
+                            v_key = list(v.keys())[0]
+                            v_val = list(v.values())[0]
 
-                for f in features:
-                    f_props = f.get('properties')
-                    if not f_props is None:
-                        f_main_keys = list(f_props.keys())
-                        for f_m in f_main_keys:
-                            if type(f_props[f_m]) in [list,dict]:
-                                values_list = extract_nested_prop(f_props[f_m],4)
-                            elif type(f_props[f_m]) in [str,int,float]:
-                                values_list = [{f_m: f_props[f_m]}]
-                            
-                            for v in values_list:
-                                v_key = list(v.keys())[0]
-                                v_val = list(v.values())[0]
-
-                                if v_key in property_names:
-                                    v_info = property_list[property_names.index(v_key)]
-                                    if type(v_val)==str:
-                                        if not v_val in v_info['distinct']:
-                                            v_info['distinct'].append(v_val)
-                                            v_info['distinctcount'] += 1
-                                        
-                                    elif type(v_val) in [int,float]:
-                                        if v_val>v_info['max']:
-                                            v_info['max'] = v_val
-                                        elif v_val<v_info['min']:
-                                            v_info['min'] = v_val
-                                        
-                                    v_info['count'] += 1
-
-                                    property_list[property_names.index(v_key)] = v_info
-                                else:
-                                    property_names.append(v_key)
+                            if v_key in property_names:
+                                v_info = property_list[property_names.index(v_key)]
+                                if type(v_val)==str:
+                                    if not v_val in v_info['distinct']:
+                                        v_info['distinct'].append(v_val)
+                                        v_info['distinctcount'] += 1
                                     
-                                    v_info = {
-                                        'key': v_key.lower().replace(' --> ','.'),
-                                        'title': v_key,
-                                        'count': 1
-                                    }
-
-                                    if type(v_val)==str:
-                                        v_info['type'] = 'string'
-                                        v_info['distinct'] = [v_val]
-                                        v_info['distinctcount'] = 1
-                                    else:
-                                        v_info['type'] = 'number'
+                                elif type(v_val) in [int,float]:
+                                    if v_val>v_info['max']:
                                         v_info['max'] = v_val
+                                    elif v_val<v_info['min']:
                                         v_info['min'] = v_val
+                                    
+                                v_info['count'] += 1
 
-                                    property_list.append(v_info)
-                                        
-        
-            return Response(
-                content = json.dumps(property_list),
-                media_type='application/json',
-                status_code=200
-            )
+                                property_list[property_names.index(v_key)] = v_info
+                            else:
+                                property_names.append(v_key)
+                                
+                                v_info = {
+                                    'key': v_key.lower().replace(' --> ','.'),
+                                    'title': v_key,
+                                    'count': 1
+                                }
 
-        else:                           
-            return Response(
-                content = 'invalid image index',
-                media_type = 'application/json',
-                status_code = 400,
-            )       
+                                if type(v_val)==str:
+                                    v_info['type'] = 'string'
+                                    v_info['distinct'] = [v_val]
+                                    v_info['distinctcount'] = 1
+                                else:
+                                    v_info['type'] = 'number'
+                                    v_info['max'] = v_val
+                                    v_info['min'] = v_val
 
-    def get_annotations_property_data(self,image:int,include_keys:Union[str,list,None],include_anns:Union[str,list,None]):
+                                property_list.append(v_info)
+                                    
+    
+        return Response(
+            content = json.dumps(property_list),
+            media_type='application/json',
+            status_code=200
+        )
+
+    def get_annotations_property_data(self,id:str,include_keys:Union[str,list,None],include_anns:Union[str,list,None]):
         """Getting data from annotations of specified image, attempting to mirror output of https://github.com/girder/large_image/blob/master/girder_annotation/girder_large_image_annotation/utils/__init__.py
 
-        :param image: Index of local image to grab data from
-        :type image: int
+        :param id: String uuid for locally stored image.
+        :type id: int
         :param include_keys: List of property names to grab from annotations
         :type include_keys: list
         :param include_anns: Which annotations to include (name/id or __all__ or list)
@@ -567,84 +733,77 @@ class LocalTileServer(TileServer):
         :rtype: _type_
         """
                 
-        if image<len(self.names) and image>=0:
-            image_anns = self.annotations[image]
+        image_item = self.get_item(id)
+        image_anns = self.get_item_annotations(id)
 
-            if include_anns is None:
-                include_anns = '__all__'
+        if include_anns is None:
+            include_anns = '__all__'
 
-            bbox_list = ['bbox.x0','bbox.y0','bbox.x1','bbox.y1']
+        bbox_list = ['bbox.x0','bbox.y0','bbox.x1','bbox.y1']
 
-            data_list = []
-            for a in image_anns:
-                features = a.get('features',[])
-                a_id = a.get('properties',{}).get('_id',None)
-                a_name = a.get('properties',{}).get('name',None)
+        data_list = []
+        for a in image_anns:
+            features = a.get('features',[])
+            a_id = a.get('properties',{}).get('_id',None)
+            a_name = a.get('properties',{}).get('name',None)
 
-                # Accepting either annotation layer name or id
-                if not include_anns=='__all__':
-                    if type(include_anns)==str:
-                        if not include_anns==a_id and not include_anns==a_name:
-                            continue
-                    elif type(include_anns)==list:
-                        if not a_id in include_anns and not a_name in include_anns:
-                            continue
-                            
-                for f in features:
-                    f_props = f.get('properties')
-                    f_bbox = list(shape(f['geometry']).bounds)
-                    f_props_cols = []
-                    if not f_props is None:
-                        for k in include_keys:
-                            # Need to specify non-feature keys
-                            if k in ['annotation.id','annotation.name','item.id','item.name']:
-                                if k=='annotation.id':
-                                    f_props_cols.append(a_id)
-                                elif k=='annotation.name':
-                                    f_props_cols.append(a_name)
-                                elif k=='item.id':
-                                    f_props_cols.append(str(image))
-                                elif k=='item.name':
-                                    f_props_cols.append(self.names[image])
+            # Accepting either annotation layer name or id
+            if not include_anns=='__all__':
+                if type(include_anns)==str:
+                    if not include_anns==a_id and not include_anns==a_name:
+                        continue
+                elif type(include_anns)==list:
+                    if not a_id in include_anns and not a_name in include_anns:
+                        continue
+                        
+            for f in features:
+                f_props = f.get('properties')
+                f_bbox = list(shape(f['geometry']).bounds)
+                f_props_cols = []
+                if not f_props is None:
+                    for k in include_keys:
+                        # Need to specify non-feature keys
+                        if k in ['annotation.id','annotation.name','item.id','item.name']:
+                            if k=='annotation.id':
+                                f_props_cols.append(a_id)
+                            elif k=='annotation.name':
+                                f_props_cols.append(a_name)
+                            elif k=='item.id':
+                                f_props_cols.append(str(id))
+                            elif k=='item.name':
+                                f_props_cols.append(image_item.name)
 
-                            elif k in bbox_list:
-                                # Adding bounding box coordinates
-                                f_props_cols.append(f_bbox[bbox_list.index(k)])
+                        elif k in bbox_list:
+                            # Adding bounding box coordinates
+                            f_props_cols.append(f_bbox[bbox_list.index(k)])
 
+                        else:
+                            # Getting keys and nested keys
+                            if '-->' in k:
+                                f_sub_keys = k.split('-->')
+                                f_sub_props = deepcopy(f_props)
+                                for sk in f_sub_keys:
+                                    if not f_sub_props is None:
+                                        f_sub_props = f_sub_props.get(sk)
                             else:
-                                # Getting keys and nested keys
-                                if '-->' in k:
-                                    f_sub_keys = k.split('-->')
-                                    f_sub_props = deepcopy(f_props)
-                                    for sk in f_sub_keys:
-                                        if not f_sub_props is None:
-                                            f_sub_props = f_sub_props.get(sk)
-                                else:
-                                    f_sub_props = f_props.get(k)
+                                f_sub_props = f_props.get(k)
 
-                                # Converting to float if able
-                                try:
-                                    f_sub_props = float(f_sub_props)
-                                    f_props_cols.append(f_sub_props)
-                                except ValueError:
-                                    f_props_cols.append(f_sub_props)                                       
-                    else:
-                        f_props_cols = [None]*len(include_keys)
+                            # Converting to float if able
+                            try:
+                                f_sub_props = float(f_sub_props)
+                                f_props_cols.append(f_sub_props)
+                            except ValueError:
+                                f_props_cols.append(f_sub_props)                                       
+                else:
+                    f_props_cols = [None]*len(include_keys)
 
-                    data_list.append(f_props_cols)
+                data_list.append(f_props_cols)
 
-            return Response(
-                content = json.dumps({'data': data_list}),
-                media_type='application/json',
-                status_code=200
-            )
-
-        else:                           
-            return Response(
-                content = 'invalid image index',
-                media_type = 'application/json',
-                status_code = 400,
-            )     
+        return Response(
+            content = json.dumps({'data': data_list}),
+            media_type='application/json',
+            status_code=200
+        )
 
     def start(self):
         """Starting tile server instance on a provided port
@@ -666,6 +825,7 @@ class LocalTileServer(TileServer):
         )
 
         uvicorn.run(self.app,host=self.host,port=self.tile_server_port)
+
 
 class DSATileServer(TileServer):
     """Use for linking visualization with remote tiles API (DSA server)

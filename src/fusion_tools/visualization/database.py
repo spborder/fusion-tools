@@ -15,7 +15,7 @@ from shapely.geometry import box
 
 from typing_extensions import Union
 
-from fusion_tools.tileserver import Slide
+#from fusion_tools.tileserver import Slide
 
 Base = declarative_base()
 
@@ -64,7 +64,7 @@ class Item(Base):
     image_meta = Column(JSON)
     ann_meta = Column(JSON)
 
-    file_path = Column(String)
+    filepath = Column(String)
 
     session = mapped_column(ForeignKey("visSession.id"))
 
@@ -74,6 +74,8 @@ class Item(Base):
             'name': self.name,
             'meta': self.meta,
             'image_meta': self.image_meta,
+            'ann_meta': self.ann_meta,
+            'filepath': self.filepath,
             'session': self.session
         }
 
@@ -198,6 +200,9 @@ class fusionDB:
         
         self.engine = create_engine(
             db_url,
+            connect_args={
+                "check_same_thread": False
+            },
             echo = echo
         )
 
@@ -226,6 +231,14 @@ class fusionDB:
                 get_create_result = self.session.query(
                     TABLE_NAMES.get(table_name)
                 ).filter_by(id = inst_id).first()
+
+                if not get_create_result:
+                    get_create_result = TABLE_NAMES.get(table_name)(
+                        id = inst_id,
+                        **kwargs
+                    )
+
+                    self.add(get_create_result)
             
             else:
                 new_id = self.get_uuid()
@@ -355,9 +368,10 @@ class fusionDB:
                 table_joins = list(set(list(search_filters.keys())))
                 for t in table_joins:
                     if t in TABLE_NAMES:
-                        search_query = search_query.join(TABLE_NAMES.get(t))
+                        if not t == search_kwargs.get('type'):
+                            search_query = search_query.join(TABLE_NAMES.get(t))
 
-                        for k,v in search_filters.get(t):
+                        for k,v in search_filters.get(t).items():
                             if type(v)==str:
                                 search_query = search_query.filter(
                                     getattr(TABLE_NAMES.get(t),k)==v
@@ -380,7 +394,7 @@ class fusionDB:
         else:
             return []
         
-    def add_slide(self, slide_id:str, slide_name:str, slide:Slide):
+    def add_slide(self, slide_id:str, slide_name:str, slide):
 
         new_item = self.get_create(
             table_name = 'item',
@@ -390,11 +404,11 @@ class fusionDB:
                 'meta': slide.metadata,
                 'image_meta': slide.image_metadata,
                 'ann_meta': slide.annotations_metadata,
-                'file_path': slide.image_filepath
+                'filepath': slide.image_filepath
             }
         )
 
-        for ann_idx, ann in slide.processed_annotations:
+        for ann_idx, ann in enumerate(slide.processed_annotations):
             # Adding layer
             new_layer = self.get_create(
                 table_name = 'layer',

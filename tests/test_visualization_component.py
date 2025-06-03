@@ -7,7 +7,7 @@ import os
 import sys
 sys.path.append('./src/')
 
-from fusion_tools import Visualization
+from fusion_tools.visualization import Visualization
 from fusion_tools.components import SlideMap, OverlayOptions, PropertyViewer, PropertyPlotter
 from fusion_tools.handler.dsa_handler import DSAHandler
 
@@ -54,24 +54,21 @@ def main():
         local_slides = local_slide_list,
         local_annotations = local_annotations_list,
         tileservers = dsa_tileservers,
-        linkage = 'col',
+        linkage = 'row',
         components = [
             [
+                SlideMap(),
                 [
-                    SlideMap(),
                     OverlayOptions(ignore_list = ['_id','_index','barcode']),
                     PropertyViewer(ignore_list = ['_id','_index','barcode']),
                     PropertyPlotter(ignore_list = ['_id','_index','barcode'])
                 ],            
-                [
-                    SlideMap(),
-                    OverlayOptions(ignore_list = ['_id','_index','barcode']),
-                    PropertyViewer(ignore_list = ['_id','_index','barcode']),
-                    PropertyPlotter(ignore_list = ['_id','_index','barcode'])
-                ]
             ]
         ],
-        app_options={'port': 8050}
+        app_options={
+            'port': 8050,
+            'default_page': 'main'
+        }
     )
 
     vis_sess.start()

@@ -1434,6 +1434,7 @@ class PropertyViewer(Tool):
             raise exceptions.PreventUpdate
 
         current_bounds_bounds = current_property_data['bounds']
+        #minx, miny, maxx, maxy
         current_bounds_box = box(current_bounds_bounds[0][1],current_bounds_bounds[0][0],current_bounds_bounds[1][1],current_bounds_bounds[1][0])
 
         plot_tabs_children = []

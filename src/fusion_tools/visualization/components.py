@@ -143,6 +143,8 @@ class Visualization:
 
         self.assets_folder = os.getcwd()+self.app_options['assets_folder']
 
+        self.initialize_database()
+
         self.vis_store_content = self.initialize_stores()
 
         self.viewer_app = DashProxy(
@@ -160,6 +162,22 @@ class Visualization:
         self.viewer_app.title = self.app_options['title']
         self.viewer_app.layout = self.gen_layout()
         self.get_callbacks()
+
+    def initialize_database(self):
+
+        if self.database is None:
+
+            self.database = fusionDB(
+                db_url = 'sqlite+pysqlite:///:memory:',
+                echo = False
+            )
+
+        elif type(self.database)==str:
+
+            self.database = fusionDB(
+                db_url = self.database,
+                echo = False
+            )
 
     def get_callbacks(self):
 
@@ -357,7 +375,8 @@ class Visualization:
 
             self.local_tile_server = LocalTileServer(
                 tile_server_port=self.app_options['port'] if not self.app_options['jupyter'] else self.app_options['port']+10,
-                host = self.app_options['host']
+                host = self.app_options['host'],
+                database = self.database
             )
 
             for s_idx,(s,anns,meta) in enumerate(zip(self.local_slides,self.local_annotations,self.slide_metadata)):
@@ -375,13 +394,13 @@ class Visualization:
                     slide_dict = {
                         'name': s.split(os.sep)[-1],
                         'id': local_slide_id,
-                        'tiles_url': self.local_tile_server.get_name_tiles_url(s.split(os.sep)[-1]),
-                        'regions_url': self.local_tile_server.get_name_regions_url(s.split(os.sep)[-1]),
-                        'image_metadata_url': self.local_tile_server.get_name_image_metadata_url(s.split(os.sep)[-1]),
-                        'metadata_url': self.local_tile_server.get_name_metadata_url(s.split(os.sep)[-1]),
-                        'annotations_url': self.local_tile_server.get_name_annotations_url(s.split(os.sep)[-1]),
-                        'annotations_metadata_url': self.local_tile_server.get_name_annotations_metadata_url(s.split(os.sep)[-1]),
-                        'annotations_region_url': self.local_tile_server.get_name_annotations_url(s.split(os.sep)[-1])
+                        'tiles_url': self.local_tile_server.get_tiles_url(local_slide_id),
+                        'regions_url': self.local_tile_server.get_regions_url(local_slide_id),
+                        'image_metadata_url': self.local_tile_server.get_image_metadata_url(local_slide_id),
+                        'metadata_url': self.local_tile_server.get_metadata_url(local_slide_id),
+                        'annotations_url': self.local_tile_server.get_annotations_url(local_slide_id),
+                        'annotations_metadata_url': self.local_tile_server.get_annotations_metadata_url(local_slide_id),
+                        'annotations_region_url': self.local_tile_server.get_annotations_url(local_slide_id)
                     }
 
                 slide_store['current'].append(slide_dict)
@@ -399,31 +418,31 @@ class Visualization:
                 if type(t)==LocalTileServer:
                     slide_store['current'].extend([
                         {
-                            'name': j,
-                            'id': f'local{j_idx}',
-                            'tiles_url': t.get_name_tiles_url(j),
-                            'regions_url': t.get_name_regions_url(j),
-                            'image_metadata_url': t.get_name_image_metadata_url(j),
-                            'metadata_url': t.get_name_metadata_url(j),
-                            'annotations_url': t.get_name_annotations_url(j),
-                            'annotations_metadata_url': t.get_name_annotations_metadata_url(j),
-                            'annotations_region_url': t.get_name_annotations_url(j)
+                            'name': j.name,
+                            'id': j.id,
+                            'tiles_url': t.get_tiles_url(j.id),
+                            'regions_url': t.get_regions_url(j.id),
+                            'image_metadata_url': t.get_image_metadata_url(j.id),
+                            'metadata_url': t.get_metadata_url(j.id),
+                            'annotations_url': t.get_annotations_url(j.id),
+                            'annotations_metadata_url': t.get_annotations_metadata_url(j.id),
+                            'annotations_region_url': t.get_annotations_url(j.id)
                         }
-                        for j_idx,j in enumerate(t['names'])
+                        for j_idx,j in enumerate(t.get_item_names_ids())
                     ])
                     slide_store['local'].extend([
                         {
-                            'name': j,
-                            'id': f'local{j_idx}',
-                            'tiles_url': t.get_name_tiles_url(j),
-                            'regions_url': t.get_name_regions_url(j),
-                            'image_metadata_url': t.get_name_image_metadata_url(j),
-                            'metadata_url': t.get_name_metadata_url(j),
-                            'annotations_url': t.get_name_annotations_url(j),
-                            'annotations_metadata_url': t.get_name_annotations_metadata_url(j),
-                            'annotations_region_url': t.get_name_annotations_url(j)
+                            'name': j.name,
+                            'id': j.id,
+                            'tiles_url': t.get_tiles_url(j.id),
+                            'regions_url': t.get_regions_url(j.id),
+                            'image_metadata_url': t.get_image_metadata_url(j.id),
+                            'metadata_url': t.get_metadata_url(j.id),
+                            'annotations_url': t.get_annotations_url(j.id),
+                            'annotations_metadata_url': t.get_annotations_metadata_url(j.id),
+                            'annotations_region_url': t.get_annotations_url(j.id)
                         }
-                        for j_idx,j in enumerate(t['names'])
+                        for j_idx,j in enumerate(t.get_item_names_ids())
                     ])
 
                 elif type(t)==DSATileServer:

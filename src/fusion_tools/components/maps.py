@@ -917,9 +917,6 @@ class SlideMap(MapComponent):
         vis_data = json.loads(vis_data)
         new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
 
-        #TODO: Add progress bar for loading annotations?
-        #TODO: Load marker layer from visualization session
-
         # Getting data from the tileservers:
         if not 'current_user' in vis_data:
             new_url = new_slide['tiles_url']
@@ -1082,23 +1079,24 @@ class SlideMap(MapComponent):
         non_nested_image_metadata = {}
         nested_image_metadata = []
 
-        if 'meta' in new_metadata:
-            for k,v in new_metadata['meta'].items():
-                if not type(v) in [list,dict]:
-                    non_nested_display_metadata[k] = v
-                else:
-                    nested_display_metadata.append({
-                        k: v
-                    })
+        if not new_metadata is None:
+            if 'meta' in new_metadata:
+                for k,v in new_metadata['meta'].items():
+                    if not type(v) in [list,dict]:
+                        non_nested_display_metadata[k] = v
+                    else:
+                        nested_display_metadata.append({
+                            k: v
+                        })
 
-        for k,v in new_metadata.items():
-            if not k=='meta':
-                if not type(v) in [list,dict]:
-                    non_nested_display_metadata[k] = v
-                else:
-                    nested_display_metadata.append({
-                        k:v
-                    })
+            for k,v in new_metadata.items():
+                if not k=='meta':
+                    if not type(v) in [list,dict]:
+                        non_nested_display_metadata[k] = v
+                    else:
+                        nested_display_metadata.append({
+                            k:v
+                        })
 
 
         for k,v in new_image_metadata.items():

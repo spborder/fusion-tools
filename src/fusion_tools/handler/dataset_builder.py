@@ -1266,12 +1266,14 @@ class DatasetBuilder(DSATool):
             if not 'local' in s:
                 slide_info = self.handler.gc.get(f'/item/{s}')
                 annotations_metadata_url = f'{self.handler.girderApiUrl}/annotation/?itemId={s}'
+                if 'current_user' in current_vis_data:
+                    annotations_metadata_url += f'&token={current_vis_data["current_user"]["token"]}'
+
                 annotations_metadata = requests.get(annotations_metadata_url).json()
                 if not type(annotations_metadata)==list:
                     annotations_metadata = [annotations_metadata]
                     
                 annotations_geojson_url = [f'{self.handler.girderApiUrl}/annotation/{a["_id"]}/geojson' for a in annotations_metadata]
-
 
                 new_slide_info.append(
                     {
