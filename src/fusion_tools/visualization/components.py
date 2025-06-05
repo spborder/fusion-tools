@@ -717,6 +717,8 @@ class Visualization:
                 'main': self.components 
             }
 
+            self.default_page = 'main'
+
         elif type(self.components)==dict:
             for page in self.components:
                 n_cols = 1

@@ -67,7 +67,6 @@ def main():
         ],
         app_options={
             'port': 8050,
-            'default_page': 'main'
         }
     )
 
