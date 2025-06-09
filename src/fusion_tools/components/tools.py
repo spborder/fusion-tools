@@ -386,6 +386,7 @@ class OverlayOptions(Tool):
                 State({'type': 'overlay-property-info','index': ALL},'data'),
                 State({'type': 'feature-lineColor','index': ALL},'value'),
                 State({'type': 'feature-overlay','index': ALL},'name'),
+                State({'type': 'adv-overlay-colorbar-width','index': ALL},'value'),
                 State({'type': 'adv-overlay-colormap','index': ALL},'value'),
                 State({'type': 'feature-bounds','index': ALL},'hideout')
             ]
@@ -694,7 +695,7 @@ class OverlayOptions(Tool):
 
         return processed_filters
 
-    def update_overlays(self, overlay_value, transp_value, lineColor_butt, filter_parent, filter_value, delete_filter, overlay_state, transp_state, overlay_info_state, lineColor_state, overlay_names, colormap_val, current_hideout):
+    def update_overlays(self, overlay_value, transp_value, lineColor_butt, filter_parent, filter_value, delete_filter, overlay_state, transp_state, overlay_info_state, lineColor_state, overlay_names, colormap_width, colormap_val, current_hideout):
         """Update overlay transparency and color based on property selection
 
         Adding new values to the "hideout" property of the GeoJSON layers triggers the featureStyle Namespace function
@@ -719,6 +720,8 @@ class OverlayOptions(Tool):
         :type overlay_info_state: list
         :param lineColor_state: Current selected lineColors to apply to current GeoJSON features
         :type lineColor_state: list
+        :param colormap_width: Current colorbar width
+        :type colormap_width: list
         :param colormap_val: Current colormap applied to overlays,
         :type colormap_val: list
         :param current_hideout: Current hideout properties assigned to each GeoJSON layer
@@ -732,6 +735,7 @@ class OverlayOptions(Tool):
         overlay_state = get_pattern_matching_value(overlay_state)
         transp_state = get_pattern_matching_value(transp_state)
         colormap_val = get_pattern_matching_value(colormap_val)
+        colormap_width = get_pattern_matching_value(colormap_width)
         overlay_info_state = json.loads(get_pattern_matching_value(overlay_info_state))
 
         if 'overlay-drop' in ctx.triggered_id['type']:
@@ -790,30 +794,36 @@ class OverlayOptions(Tool):
             'background':'rgba(255,255,255,0.8)',
             'box-shadow':'0 0 15px rgba(0,0,0,0.2)',
             'border-radius':'10px',
-            'width': '400px',
+            'width': f'{colormap_width+100}px',
             'padding':'0px 0px 0px 25px'
         }
 
         if 'min' in overlay_bounds:
-            colorbar = [dl.Colorbar(
-                colorscale = colormap_val if not '->' in colormap_val else colormap_val.split('->'),
-                width = 300,
-                height = 15,
-                position = 'bottomleft',
-                id = f'colorbar{np.random.randint(0,100)}',
-                style = color_bar_style,
-                tooltip=True
-            )]
+            colorbar = [
+                dl.Colorbar(
+                    colorscale = colormap_val if not '->' in colormap_val else colormap_val.split('->'),
+                    width = colormap_width,
+                    height = 15,
+                    position = 'bottomleft',
+                    id = f'colorbar{np.random.randint(0,100)}',
+                    min = overlay_bounds.get('min'),
+                    max = overlay_bounds.get('max'),
+                    style = color_bar_style,
+                    tooltip=True
+                )
+            ]
         elif 'unique' in overlay_bounds:
-            colorbar = [dlx.categorical_colorbar(
-                categories = overlay_bounds['unique'],
-                colorscale = colormap_val if not '->' in colormap_val else colormap_val.split('->'),
-                style = color_bar_style,
-                position = 'bottomleft',
-                id = f'colorbar{np.random.randint(0,100)}',
-                width = 300,
-                height = 15
-            )]
+            colorbar = [
+                dlx.categorical_colorbar(
+                    categories = overlay_bounds['unique'],
+                    colorscale = colormap_val if not '->' in colormap_val else colormap_val.split('->'),
+                    style = color_bar_style,
+                    position = 'bottomleft',
+                    id = f'colorbar{np.random.randint(0,100)}',
+                    width = colormap_width,
+                    height = 15
+                )
+            ]
 
         else:
             colorbar = [no_update]
@@ -2026,6 +2036,7 @@ class PropertyPlotter(Tool):
         property_list = get_pattern_matching_value(property_list)
         label_names = get_pattern_matching_value(label_list)
         
+        #TODO: Replace this reading and extracting from annotations step with db query
         current_features = json.loads(get_pattern_matching_value(current_features))
         property_keys = json.loads(get_pattern_matching_value(property_keys))
 

@@ -1235,6 +1235,7 @@ class SlideMap(MapComponent):
             }
             return [json.dumps(empty_store)]
         
+        #TODO: Check if these annotations or annotations for this item are currently in the running database instance. If not, add them there.
         annotations_geojson = json.loads(get_pattern_matching_value(annotations_geojson))
 
         start = time.time()

@@ -16,7 +16,7 @@ from dash_extensions.enrich import DashProxy, html, MultiplexerTransform, Prefix
 from typing_extensions import Union
 from fusion_tools.tileserver import TileServer, DSATileServer, LocalTileServer, CustomTileServer
 from fusion_tools.handler.dataset_uploader import DSAUploadHandler
-from fusion_tools.visualization.database import fusionDB
+from fusion_tools.database import fusionDB
 import threading
 
 import uvicorn
@@ -165,6 +165,7 @@ class Visualization:
 
     def initialize_database(self):
 
+        #TODO: Find some way to make it easier for components to connect to this database
         if self.database is None:
 
             self.database = fusionDB(
@@ -284,7 +285,9 @@ class Visualization:
         :type pathname: str
         """
 
+        #TODO: Check if the user specified in session_data['current_user'] is in the database yet
         session_data = json.loads(session_data)
+
         if ctx.triggered_id=='anchor-page-url':
             if pathname in self.layout_dict:
                 # If that path is in the layout dict, return that page content
@@ -322,6 +325,11 @@ class Visualization:
                 )
 
                 return page_content, page_pathname, '', json.dumps(new_session_data)
+            
+            elif 'item' in pathname:
+                #TODO: Loading an individual item from id
+
+                pass
 
             else:
                 if self.default_page is None:
@@ -358,10 +366,14 @@ class Visualization:
     def initialize_stores(self):
 
         # This should be all the information necessary to reproduce the tileservers and annotations for each image
+        #TODO: Add session "id" here and add to database
         slide_store = {
             "current": [],
             "local": [],
-            "data": {}
+            "data": {},
+            'session': {
+                'id': f'guestsession{uuid.uuid4().hex[:12]}'
+            }
         }
         s_idx = 0
         t_idx = 0
@@ -472,6 +484,10 @@ class Visualization:
                         'annotations_region_url': t.annotations_regions_url if hasattr(t,'annotations_regions_url') else None,
                         'annotations_geojson_url': t.annotations_geojson_url if hasattr(t,'annotations_geojson_url') else None
                     })
+
+
+
+        #TODO: Add initial session to database and set as default session?
 
 
         return slide_store
@@ -770,6 +786,7 @@ class Visualization:
                         if not type(col)==list:
                             col.load(component_prefix = component_prefix)
                             col.gen_layout(session_data = self.vis_store_content)
+                            col.add_database(database = self.database)
                             col_components.append(str(col))
                             
                             row_children.append(
@@ -799,6 +816,7 @@ class Visualization:
                                 
                                 tab.load(component_prefix = component_prefix)
                                 tab.gen_layout(session_data = self.vis_store_content)
+                                tab.add_database(database = self.database)
                                 tab_components.append(str(tab))
 
                                 tabs_children.append(
@@ -835,6 +853,7 @@ class Visualization:
                     
                     row.load(component_prefix = component_prefix)
                     row.gen_layout(session_data = self.vis_store_content)
+                    row.add_database(database = self.database)
                     row_components.append(str(row))
 
                     row_children.append(
@@ -882,6 +901,7 @@ class Visualization:
         
         for h_idx, h in enumerate(self.header):
             h.load(h_idx)
+            h.add_database(database = self.database)
 
         header_components = html.Div([
             html.Hr(),

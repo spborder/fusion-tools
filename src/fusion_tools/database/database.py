@@ -3,7 +3,7 @@
 Structure schemas for different items in SQLite database
 
 """
-
+import json
 import uuid
 
 from sqlalchemy import (
@@ -14,8 +14,6 @@ from sqlalchemy.orm import declarative_base, sessionmaker,mapped_column
 from shapely.geometry import box
 
 from typing_extensions import Union
-
-#from fusion_tools.tileserver import Slide
 
 Base = declarative_base()
 
@@ -47,6 +45,9 @@ class VisSession(Base):
     id = mapped_column(String(24),primary_key = True)
     # Can multiple users access the same vis session?
     user = mapped_column(ForeignKey("user.id"))
+
+    # Visualization session data stored as JSON
+    data = Column(JSON)
 
     def to_dict(self):
         vis_dict = {
@@ -445,6 +446,44 @@ class fusionDB:
                         }
                     )
 
+    def add_vis_session(self, vis_session: dict):
+        #TODO: Adding new visualization session to database (local should just be the same each time so don't have to back it up)
+        # Contains {"current": [], "local":[], "data": {}, "current_user": {}, "session": {}}
+
+        #TODO: Guest user sessions all start with "guestuser"
+        vis_session_kwargs = {
+            'user': vis_session.get('current_user',{'_id': f'guestuser'+self.get_uuid()[:15]}).get('_id'),
+            'data': vis_session.get('data',{})
+        }
+
+        new_vis_session = self.get_create(
+            table_name = 'visSession',
+            inst_id = vis_session.get('session',{}).get('id'),
+            kwargs = vis_session_kwargs
+        )
+
+        #TODO: Adding items in "current"
+        for c in vis_session.get('current',[]):
+            print(json.dumps(c,indent=4))
+            item_kwargs = {
+                'name': c.get('name'),
+                'meta': c.get('meta'),
+                'image_meta': c.get('image_meta'),
+                'ann_meta': c.get('ann_meta'),
+                'filepath': c.get('filepath'),
+                'session': vis_session.get('session',{}).get('id')
+            }
+            new_item = self.get_create(
+                table_name = 'item',
+                inst_id = c.get('id'),
+                kwargs = c
+            )
+
+            #TODO: Get Layers, Structures, ImageOverlays, and Annotations? Or wait to add those to the database?
+            # Should duplicates be added? It would be important to preserve different versions of each Layer/Structure/etc. if changes are made.
+            # The default/static version of annotations can just be the source (local file/DSA annotations/item/{id})
+
+
     def get_names(self, table_name:str, size:Union[int,None]=None, offset = 0):
 
         return_names = []
@@ -462,6 +501,22 @@ class fusionDB:
 
         return return_names
             
+    def get_structure_property_keys(self, item_id:Union[str,list,None] = None, layer_id:Union[str,list,None] = None):
+        #TODO: Make a more efficient way to get names of properties for each structure
+        pass
+
+    def get_structure_property_data(self, item_id:Union[str,list,None] = None, layer_id:Union[str,list,None] = None, property_list:Union[str,list] = None):
+        #TODO: Make a more efficient way to get property values for each structure
+        pass
+
+
+
+
+
+
+
+
+
 
 
 

@@ -10,6 +10,9 @@ class Tool:
         # visualization session
         self.session_update = False
 
+        # Initializing the database property with None
+        self.database = None
+
     def prefix_escape(self,input_id: Union[str,dict])->bool:
         """Specifying the default prefix escape for all blueprints. Basic specification is to ignore "anchor" or ids that already have a prefix
 
@@ -35,6 +38,15 @@ class Tool:
             return True
         return False
     
+    def add_database(self, database:None):
+        """Adding a database to the component, connects to the running database for this application.
+
+        :param database: Instance of fusionDB provided by Visualization.get_layout_children()
+        :type database: None
+        """
+
+        self.database = database
+
 
 class MultiTool:
     """General class for a Tool which works on multiple slides at once
@@ -44,6 +56,9 @@ class MultiTool:
         # visualization session
         self.session_update = True
 
+        # Initializing the database property with None
+        self.database = None
+
     def prefix_escape(self,input_id: Union[str,dict])->bool:
         """Specifying the default prefix escape for all blueprints. Basic specification is to ignore "anchor" or ids that already have a prefix
 
@@ -69,6 +84,14 @@ class MultiTool:
             return True
         return False
     
+    def add_database(self, database:None):
+        """Adding a database to the component, connects to the running database for this application.
+
+        :param database: Instance of fusionDB provided by Visualization.get_layout_children()
+        :type database: None
+        """
+
+        self.database = database
     
 class Handler:
     pass
@@ -121,4 +144,11 @@ class MapComponent:
             return True
         return False
     
+    def add_database(self, database:None):
+        """Adding a database to the component, connects to the running database for this application.
 
+        :param database: Instance of fusionDB provided by Visualization.get_layout_children()
+        :type database: None
+        """
+
+        self.database = database

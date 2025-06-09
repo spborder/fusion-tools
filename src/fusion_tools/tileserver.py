@@ -17,7 +17,7 @@ import uvicorn
 
 from shapely.geometry import box, shape
 
-from fusion_tools.visualization.database import (
+from fusion_tools.database import (
     fusionDB, User, VisSession, Item, Layer, Structure,
     ImageOverlay, Annotation) 
 from fusion_tools.utils.shapes import (
