@@ -11,7 +11,7 @@ from sqlalchemy import (
     Column, String, Boolean,ForeignKey, JSON)
 from sqlalchemy.orm import declarative_base, sessionmaker,mapped_column
 
-from shapely.geometry import box
+from shapely.geometry import box, shape
 
 from typing_extensions import Union
 
@@ -483,7 +483,6 @@ class fusionDB:
             # Should duplicates be added? It would be important to preserve different versions of each Layer/Structure/etc. if changes are made.
             # The default/static version of annotations can just be the source (local file/DSA annotations/item/{id})
 
-
     def get_names(self, table_name:str, size:Union[int,None]=None, offset = 0):
 
         return_names = []
@@ -505,11 +504,60 @@ class fusionDB:
         #TODO: Make a more efficient way to get names of properties for each structure
         pass
 
-    def get_structure_property_data(self, item_id:Union[str,list,None] = None, layer_id:Union[str,list,None] = None, property_list:Union[str,list] = None):
+    def get_structure_property_data(self, item_id:Union[str,list,None] = None, layer_id:Union[str,list,None] = None, structure_id:Union[str,list,None] = None, property_list:Union[str,list] = None):
+        
         #TODO: Make a more efficient way to get property values for each structure
-        pass
 
+        print(f'item_id: {item_id}')
+        print(f'layer_id: {layer_id}')
+        print(f'structure_id: {structure_id}')
+        print(f'property_list: {property_list}')
+        if property_list is None:
+            return []
+        elif type(property_list)==str:
+            property_list = [property_list]
 
+        search_query = self.session.query(
+            *[Structure.properties[p.split(' --> ')] for p in property_list],
+            Structure.id,
+            Structure.geom,
+            Layer.id,
+            Layer.name,
+            Item.id,
+            Item.name
+        ).filter(Structure.layer == Layer.id).filter(Layer.item==Item.id)
+
+        if not item_id is None:
+            if type(item_id)==list:
+                search_query = search_query.filter(Item.id.in_(item_id))
+            elif type(item_id)==str:
+                search_query = search_query.filter(Item.id == item_id)
+
+        if not layer_id is None:
+            if type(layer_id)==list:
+                search_query = search_query.filter(Layer.id.in_(layer_id))
+            elif type(layer_id)==str:
+                search_query = search_query.filter(Layer.id==layer_id)
+
+        if not structure_id is None:
+            if type(structure_id)==list:
+                search_query = search_query.filter(Structure.id.in_(structure_id))
+            elif type(structure_id)==str:
+                search_query = search_query.filter(Structure.id==structure_id)
+        
+        returned_props = property_list + ['structure.id','geometry','layer.id','layer.name','item.id','item.name']
+        return_list = []
+        for idx,i in enumerate(search_query.all()):
+            i_dict = {'_index': idx}
+            for prop,prop_name in zip(i,returned_props):
+                if not prop_name=='geometry':
+                    i_dict[prop_name] = prop
+                else:
+                    i_dict['bbox'] = list(shape(prop).bounds)
+
+            return_list.append(i_dict)
+
+        return return_list
 
 
 

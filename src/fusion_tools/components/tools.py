@@ -55,7 +55,14 @@ from fusion_tools.utils.shapes import (
 from fusion_tools.utils.images import get_feature_image, write_ome_tiff, format_intersecting_masks
 from fusion_tools.utils.stats import get_label_statistics, run_wilcox_rank_sum
 from fusion_tools import Tool, MultiTool
+
+import time
     
+#TODO: Re-organize these to separate:
+# - overlays (OverlayOptions),
+# - plotting tools (PropertyViewer, PropertyPlotter, GlobalPropertyPlotter),
+# - external resources (HRAViewer, DataExtractor),
+# - custom (CustomFunction)
 
 class OverlayOptions(Tool):
     """OverlayOptions Tool which enables editing overlay visualization properties including line color, fill color, and filters.
@@ -1673,6 +1680,8 @@ class PropertyPlotter(Tool):
         self.ignore_list = ignore_list
         self.property_depth = property_depth
 
+        self.assets_folder = os.getcwd()+'/.fusion_assets/'
+
     def __str__(self):
         return 'Property Plotter'
 
@@ -1689,6 +1698,7 @@ class PropertyPlotter(Tool):
         )        
         
         self.get_callbacks()
+        self.get_namespace()
 
     def get_namespace(self):
         """Adding JavaScript functions to the PropertyPlotter Namespace
@@ -1823,7 +1833,7 @@ class PropertyPlotter(Tool):
         # Updating plot based on selected properties and labels
         self.blueprint.callback(
             [
-                Input({'type':'property-plotter-butt','index':ALL},'n_clicks')
+                Input({'type': 'property-plotter-butt','index': ALL},'n_clicks')
             ],
             [
                 Output({'type': 'property-graph','index': ALL},'figure'),
@@ -1831,10 +1841,10 @@ class PropertyPlotter(Tool):
                 Output({'type': 'property-plotter-store','index': ALL},'data')
             ],
             [
-                State({'type': 'property-list','index': ALL},'checked'),
+                State({'type':'property-list','index': ALL},'checked'),
                 State({'type': 'label-list','index': ALL},'value'),
-                State({'type': 'property-plotter-keys','index':ALL},'data'),
-                State({'type': 'map-annotations-store','index':ALL},'data'),
+                State({'type': 'property-plotter-keys','index': ALL},'data'),
+                State({'type': 'map-slide-information','index': ALL},'data'),
                 State({'type': 'property-plotter-store','index': ALL},'data')
             ]
         )(self.update_property_graph)
@@ -1851,23 +1861,23 @@ class PropertyPlotter(Tool):
             ],
             [
                 State({'type': 'property-plotter-store','index': ALL},'data'),
-                State({'type':'label-list','index': ALL},'options')
+                State({'type':'label-list','index': ALL},'options'),
+                State({'type': 'map-slide-information','index': ALL},'data')
             ]
         )(self.select_data_from_plot)
 
-        # Clearing markers
+        # Clearing individual markers
         self.blueprint.callback(
             [
-                Input({'type':'selected-marker-delete','index': ALL},'n_clicks')
+                Input({'type': 'property-plotter-markers','index': ALL},'n_dblclicks')
             ],
             [
-                Output({'type': 'map-marker-div','index': ALL},'children'),
-                Output({'type': 'property-plotter-store','index': ALL},'data'),
-                Output({'type': 'property-graph-selected-div','index': ALL},'children')
+                Output({'type': 'property-plotter-selected-n','index': ALL},'children'),
+                Output({'type': 'property-plotter-store','index': ALL},'data')
             ],
             [
-                State({'type': 'property-plotter-store','index': ALL},'data'),
-                State({'type': 'label-list','index':ALL},'options')
+                State({'type': 'property-plotter-markers','index': ALL},'data'),
+                State({'type': 'property-plotter-store','index': ALL},'data')
             ]
         )(self.remove_marker_label)
 
@@ -1883,8 +1893,8 @@ class PropertyPlotter(Tool):
             [
                 State({'type': 'selected-sub-drop','index': ALL},'value'),
                 State({'type': 'property-plotter-store','index': ALL},'data'),
-                State({'type': 'map-annotations-store','index': ALL},'data'),
-                State({'type': 'label-list','index': ALL},'value')
+                State({'type': 'label-list','index': ALL},'value'),
+                State({'type': 'map-slide-information','index': ALL},'data')
             ]
         )(self.update_sub_div)
 
@@ -1895,6 +1905,9 @@ class PropertyPlotter(Tool):
             ],
             [
                 Output({'type': 'map-marker-div','index': ALL},'children')
+            ],
+            [
+                State({'type': 'map-slide-information','index': ALL},'data')
             ]
         )(self.sub_select_data)
 
@@ -2013,31 +2026,43 @@ class PropertyPlotter(Tool):
 
         self.blueprint.layout = layout
 
-    def update_property_graph(self, plot_butt_click, property_list, label_list, property_keys, current_features, current_plot_data):
-        """Updating plot based on selected properties, label(s)
+    def get_data_from_database(self, slide_info:dict, property_list:list,structure_id:Union[list,str,None] = None):
 
-        :param plot_butt_click: Whether this callback is triggered by the plot button being clicked
+        property_data_list = self.database.get_structure_property_data(
+            item_id = slide_info.get('id'),
+            structure_id = structure_id,
+            layer_id = None,
+            property_list = property_list
+        )
+
+        return property_data_list   
+
+    def update_property_graph(self, plot_butt_click, property_list, label_list, property_keys, slide_information,current_plot_data):
+        """Updating the property plotter graph based on selected properties/labels
+
+        :param plot_butt_click: Plot button clicked
         :type plot_butt_click: list
-        :param property_list: List of properties to incorporate in the generated plot
+        :param property_list: List of checked keys from the property tree
         :type property_list: list
-        :param label_list: List of properties to use as labels in the generated plot
+        :param label_list: Selected label from dropdown menu
         :type label_list: list
-        :param current_features: Current set of GeoJSON features 
-        :type current_features: list
-        :param current_plot_data: Data present in the current plot.
+        :param property_keys: Key for translating checked key to property name
+        :type property_keys: list
+        :param slide_information: Information for the current slide
+        :type slide_information: list
+        :param current_plot_data: Data currently in use for the plot (rows = structure, columns = properties)
         :type current_plot_data: list
-        :raises exceptions.PreventUpdate: Stop callback execution because no properties are selected
-        :raises exceptions.PreventUpdate: Stop callback execution because no properties are selected
-        :return: Generated plot figure and new plot data
-        :rtype: tuple
         """
+        
+        # Testing with get_data_from_database integration
+        #start = time.time()
         current_plot_data = json.loads(get_pattern_matching_value(current_plot_data))
+
+        slide_information = json.loads(get_pattern_matching_value(slide_information))
 
         property_list = get_pattern_matching_value(property_list)
         label_names = get_pattern_matching_value(label_list)
-        
-        #TODO: Replace this reading and extracting from annotations step with db query
-        current_features = json.loads(get_pattern_matching_value(current_features))
+
         property_keys = json.loads(get_pattern_matching_value(property_keys))
 
         # Don't do anything if not given properties
@@ -2048,11 +2073,15 @@ class PropertyPlotter(Tool):
                 raise exceptions.PreventUpdate
 
         property_names = [property_keys[i] for i in property_list if i in property_keys]
-            
-        extracted_data = self.extract_data_from_features(current_features, property_names, label_names)
-        current_plot_data['data'] = extracted_data
 
-        data_df = pd.DataFrame.from_records(extracted_data).dropna(subset=property_names,how = 'all')
+        property_data = self.get_data_from_database(
+            slide_info = slide_information,
+            property_list = property_names + [label_names]
+        )
+              
+        current_plot_data['data'] = property_data
+
+        data_df = pd.DataFrame.from_records(property_data).dropna(subset=property_names,how = 'all')
         data_df.reset_index(inplace=True,drop=True)
         if len(property_names)==1:
             # Single feature visualization
@@ -2060,7 +2089,7 @@ class PropertyPlotter(Tool):
                 data_df = data_df,
                 label_col = label_names,
                 property_column = property_names[0],
-                customdata_columns=['bbox','point_info']
+                customdata_columns=['bbox','structure.id']
             )
 
         elif len(property_names)>1:
@@ -2084,15 +2113,14 @@ class PropertyPlotter(Tool):
                 data_df = data_df,
                 plot_cols = plot_cols,
                 label_col = label_names,
-                customdata_cols = ['bbox','point_info']
+                customdata_cols = ['bbox','structure.id']
             )
 
         current_plot_data = json.dumps(current_plot_data)
 
-        try:
-            property_graph_tabs_div = self.make_property_plot_tabs(data_df,label_names,property_names,['bbox','point_info'])
-        except:
-            property_graph_tabs_div = dbc.Alert('Error generating property statistics tabs',color = 'danger')
+        property_graph_tabs_div = self.make_property_plot_tabs(data_df,label_names,property_names,['bbox','structure.id'])
+
+        #print(f'Time for update_property_graph: {time.time() - start}')
 
         return [plot_figure], [property_graph_tabs_div], [current_plot_data]
 
@@ -2419,7 +2447,7 @@ class PropertyPlotter(Tool):
 
         new_selected_div = [
             html.Div([
-                html.H3(f'Selected Samples: {n_markers}'),
+                html.H3(f'Selected Samples: {n_markers}',id = {'type': f'{self.component_prefix}-property-plotter-selected-n','index': 0}),
                 html.Hr(),
                 dbc.Row([
                     dbc.Col(
@@ -2468,7 +2496,7 @@ class PropertyPlotter(Tool):
 
         return new_selected_div
 
-    def select_data_from_plot(self, selected_data, current_plot_data, available_properties):
+    def select_data_from_plot(self, selected_data, current_plot_data, available_properties, slide_information):
         """Updating selected data tab based on selection in primary graph
 
 
@@ -2476,6 +2504,8 @@ class PropertyPlotter(Tool):
         :type selected_data: list
         :param current_plot_data: Data used to generate the current plot
         :type current_plot_data: list
+        :param slide_information: Data on the current slide
+        :type slide_information: list
         :raises exceptions.PreventUpdate: Stop callback execution because there is no selected data
         :raises exceptions.PreventUpdate: Stop callback execution because there is no selected data
         :return: Selected data description div, markers to add to the map, updated current plot data
@@ -2487,73 +2517,52 @@ class PropertyPlotter(Tool):
         current_plot_data = json.loads(get_pattern_matching_value(current_plot_data))
         selected_data = get_pattern_matching_value(selected_data)
         available_properties = get_pattern_matching_value(available_properties)
+        slide_information = json.loads(get_pattern_matching_value(slide_information))
 
         if selected_data is None:
             raise exceptions.PreventUpdate
         if type(selected_data)==list:
             if len(selected_data)==0:
                 raise exceptions.PreventUpdate
+        
+        x_scale = slide_information.get('x_scale',1)
+        y_scale = slide_information.get('y_scale',1)
 
-        #TODO: This should be updated to return a GeoJSON of points with indications of which structures are selected
-        map_marker_geojson = {
-            'type': 'FeatureCollection',
-            'features': [
-                {
-                    'type': 'Feature',
-                    'geometry': {
-                        'type': 'Point',
-                        'coordinates': [
-                            [
-                                (p['customdata'][0][0]+p['customdata'][0][2])/2,
-                                (p['customdata'][0][1]+p['customdata'][0][3])/2
-                            ][::-1]
-                        ]
-                    },
-                    'properties': {
-
+        map_marker_geojson = dl.GeoJSON(
+            data = {
+                'type': 'FeatureCollection',
+                'features': [
+                    {
+                        'type': 'Feature',
+                        'geometry': {
+                            'type': 'Point',
+                            'coordinates': [
+                                x_scale*((p['customdata'][0][0]+p['customdata'][0][2])/2),
+                                y_scale*((p['customdata'][0][1]+p['customdata'][0][3])/2)
+                            ]
+                        },
+                        'properties': {
+                            'customdata': p['customdata']
+                        }
                     }
-                }
-                for p_idx, p in enumerate(selected_data['points'])
-            ]
-        }
+                    for p_idx, p in enumerate(selected_data['points'])
+                ]
+            },
+            pointToLayer=self.js_namespace("markerRender"),
+            onEachFeature=self.js_namespace("tooltipMarker"),
+            id = {'type': f'{self.component_prefix}-property-plotter-markers','index': 0},
+            eventHandlers = {
+                'dblclick': self.js_namespace('removeMarker')
+            }
+        )
 
-
-        map_marker = []
-        for p_idx,p in enumerate(selected_data['points']):
-            map_marker.append(
-                dl.Marker(
-                    position = [
-                        (p['customdata'][0][0]+p['customdata'][0][2])/2,
-                        (p['customdata'][0][1]+p['customdata'][0][3])/2
-                    ][::-1],
-                    children = [
-                        dl.Popup(
-                            dbc.Button(
-                                'Clear Marker',
-                                color = 'danger',
-                                n_clicks = 0,
-                                id = {'type': f'{self.component_prefix}-selected-marker-delete','index': p_idx}
-                            ),
-                            id = {'type': f'{self.component_prefix}-selected-marker-popup','index': p_idx}
-                        ),
-                        html.Div(
-                            children = [
-                                json.dumps(p['customdata'][1])
-                            ],
-                            id = {'type': f'{self.component_prefix}-selected-marker-index','index': p_idx},
-                            style = {'display': 'none'}
-                        )
-                    ]
-                )
-            )
-
-        current_plot_data['selected'] = selected_data
+        current_plot_data['selected'] = [i['customdata'] for i in selected_data['points']]
         current_plot_data = [json.dumps(current_plot_data)]
 
         # Update property_graph_selected_div
-        property_graph_selected_div = self.gen_selected_div(len(map_marker), available_properties)
+        property_graph_selected_div = self.gen_selected_div(len(selected_data['points']), available_properties)
 
-        return property_graph_selected_div, [map_marker], current_plot_data
+        return property_graph_selected_div, [map_marker_geojson], current_plot_data
 
     def make_property_plot_tabs(self, data_df:pd.DataFrame, label_col: Union[str,None],property_cols: list, customdata_cols:list)->list:
         """Generate property plot description tabs
@@ -2660,277 +2669,283 @@ class PropertyPlotter(Tool):
 
         # Property statistics
         label_stats_children = []
-        if data_df.shape[0]>1:
-            if not label_col is None:
-                label_data = data_df[label_col]
-                if type(label_data)==pd.DataFrame:
-                    label_data = label_data.iloc[:,0]
+        try:
+            if data_df.shape[0]>1:
+                if not label_col is None:
+                    label_data = data_df[label_col]
+                    if type(label_data)==pd.DataFrame:
+                        label_data = label_data.iloc[:,0]
 
-                unique_labels = label_data.unique().tolist()
-                if len(unique_labels)>1:
-                    if any([i>1 for i in list(label_data.value_counts().to_dict().values())]):
+                    unique_labels = label_data.unique().tolist()
+                    if len(unique_labels)>1:
+                        if any([i>1 for i in list(label_data.value_counts().to_dict().values())]):
 
-                        p_value, results = get_label_statistics(
-                            data_df = data_df.loc[:,[i for i in data_df if not i in customdata_cols]],
-                            label_col=label_col
-                        )
+                            p_value, results = get_label_statistics(
+                                data_df = data_df.loc[:,[i for i in data_df if not i in customdata_cols]],
+                                label_col=label_col
+                            )
 
-                        if len(property_cols)==1:
-                            if len(unique_labels)==2:
-                                if p_value<0.05:
-                                    significance = dbc.Alert('Statistically significant (p<0.05)',color='success')
+                            if len(property_cols)==1:
+                                if len(unique_labels)==2:
+                                    if p_value<0.05:
+                                        significance = dbc.Alert('Statistically significant (p<0.05)',color='success')
+                                    else:
+                                        significance = dbc.Alert('Not statistically significant (p>=0.05)',color='warning')
+                                    
+                                    label_stats_children.extend([
+                                        significance,
+                                        html.Hr(),
+                                        html.Div([
+                                            html.A('Statistical Test: t-Test',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html',target='_blank'),
+                                            html.P('Tests null hypothesis that two independent samples have identical mean values. Assumes equal variance within groups.')
+                                        ]),
+                                        html.Div(
+                                            dash_table.DataTable(
+                                                id = {'type': f'{self.component_prefix}-property-stats-table','index': 0},
+                                                columns = [
+                                                    {'name': i, 'id': i}
+                                                    for i in results.columns
+                                                ],
+                                                data = results.to_dict('records'),
+                                                style_cell = {
+                                                    'overflow': 'hidden',
+                                                    'textOverflow': 'ellipsis',
+                                                    'maxWidth': 0
+                                                },
+                                                tooltip_data = [
+                                                    {
+                                                        column: {'value': str(value), 'type': 'markdown'}
+                                                        for column, value in row.items()
+                                                    } for row in results.to_dict('records')
+                                                ],
+                                                tooltip_duration = None
+                                            ) if type(results)==pd.DataFrame else []
+                                        )
+                                    ])
+                            
+                                elif len(unique_labels)>2:
+
+                                    if p_value<0.05:
+                                        significance = dbc.Alert('Statistically significant! (p<0.05)',color='success')
+                                    else:
+                                        significance = dbc.Alert('Not statistically significant (p>=0.05)',color='warning')
+                                    
+                                    label_stats_children.extend([
+                                        significance,
+                                        html.Hr(),
+                                        html.Div([
+                                            html.A('Statistical Test: One-Way ANOVA',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.f_oneway.html',target='_blank'),
+                                            html.P('Tests null hypothesis that two or more groups have the same population mean. Assumes independent samples from normal, homoscedastic (equal standard deviation) populations')
+                                        ]),
+                                        html.Div(
+                                            dash_table.DataTable(
+                                                id = {'type': f'{self.component_prefix}-property-stats-table','index':0},
+                                                columns = [
+                                                    {'name': i, 'id': i}
+                                                    for i in results['anova'].columns
+                                                ],
+                                                data = results['anova'].to_dict('records'),
+                                                style_cell = {
+                                                    'overflow': 'hidden',
+                                                    'textOverflow': 'ellipsis',
+                                                    'maxWidth': 0
+                                                },
+                                                tooltip_data = [
+                                                    {
+                                                        column: {'value': str(value),'type': 'markdown'}
+                                                        for column, value in row.items()
+                                                    } for row in results['anova'].to_dict('records')
+                                                ],
+                                                tooltip_duration = None
+                                            )
+                                        ),
+                                        html.Hr(),
+                                        html.Div([
+                                            html.A("Statistical Test: Tukey's HSD",href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.tukey_hsd.html',target='_blank'),
+                                            html.P('Post hoc test for pairwise comparison of means from different groups. Assumes independent samples from normal, equal (finite) variance populations')
+                                        ]),
+                                        html.Div(
+                                            dash_table.DataTable(
+                                                id = {'type': f'{self.component_prefix}-property-stats-tukey','index': 0},
+                                                columns = [
+                                                    {'name': i,'id': i}
+                                                    for i in results['tukey'].columns
+                                                ],
+                                                data = results['tukey'].to_dict('records'),
+                                                style_cell = {
+                                                    'overflow': 'hidden',
+                                                    'textOverflow': 'ellipsis',
+                                                    'maxWidth': 0
+                                                },
+                                                tooltip_data = [
+                                                    {
+                                                        column: {'value': str(value), 'type': 'markdown'}
+                                                        for column, value in row.items()
+                                                    } for row in results['tukey'].to_dict('records')
+                                                ],
+                                                tooltip_duration = None,
+                                                style_data_conditional = [
+                                                    {
+                                                        'if': {
+                                                            'column_id': 'Comparison'
+                                                        },
+                                                        'width': '35%'
+                                                    },
+                                                    {
+                                                        'if': {
+                                                            'filter_query': '{p-value} <0.05',
+                                                            'column_id': 'p-value'
+                                                        },
+                                                        'backgroundColor': 'green',
+                                                        'color': 'white'
+                                                    },
+                                                    {
+                                                        'if': {
+                                                            'filter_query': '{p-value} >=0.05',
+                                                            'column_id': 'p-value'
+                                                        },
+                                                        'backgroundColor': 'tomato',
+                                                        'color': 'white'
+                                                    }
+                                                ]
+                                            )
+                                        )
+                                    ])
+
                                 else:
-                                    significance = dbc.Alert('Not statistically significant (p>=0.05)',color='warning')
+
+                                    label_stats_children.append(
+                                        dbc.Alert('Only one unique label present!',color = 'warning')
+                                    )
+
+                            elif len(property_cols)==2:
+                                if any([i<0.05 for i in p_value]):
+                                    significance = dbc.Alert('Statistical significance found!',color='success')
+                                else:
+                                    significance = dbc.Alert('No statistical significance',color='warning')
                                 
                                 label_stats_children.extend([
                                     significance,
                                     html.Hr(),
                                     html.Div([
-                                        html.A('Statistical Test: t-Test',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.ttest_ind.html',target='_blank'),
-                                        html.P('Tests null hypothesis that two independent samples have identical mean values. Assumes equal variance within groups.')
+                                        html.A('Statistical Test: Pearson Correlation Coefficient (r)',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.mstats.pearsonr.html',target='_blank'),
+                                        html.P('Measures the linear relationship between two datasets. Assumes normally distributed data.')
                                     ]),
                                     html.Div(
                                         dash_table.DataTable(
-                                            id = {'type': f'{self.component_prefix}-property-stats-table','index': 0},
-                                            columns = [
-                                                {'name': i, 'id': i}
-                                                for i in results.columns
-                                            ],
+                                            id=f'{self.component_prefix}-pearson-table',
+                                            columns = [{'name':i,'id':i} for i in results.columns],
                                             data = results.to_dict('records'),
                                             style_cell = {
-                                                'overflow': 'hidden',
-                                                'textOverflow': 'ellipsis',
-                                                'maxWidth': 0
+                                                'overflow':'hidden',
+                                                'textOverflow':'ellipsis',
+                                                'maxWidth':0
                                             },
                                             tooltip_data = [
                                                 {
-                                                    column: {'value': str(value), 'type': 'markdown'}
-                                                    for column, value in row.items()
+                                                    column: {'value':str(value),'type':'markdown'}
+                                                    for column,value in row.items()
                                                 } for row in results.to_dict('records')
-                                            ],
-                                            tooltip_duration = None
-                                        ) if type(results)==pd.DataFrame else []
-                                    )
-                                ])
-                        
-                            elif len(unique_labels)>2:
-
-                                if p_value<0.05:
-                                    significance = dbc.Alert('Statistically significant! (p<0.05)',color='success')
-                                else:
-                                    significance = dbc.Alert('Not statistically significant (p>=0.05)',color='warning')
-                                
-                                label_stats_children.extend([
-                                    significance,
-                                    html.Hr(),
-                                    html.Div([
-                                        html.A('Statistical Test: One-Way ANOVA',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.f_oneway.html',target='_blank'),
-                                        html.P('Tests null hypothesis that two or more groups have the same population mean. Assumes independent samples from normal, homoscedastic (equal standard deviation) populations')
-                                    ]),
-                                    html.Div(
-                                        dash_table.DataTable(
-                                            id = {'type': f'{self.component_prefix}-property-stats-table','index':0},
-                                            columns = [
-                                                {'name': i, 'id': i}
-                                                for i in results['anova'].columns
-                                            ],
-                                            data = results['anova'].to_dict('records'),
-                                            style_cell = {
-                                                'overflow': 'hidden',
-                                                'textOverflow': 'ellipsis',
-                                                'maxWidth': 0
-                                            },
-                                            tooltip_data = [
-                                                {
-                                                    column: {'value': str(value),'type': 'markdown'}
-                                                    for column, value in row.items()
-                                                } for row in results['anova'].to_dict('records')
-                                            ],
-                                            tooltip_duration = None
-                                        )
-                                    ),
-                                    html.Hr(),
-                                    html.Div([
-                                        html.A("Statistical Test: Tukey's HSD",href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.tukey_hsd.html',target='_blank'),
-                                        html.P('Post hoc test for pairwise comparison of means from different groups. Assumes independent samples from normal, equal (finite) variance populations')
-                                    ]),
-                                    html.Div(
-                                        dash_table.DataTable(
-                                            id = {'type': f'{self.component_prefix}-property-stats-tukey','index': 0},
-                                            columns = [
-                                                {'name': i,'id': i}
-                                                for i in results['tukey'].columns
-                                            ],
-                                            data = results['tukey'].to_dict('records'),
-                                            style_cell = {
-                                                'overflow': 'hidden',
-                                                'textOverflow': 'ellipsis',
-                                                'maxWidth': 0
-                                            },
-                                            tooltip_data = [
-                                                {
-                                                    column: {'value': str(value), 'type': 'markdown'}
-                                                    for column, value in row.items()
-                                                } for row in results['tukey'].to_dict('records')
                                             ],
                                             tooltip_duration = None,
                                             style_data_conditional = [
                                                 {
                                                     'if': {
-                                                        'column_id': 'Comparison'
-                                                    },
-                                                    'width': '35%'
-                                                },
-                                                {
-                                                    'if': {
                                                         'filter_query': '{p-value} <0.05',
-                                                        'column_id': 'p-value'
+                                                        'column_id':'p-value',
                                                     },
-                                                    'backgroundColor': 'green',
-                                                    'color': 'white'
+                                                    'backgroundColor':'green',
+                                                    'color':'white'
                                                 },
                                                 {
-                                                    'if': {
-                                                        'filter_query': '{p-value} >=0.05',
-                                                        'column_id': 'p-value'
+                                                    'if':{
+                                                        'filter_query': '{p-value} >= 0.05',
+                                                        'column_id':'p-value'
                                                     },
-                                                    'backgroundColor': 'tomato',
-                                                    'color': 'white'
+                                                    'backgroundColor':'tomato',
+                                                    'color':'white'
                                                 }
                                             ]
                                         )
                                     )
                                 ])
 
-                            else:
+                            elif len(property_cols)>2:
+                                
+                                overall_silhouette = results['overall_silhouette']
+                                if overall_silhouette>=-1 and overall_silhouette<=-0.5:
+                                    silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color='danger')
+                                elif overall_silhouette>-0.5 and overall_silhouette<=0.5:
+                                    silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color = 'primary')
+                                elif overall_silhouette>0.5 and overall_silhouette<=1:
+                                    silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color = 'success')
+                                else:
+                                    silhouette_alert = dbc.Alert(f'Weird value: {overall_silhouette}')
 
-                                label_stats_children.append(
-                                    dbc.Alert('Only one unique label present!',color = 'warning')
-                                )
-
-                        elif len(property_cols)==2:
-                            if any([i<0.05 for i in p_value]):
-                                significance = dbc.Alert('Statistical significance found!',color='success')
-                            else:
-                                significance = dbc.Alert('No statistical significance',color='warning')
-                            
-                            label_stats_children.extend([
-                                significance,
-                                html.Hr(),
-                                html.Div([
-                                    html.A('Statistical Test: Pearson Correlation Coefficient (r)',href='https://docs.scipy.org/doc/scipy/reference/generated/scipy.stats.mstats.pearsonr.html',target='_blank'),
-                                    html.P('Measures the linear relationship between two datasets. Assumes normally distributed data.')
-                                ]),
-                                html.Div(
-                                    dash_table.DataTable(
-                                        id=f'{self.component_prefix}-pearson-table',
-                                        columns = [{'name':i,'id':i} for i in results.columns],
-                                        data = results.to_dict('records'),
-                                        style_cell = {
-                                            'overflow':'hidden',
-                                            'textOverflow':'ellipsis',
-                                            'maxWidth':0
-                                        },
-                                        tooltip_data = [
-                                            {
-                                                column: {'value':str(value),'type':'markdown'}
-                                                for column,value in row.items()
-                                            } for row in results.to_dict('records')
-                                        ],
-                                        tooltip_duration = None,
-                                        style_data_conditional = [
-                                            {
-                                                'if': {
-                                                    'filter_query': '{p-value} <0.05',
-                                                    'column_id':'p-value',
-                                                },
-                                                'backgroundColor':'green',
-                                                'color':'white'
+                                label_stats_children.extend([
+                                    silhouette_alert,
+                                    html.Div([
+                                        html.A('Clustering Metric: Silhouette Coefficient',href='https://scikit-learn.org/stable/modules/generated/sklearn.metrics.silhouette_score.html#sklearn.metrics.silhouette_score',target='_blank'),
+                                        html.P('Quantifies density of distribution for each sample. Values closer to 1 indicate high class clustering. Values closer to 0 indicate mixed clustering between classes. Values closer to -1 indicate highly dispersed distribution for a class.')
+                                    ]),
+                                    html.Div(
+                                        dash_table.DataTable(
+                                            id=f'{self.component_prefix}-silhouette-table',
+                                            columns = [{'name':i,'id':i} for i in results['samples_silhouette'].columns],
+                                            data = results['samples_silhouette'].to_dict('records'),
+                                            style_cell = {
+                                                'overflow':'hidden',
+                                                'textOverflow':'ellipsis',
+                                                'maxWidth':0
                                             },
-                                            {
-                                                'if':{
-                                                    'filter_query': '{p-value} >= 0.05',
-                                                    'column_id':'p-value'
+                                            tooltip_data = [
+                                                {
+                                                    column: {'value':str(value),'type':'markdown'}
+                                                    for column,value in row.items()
+                                                } for row in results['samples_silhouette'].to_dict('records')
+                                            ],
+                                            tooltip_duration = None,
+                                            style_data_conditional = [
+                                                {
+                                                    'if': {
+                                                        'filter_query': '{Silhouette Score}>0',
+                                                        'column_id':'Silhouette Score',
+                                                    },
+                                                    'backgroundColor':'green',
+                                                    'color':'white'
                                                 },
-                                                'backgroundColor':'tomato',
-                                                'color':'white'
-                                            }
-                                        ]
+                                                {
+                                                    'if':{
+                                                        'filter_query': '{Silhouette Score}<0',
+                                                        'column_id':'Silhouette Score'
+                                                    },
+                                                    'backgroundColor':'tomato',
+                                                    'color':'white'
+                                                }
+                                            ]
+                                        )
                                     )
-                                )
-                            ])
-
-                        elif len(property_cols)>2:
-                            
-                            overall_silhouette = results['overall_silhouette']
-                            if overall_silhouette>=-1 and overall_silhouette<=-0.5:
-                                silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color='danger')
-                            elif overall_silhouette>-0.5 and overall_silhouette<=0.5:
-                                silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color = 'primary')
-                            elif overall_silhouette>0.5 and overall_silhouette<=1:
-                                silhouette_alert = dbc.Alert(f'Overall Silhouette Score: {overall_silhouette}',color = 'success')
-                            else:
-                                silhouette_alert = dbc.Alert(f'Weird value: {overall_silhouette}')
-
-                            label_stats_children.extend([
-                                silhouette_alert,
-                                html.Div([
-                                    html.A('Clustering Metric: Silhouette Coefficient',href='https://scikit-learn.org/stable/modules/generated/sklearn.metrics.silhouette_score.html#sklearn.metrics.silhouette_score',target='_blank'),
-                                    html.P('Quantifies density of distribution for each sample. Values closer to 1 indicate high class clustering. Values closer to 0 indicate mixed clustering between classes. Values closer to -1 indicate highly dispersed distribution for a class.')
-                                ]),
-                                html.Div(
-                                    dash_table.DataTable(
-                                        id=f'{self.component_prefix}-silhouette-table',
-                                        columns = [{'name':i,'id':i} for i in results['samples_silhouette'].columns],
-                                        data = results['samples_silhouette'].to_dict('records'),
-                                        style_cell = {
-                                            'overflow':'hidden',
-                                            'textOverflow':'ellipsis',
-                                            'maxWidth':0
-                                        },
-                                        tooltip_data = [
-                                            {
-                                                column: {'value':str(value),'type':'markdown'}
-                                                for column,value in row.items()
-                                            } for row in results['samples_silhouette'].to_dict('records')
-                                        ],
-                                        tooltip_duration = None,
-                                        style_data_conditional = [
-                                            {
-                                                'if': {
-                                                    'filter_query': '{Silhouette Score}>0',
-                                                    'column_id':'Silhouette Score',
-                                                },
-                                                'backgroundColor':'green',
-                                                'color':'white'
-                                            },
-                                            {
-                                                'if':{
-                                                    'filter_query': '{Silhouette Score}<0',
-                                                    'column_id':'Silhouette Score'
-                                                },
-                                                'backgroundColor':'tomato',
-                                                'color':'white'
-                                            }
-                                        ]
-                                    )
-                                )
-                            ])
+                                ])
+                        else:
+                            label_stats_children.append(
+                                dbc.Alert(f'Only one of each label type present!',color='warning')
+                            )
                     else:
                         label_stats_children.append(
-                            dbc.Alert(f'Only one of each label type present!',color='warning')
+                            dbc.Alert(f'Only one label present! ({unique_labels[0]})',color='warning')
                         )
                 else:
                     label_stats_children.append(
-                        dbc.Alert(f'Only one label present! ({unique_labels[0]})',color='warning')
+                        dbc.Alert('No labels assigned to the plot!',color='warning')
                     )
             else:
                 label_stats_children.append(
-                    dbc.Alert('No labels assigned to the plot!',color='warning')
+                    dbc.Alert('Only one sample present!',color='warning')
                 )
-        else:
+
+        except:
             label_stats_children.append(
-                dbc.Alert('Only one sample present!',color='warning')
+                dbc.Alert('Error generating property statistics tabs',color = 'danger')
             )
 
         label_stats_tab = dbc.Tab(
@@ -2962,36 +2977,25 @@ class PropertyPlotter(Tool):
 
         return property_plot_tabs
 
-    def remove_marker_label(self, delete_click, current_plot_data, available_properties):
-        """Remove marker from selected feature
-
-        :param delete_click: Clear marker button clicked
-        :type delete_click: list
-        :param current_plot_data: Current data for plot
-        :type current_plot_data: list
-        :return: Updating current markers on SlideMap, current plot data, and property-graph-selected-div
-        :rtype: tuple
-        """
+    def remove_marker_label(self, marker_dblclicked, marker_geo, current_plot_data):
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
-
-        current_plot_data = json.loads(get_pattern_matching_value(current_plot_data))
-        available_properties = get_pattern_matching_value(available_properties)
-        n_marked = len(current_plot_data['selected']['points'])
-
-        patched_list = Patch()
-        values_to_remove = np.where(delete_click)[0].tolist()
-        for v in values_to_remove:
-            del patched_list[v]
-            del current_plot_data['selected']['points'][v]
         
-        current_plot_data = [json.dumps(current_plot_data)]
-        new_selected_div = self.gen_selected_div(n_marked-1, available_properties)
+        current_plot_data = json.loads(get_pattern_matching_value(current_plot_data))
+        marker_geo = get_pattern_matching_value(marker_geo)
+        marker_count = len(marker_geo['features'])
 
-        return [patched_list], current_plot_data, new_selected_div
+        current_marker_count = f'Selected Samples: {marker_count}'
 
-    def update_sub_div(self, plot_butt_clicked, marker_butt_clicked, sub_plot_value, current_plot_data, current_features, current_labels):
+        current_plot_data['selected'] = [
+            p['properties']['customdata'] for p in marker_geo['features']
+        ]
+
+
+        return [current_marker_count], [json.dumps(current_plot_data)]
+
+    def update_sub_div(self, plot_butt_clicked, marker_butt_clicked, sub_plot_value, current_plot_data, current_labels, slide_information):
         """Updating the property-graph-selected-div based on selection of either a property to plot a sub-plot of or whether the marker properties button was clicked
 
         :param plot_butt_clicked: Update sub-plot button was clicked
@@ -3000,10 +3004,10 @@ class PropertyPlotter(Tool):
         :type marker_butt_clicked: list
         :param current_plot_data: Current data in the plot
         :type current_plot_data: list
-        :param current_features: Current set of GeoJSON FeatureCollections on the SlideMap
-        :type current_features: list
         :param current_labels: Current labels applied to the main plot
         :type current_labels: list
+        :param slide_information: Information relating to the current slide
+        :type slide_information: list
         :return: Updated children of the selected-property-graph-div including either sub-plot or table of marker features
         :rtype: tuple
         """
@@ -3014,9 +3018,9 @@ class PropertyPlotter(Tool):
         current_plot_data = json.loads(get_pattern_matching_value(current_plot_data))
         sub_plot_value = get_pattern_matching_value(sub_plot_value)
         current_labels = get_pattern_matching_value(current_labels)
-        sub_div_content = []
 
-        current_features = json.loads(get_pattern_matching_value(current_features))
+        slide_information = json.loads(get_pattern_matching_value(slide_information))
+        sub_div_content = []
 
         if 'selected-sub-butt' in ctx.triggered_id['type']:
             if not sub_plot_value is None:
@@ -3027,13 +3031,12 @@ class PropertyPlotter(Tool):
                     sub_plot_value = sub_plot_value[0]
 
                 # Pulling selected data points from current plot_data
-                current_selected = current_plot_data['selected']['points']
+                current_selected = current_plot_data['selected']
                 
-                selected_data = self.extract_data_from_features(
-                    geo_list=current_features,
-                    properties = sub_plot_value,
-                    labels = current_labels,
-                    filter_list = [i['customdata'][1] for i in current_selected]
+                selected_data = self.get_data_from_database(
+                    slide_info = slide_information,
+                    structure_id = [i[1] for i in current_selected],
+                    property_list = sub_plot_value + [current_labels]
                 )
 
                 if len(selected_data)>0:
@@ -3045,14 +3048,14 @@ class PropertyPlotter(Tool):
                             data_df = data_df,
                             label_col = current_labels,
                             property_column = sub_plot_value[0],
-                            customdata_columns = ['bbox','point_info']
+                            customdata_columns = ['bbox','structure.id']
                         )
                     elif len(sub_plot_value)==2:
                         sub_plot_figure = self.gen_scatter_plot(
                             data_df = data_df,
                             plot_cols = sub_plot_value,
                             label_col = current_labels,
-                            customdata_cols = ['bbox','point_info']
+                            customdata_cols = ['bbox','structure.id']
                         )
 
                     elif len(sub_plot_value)>2:
@@ -3071,7 +3074,7 @@ class PropertyPlotter(Tool):
                             data_df = data_df,
                             plot_cols = ['UMAP1','UMAP2'],
                             label_col = current_labels,
-                            customdata_cols = ['bbox','point_info']
+                            customdata_cols = ['bbox','structure.id']
                         )
 
 
@@ -3086,13 +3089,14 @@ class PropertyPlotter(Tool):
                     )
 
         elif 'selected-sub-markers' in ctx.triggered_id['type']:
-            current_selected = current_plot_data['selected']['points']
+            current_selected = current_plot_data['selected']
 
-            selected_data = self.extract_data_from_features(
-                geo_list = current_features,
-                properties = current_labels,
-                labels = current_labels,
-                filter_list = [i['customdata'][1] for i in current_selected]
+            property_columns = list(current_plot_data['data'][0].keys())
+
+            selected_data = self.get_data_from_database(
+                slide_info = slide_information,
+                structure_id = [i[1] for i in current_selected],
+                propety_list = property_columns
             )
 
             selected_data = pd.DataFrame.from_records(selected_data)
@@ -3158,7 +3162,7 @@ class PropertyPlotter(Tool):
 
         return [sub_div_content]
 
-    def sub_select_data(self, sub_selected_data):
+    def sub_select_data(self, sub_selected_data, slide_information):
         """Updating the markers on the map according to selected data in the sub-plot
 
         :param sub_selected_data: Selected points in the sub-plot
@@ -3175,6 +3179,7 @@ class PropertyPlotter(Tool):
             raise exceptions.PreventUpdate
         
         sub_selected_data = get_pattern_matching_value(sub_selected_data)
+        slide_information = json.loads(get_pattern_matching_value(slide_information))
         
         if sub_selected_data is None:
             raise exceptions.PreventUpdate
@@ -3182,40 +3187,40 @@ class PropertyPlotter(Tool):
             if len(sub_selected_data)==0:
                 raise exceptions.PreventUpdate
 
-        map_marker = []
-        for p_idx,p in enumerate(sub_selected_data['points']):
-            map_marker.append(
-                dl.Marker(
-                    position = [
-                        (p['customdata'][0][0]+p['customdata'][0][2])/2,
-                        (p['customdata'][0][1]+p['customdata'][0][3])/2
-                    ][::-1],
-                    children = [
-                        dl.Popup(
-                            dbc.Button(
-                                'Clear Marker',
-                                color = 'danger',
-                                n_clicks = 0,
-                                id = {'type': f'{self.component_prefix}-selected-marker-delete','index': p_idx}
-                            ),
-                            id = {'type': f'{self.component_prefix}-selected-marker-popup','index': p_idx}
-                        ),
-                        html.Div(
-                            children = [
-                                json.dumps(p['customdata'][1])
-                            ],
-                            id = {'type': f'{self.component_prefix}-selected-marker-index','index': p_idx},
-                            style = {'display':'none'}
-                        )
-                    ]
-                )
-            )
-        
-        map_marker_div = html.Div(
-            map_marker
+        x_scale = slide_information.get('x_scale')
+        y_scale = slide_information.get('y_scale')
+
+        map_marker_geojson = dl.GeoJSON(
+            data = {
+                'type': 'FeatureCollection',
+                'features': [
+                    {
+                        'type': 'Feature',
+                        'geometry': {
+                            'type': 'Point',
+                            'coordinates': [
+                                x_scale*((p['customdata'][0][0]+p['customdata'][0][2])/2),
+                                y_scale*((p['customdata'][0][1]+p['customdata'][0][3])/2)
+                            ]
+                        },
+                        'properties': {
+                            'id': p['customdata'][1]
+                        }
+                    }
+                    for p_idx, p in enumerate(sub_selected_data['points'])
+                ]
+            },
+            pointToLayer=self.js_namespace("markerRender"),
+            onEachFeature=self.js_namespace("tooltipMarker"),
+            id = {'type': f'{self.component_prefix}-property-plotter-markers','index': 0},
+            eventHandlers = {
+                'dblclick': self.js_namespace('removeMarker')
+            }
         )
 
-        return [map_marker_div]
+        return [map_marker_geojson]
+
+
 
 class HRAViewer(Tool):
     """HRAViewer Tool which enables hierarchy visualization for organs, cell types, biomarkers, and proteins in the Human Reference Atlas
@@ -4735,7 +4740,6 @@ class DataExtractor(Tool):
 
         return [updated_download_info],[interval_disabled], [modal_open], [modal_children], [new_n_intervals], [download_data]
         
-
 
 
 class GlobalPropertyPlotter(MultiTool):

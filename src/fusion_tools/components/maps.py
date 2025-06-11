@@ -1145,7 +1145,8 @@ class SlideMap(MapComponent):
                         title = 'Case Metadata',
                         children = non_nested_case_metadata_table + case_nested_accordions
                     )
-                ]
+                ],
+                start_collapsed=True
             )
         )
 
@@ -2089,7 +2090,8 @@ class MultiFrameSlideMap(SlideMap):
                         title = 'Case Metadata',
                         children = non_nested_case_metadata_table + case_nested_accordions
                     )
-                ]
+                ],
+                start_collapsed=True
             )
         )
 
@@ -2798,7 +2800,8 @@ class LargeSlideMap(SlideMap):
                         title = 'Case Metadata',
                         children = non_nested_case_metadata_table + case_nested_accordions
                     )
-                ]
+                ],
+                start_collapsed=True
             )
         )
 
@@ -3392,7 +3395,8 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
                         title = 'Case Metadata',
                         children = non_nested_case_metadata_table + case_nested_accordions
                     )
-                ]
+                ],
+                start_collapsed=True
             )
         )
 
@@ -3683,7 +3687,8 @@ class HybridSlideMap(MultiFrameSlideMap):
                         title = 'Case Metadata',
                         children = non_nested_case_metadata_table + case_nested_accordions
                     )
-                ]
+                ],
+                start_collapsed=True
             )
         )
 

@@ -38,9 +38,10 @@ from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 from fusion_tools.utils.shapes import find_intersecting, extract_geojson_properties, path_to_mask, process_filters_queries
 from fusion_tools import Tool
 
-#TODO: Need some kind of handler for handling where/how data is stored
-#TODO: Add schema selection for FeatureAnnotation and BulkLabels
 
+#TODO: Create an annotation folder which has a schemas module with a unified schema for each type
+# Optionally create one master annotation component which can hold the schemas and populate with one of the different levels of annotation components
+# Saving data can be routed to the fusionDB with options for extracting data into spreadsheets/files as needed
 
 class FeatureAnnotation(Tool):
     """Enables annotation (drawing) on top of structures in the SlideMap using a separate interface.
