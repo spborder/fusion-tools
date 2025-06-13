@@ -5,6 +5,7 @@ Structure schemas for different items in SQLite database
 """
 import json
 import uuid
+import time
 
 from sqlalchemy import (
     not_, func, select, create_engine,
@@ -508,10 +509,10 @@ class fusionDB:
         
         #TODO: Make a more efficient way to get property values for each structure
 
-        print(f'item_id: {item_id}')
-        print(f'layer_id: {layer_id}')
-        print(f'structure_id: {structure_id}')
-        print(f'property_list: {property_list}')
+        #print(f'item_id: {item_id}')
+        #print(f'layer_id: {layer_id}')
+        #print(f'structure_id: {structure_id}')
+        #print(f'property_list: {property_list}')
         if property_list is None:
             return []
         elif type(property_list)==str:
@@ -559,11 +560,58 @@ class fusionDB:
 
         return return_list
 
+    def get_structures_in_bbox(self, bbox:list, item_id:Union[str,None] = None, layer_id:Union[str,list,None] = None, structure_id:Union[str,list,None] = None):
+        """Querying database for structures that intersect with a 
+
+        :param bbox: _description_
+        :type bbox: list
+        :param item_id: _description_, defaults to None
+        :type item_id: Union[str,None], optional
+        :param layer_id: _description_, defaults to None
+        :type layer_id: Union[str,list,None], optional
+        :param structure_id: _description_, defaults to None
+        :type structure_id: Union[str,list,None], optional
+        :return: _description_
+        :rtype: _type_
+        """
+        
+        #TODO: Test the performance of this using shape().intersects() vs. checking min/max ranges for bounding boxes
+        start = time.time()
+        search_query = self.session.query(
+            Structure.id,
+            Structure.geom
+        )
+
+        if not item_id is None:
+            if type(item_id)==str:
+                search_query = search_query.filter(Item.id == item_id)
+
+        if not layer_id is None:
+            if type(layer_id)==list:
+                search_query = search_query.filter(Layer.id.in_(layer_id))
+            elif type(layer_id)==str:
+                search_query = search_query.filter(Layer.id==layer_id)
+
+        if not structure_id is None:
+            if type(structure_id)==list:
+                search_query = search_query.filter(Structure.id.in_(structure_id))
+            elif type(structure_id)==str:
+                search_query = search_query.filter(Structure.id==structure_id)
+
+        # Box should be minx, miny, maxx, maxy
+        query_box = box(*bbox)
+        return_list = []
+        for idx,i in enumerate(search_query.all()):
+            structure_id = i[0]
+            structure_geom = i[1]
+            if shape(structure_geom).intersects(query_box):
+                return_list.append(structure_id)
 
 
+        print(f'Time for get_structures_in_bbox: {time.time() - start}')
 
 
-
+        return return_list
 
 
 

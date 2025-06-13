@@ -3221,7 +3221,6 @@ class PropertyPlotter(Tool):
         return [map_marker_geojson]
 
 
-
 class HRAViewer(Tool):
     """HRAViewer Tool which enables hierarchy visualization for organs, cell types, biomarkers, and proteins in the Human Reference Atlas
 
@@ -3230,25 +3229,42 @@ class HRAViewer(Tool):
     :param Tool: General class for interactive components that visualize, edit, or perform analyses on data.
     :type Tool: None
     """
-    def __init__(self):
+    def __init__(self,
+                 asct_b_version:int = 7):
         """Constructor method
         """
         
         super().__init__()
-        self.asct_b_version = 7
+        self.asct_b_version = asct_b_version
 
-        self.asct_b_release = pd.read_csv(
-            BytesIO(
-                requests.get(
-                    f'https://humanatlas.io/assets/table-data/asctb_release{self.asct_b_version}.csv'
-                ).content
-            )
+        asct_b_release = requests.get(
+            f'https://humanatlas.io/assets/table-data/asctb_release{self.asct_b_version}.csv'
         )
 
-        self.organ_table_options = [
-            {'label': f'{i} ASCT+B Table', 'value': i, 'disabled': False}
-            for i in self.asct_b_release['Organ'].tolist()
-        ]
+        #TODO: This endpoint may have been moved, check to see what it was updated to
+        if asct_b_release.ok:
+            try:
+                self.asct_b_release = pd.read_csv(
+                    BytesIO(asct_b_release.content)
+                )
+
+                self.organ_table_options = [
+                    {'label': f'{i} ASCT+B Table', 'value': i, 'disabled': False}
+                    for i in self.asct_b_release['Organ'].tolist()
+                ]
+
+                self.show_asct_b_error = False
+            except pd.errors.ParserError:
+                self.asct_b_release = None
+                self.organ_table_options = []
+
+                self.show_asct_b_error = True
+
+        else:
+            self.asct_b_release = None
+            self.organ_table_options = []
+
+            self.show_asct_b_error = True
 
     def __str__(self):
         return "HRA Viewer"
@@ -3281,6 +3297,35 @@ class HRAViewer(Tool):
                         dbc.Col('Select one of the embedded components below or select an organ to view the ASCT+B table for that organ')
                     ),
                     html.Hr(),
+                    html.Div(
+                        id = {'type': 'hra-viewer-error-div','index': 0},
+                        children = [
+                            dbc.Alert(
+                                color = 'danger',
+                                children = [
+                                    dbc.Row([
+                                        dbc.Col([
+                                            f'Error loading ASCT+B Tables (version: {self.asct_b_version})'
+                                        ],md = 8),
+                                        dbc.Col([
+                                            html.A(
+                                                html.I(
+                                                    className = 'fa-solid fa-rotate fa-2x',
+                                                    n_clicks = 0,
+                                                    id = {'type': 'hra-viewer-refresh-icon','index': 0}
+                                                )
+                                            ),
+                                            dbc.Tooltip(
+                                                target = {'type': 'hra-viewer-refresh-icon','index': 0},
+                                                children = 'Click to re-try grabbing ASCT+B tables'
+                                            )],
+                                            md = 4
+                                        )
+                                    ])
+                                ]
+                            )
+                        ] if self.show_asct_b_error else []
+                    ),
                     dbc.Row([
                         dbc.Col([
                             dbc.Label('HRA View Select: ',html_for = {'type': 'hra-viewer-drop','index': 0})
@@ -3322,6 +3367,16 @@ class HRAViewer(Tool):
                 Output({'type': 'hra-viewer-parent','index': ALL},'children')
             ]
         )(self.update_hra_viewer)
+
+        self.blueprint.callback(
+            [
+                Input({'type': 'hra-viewer-refresh-icon','index': ALL},'n_clicks')
+            ],
+            [
+                Output({'type': 'hra-viewer-error-div','index': ALL},'children'),
+                Output({'type': 'hra-viewer-drop','index': ALL},'options')
+            ]
+        )(self.refresh_asctb_tables)
 
     def get_organ_table(self, organ:str):
         """Grabbing ASCT+B Table for a specific organ
@@ -3609,6 +3664,91 @@ class HRAViewer(Tool):
                 viewer_children = dbc.Alert(f'Unable to get ASCT+B Table for {viewer_drop_value}',color='warning')
 
         return [viewer_children]
+
+    def refresh_asctb_tables(self, refresh_clicked):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        asct_b_release = requests.get(
+            f'https://humanatlas.io/assets/table-data/asctb_release{self.asct_b_version}.csv'
+        )
+
+        if asct_b_release.ok:
+            try:
+                self.asct_b_release = pd.read_csv(
+                    BytesIO(asct_b_release.content)
+                )
+
+                self.organ_table_options = [
+                    {'label': f'{i} ASCT+B Table', 'value': i, 'disabled': False}
+                    for i in self.asct_b_release['Organ'].tolist()
+                ]
+
+                return_options = {'label': 'FTU Explorer','value': 'FTU Explorer','disabled': False} + self.organ_table_options
+                return_error_div = dbc.Alert(
+                    'Success',
+                    color = 'success',
+                    dismissable=True
+                )
+            except pd.errors.ParserError:
+                return_options = no_update
+                return_error_div = dbc.Alert(
+                    color = 'danger',
+                    children = [
+                        dbc.Row([
+                            dbc.Col([
+                                f'Error loading ASCT+B Tables (version: {self.asct_b_version})'
+                            ],md = 8),
+                            dbc.Col([
+                                html.A(
+                                    html.I(
+                                        className = 'fa-solid fa-rotate fa-2x',
+                                        n_clicks = 0,
+                                        id = {'type': f'{self.component_prefix}-hra-viewer-refresh-icon','index': 0}
+                                    )
+                                ),
+                                dbc.Tooltip(
+                                    target = {'type': f'{self.component_prefix}-hra-viewer-refresh-icon','index': 0},
+                                    children = 'Click to re-try grabbing ASCT+B tables'
+                                )],
+                                md = 4
+                            )
+                        ])
+                    ]
+                )
+        
+        else:
+
+            return_options = no_update
+            return_error_div = dbc.Alert(
+                color = 'danger',
+                children = [
+                    dbc.Row([
+                        dbc.Col([
+                            f'Error loading ASCT+B Tables (version: {self.asct_b_version})'
+                        ],md = 8),
+                        dbc.Col([
+                            html.A(
+                                html.I(
+                                    className = 'fa-solid fa-rotate fa-2x',
+                                    n_clicks = 0,
+                                    id = {'type': f'{self.component_prefix}-hra-viewer-refresh-icon','index': 0}
+                                )
+                            ),
+                            dbc.Tooltip(
+                                target = {'type': f'{self.component_prefix}-hra-viewer-refresh-icon','index': 0},
+                                children = 'Click to re-try grabbing ASCT+B tables'
+                            )],
+                            md = 4
+                        )
+                    ])
+                ]
+            )
+
+        return [return_error_div],[return_options]
+
+
 
 class DataExtractor(Tool):
     def __init__(self,
@@ -4850,12 +4990,15 @@ class GlobalPropertyPlotter(MultiTool):
 
         property_data = pd.DataFrame()
         for slide in session_data['current']:
-
             # Determine whether this is a DSA slide or local
             if 'api_url' in slide:
                 item_id = slide['metadata_url'].split('/')[-1]
                 if not structure_list is None and not structure_list==[]:
-                    ann_meta = requests.get(slide['annotations_metadata_url']).json()
+                    if not 'current_user' in session_data:
+                        ann_meta = requests.get(slide['annotations_metadata_url']).json()
+                    else:
+                        ann_meta = requests.get(slide['annotations_metadata_url']+f'?token={session_data["current_user"]["token"]}').json()
+
                     structure_names = [a['annotation']['name'] for a in ann_meta]
                     structure_ids = []
                     for s in structure_list:
@@ -4863,15 +5006,18 @@ class GlobalPropertyPlotter(MultiTool):
                             structure_ids.append(ann_meta[structure_names.index(s)]['_id'])
                 else:
                     structure_ids = ["__all__"]
+
+                if len(structure_ids)==0:
+                    structure_ids = ["__all__"]
+                
                 # Setting request string
                 if 'current_user' in session_data:
-                    request_str = f'{slide["api_url"]}annotation/item/{item_id}/plot/data?token={session_data["current_user"]["token"]}'
+                    request_str = f'{slide["api_url"]}/annotation/item/{item_id}/plot/data?token={session_data["current_user"]["token"]}'
                 else:
-                    request_str = f'{slide["api_url"]}annotation/item/{item_id}/plot/data'
+                    request_str = f'{slide["api_url"]}/annotation/item/{item_id}/plot/data'
 
                 sep_str = '&' if '?' in request_str else '?'
                 request_str+=f'{sep_str}keys={",".join(keys_list)}&sources=annotationelement,item,annotation&annotations={json.dumps(structure_ids).strip()}'
-                #print(request_str)
                 req_obj = requests.post(request_str)
                 if req_obj.ok:
                     req_json = req_obj.json()
@@ -4880,20 +5026,29 @@ class GlobalPropertyPlotter(MultiTool):
                     else:
                         new_df = pd.DataFrame(columns = [i['key'] for i in req_json['columns']], data = req_json['data'])
                         property_data = pd.concat([property_data,new_df],axis=0,ignore_index=True)
+                else:
+                    print(request_str)
+                    print(f'DSA req no good')
 
             else:
+
+                if structure_list is None:
+                    structure_list = ['__all__']
+
                 item_id = slide['metadata_url'].split('/')[-2]
                 # Setting LocalTileServer request string
-                request_str = f'{slide["annotations_metadata_url"].replace("metadata","data")}?include_keys={json.dumps(keys_list).strip()}&include_anns={json.dumps(structure_list).strip()}'
-
+                request_str = f'{slide["annotations_metadata_url"].replace("metadata","data")}?include_keys={",".join(keys_list).strip()}&include_anns={",".join(structure_list).strip()}'
                 req_obj = requests.get(request_str)
                 if req_obj.ok:
                     req_json = req_obj.json()
                     if property_data.empty:
-                        property_data = pd.DataFrame(columns = [i['key'] for i in req_json['columns']], data = req_json['data'])
+                        property_data = pd.DataFrame(columns = req_json['columns'], data = req_json['data'])
                     else:
-                        new_df = pd.DataFrame(columns = [i['key'] for i in req_json['columns']], data = req_json['data'])
+                        new_df = pd.DataFrame(columns = req_json['columns'], data = req_json['data'])
                         property_data = pd.concat([property_data,new_df],axis=0,ignore_index=True)
+                else:
+                    print(f'request_str: {request_str}')
+                    print('local request no good')
 
 
         return property_data

@@ -663,6 +663,50 @@ class LocalTileServer(TileServer):
             a_id = a.get('properties',{}).get('_id',None)
             a_name = a.get('properties',{}).get('name',None)
 
+            if 'annotation.name' in property_names:
+                v_info = property_list[property_names.index('annotation.name')]
+                if not v_val in v_info['distinct']:
+                    v_info['distinct'].append(v_val)
+                    v_info['distinctcount'] += 1
+                
+                v_info['count'] +=1
+                property_list[property_names.index('annotation.name')] = v_info
+
+            else:
+                property_names.append('annotation.name')
+                
+                v_info = {
+                    'key': 'annotation.name',
+                    'title': 'Annotation Name',
+                    'count': 1,
+                    'distinct': [a_name],
+                    'distinctcount': 1
+                }
+                property_list.append(v_info)
+
+            if 'annotation.id' in property_names:
+                v_info = property_list[property_names.index('annotation.id')]
+                if not v_val in v_info['distinct']:
+                    v_info['distinct'].append(v_val)
+                    v_info['distinctcount'] += 1
+
+                v_info['count'] += 1
+
+                property_list[property_names.index('annotation.id')] = v_info
+
+            else:
+                property_names.append('annotation.id')
+                
+                v_info = {
+                    'key': 'annotation.id',
+                    'title': 'Annotation ID',
+                    'count': 1,
+                    'distinct': [a_id],
+                    'distinctcount': 1
+                }
+                property_list.append(v_info)
+
+
             for f in features:
                 f_props = f.get('properties')
                 if not f_props is None:
@@ -713,14 +757,14 @@ class LocalTileServer(TileServer):
 
                                 property_list.append(v_info)
                                     
-    
+
         return Response(
             content = json.dumps(property_list),
             media_type='application/json',
             status_code=200
         )
 
-    def get_annotations_property_data(self,id:str,include_keys:Union[str,list,None],include_anns:Union[str,list,None]):
+    def get_annotations_property_data(self,id:str,include_keys:Union[str,None] = None,include_anns:Union[str,None] = None):
         """Getting data from annotations of specified image, attempting to mirror output of https://github.com/girder/large_image/blob/master/girder_annotation/girder_large_image_annotation/utils/__init__.py
 
         :param id: String uuid for locally stored image.
@@ -729,12 +773,15 @@ class LocalTileServer(TileServer):
         :type include_keys: list
         :param include_anns: Which annotations to include (name/id or __all__ or list)
         :type include_anns: Union[str,list,None]
-        :return: 
-        :rtype: _type_
         """
                 
-        image_item = self.get_item(id)
+        image_item = self.get_item(id)[0]
         image_anns = self.get_item_annotations(id)
+
+        include_keys = include_keys.split(',')
+
+        if include_keys is None:
+            include_keys = []
 
         if include_anns is None:
             include_anns = '__all__'
@@ -762,6 +809,7 @@ class LocalTileServer(TileServer):
                 f_props_cols = []
                 if not f_props is None:
                     for k in include_keys:
+                        k = k.replace('data.','')
                         # Need to specify non-feature keys
                         if k in ['annotation.id','annotation.name','item.id','item.name']:
                             if k=='annotation.id':
@@ -771,7 +819,7 @@ class LocalTileServer(TileServer):
                             elif k=='item.id':
                                 f_props_cols.append(str(id))
                             elif k=='item.name':
-                                f_props_cols.append(image_item.name)
+                                f_props_cols.append(image_item.get('name'))
 
                         elif k in bbox_list:
                             # Adding bounding box coordinates
@@ -789,18 +837,21 @@ class LocalTileServer(TileServer):
                                 f_sub_props = f_props.get(k)
 
                             # Converting to float if able
-                            try:
-                                f_sub_props = float(f_sub_props)
+                            if f_sub_props is not None:
+                                try:
+                                    f_sub_props = float(f_sub_props)
+                                    f_props_cols.append(f_sub_props)
+                                except ValueError:
+                                    f_props_cols.append(f_sub_props)
+                            else:
                                 f_props_cols.append(f_sub_props)
-                            except ValueError:
-                                f_props_cols.append(f_sub_props)                                       
                 else:
                     f_props_cols = [None]*len(include_keys)
 
                 data_list.append(f_props_cols)
 
         return Response(
-            content = json.dumps({'data': data_list}),
+            content = json.dumps({'data': data_list, 'columns': include_keys}),
             media_type='application/json',
             status_code=200
         )

@@ -294,7 +294,7 @@ class Visualization:
 
                 # If the page needs to be updated based on changes in anchor-vis-data
                 page_content = self.update_page_layout(
-                    page_components_list = self.components[pathname.replace(self.app_options.get('requests_pathname_prefix',''),'').replace('-',' ')],
+                    page_components_list = self.components[pathname.replace(self.app_options.get('requests_pathname_prefix','/'),'').replace('-',' ')],
                     use_prefix = True,
                     session_data=session_data
                 )
@@ -316,7 +316,7 @@ class Visualization:
                 if 'current_user' in session_data:
                     new_session_data['current_user'] = session_data['current_user']
                 
-                page_pathname = session_content['page'].replace(self.app_options.get('requests_pathname_prefix',''),'').replace('-',' ')
+                page_pathname = session_content['page'].replace(self.app_options.get('requests_pathname_prefix','/'),'').replace('-',' ')
 
                 page_content = self.update_page_layout(
                     page_components_list = self.components[page_pathname],
@@ -345,7 +345,7 @@ class Visualization:
                     return not_found_page, pathname, '', no_update
                 else:
                     page_content = self.update_page_layout(
-                        page_components_list = self.components[self.default_page.replace(self.app_options.get('requests_pathname_prefix',''),'').replace('-',' ')],
+                        page_components_list = self.components[self.default_page.replace(self.app_options.get('requests_pathname_prefix','/'),'').replace('-',' ')],
                         use_prefix = True,
                         session_data=session_data
                     )
@@ -356,7 +356,7 @@ class Visualization:
             new_pathname = list(self.layout_dict.keys())[ctx.triggered_id['index']]
             # If the page needs to be updated based on changes in anchor-vis-data
             page_content = self.update_page_layout(
-                page_components_list = self.components[new_pathname.replace(self.app_options.get('requests_pathname_prefix',''),'').replace('-',' ')],
+                page_components_list = self.components[new_pathname.replace(self.app_options.get('requests_pathname_prefix','/'),'').replace('-',' ')],
                 use_prefix = True,
                 session_data=session_data
             )
@@ -875,7 +875,7 @@ class Visualization:
                 )
 
             page_components.append(row_components)
-            self.layout_dict[self.app_options.get('requests_pathname_prefix','')+page.replace(" ","-")] = page_children
+            self.layout_dict[self.app_options.get('requests_pathname_prefix','/')+page.replace(" ","-")] = page_children
 
         upload_check = self.check_for_uploader(page_components)
         if upload_check:

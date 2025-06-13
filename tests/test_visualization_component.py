@@ -8,7 +8,7 @@ import sys
 sys.path.append('./src/')
 
 from fusion_tools.visualization import Visualization
-from fusion_tools.components import SlideMap, OverlayOptions, PropertyViewer, PropertyPlotter
+from fusion_tools.components import SlideMap, OverlayOptions, PropertyViewer, PropertyPlotter, GlobalPropertyPlotter
 from fusion_tools.handler.dsa_handler import DSAHandler
 
 
@@ -61,7 +61,8 @@ def main():
                 [
                     OverlayOptions(ignore_list = ['_id','_index','barcode']),
                     PropertyViewer(ignore_list = ['_id','_index','barcode']),
-                    PropertyPlotter(ignore_list = ['_id','_index','barcode'])
+                    PropertyPlotter(ignore_list = ['_id','_index','barcode']),
+                    GlobalPropertyPlotter()
                 ],            
             ]
         ],
