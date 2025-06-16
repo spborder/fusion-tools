@@ -53,6 +53,7 @@ def main():
     vis_sess = Visualization(
         local_slides = local_slide_list,
         local_annotations = local_annotations_list,
+        #database = 'sqlite:///fusion_database.db',
         tileservers = dsa_tileservers,
         linkage = 'row',
         components = [

@@ -147,7 +147,7 @@ class SlideMap(MapComponent):
             }
         )
 
-        return await db_item
+        return db_item
 
     def get_image_overlay_popup(self, st, st_idx):
         """Getting popup components for image overlay annotations
@@ -983,11 +983,14 @@ class SlideMap(MapComponent):
         #TODO: Check if slide is cached if using cache
         get_from_cache = False
         if self.cache:
-            cached_item = asyncio.run(self.check_slide_in_cache(
-                image_id = new_slide.get('id')
-            ))
+            print(f'Checking slide in cache: {new_slide.get("id")}')
+            cached_item = asyncio.run(
+                self.check_slide_in_cache(
+                    image_id = new_slide.get('id')
+                )
+            )
             print(type(cached_item))
-
+            print(dir(cached_item))
             print(f'Image present in cache: {len(cached_item)>0}')
             if len(cached_item)>0:
                 get_from_cache = True

@@ -218,9 +218,6 @@ class fusionDB:
             return []
 
         print(f'db search called: {json.dumps(search_kwargs,indent=4)}')
-        Base.metadata.reflect(self.engine)
-        print(Base.metadata.tables.keys())
-
         with self.get_db() as session:
             search_query = session.query(
                 TABLE_NAMES.get(search_kwargs.get('type'))

@@ -256,7 +256,7 @@ class LocalTileServer(TileServer):
     def root(self):
         return {'message': "Oh yeah, now we're cooking"}
 
-    def get_item(self,item_id:str):
+    async def get_item(self,item_id:str):
         """Grabbing item from database
 
         :param item_id: String uuid for local item
@@ -264,7 +264,7 @@ class LocalTileServer(TileServer):
         :return: Item instance
         :rtype: None
         """
-        image_item = self.database.search(
+        image_item = await self.database.search(
             search_kwargs = {
                 'type': 'item',
                 'filters': {
@@ -773,7 +773,7 @@ class LocalTileServer(TileServer):
             status_code=200
         )
 
-    def get_annotations_property_data(self,id:str,include_keys:Union[str,None] = None,include_anns:Union[str,None] = None):
+    async def get_annotations_property_data(self,id:str,include_keys:Union[str,None] = None,include_anns:Union[str,None] = None):
         """Getting data from annotations of specified image, attempting to mirror output of https://github.com/girder/large_image/blob/master/girder_annotation/girder_large_image_annotation/utils/__init__.py
 
         :param id: String uuid for locally stored image.
@@ -784,8 +784,8 @@ class LocalTileServer(TileServer):
         :type include_anns: Union[str,list,None]
         """
                 
-        image_item = self.get_item(id)[0]
-        image_anns = self.get_item_annotations(id)
+        image_item = await self.get_item(id)[0]
+        image_anns = await self.get_item_annotations(id)
 
         include_keys = include_keys.split(',')
 
