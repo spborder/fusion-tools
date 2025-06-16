@@ -17,9 +17,7 @@ import uvicorn
 
 from shapely.geometry import box, shape
 
-from fusion_tools.database import (
-    fusionDB, User, VisSession, Item, Layer, Structure,
-    ImageOverlay, Annotation) 
+from fusion_tools.database.database import fusionDB 
 from fusion_tools.utils.shapes import (
     load_annotations,
     histomics_to_geojson, 
@@ -242,7 +240,18 @@ class LocalTileServer(TileServer):
 
         slide_name = new_image_path.split(os.sep)[-1]
         # Adding information to database
-        self.database.add_slide(new_image_id,slide_name,new_local_item)
+        self.database.add_slide(
+            new_image_id,
+            slide_name,
+            new_local_item.metadata,
+            new_local_item.image_metadata,
+            new_local_item.image_filepath,
+            new_local_item.annotations_metadata,
+            new_local_item.processed_annotations
+        )
+
+        print(f"Item names in database: {self.database.get_names('item')}")
+
 
     def root(self):
         return {'message': "Oh yeah, now we're cooking"}
@@ -292,7 +301,7 @@ class LocalTileServer(TileServer):
 
             return tile_source
         
-    def get_item_annotations(self, item_id:str):
+    async def get_item_annotations(self, item_id:str):
         """Loading annotations from item database
 
         :param item_id: String uuid for local image
@@ -301,7 +310,7 @@ class LocalTileServer(TileServer):
 
         item_annotations = []
 
-        item_layers = self.database.search(
+        item_layers = await self.database.search(
             search_kwargs = {
                 'type': 'layer',
                 'filters': {
@@ -316,7 +325,7 @@ class LocalTileServer(TileServer):
             layer_name = l.get('name')
             layer_id = l.get('id')
 
-            layer_structures = self.database.search(
+            layer_structures = await self.database.search(
                 search_kwargs={
                     'type': 'structure',
                     'filters': {
@@ -347,7 +356,7 @@ class LocalTileServer(TileServer):
                 )
             else:
                 # This could be an ImageOverlay layer
-                image_overlays = self.database.search(
+                image_overlays = await self.database.search(
                     search_kwargs = {
                         'type': 'image_overlay',
                         'filters': {
@@ -648,14 +657,14 @@ class LocalTileServer(TileServer):
             media_type='application/json'
         )
 
-    def get_annotations_property_keys(self,id:str):
+    async def get_annotations_property_keys(self,id:str):
         """Getting the names of properties stored in an image's annotations
 
         :param id: String uuid for locally stored image
         :type id: int
         """
-
-        image_anns = self.get_item_annotations(id)
+        print(f'id from get_annotations_property_keys: {id}')
+        image_anns = await self.get_item_annotations(id)
         property_list = []
         property_names = []
         for a in image_anns:

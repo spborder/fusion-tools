@@ -57,7 +57,9 @@ def main():
         linkage = 'row',
         components = [
             [
-                SlideMap(),
+                SlideMap(
+                    cache = True
+                ),
                 [
                     OverlayOptions(ignore_list = ['_id','_index','barcode']),
                     PropertyViewer(ignore_list = ['_id','_index','barcode']),

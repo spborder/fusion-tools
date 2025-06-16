@@ -90,10 +90,7 @@ class IntraStructure(Base):
     properties = mapped_column(String)
 
 
-def main():
-    
-    # Create an in-memory-only SQLite database
-    # URL string indicates that database is sqlite, using the Python DBAPI, and DB is located in memory
+class dbObject:
     engine = create_engine(
         'sqlite+pysqlite:///:memory:',
         echo=False,
@@ -103,6 +100,12 @@ def main():
     print(engine)
     Base.metadata.create_all(engine)
     Session = sessionmaker(bind = engine)
+
+
+def main():
+    
+    # Create an in-memory-only SQLite database
+    # URL string indicates that database is sqlite, using the Python DBAPI, and DB is located in memory
 
     example_anns_path = 'C:\\Users\\samuelborder\\Desktop\\HIVE_Stuff\\FUSION\\Test Upload\\FFPE Niche Mappings\\Full Annotations\\'
     
@@ -117,7 +120,7 @@ def main():
 
     """
     # Defining the session object 
-    ex_session_obj = Session()    
+    #ex_session_obj = Session()    
     # Defining example user
     user_id = uuid.uuid4().hex[:24]
     ex_user = User(
@@ -125,9 +128,12 @@ def main():
     )
 
     # Adding to session
-    ex_session_obj.add(
-        ex_user
-    )
+    with dbObject.Session() as session:
+        session.add(
+            ex_user
+        )
+        session.commit()
+
 
     # Defining example visualization session
     ex_vis_id = uuid.uuid4().hex[:24]
@@ -137,9 +143,11 @@ def main():
     )
 
     # Adding to session
-    ex_session_obj.add(
-        ex_vis_sess
-    )
+    with dbObject.Session() as session:
+        session.add(
+            ex_vis_sess
+        )
+        session.commit()
 
     for ex_idx,ex in tqdm(enumerate(os.listdir(example_anns_path)),total = len(os.listdir(example_anns_path))):
 
@@ -165,9 +173,11 @@ def main():
         )
 
         # Adding to session
-        ex_session_obj.add(
-            ex_item
-        )
+        with dbObject.Session() as session:
+            session.add(
+                ex_item
+            )
+            session.commit()
 
         # Defining example layers
         for a in example_anns:
@@ -178,9 +188,11 @@ def main():
                 item = ex_item_id
             )
 
-            ex_session_obj.add(
-                ex_layer
-            )
+            with dbObject.Session() as session:
+                session.add(
+                    ex_layer
+                )
+                session.commit()
 
             structure_objs = []
             for f in a['features']:
@@ -194,27 +206,30 @@ def main():
                 )
                 structure_objs.append(ex_structure)
 
-            ex_session_obj.add_all(structure_objs)
+            with dbObject.Session() as session:
 
-        ex_session_obj.commit()
+                session.add_all(structure_objs)
+                session.commit()
 
     # Executing query of structures with specific property
     # By default, JSON-type columns are parsed using json.loads, nested keys are accessed sequentially in a list
-    result = ex_session_obj.execute(
-        select(func.avg(Structure.properties["Main_Cell_Types","POD"].as_float()))
-        .join(Layer)
-        .where(Layer.name.in_(['Glomeruli','Sclerotic Glomeruli']))
-        .where(Structure.properties["Main_Cell_Types","POD"].as_float() > 0.5)
-    )
-    for a in result.all():
-        print(a)
+    with dbObject.Session() as session:
+        result = session.execute(
+            select(func.avg(Structure.properties["Main_Cell_Types","POD"].as_float()))
+            .join(Layer)
+            .where(Layer.name.in_(['Glomeruli','Sclerotic Glomeruli']))
+            .where(Structure.properties["Main_Cell_Types","POD"].as_float() > 0.5)
+        )
+        for a in result.all():
+            print(a)
 
-    result = ex_session_obj.execute(
-        select(Item.name)
-    )
-    item_names = []
-    for a in result.all():
-        item_names.append(a[0])
+    with dbObject.Session() as session:
+        result = session.execute(
+            select(Item.name)
+        )
+        item_names = []
+        for a in result.all():
+            item_names.append(a[0])
 
     # Use a .join to access properties from different tables
     
@@ -222,28 +237,29 @@ def main():
         'layer.name': 'Glomeruli'
     }
     for idx,i in enumerate(item_names):
-        count_query = ex_session_obj.query(Structure)
+        with dbObject.Session() as session:
+            count_query = session.query(Structure)
 
-        search_dict['item.name'] = i
-        if any(['layer' in i for i in list(search_dict.keys())]):
-            count_query = count_query.join(Layer)
+            search_dict['item.name'] = i
+            if any(['layer' in i for i in list(search_dict.keys())]):
+                count_query = count_query.join(Layer)
 
-        if any(['item' in i for i in list(search_dict.keys())]):
-            count_query = count_query.join(Item)
+            if any(['item' in i for i in list(search_dict.keys())]):
+                count_query = count_query.join(Item)
 
-        for k,v in search_dict.items():
-            if 'item' in k:
-                count_query = count_query.filter(getattr(Item,k.split('.')[-1])==v)
-            elif 'layer' in k:
-                count_query = count_query.filter(
-                    getattr(Layer,k.split('.')[-1])==v
-                )
-        
-        count = 0
-        for a in count_query.all():
-            count+=1
+            for k,v in search_dict.items():
+                if 'item' in k:
+                    count_query = count_query.filter(getattr(Item,k.split('.')[-1])==v)
+                elif 'layer' in k:
+                    count_query = count_query.filter(
+                        getattr(Layer,k.split('.')[-1])==v
+                    )
+            
+            count = 0
+            for a in count_query.all():
+                count+=1
 
-        print(f'Item: {i} has: {count} Glomeruli')
+            print(f'Item: {i} has: {count} Glomeruli')
 
 
 

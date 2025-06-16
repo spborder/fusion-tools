@@ -10,179 +10,16 @@ import time
 from sqlalchemy import (
     not_, func, select, create_engine,
     Column, String, Boolean,ForeignKey, JSON)
-from sqlalchemy.orm import declarative_base, sessionmaker,mapped_column
+from sqlalchemy.orm import declarative_base, sessionmaker, mapped_column, Session, scoped_session
+from sqlalchemy.pool import NullPool
 
+from typing import Generator
+from contextlib import contextmanager
 from shapely.geometry import box, shape
 
 from typing_extensions import Union
 
-Base = declarative_base()
-
-class User(Base):
-    __tablename__ = 'user'
-    id = mapped_column(String(24), primary_key = True)
-    login = Column(String)
-
-    firstName = Column(String)
-    lastName = Column(String)
-    email = Column(String)
-
-    admin = Column(Boolean)
-
-    def to_dict(self):
-        user_dict = {
-            'id': self.id,
-            'login': self.login,
-            'firstName': self.firstName,
-            'lastName': self.lastName,
-            'email': self.email,
-            'admin': self.admin
-        }
-
-        return user_dict
-    
-class VisSession(Base):
-    __tablename__='visSession'
-    id = mapped_column(String(24),primary_key = True)
-    # Can multiple users access the same vis session?
-    user = mapped_column(ForeignKey("user.id"))
-
-    # Visualization session data stored as JSON
-    data = Column(JSON)
-
-    def to_dict(self):
-        vis_dict = {
-            'id': self.id,
-            'user': self.user
-        }
-
-        return vis_dict
-
-class Item(Base):
-    __tablename__='item'
-    id = mapped_column(String(24),primary_key = True)
-    name = Column(String)
-    meta = Column(JSON)
-    image_meta = Column(JSON)
-    ann_meta = Column(JSON)
-
-    filepath = Column(String)
-
-    session = mapped_column(ForeignKey("visSession.id"))
-
-    def to_dict(self):
-        item_dict = {
-            'id': self.id,
-            'name': self.name,
-            'meta': self.meta,
-            'image_meta': self.image_meta,
-            'ann_meta': self.ann_meta,
-            'filepath': self.filepath,
-            'session': self.session
-        }
-
-        return item_dict
-
-class Layer(Base):
-    __tablename__ = 'layer'
-    id = mapped_column(String(24),primary_key = True)
-    name = Column(String)
-    item = mapped_column(ForeignKey("item.id"))
-
-    def to_dict(self):
-        layer_dict = {
-            'id': self.id,
-            'name': self.name,
-            'item': self.item
-        }
-
-        return layer_dict
-
-class Structure(Base):
-    __tablename__ = 'structure'
-    id = mapped_column(String(24),primary_key = True)
-    geom = Column(JSON)
-
-    properties = Column(JSON)
-
-    layer = mapped_column(ForeignKey('layer.id'))
-    item = mapped_column(ForeignKey('item.id'))
-
-    def to_dict(self):
-        structure_dict = {
-            'id': self.id,
-            'geom': self.geom,
-            'properties': self.properties,
-            'layer': self.layer
-        }
-
-        return structure_dict
-    
-    def to_geojson(self):
-        geojson_dict = {
-            'type': 'Feature',
-            'geometry': self.geom,
-            'properties': self.properties
-        }
-
-        return geojson_dict
-
-class ImageOverlay(Base):
-    __tablename__ = 'image_overlay'
-    id = mapped_column(String(24),primary_key = True)
-    bounds = Column(JSON)
-
-    properties = Column(JSON)
-    image_src = Column(String)
-
-    layer = mapped_column(ForeignKey('layer.id'))
-
-    def to_dict(self):
-        img_overlay_dict = {
-            'id': self.id,
-            'bounds': self.bounds,
-            'properties': self.properties,
-            'image_src': self.image_src,
-            'layer': self.layer
-        }
-
-        return img_overlay_dict
-    
-    def to_geojson(self):
-        img_overlay_geojson = {
-            'type': 'Feature',
-            'geometry': list(box(*self.bounds).exterior.coords),
-            'properties': self.properties
-        }
-
-        return img_overlay_geojson
-
-class Annotation(Base):
-    __tablename__ = 'annotation'
-    id = Column(String(24),primary_key = True)
-
-    user = mapped_column(ForeignKey('user.id'))
-    session = mapped_column(ForeignKey('visSession.id'))
-    item = mapped_column(ForeignKey('item.id'))
-    layer = mapped_column(ForeignKey('layer.id'))
-    structure = mapped_column(ForeignKey('structure.id'))
-
-    classifications = Column(JSON)
-    segmentations = Column(JSON)
-
-    def to_dict(self):
-        ann_dict = {
-            'id': self.id,
-            'user': self.user,
-            'session': self.session,
-            'item': self.item,
-            'layer': self.layer,
-            'structure': self.structure,
-            'classifications': self.classifications,
-            'segmentations': self.segmentations
-        }
-
-        return ann_dict
+from .models import Base, User, VisSession, Item, Layer, Structure, ImageOverlay, Annotation
 
 
 TABLE_NAMES = {
@@ -195,65 +32,81 @@ TABLE_NAMES = {
     'annotation': Annotation
 }
 
+
 class fusionDB:
     def __init__(self,
-                 db_url: str,
-                 echo: bool = False):
+                 db_url:str,
+                 echo:bool = False):
         
         self.engine = create_engine(
             db_url,
             connect_args={
                 "check_same_thread": False
             },
-            echo = echo
+            echo = echo,
+            pool_pre_ping = True,
         )
 
-        Base.metadata.create_all(self.engine)
-        Session = sessionmaker(bind=self.engine)
+        Base.metadata.create_all(bind = self.engine)
+        self.SessionLocal = scoped_session(sessionmaker(bind=self.engine))
 
-        self.session = Session()
-        self.tables = Base.metadata.tables.keys()
+    @contextmanager
+    def get_db(self) -> Generator[Session, None, None]:
+        # Generator type has types, yield, send, return (in this case it yields a Session, sends None and returns None)
+        db: Session = self.SessionLocal()
+        try:
+            yield db
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
 
     def get_uuid(self):
-
         return uuid.uuid4().hex[:24]
     
-    def add(self, obj):
-        
-        self.session.add(obj)
-        self.session.commit()
-        self.session.refresh(obj)
+    def add(self, obj, session = None):
+        # Using sessionmaker in a context manager 
+        # (closes automatically and rolls back in the event of a database error)
+        if session is None:
+            with self.get_db() as session:
+                session.add(obj)
+                session.commit()
+        else:
+            session.add(obj)
 
         return True
 
     def get_create(self, table_name:str, inst_id:Union[str,None] = None, kwargs:Union[dict,None] = None):
         
-        if table_name in TABLE_NAMES:
-            if not inst_id is None:
-                get_create_result = self.session.query(
-                    TABLE_NAMES.get(table_name)
-                ).filter_by(id = inst_id).first()
+        with self.get_db() as session:
+            if table_name in TABLE_NAMES:
+                if not inst_id is None:
+                    get_create_result = session.query(
+                        TABLE_NAMES.get(table_name)
+                    ).filter_by(id = inst_id).first()
 
-                if not get_create_result:
+                    if not get_create_result:
+                        get_create_result = TABLE_NAMES.get(table_name)(
+                            id = inst_id,
+                            **kwargs
+                        )
+
+                        self.add(get_create_result, session)
+                
+                else:
+                    new_id = self.get_uuid()
                     get_create_result = TABLE_NAMES.get(table_name)(
-                        id = inst_id,
+                        id = new_id,
                         **kwargs
                     )
 
-                    self.add(get_create_result)
-            
+                    self.add(get_create_result, session)
+
+                return get_create_result
             else:
-                new_id = self.get_uuid()
-                get_create_result = TABLE_NAMES.get(table_name)(
-                    id = new_id,
-                    **kwargs
-                )
-
-                self.add(get_create_result)
-
-            return get_create_result
-        else:
-            return None
+                return None
 
     def count(self, table_name:str):
         """Get the count of unique instances within this specific table
@@ -263,15 +116,17 @@ class fusionDB:
         :return: Count of instances
         :rtype: int
         """
-        #TODO: Add some filtering capability here
-        if table_name in TABLE_NAMES:
-            count_result = self.session.execute(
-                select(func.count(func.distinct(TABLE_NAMES.get(table_name).id)))
-            ).one()
 
-            return count_result[0]
-        else:
-            return 0
+        #TODO: Add some filtering capability here
+        with self.get_db() as session:
+            if table_name in TABLE_NAMES:
+                count_result = session.execute(
+                    select(func.count(func.distinct(TABLE_NAMES.get(table_name).id)))
+                ).one()
+
+                return count_result[0]
+            else:
+                return 0
 
     def search_op(self, search_query, table_name:str, column:str, op:dict):
         """Method for applying different types of filters to database queries
@@ -344,7 +199,7 @@ class fusionDB:
         else:
             return search_query
 
-    def search(self, search_kwargs:dict, size:Union[int,None] = None, offset = 0, order = None):
+    async def search(self, search_kwargs:dict, size:Union[int,None] = None, offset = 0, order = None):
         """Search DB
 
         :param search_kwargs: Dictionary containing "type" (table name) and "filters"
@@ -358,8 +213,16 @@ class fusionDB:
         :return: Results of DB search
         :rtype: list
         """
-        if search_kwargs.get('type','') in TABLE_NAMES:
-            search_query = self.session.query(
+
+        if not search_kwargs.get('type','') in TABLE_NAMES:
+            return []
+
+        print(f'db search called: {json.dumps(search_kwargs,indent=4)}')
+        Base.metadata.reflect(self.engine)
+        print(Base.metadata.tables.keys())
+
+        with self.get_db() as session:
+            search_query = session.query(
                 TABLE_NAMES.get(search_kwargs.get('type'))
             )
             
@@ -381,7 +244,6 @@ class fusionDB:
                             elif type(v)==dict:
                                 search_query = self.search_op(search_query,t,k,v)
 
-
             return_list = []
             for idx,i in enumerate(search_query.all()):
                 if not size is None:
@@ -392,25 +254,22 @@ class fusionDB:
                     return_list.append(i.to_dict())
             
             return return_list
-
-        else:
-            return []
-        
-    def add_slide(self, slide_id:str, slide_name:str, slide):
+      
+    def add_slide(self, slide_id:str, slide_name:str, metadata: dict, image_metadata: dict, image_filepath:Union[str,None], annotations_metadata:dict,annotations:Union[list,dict,None]):
 
         new_item = self.get_create(
             table_name = 'item',
             inst_id = slide_id,
             kwargs = {
                 'name': slide_name,
-                'meta': slide.metadata,
-                'image_meta': slide.image_metadata,
-                'ann_meta': slide.annotations_metadata,
-                'filepath': slide.image_filepath
+                'meta': metadata,
+                'image_meta': image_metadata,
+                'ann_meta': annotations_metadata,
+                'filepath': image_filepath
             }
         )
 
-        for ann_idx, ann in enumerate(slide.processed_annotations):
+        for ann_idx, ann in enumerate(annotations):
             # Adding layer
             new_layer = self.get_create(
                 table_name = 'layer',
@@ -465,7 +324,7 @@ class fusionDB:
 
         #TODO: Adding items in "current"
         for c in vis_session.get('current',[]):
-            print(json.dumps(c,indent=4))
+            print(f'add_vis_session current slide: {json.dumps(c,indent=4)}')
             item_kwargs = {
                 'name': c.get('name'),
                 'meta': c.get('meta'),
@@ -487,78 +346,170 @@ class fusionDB:
     def get_names(self, table_name:str, size:Union[int,None]=None, offset = 0):
 
         return_names = []
-        if table_name in TABLE_NAMES:
-            name_query = self.session.execute(
-                select(getattr(TABLE_NAMES.get(table_name),'name'))
+        with self.get_db() as session:
+
+            if table_name in TABLE_NAMES:
+                name_query = session.execute(
+                    select(getattr(TABLE_NAMES.get(table_name),'name'))
+                )
+
+                for a_idx,a in enumerate(name_query.all()):
+                    if not size is None:
+                        if len(return_names)==size:
+                            break
+                    if a_idx>=offset:
+                        return_names.append(a[0])
+
+            return return_names
+
+    def get_item_annotations(self, item_id:str, user_id:Union[str,None] = None, vis_session_id:Union[str,None] = None)->list:
+        """Loading annotations from item database
+
+        :param item_id: String uuid for an item
+        :type item_id: str
+        :param user_id: String uuid for a user, defaults to None
+        :type user_id: Union[str,None], optional
+        :param vis_session_id: String uuid for a visualization session, defaults to None
+        :type vis_session_id: Union[str,None], optional
+        :return: List of GeoJSON-formatted FeatureCollections (and image overlays if present)
+        :rtype: list
+        """
+        print(f'get_item_annotations called: {item_id}')
+
+        item_annotations = []
+
+        item_layers = self.search(
+            search_kwargs = {
+                'type': 'layer',
+                'filters': {
+                    'item': {
+                        'id': item_id
+                    }
+                }
+            }
+        )
+
+        for l in item_layers:
+            layer_name = l.get('name')
+            layer_id = l.get('id')
+
+            layer_structures = self.search(
+                search_kwargs={
+                    'type': 'structure',
+                    'filters': {
+                        'layer': {
+                            'id': layer_id
+                        }
+                    }
+                }
             )
 
-            for a_idx,a in enumerate(name_query.all()):
-                if not size is None:
-                    if len(return_names)==size:
-                        break
-                if a_idx>=offset:
-                    return_names.append(a[0])
+            if len(layer_structures)>0:
+                item_annotations.append(
+                    {
+                        'type': 'FeatureCollection',
+                        'properties': {
+                            'name': layer_name,
+                            '_id': layer_id
+                        },
+                        'features': [
+                            {
+                                'type': 'Feature',
+                                'geometry': s.get('geom'),
+                                'properties': s.get('properties')
+                            }
+                            for s in layer_structures
+                        ]
+                    }
+                )
+            else:
+                # This could be an ImageOverlay layer
+                image_overlays = self.search(
+                    search_kwargs = {
+                        'type': 'image_overlay',
+                        'filters': {
+                            'layer': {
+                                'id': layer_id
+                            }
+                        }
+                    }
+                )
 
-        return return_names
-            
+                if len(image_overlays)>0:
+                    item_annotations.extend(
+                        [
+                            i.to_dict() for i in image_overlays
+                        ]
+                    )
+
+        return item_annotations
+
     def get_structure_property_keys(self, item_id:Union[str,list,None] = None, layer_id:Union[str,list,None] = None):
         #TODO: Make a more efficient way to get names of properties for each structure
         pass
 
     def get_structure_property_data(self, item_id:Union[str,list,None] = None, layer_id:Union[str,list,None] = None, structure_id:Union[str,list,None] = None, property_list:Union[str,list] = None):
-        
-        #TODO: Make a more efficient way to get property values for each structure
+        """Extracting one or multiple properties from structures given id filters.
 
-        #print(f'item_id: {item_id}')
-        #print(f'layer_id: {layer_id}')
-        #print(f'structure_id: {structure_id}')
-        #print(f'property_list: {property_list}')
+        :param item_id: String uuid for one or multiple image items, defaults to None
+        :type item_id: Union[str,list,None], optional
+        :param layer_id: String uuid for one or multiple layers, defaults to None
+        :type layer_id: Union[str,list,None], optional
+        :param structure_id: String uuid for one or multiple structures, defaults to None
+        :type structure_id: Union[str,list,None], optional
+        :param property_list: List of one or more properties to extract from structures, defaults to None
+        :type property_list: Union[str,list], optional
+        :return: Records-formatted list of dictionaries with each property, along with structure id, bounding box (minx, miny, maxx, maxy), layer id, layer name, item id, and item name
+        :rtype: list
+        """
+
         if property_list is None:
             return []
         elif type(property_list)==str:
             property_list = [property_list]
 
-        search_query = self.session.query(
-            *[Structure.properties[p.split(' --> ')] for p in property_list],
-            Structure.id,
-            Structure.geom,
-            Layer.id,
-            Layer.name,
-            Item.id,
-            Item.name
-        ).filter(Structure.layer == Layer.id).filter(Layer.item==Item.id)
+        with self.get_db() as session:
+            search_query = session.query(
+                *[Structure.properties[p.split(' --> ')] for p in property_list],
+                Structure.id,
+                Structure.geom,
+                Layer.id,
+                Layer.name,
+                Item.id,
+                Item.name
+            ).filter(Structure.layer == Layer.id).filter(Layer.item==Item.id)
 
-        if not item_id is None:
-            if type(item_id)==list:
-                search_query = search_query.filter(Item.id.in_(item_id))
-            elif type(item_id)==str:
-                search_query = search_query.filter(Item.id == item_id)
+            if not item_id is None:
+                if type(item_id)==list:
+                    search_query = search_query.filter(Item.id.in_(item_id))
+                elif type(item_id)==str:
+                    search_query = search_query.filter(Item.id == item_id)
 
-        if not layer_id is None:
-            if type(layer_id)==list:
-                search_query = search_query.filter(Layer.id.in_(layer_id))
-            elif type(layer_id)==str:
-                search_query = search_query.filter(Layer.id==layer_id)
+            if not layer_id is None:
+                if type(layer_id)==list:
+                    search_query = search_query.filter(Layer.id.in_(layer_id))
+                elif type(layer_id)==str:
+                    search_query = search_query.filter(Layer.id==layer_id)
 
-        if not structure_id is None:
-            if type(structure_id)==list:
-                search_query = search_query.filter(Structure.id.in_(structure_id))
-            elif type(structure_id)==str:
-                search_query = search_query.filter(Structure.id==structure_id)
-        
-        returned_props = property_list + ['structure.id','geometry','layer.id','layer.name','item.id','item.name']
-        return_list = []
-        for idx,i in enumerate(search_query.all()):
-            i_dict = {'_index': idx}
-            for prop,prop_name in zip(i,returned_props):
-                if not prop_name=='geometry':
-                    i_dict[prop_name] = prop
-                else:
-                    i_dict['bbox'] = list(shape(prop).bounds)
+            if not structure_id is None:
+                if type(structure_id)==list:
+                    search_query = search_query.filter(Structure.id.in_(structure_id))
+                elif type(structure_id)==str:
+                    search_query = search_query.filter(Structure.id==structure_id)
+            
+            returned_props = property_list + ['structure.id','geometry','layer.id','layer.name','item.id','item.name']
+            return_list = []
+            for idx,i in enumerate(search_query.all()):
+                i_dict = {'_index': idx}
+                for prop,prop_name in zip(i,returned_props):
+                    if not prop_name=='geometry':
+                        i_dict[prop_name] = prop
+                    else:
+                        i_dict['bbox'] = list(shape(prop).bounds)
 
-            return_list.append(i_dict)
+                return_list.append(i_dict)
 
-        return return_list
+            return return_list
 
     def get_structures_in_bbox(self, bbox:list, item_id:Union[str,None] = None, layer_id:Union[str,list,None] = None, structure_id:Union[str,list,None] = None):
         """Querying database for structures that intersect with a 
@@ -576,43 +527,42 @@ class fusionDB:
         """
         
         #TODO: Test the performance of this using shape().intersects() vs. checking min/max ranges for bounding boxes
-        start = time.time()
-        search_query = self.session.query(
-            Structure.id,
-            Structure.geom
-        )
+        with self.get_db() as session:
+            start = time.time()
+            search_query = session.query(
+                Structure.id,
+                Structure.geom
+            )
 
-        if not item_id is None:
-            if type(item_id)==str:
-                search_query = search_query.filter(Item.id == item_id)
+            if not item_id is None:
+                if type(item_id)==str:
+                    search_query = search_query.filter(Item.id == item_id)
 
-        if not layer_id is None:
-            if type(layer_id)==list:
-                search_query = search_query.filter(Layer.id.in_(layer_id))
-            elif type(layer_id)==str:
-                search_query = search_query.filter(Layer.id==layer_id)
+            if not layer_id is None:
+                if type(layer_id)==list:
+                    search_query = search_query.filter(Layer.id.in_(layer_id))
+                elif type(layer_id)==str:
+                    search_query = search_query.filter(Layer.id==layer_id)
 
-        if not structure_id is None:
-            if type(structure_id)==list:
-                search_query = search_query.filter(Structure.id.in_(structure_id))
-            elif type(structure_id)==str:
-                search_query = search_query.filter(Structure.id==structure_id)
+            if not structure_id is None:
+                if type(structure_id)==list:
+                    search_query = search_query.filter(Structure.id.in_(structure_id))
+                elif type(structure_id)==str:
+                    search_query = search_query.filter(Structure.id==structure_id)
 
-        # Box should be minx, miny, maxx, maxy
-        query_box = box(*bbox)
-        return_list = []
-        for idx,i in enumerate(search_query.all()):
-            structure_id = i[0]
-            structure_geom = i[1]
-            if shape(structure_geom).intersects(query_box):
-                return_list.append(structure_id)
-
-
-        print(f'Time for get_structures_in_bbox: {time.time() - start}')
+            # Box should be minx, miny, maxx, maxy
+            query_box = box(*bbox)
+            return_list = []
+            for idx,i in enumerate(search_query.all()):
+                structure_id = i[0]
+                structure_geom = i[1]
+                if shape(structure_geom).intersects(query_box):
+                    return_list.append(structure_id)
 
 
-        return return_list
+            print(f'Time for get_structures_in_bbox: {time.time() - start}')
 
 
+            return return_list
 
 

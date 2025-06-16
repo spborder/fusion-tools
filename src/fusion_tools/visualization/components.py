@@ -16,7 +16,7 @@ from dash_extensions.enrich import DashProxy, html, MultiplexerTransform, Prefix
 from typing_extensions import Union
 from fusion_tools.tileserver import TileServer, DSATileServer, LocalTileServer, CustomTileServer
 from fusion_tools.handler.dataset_uploader import DSAUploadHandler
-from fusion_tools.database import fusionDB
+from fusion_tools.database.database import fusionDB
 import threading
 
 import uvicorn
@@ -484,8 +484,6 @@ class Visualization:
                         'annotations_region_url': t.annotations_regions_url if hasattr(t,'annotations_regions_url') else None,
                         'annotations_geojson_url': t.annotations_geojson_url if hasattr(t,'annotations_geojson_url') else None
                     })
-
-
 
         #TODO: Add initial session to database and set as default session?
 
