@@ -218,9 +218,8 @@ class fusionDB:
         if not search_kwargs.get('type','') in TABLE_NAMES:
             return []
 
-        print(f'db search called: {json.dumps(search_kwargs,indent=4)}')
+        #print(f'db search called: {json.dumps(search_kwargs,indent=4)}')
         with self.get_db() as session:
-            print(session.get_bind())
             search_query = session.query(
                 TABLE_NAMES.get(search_kwargs.get('type'))
             )
@@ -252,7 +251,7 @@ class fusionDB:
                 if idx>=offset:
                     return_list.append(i.to_dict())
 
-            print(f'n returned from db_search: {len(return_list)}')
+            #print(f'n returned from db_search: {len(return_list)}')
             
             return return_list
       
@@ -363,7 +362,7 @@ class fusionDB:
 
             return return_names
 
-    def get_item_annotations(self, item_id:str, user_id:Union[str,None] = None, vis_session_id:Union[str,None] = None)->list:
+    async def get_item_annotations(self, item_id:str, user_id:Union[str,None] = None, vis_session_id:Union[str,None] = None)->list:
         """Loading annotations from item database
 
         :param item_id: String uuid for an item
@@ -375,11 +374,10 @@ class fusionDB:
         :return: List of GeoJSON-formatted FeatureCollections (and image overlays if present)
         :rtype: list
         """
-        print(f'get_item_annotations called: {item_id}')
 
         item_annotations = []
 
-        item_layers = self.search(
+        item_layers = await self.search(
             search_kwargs = {
                 'type': 'layer',
                 'filters': {
@@ -394,7 +392,7 @@ class fusionDB:
             layer_name = l.get('name')
             layer_id = l.get('id')
 
-            layer_structures = self.search(
+            layer_structures = await self.search(
                 search_kwargs={
                     'type': 'structure',
                     'filters': {
@@ -425,7 +423,7 @@ class fusionDB:
                 )
             else:
                 # This could be an ImageOverlay layer
-                image_overlays = self.search(
+                image_overlays = await self.search(
                     search_kwargs = {
                         'type': 'image_overlay',
                         'filters': {
@@ -468,6 +466,9 @@ class fusionDB:
             return []
         elif type(property_list)==str:
             property_list = [property_list]
+
+        # Ensuring uniqueness of property names
+        property_list = list(set(property_list))
 
         with self.get_db() as session:
             search_query = session.query(

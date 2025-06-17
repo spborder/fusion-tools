@@ -56,7 +56,9 @@ def get_layout(args):
             ],
             "Visualization": [
                 [
-                    HybridSlideMap(),
+                    HybridSlideMap(
+                        cache = True
+                    ),
                     [
                         OverlayOptions(),
                         ChannelMixer(),

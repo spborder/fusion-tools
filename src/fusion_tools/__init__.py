@@ -22,6 +22,7 @@ def asyncio_db_loop(method):
                 raise
 
         result = method(self, *args, **kwargs)
+        return result
 
     return wrapper
 

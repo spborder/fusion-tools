@@ -417,7 +417,8 @@ class Visualization:
                         'metadata_url': self.local_tile_server.get_metadata_url(local_slide_id),
                         'annotations_url': self.local_tile_server.get_annotations_url(local_slide_id),
                         'annotations_metadata_url': self.local_tile_server.get_annotations_metadata_url(local_slide_id),
-                        'annotations_region_url': self.local_tile_server.get_annotations_url(local_slide_id)
+                        'annotations_region_url': self.local_tile_server.get_annotations_url(local_slide_id),
+                        'cached': True
                     }
 
                 slide_store['current'].append(slide_dict)
@@ -443,7 +444,8 @@ class Visualization:
                             'metadata_url': t.get_metadata_url(j.id),
                             'annotations_url': t.get_annotations_url(j.id),
                             'annotations_metadata_url': t.get_annotations_metadata_url(j.id),
-                            'annotations_region_url': t.get_annotations_url(j.id)
+                            'annotations_region_url': t.get_annotations_url(j.id),
+                            'cached': True
                         }
                         for j_idx,j in enumerate(t.get_item_names_ids())
                     ])
@@ -457,7 +459,8 @@ class Visualization:
                             'metadata_url': t.get_metadata_url(j.id),
                             'annotations_url': t.get_annotations_url(j.id),
                             'annotations_metadata_url': t.get_annotations_metadata_url(j.id),
-                            'annotations_region_url': t.get_annotations_url(j.id)
+                            'annotations_region_url': t.get_annotations_url(j.id),
+                            'cached': True
                         }
                         for j_idx,j in enumerate(t.get_item_names_ids())
                     ])

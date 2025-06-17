@@ -2026,12 +2026,20 @@ class PropertyPlotter(Tool):
         self.blueprint.layout = layout
 
     def get_data_from_database(self, slide_info:dict, property_list:list,structure_id:Union[list,str,None] = None):
+        """Grabbing data from the database for selected list of properties
 
+        :param slide_info: Slide information, contains "id"
+        :type slide_info: dict
+        :param property_list: List of properties to extract (plotted properties + label)
+        :type property_list: list
+        :param structure_id: If specific structures are needed, provide a list here., defaults to None
+        :type structure_id: Union[list,str,None], optional
+        """
         property_data_list = self.database.get_structure_property_data(
             item_id = slide_info.get('id'),
             structure_id = structure_id,
             layer_id = None,
-            property_list = property_list
+            property_list = [p for p in property_list if not p is None]
         )
 
         return property_data_list   
@@ -4979,6 +4987,15 @@ class GlobalPropertyPlotter(MultiTool):
     
     def get_plottable_data(self, session_data, keys_list, label_keys, structure_list):
 
+        #TODO: Enable database integration here 
+        # Main changes:
+        #   1) Checking cache for items in "current"
+        #   2) Updating "annotation.name" to "layer.name" in cached/local items
+        #   3) Updating "bbox" keys to "bbox.min_x", "bbox.min_y", "bbox.max_x", "bbox.max_y" instead of x0, y0, x1, y1
+
+        # self.database.get_structure_property_data automatically returns 
+        # [*propery_list: numeric or str for each property, structure.id: str, bbox: list, layer.id: str, layer.name: str, item.id: str, item.name: str]
+
 
         # Required keys for backwards identification
         req_keys = ['item.name','annotation.name','bbox.x0','bbox.y0','bbox.x1','bbox.y1']
@@ -4988,14 +5005,22 @@ class GlobalPropertyPlotter(MultiTool):
 
         property_data = pd.DataFrame()
         for slide in session_data['current']:
+            if slide.get('cached'):
+                #TODO: Grab data from the local fusionDB instance
+                pass
+
             # Determine whether this is a DSA slide or local
             if 'api_url' in slide:
                 item_id = slide['metadata_url'].split('/')[-1]
                 if not structure_list is None and not structure_list==[]:
                     if not 'current_user' in session_data:
-                        ann_meta = requests.get(slide['annotations_metadata_url']).json()
+                        ann_meta = requests.get(
+                            slide['annotations_metadata_url']
+                        ).json()
                     else:
-                        ann_meta = requests.get(slide['annotations_metadata_url']+f'?token={session_data["current_user"]["token"]}').json()
+                        ann_meta = requests.get(
+                            slide['annotations_metadata_url']+f'?token={session_data["current_user"]["token"]}'
+                        ).json()
 
                     structure_names = [a['annotation']['name'] for a in ann_meta]
                     structure_ids = []

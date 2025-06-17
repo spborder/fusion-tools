@@ -254,7 +254,6 @@ class LocalTileServer(TileServer):
 
         print(f"Item names in database: {self.database.get_names('item')}")
 
-
     def root(self):
         return {'message': "Oh yeah, now we're cooking"}
 
@@ -290,10 +289,10 @@ class LocalTileServer(TileServer):
         :rtype: None
         """
         image_item = await asyncio.gather(self.get_item(item_id))
-        if len(image_item)==0:
+        if len(image_item[0])==0:
             return None
         else:
-            image_item = image_item[0]
+            image_item = image_item[0][0]
             image_filepath = image_item.get('filepath')
 
             tile_source = large_image.open(
@@ -454,7 +453,7 @@ class LocalTileServer(TileServer):
         :rtype: Response
         """
         tile_source = await asyncio.gather(self.get_tile_source(id,style))
-
+        tile_source = tile_source[0]
         if tile_source is None:
             return Response(content = 'invalid image id', media_type='application/json',status_code=400)
 
@@ -665,7 +664,7 @@ class LocalTileServer(TileServer):
         :param id: String uuid for locally stored image
         :type id: int
         """
-        print(f'id from get_annotations_property_keys: {id}')
+        #print(f'id from get_annotations_property_keys: {id}')
         image_anns = await self.get_item_annotations(id)
         property_list = []
         property_names = []

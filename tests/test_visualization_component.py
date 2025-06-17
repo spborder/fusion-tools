@@ -39,21 +39,21 @@ def main():
         base_dir+'new Visium\\V12U21-010_XY02_21-0069.h5ad',
     ]
 
-    #dsa_handler = DSAHandler(
-    #    girderApiUrl = 'http://ec2-3-230-122-132.compute-1.amazonaws.com:8080/api/v1'
-    #)
+    dsa_handler = DSAHandler(
+        girderApiUrl = 'http://ec2-3-230-122-132.compute-1.amazonaws.com:8080/api/v1'
+    )
 
     dsa_items_list = [
         '64f545082d82d04be3e39ee1',
         '64f54be52d82d04be3e39f65'
     ]
 
-    #dsa_tileservers = [dsa_handler.get_tile_server(i) for i in dsa_items_list]
+    dsa_tileservers = [dsa_handler.get_tile_server(i) for i in dsa_items_list]
     
     vis_sess = Visualization(
         local_slides = local_slide_list,
         local_annotations = local_annotations_list,
-        #tileservers = dsa_tileservers,
+        tileservers = dsa_tileservers,
         linkage = 'row',
         components = [
             [
