@@ -1,6 +1,30 @@
 """Base classes for tools
 """
 from typing_extensions import Union
+import asyncio
+
+def asyncio_db_loop(method):
+    """Decorator for checking that an event loop is present for handling asynchronous callse
+
+    :param method: _description_
+    :type method: _type_
+    :return: _description_
+    :rtype: _type_
+    """
+    def wrapper(self, *args, **kwargs):
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError as e:
+            if str(e).startswith('There is no current event loop in thread'):
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            else:
+                raise
+
+        result = method(self, *args, **kwargs)
+
+    return wrapper
+
 
 class Tool:
     """General class for interactive components that visualize, edit, or perform analyses on data.
@@ -46,6 +70,15 @@ class Tool:
         """
 
         self.database = database
+
+    def add_assets_folder(self, assets_folder:str):
+        """Adding an assets folder from the Visualization component
+
+        :param assets_folder: String corresponding to assets folder path
+        :type assets_folder: str
+        """
+
+        self.assets_folder = assets_folder
 
 
 class MultiTool:
@@ -93,6 +126,16 @@ class MultiTool:
 
         self.database = database
     
+    def add_assets_folder(self, assets_folder:str):
+        """Adding an assets folder from the Visualization component
+
+        :param assets_folder: String corresponding to assets folder path
+        :type assets_folder: str
+        """
+
+        self.assets_folder = assets_folder
+
+
 class Handler:
     pass
 
@@ -152,3 +195,12 @@ class MapComponent:
         """
 
         self.database = database
+
+    def add_assets_folder(self, assets_folder:str):
+        """Adding an assets folder from the Visualization component
+
+        :param assets_folder: String corresponding to assets folder path
+        :type assets_folder: str
+        """
+
+        self.assets_folder = assets_folder

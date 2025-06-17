@@ -35,7 +35,7 @@ from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, Mu
 from dash_extensions.javascript import assign, arrow_function, Namespace
 
 # fusion-tools imports
-from fusion_tools import MapComponent
+from fusion_tools import MapComponent, asyncio_db_loop
 from fusion_tools.utils.shapes import (
     find_intersecting,
     spatially_aggregate,
@@ -64,9 +64,6 @@ class SlideMap(MapComponent):
 
         self.cache = cache
 
-        # Add Namespace functions here:
-        self.assets_folder = os.getcwd()+'/.fusion_assets/'
-        self.get_namespace()
     
     def load(self, component_prefix:int):
 
@@ -81,6 +78,7 @@ class SlideMap(MapComponent):
         )        
 
         # Add callback functions here
+        self.get_namespace()
         self.get_callbacks()
         self.get_annotations_callbacks()
 
@@ -107,7 +105,8 @@ class SlideMap(MapComponent):
 
         return x_scale, y_scale
 
-    async def check_slide_in_cache(self, image_id:str, user_id: str = None, vis_session_id: str = None):
+    @asyncio_db_loop
+    def check_slide_in_cache(self, image_id:str, user_id: str = None, vis_session_id: str = None):
         """Check if a new slide is present in the database
 
         :param image_id: String uuid assigned to an image
@@ -140,14 +139,22 @@ class SlideMap(MapComponent):
                 }
             }
 
-        db_item = await self.database.search(
-            search_kwargs = {
-                'type': 'item',
-                'filters': filter_dict
-            }
+        loop = asyncio.get_event_loop()
+        db_item = loop.run_until_complete(
+            asyncio.gather(
+                self.database.search(
+                    search_kwargs = {
+                        'type': 'item',
+                        'filters': filter_dict
+                    }
+                )
+            )
         )
-
-        return db_item
+        return_val = db_item[0].copy()
+        if len(return_val)==0:
+            return False
+        else:
+            return True
 
     def get_image_overlay_popup(self, st, st_idx):
         """Getting popup components for image overlay annotations
@@ -984,15 +991,11 @@ class SlideMap(MapComponent):
         get_from_cache = False
         if self.cache:
             print(f'Checking slide in cache: {new_slide.get("id")}')
-            cached_item = asyncio.run(
-                self.check_slide_in_cache(
-                    image_id = new_slide.get('id')
-                )
+            cached_item = self.check_slide_in_cache(
+                image_id = new_slide.get('id')
             )
-            print(type(cached_item))
-            print(dir(cached_item))
-            print(f'Image present in cache: {len(cached_item)>0}')
-            if len(cached_item)>0:
+            print(f'Image present in cache: {cached_item}')
+            if cached_item:
                 get_from_cache = True
             
 
@@ -1338,8 +1341,8 @@ class SlideMap(MapComponent):
             db_item = self.check_slide_in_cache(
                 image_id = slide_information.get('id')
             )
-
-            if len(db_item)==0:
+            print(db_item)
+            if not db_item:
                 # Then this item is not cached, add it to the database.
                 self.database.add_slide(
                     slide_id = slide_information.get('id'),
@@ -3534,9 +3537,6 @@ class HybridSlideMap(MultiFrameSlideMap):
         """
         super().__init__()
 
-        # Place to save Namespace functions:
-        self.assets_folder = os.getcwd()+'/.fusion_assets/'
-        self.get_namespace()
 
     def load(self, component_prefix:int):
 
@@ -3551,6 +3551,8 @@ class HybridSlideMap(MultiFrameSlideMap):
         )        
 
         # Add callback functions here
+        self.get_namespace()
+
         self.get_callbacks()
         self.get_annotations_callbacks()
 

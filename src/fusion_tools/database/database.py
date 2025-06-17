@@ -45,6 +45,7 @@ class fusionDB:
             },
             echo = echo,
             pool_pre_ping = True,
+            pool_recycle=3600
         )
 
         Base.metadata.create_all(bind = self.engine)
@@ -219,6 +220,7 @@ class fusionDB:
 
         print(f'db search called: {json.dumps(search_kwargs,indent=4)}')
         with self.get_db() as session:
+            print(session.get_bind())
             search_query = session.query(
                 TABLE_NAMES.get(search_kwargs.get('type'))
             )
@@ -249,6 +251,8 @@ class fusionDB:
 
                 if idx>=offset:
                     return_list.append(i.to_dict())
+
+            print(f'n returned from db_search: {len(return_list)}')
             
             return return_list
       

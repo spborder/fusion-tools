@@ -15,6 +15,8 @@ from copy import deepcopy
 import numpy as np
 import uvicorn
 
+import asyncio
+
 from shapely.geometry import box, shape
 
 from fusion_tools.database.database import fusionDB 
@@ -277,7 +279,7 @@ class LocalTileServer(TileServer):
 
         return image_item
     
-    def get_tile_source(self,item_id:str,style:Union[str,None]=None):
+    async def get_tile_source(self,item_id:str,style:Union[str,None]=None):
         """Getting large-image tile source for a given id+style combo. 
 
         :param item_id: String uuid for local image
@@ -287,7 +289,7 @@ class LocalTileServer(TileServer):
         :return: Tile source
         :rtype: None
         """
-        image_item = self.get_item(item_id)
+        image_item = await asyncio.gather(self.get_item(item_id))
         if len(image_item)==0:
             return None
         else:
@@ -435,7 +437,7 @@ class LocalTileServer(TileServer):
         image_metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/image_metadata'
         return image_metadata_url
 
-    def get_tile(self,id:str,z:int, x:int, y:int, style:Union[None,str] = None):
+    async def get_tile(self,id:str,z:int, x:int, y:int, style:Union[None,str] = None):
         """Tiles endpoint, returns an image tyle based on provided coordinates
 
         :param id: Local item id
@@ -451,7 +453,7 @@ class LocalTileServer(TileServer):
         :return: Image tile containing bytes encoded pixel information
         :rtype: Response
         """
-        tile_source = self.get_tile_source(id,style)
+        tile_source = await asyncio.gather(self.get_tile_source(id,style))
 
         if tile_source is None:
             return Response(content = 'invalid image id', media_type='application/json',status_code=400)
@@ -477,31 +479,31 @@ class LocalTileServer(TileServer):
 
         return Response(content = raw_tile, media_type='image/png')
     
-    def get_image_metadata(self,id:str):
+    async def get_image_metadata(self,id:str):
         """Getting large-image metadata for image
 
         :return: Dictionary containing metadata for local image
         :rtype: Response
         """
 
-        image_item = self.get_item(id)
-
-        if len(image_item)>0:
-            image_meta = image_item[0].get('image_meta',{})
+        image_item = await asyncio.gather(self.get_item(id))
+        print(image_item)
+        if len(image_item[0])>0:
+            image_meta = image_item[0][0].get('image_meta',{})
             return Response(content = json.dumps(image_meta),media_type = 'application/json')
         else:
             return Response(content = 'invalid image id',media_type='application/json', status_code=400)
         
-    def get_metadata(self, id:str):
+    async def get_metadata(self, id:str):
         """Getting metadata associated with slide/case/patient
 
         :param image: Index of local image
         :type image: int
         """
-        image_item = self.get_item(id)
+        image_item = await asyncio.gather(self.get_item(id))
 
-        if len(image_item)>0:
-            item_meta = image_item[0].get('meta',{})
+        if len(image_item[0])>0:
+            item_meta = image_item[0][0].get('meta',{})
             return Response(content = json.dumps(item_meta),media_type = 'application/json')
         else:
             return Response(content = 'invalid image id',media_type='application/json',status_code=400)
@@ -547,7 +549,7 @@ class LocalTileServer(TileServer):
         
         return Response(content = thumbnail, media_type = 'image/png')
 
-    def get_annotations(self,id:str, top:Union[int,None]=None, left:Union[int,None]=None, bottom: Union[int,None]=None, right: Union[int,None]=None):
+    async def get_annotations(self,id:str, top:Union[int,None]=None, left:Union[int,None]=None, bottom: Union[int,None]=None, right: Union[int,None]=None):
         """Getting annotations for a given item id, optionally specifying a region within which to grab annotations.
 
         :param id: String uuid for local image
@@ -563,7 +565,7 @@ class LocalTileServer(TileServer):
         :return: Annotations for item (optionally within a specified region)
         """
 
-        image_annotations = self.get_item_annotations(id)
+        image_annotations = await asyncio.gather(self.get_item_annotations(id))
         
         if len(image_annotations)>0:
             if all([i is None for i in [top,left,bottom,right]]):
@@ -634,22 +636,22 @@ class LocalTileServer(TileServer):
                 status_code = 400
             )
 
-    def get_annotations_metadata(self,id:str):
+    async def get_annotations_metadata(self,id:str):
         """Getting metadata for annotations for an item
 
         :param id: String uuid for locally stored image
         :type id: str
         :return: Metadata associated with annotations for that image
         """
-        image_item = self.get_item(id)
-        if len(image_item)==0:
+        image_item = await asyncio.gather(self.get_item(id))
+        if len(image_item[0])==0:
             return Response(
                 content = 'invalid image id',
                 media_type = 'application/json',
                 status_code = 400,
             )
         
-        image_item = image_item[0]
+        image_item = image_item[0][0]
 
         ann_meta = image_item.get('ann_meta',[])
         return Response(

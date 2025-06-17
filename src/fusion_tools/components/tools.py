@@ -1680,7 +1680,6 @@ class PropertyPlotter(Tool):
         self.ignore_list = ignore_list
         self.property_depth = property_depth
 
-        self.assets_folder = os.getcwd()+'/.fusion_assets/'
 
     def __str__(self):
         return 'Property Plotter'
@@ -3751,8 +3750,7 @@ class HRAViewer(Tool):
 
 
 class DataExtractor(Tool):
-    def __init__(self,
-                 assets_folder_path:str = f'{os.getcwd()}/.fusion_assets/'):
+    def __init__(self):
 
         super().__init__()
 
@@ -3765,7 +3763,6 @@ class DataExtractor(Tool):
             }
         }
 
-        self.download_folder = assets_folder_path+'downloads/'
 
         self.exportable_data = {
             'Properties':{
@@ -4660,8 +4657,9 @@ class DataExtractor(Tool):
         slide_markers = get_pattern_matching_value(slide_markers)
         
         base_download_folder = uuid.uuid4().hex[:24]
-        if not os.path.exists(self.download_folder+base_download_folder):
-            os.makedirs(self.download_folder+base_download_folder)
+        download_folder = self.assets_folder+'/downloads/'
+        if not os.path.exists(download_folder+base_download_folder):
+            os.makedirs(download_folder+base_download_folder)
 
         # Specifying which download threads to deploy
         download_thread_list = []
@@ -4677,8 +4675,8 @@ class DataExtractor(Tool):
 
             for d_idx, (data,data_format,data_channels,data_masks,data_channel_mix) in enumerate(zip(selected_data,selected_data_formats, selected_data_channels, selected_mask_options, channel_mix_checked)):
                 if data in ['Images','Masks','Images & Masks']:
-                    if not os.path.exists(self.download_folder+base_download_folder+'/'+data):
-                        os.makedirs(self.download_folder+base_download_folder+'/'+data)
+                    if not os.path.exists(self.assets_folder+'/downloads/'+base_download_folder+'/'+data):
+                        os.makedirs(self.assets_folder+'/downloads/'+base_download_folder+'/'+data)
 
                     if data_masks=='Intersecting':
                         struct_features = [{'type': 'FeatureCollection', 'features': struct_features}, slide_annotations]
@@ -4716,7 +4714,7 @@ class DataExtractor(Tool):
                             'x_scale': slide_info['x_scale'],
                             'y_scale': slide_info['y_scale'],
                             'format': data_format,
-                            'folder': self.download_folder+base_download_folder,
+                            'folder': self.assets_folder+'/downloads/'+base_download_folder,
                             'features': struct_features,
                             'tile_url': slide_info['tiles_url'].replace('zxy/{z}/{x}/{y}','region'),
                             'save_masks': 'Masks' in data,
@@ -4734,7 +4732,7 @@ class DataExtractor(Tool):
                             'x_scale': slide_info['x_scale'],
                             'y_scale': slide_info['y_scale'],
                             'format': data_format,
-                            'folder': self.download_folder+base_download_folder,
+                            'folder': self.assets_folder+'/downloads/'+base_download_folder,
                             'features': struct_features,
                             '_id': uuid.uuid4().hex[:24]
                         }
@@ -4742,8 +4740,8 @@ class DataExtractor(Tool):
 
         download_data_store = json.dumps({
             'selected_data': [],
-            'base_folder':self.download_folder+base_download_folder,
-            'zip_file_path': self.download_folder+base_download_folder+'/fusion_download.zip',
+            'base_folder':self.assets_folder+'/downloads/'+base_download_folder,
+            'zip_file_path': self.assets_folder+'/downloads/'+base_download_folder+'/fusion_download.zip',
             'download_tasks': download_thread_list,
             'current_task': download_thread_list[0]['_id'],
             'completed_tasks': []

@@ -74,12 +74,9 @@ class FeatureAnnotation(Tool):
         assert self.labels_format in ['csv','json']
         assert self.annotations_format in ['one-hot','one-hot-labeled','rgb','index']
 
-        self.assets_folder = os.getcwd()+'/.fusion_assets/'
-
         if not os.path.exists(self.storage_path):
             os.makedirs(self.storage_path)
 
-        self.get_namespace()
     
     def __str__(self):
         return 'Feature Annotation'
@@ -97,6 +94,7 @@ class FeatureAnnotation(Tool):
         )
 
         # Add callbacks here
+        self.get_namespace()
         self.get_callbacks()
         self.feature_annotation_callbacks()
 
@@ -1571,8 +1569,6 @@ class BulkLabels(Tool):
         self.ignore_list = ignore_list
         self.property_depth = property_depth
 
-        self.assets_folder = os.getcwd()+'/.fusion_assets/'
-        self.get_namespace()
 
     def __str__(self):
         return 'Bulk Labels'
@@ -1588,6 +1584,7 @@ class BulkLabels(Tool):
             ]
         )
 
+        self.get_namespace()
         self.get_callbacks()
 
     def get_scale_factors(self, image_metadata: dict):

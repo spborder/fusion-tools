@@ -112,7 +112,7 @@ class Visualization:
 
         self.default_options = {
             'title': 'FUSION',
-            'assets_folder': '/.fusion_assets/',
+            'assets_folder': os.path.join(os.getcwd(),'.fusion_assets')+os.sep,
             'requests_pathname_prefix':'/',
             'server': 'default',
             'server_options': {},
@@ -141,7 +141,7 @@ class Visualization:
 
         self.default_page = self.app_options.get('default_page')
 
-        self.assets_folder = os.getcwd()+self.app_options['assets_folder']
+        self.assets_folder = self.app_options['assets_folder']
 
         self.initialize_database()
 
@@ -167,14 +167,19 @@ class Visualization:
 
         #TODO: Find some way to make it easier for components to connect to this database
         if self.database is None:
+            print(f'Creating fusionDB instance at: {self.app_options.get("assets_folder","")}fusion_database.db')
+            if os.path.exists(self.app_options.get("assets_folder","")+'fusion_database.db'):
+                print(f'Removing previous instance of fusionDB')
+                print(self.app_options.get('assets_folder','')+'fusion_database.db')
+                os.unlink(self.app_options.get('assets_folder','')+'fusion_database.db')
 
             self.database = fusionDB(
-                db_url = 'sqlite+pysqlite:///:memory:',
+                db_url = f'sqlite:///{self.app_options.get("assets_folder","")}fusion_database.db',
                 echo = False
             )
 
         elif type(self.database)==str:
-
+            print(f'Creating fusionDB instance at: {self.database}')
             self.database = fusionDB(
                 db_url = self.database,
                 echo = False
@@ -782,6 +787,7 @@ class Visualization:
                                 component_prefix = col_idx
 
                         if not type(col)==list:
+                            col.add_assets_folder(self.assets_folder)
                             col.load(component_prefix = component_prefix)
                             col.gen_layout(session_data = self.vis_store_content)
                             col.add_database(database = self.database)
@@ -812,6 +818,7 @@ class Visualization:
                                     if self.linkage[page_idx]=='tab':
                                         component_prefix = tab_idx
                                 
+                                tab.add_assets_folder(self.assets_folder)
                                 tab.load(component_prefix = component_prefix)
                                 tab.gen_layout(session_data = self.vis_store_content)
                                 tab.add_database(database = self.database)
@@ -849,6 +856,7 @@ class Visualization:
                     row_components.append(col_components)
                 else:
                     
+                    row.add_assets_folder(self.assets_folder)
                     row.load(component_prefix = component_prefix)
                     row.gen_layout(session_data = self.vis_store_content)
                     row.add_database(database = self.database)
