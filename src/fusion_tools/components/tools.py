@@ -737,6 +737,7 @@ class OverlayOptions(Tool):
         :rtype: tuple
         """
 
+        start = time.time()
         overlay_value = get_pattern_matching_value(overlay_value)
         transp_value = get_pattern_matching_value(transp_value)
         overlay_state = get_pattern_matching_value(overlay_state)
@@ -848,6 +849,8 @@ class OverlayOptions(Tool):
             }
             for i,j in zip(range(len(ctx.outputs_list[0])),current_hideout)
         ]
+
+        print(f'Time for update_overlays: {time.time() - start}')
 
         return geojson_hideout, colorbar
 

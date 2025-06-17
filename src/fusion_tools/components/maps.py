@@ -1357,7 +1357,7 @@ class SlideMap(MapComponent):
             if not db_item:
                 # Then this item is not cached, add it to the database.
                 # Use the original slide CRS annotations when adding to the database:
-                slide_crs_geojson = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/slide_information['x_scale'],c[1]/slide_information['y_scale']),g),a) for a in annotations_geojson]
+                slide_crs_geojson = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/slide_information['x_scale'],c[1]/slide_information['y_scale']),g),a) for a in annotations_geojson if not a is None]
                 for a,s in zip(annotations_geojson,slide_crs_geojson):
                     s['properties'] = a['properties']
 
@@ -1377,12 +1377,12 @@ class SlideMap(MapComponent):
 
         start = time.time()
         new_available_properties, new_feature_names, new_property_info = extract_geojson_properties(annotations_geojson,None,['_id','_index'],4)
-        #print(f'Getting geojson properties: {time.time() - start}')
         annotations_info_store = json.dumps({
             'available_properties': new_available_properties,
             'feature_names': new_feature_names,
             'property_info': new_property_info
         })
+        print(f'Getting geojson properties: {time.time() - start}')
 
         return [annotations_info_store]
 

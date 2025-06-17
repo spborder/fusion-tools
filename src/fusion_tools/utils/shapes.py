@@ -1414,7 +1414,7 @@ def extract_geojson_properties(geo_list: list, reference_object: Union[str,None]
     geojson_properties = sorted(geojson_properties)
     end = time.time()
 
-    #print(f'Time for extracting GeoJSON properties: {end-start}')
+    print(f'Time for extracting GeoJSON properties: {end-start}')
 
     return geojson_properties, feature_names, property_info
 
