@@ -1213,12 +1213,24 @@ def find_nested_levels(nested_dict)->int:
     :return: number of levels for nested dictionary
     :rtype: int
     """
-    try:
-        return max(find_nested_levels(v) if isinstance(v,dict) else 0 for v in nested_dict.values()) + 1
-    except ValueError:
+    if not isinstance(nested_dict, dict) or not nested_dict:
         return 0
+    
+    max_depth = 0
+    
+    stack = [(nested_dict, 1)]
+    
+    while stack:
+        current_dict, depth = stack.pop()
+        max_depth = max(max_depth, depth)
+        
+        for val in current_dict.values():
+            if isinstance(val,dict):
+                stack.append((val, depth+1))
+    
+    return max_depth
 
-def extract_nested_prop(main_prop_dict: dict, depth: int, path: tuple = (), values_list: list = []):
+def extract_nested_prop(main_prop_dict: dict, depth: int, path: tuple = (), values_list: list = None, _seen:set = None):
     """Extracted nested properties up to depth level.
 
     :param main_prop_dict: Main dictionary containing nested properties. ex: {'main_prop': {'sub_prop1': value1, 'sub_prop2': value2}}
@@ -1226,51 +1238,75 @@ def extract_nested_prop(main_prop_dict: dict, depth: int, path: tuple = (), valu
     :param depth: Number of levels to extend into nested dictionary
     :type depth: int
     """
-    if len(list(main_prop_dict.keys()))>0 and depth>0:
-        for keys, values in main_prop_dict.items():
-            if depth == 1:
-                if type(values) in [int,float,str]:
-                    values_list.append({
-                        ' --> '.join(list(path+(keys,))): values
-                    })
+    if values_list is None:
+        values_list = []
+    
+    if _seen is None:
+        _seen = set()
+    
+    if not main_prop_dict or depth<=0:
+        return values_list
 
-                elif type(values)==list:
-                    values_list.extend(extract_listed_prop(values,path+(keys,),[]))
+    stack = [(main_prop_dict, depth, path)]
+    
+    #Doing a DFS based traversal. 
+    while stack:
+        cur_dict, cur_depth, cur_path = stack.pop()
+        
+        for key, val in cur_dict.items():
+            new_path = cur_path + (key, )
+            
+            #You're at the leaf node or the final non-nested dict
+            if cur_depth == 1:
+                if isinstance(val, (int,float, str)):
+                    joined = " --> ".join(new_path)
+                    #Check if you already saw this value
+                    if joined not in _seen:
+                        _seen.add(joined)
+                        values_list.append({joined: val})
+                
+                elif isinstance(val, list):
+                    extract_listed_prop(val,new_path, values_list, _seen)
 
-                else:
-                    # Skipping properties that are still nested 
-                    continue
             else:
-                if type(values)==dict:
-                    extract_nested_prop(values, depth-1, path+ (keys,), values_list)
-                elif type(values)==list:
-                    values_list.extend(extract_listed_prop(values,path+(keys,),[]))
-                elif type(values) in [int,float,str]:
-                    # Only adding properties to the list one time
-                    if not any([' --> '.join(list(path+(keys,))) in list(i.keys()) for i in values_list]):
-                        values_list.append({
-                            ' --> '.join(list(path+(keys,))): values
-                        }) 
-                else:
-                    # Skipping properties of some mysterious fifth type
-                    continue
+                if isinstance(val, dict):
+                    stack.append((val,cur_depth-1, new_path))
+                elif isinstance(val, list):
+                    extract_listed_prop(val,new_path,values_list, _seen)
+                elif isinstance(val, (int,float,str)):
+                    joined = " --> ".join(new_path)
+                    if joined not in _seen:
+                        _seen.add(joined)
+                        values_list.append({joined:val})
+    
 
     return values_list
 
-def extract_listed_prop(main_list: list, path: tuple = (), values_list: list = []):
 
-    if len(main_list)>0:
-        for item_idx,list_item in enumerate(main_list):
-            item_key = f'Value {item_idx}'
-            if type(list_item) in [int,float,str]:
-                values_list.append({
-                    ' --+ '.join(list(path+(item_key,))): list_item
-                })
-            elif type(list_item)==dict:
-                nested_n = find_nested_levels({item_key:list_item})
-                values_list.extend(extract_nested_prop({item_key: list_item},nested_n,path+(item_key,),[]))
-            elif type(list_item)==list:
-                extract_listed_prop(list_item,path+(item_key,),[])
+def extract_listed_prop(main_list: list, path: tuple = (), values_list: list = None,_seen:set = None):
+
+    if values_list is None:
+        values_list = []
+    
+    if _seen is None:
+        _seen = set()
+    
+    for idx, item in enumerate(main_list):
+        item_key = f"Value {idx}"
+        new_path = path + (item_key, )
+        
+        if isinstance(item, (int, float, str)):
+            joined = " --+ ".join(new_path)
+            if joined not in _seen:
+                _seen.add(joined)
+                values_list.append({joined: item})
+                
+        elif isinstance(item, dict):
+            nested_depth = find_nested_levels({item_key: item})
+            extract_nested_prop({item_key: item}, nested_depth, new_path, values_list, _seen)
+        
+        elif isinstance(item, list):
+            extract_listed_prop(item,new_path, values_list, _seen)
 
     return values_list
 
