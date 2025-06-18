@@ -1,6 +1,31 @@
 # Changelog
 
 <!--next-version-placeholder-->
+## v3.6.0 (06/2025)
+
+### Features:
+- `fusionDB` database object added!
+    - This database helps organize local slide data, greatly increasing the scalability of locally deployed instances of *FUSION*
+    - Sub-versions in 3.6 will add interaction between components and an instance of `fusionDB` to increase performance of more detailed queries
+- `HybridSlideMap` and `HybridLargeSlideMap` component added!
+    - These components combine `SlideMap` and `MultiFrameSlideMap` classes to allow for both single frame and multi-frame images in the same visualization session
+- `WelcomePage` component added!
+    - This is more of an example of how new pages can be added, this page provides some information on *fusion-tools* which can be added into a layout
+- `SlideAnnotation` component added!
+    - This component enables slide-level annotation with both categorical/quantitative labels per-slide as well as manual annotations. 
+    - Specify annotation schema using `SlideAnnotationSchema` which can be shared with other users.
+- *default_page* argument added to `Visualization` object
+    - Get rid of the "Uh oh! Page / not in layout!" 404 page, single page layouts have "main" added by default to open directly onto whatever named page you want to set it to.
+- `load_visium_hd` function added to `fusion_tools.utils.shapes`!
+    - This function enables loading *10x VisiumHD* experiments at one resolution label (binning)
+    - Automatically add extra analyses as properties to each square by passing a list of file paths and names (*include_analysis_path*, *include_analysis_names*)
+
+### Fixes:
+- Better handling of girderTokens in `DSAHandler` class, making it easier for users to access Private or access-controlled collections
+- Annotation data shifted from sequential requests.get() calls to a clientside_callback using fetch API. Uses requests.get() as a backup.
+
+
+
 ## v3.4.0 (03/2025)
 
 ### Features:

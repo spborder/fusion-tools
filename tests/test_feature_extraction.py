@@ -47,7 +47,10 @@ def main():
 
     # define sub-compartment segmentation function
 
-    def stain_mask(image,mask):
+    def stain_mask(kwargs):
+        image = kwargs.get('image')
+        mask = kwargs.get('mask')
+
         seg_params = [
             {
                 'name': 'Nuclei',
@@ -147,7 +150,7 @@ def main():
             'texture'
         ],
         preprocess = lambda image: rescale(image,2,channel_axis=-1),
-        sub_mask = lambda image,mask: stain_mask(image,mask),
+        sub_mask = lambda image,mask,coords: stain_mask(image,mask,coords),
         mask_names = ['Nuclei','Eosinophilic','Luminal Space'],
         channel_names = ['Red','Green','Blue'],
         n_jobs = 4,

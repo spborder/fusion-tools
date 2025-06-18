@@ -2,6 +2,8 @@ import os
 import pandas as pd
 import numpy as np
 import json
+import uuid
+
 
 # Dash imports
 import dash
@@ -14,6 +16,7 @@ from dash_extensions.enrich import DashProxy, html, MultiplexerTransform, Prefix
 from typing_extensions import Union
 from fusion_tools.tileserver import TileServer, DSATileServer, LocalTileServer, CustomTileServer
 from fusion_tools.handler.dataset_uploader import DSAUploadHandler
+from fusion_tools.database.database import fusionDB
 import threading
 
 import uvicorn
@@ -59,6 +62,7 @@ class Visualization:
                  local_annotations: Union[list,dict,None] = None,
                  slide_metadata: Union[list,dict,None] = None,
                  tileservers: Union[list,TileServer,None] = None,
+                 database: Union[fusionDB, None] = None,
                  components: Union[list,dict] = [],
                  header: list = [],
                  app_options: dict = {},
@@ -87,6 +91,7 @@ class Visualization:
         self.local_slides = local_slides
         self.slide_metadata = slide_metadata
         self.tileservers = tileservers
+        self.database = database
         self.local_annotations = local_annotations
         self.components = components
         self.header = header
@@ -107,7 +112,7 @@ class Visualization:
 
         self.default_options = {
             'title': 'FUSION',
-            'assets_folder': '/.fusion_assets/',
+            'assets_folder': os.path.join(os.getcwd(),'.fusion_assets')+os.sep,
             'requests_pathname_prefix':'/',
             'server': 'default',
             'server_options': {},
@@ -136,7 +141,9 @@ class Visualization:
 
         self.default_page = self.app_options.get('default_page')
 
-        self.assets_folder = os.getcwd()+self.app_options['assets_folder']
+        self.assets_folder = self.app_options['assets_folder']
+
+        self.initialize_database()
 
         self.vis_store_content = self.initialize_stores()
 
@@ -155,6 +162,28 @@ class Visualization:
         self.viewer_app.title = self.app_options['title']
         self.viewer_app.layout = self.gen_layout()
         self.get_callbacks()
+
+    def initialize_database(self):
+
+        #TODO: Find some way to make it easier for components to connect to this database
+        if self.database is None:
+            print(f'Creating fusionDB instance at: {self.app_options.get("assets_folder","")}fusion_database.db')
+            if os.path.exists(self.app_options.get("assets_folder","")+'fusion_database.db'):
+                print(f'Removing previous instance of fusionDB')
+                print(self.app_options.get('assets_folder','')+'fusion_database.db')
+                os.unlink(self.app_options.get('assets_folder','')+'fusion_database.db')
+
+            self.database = fusionDB(
+                db_url = f'sqlite:///{self.app_options.get("assets_folder","")}fusion_database.db',
+                echo = False
+            )
+
+        elif type(self.database)==str:
+            print(f'Creating fusionDB instance at: {self.database}')
+            self.database = fusionDB(
+                db_url = self.database,
+                echo = False
+            )
 
     def get_callbacks(self):
 
@@ -261,14 +290,16 @@ class Visualization:
         :type pathname: str
         """
 
+        #TODO: Check if the user specified in session_data['current_user'] is in the database yet
         session_data = json.loads(session_data)
+
         if ctx.triggered_id=='anchor-page-url':
             if pathname in self.layout_dict:
                 # If that path is in the layout dict, return that page content
 
                 # If the page needs to be updated based on changes in anchor-vis-data
                 page_content = self.update_page_layout(
-                    page_components_list = self.components[pathname.replace(self.app_options.get('requests_pathname_prefix',''),'').replace('-',' ')],
+                    page_components_list = self.components[pathname.replace(self.app_options.get('requests_pathname_prefix','/'),'').replace('-',' ')],
                     use_prefix = True,
                     session_data=session_data
                 )
@@ -290,7 +321,7 @@ class Visualization:
                 if 'current_user' in session_data:
                     new_session_data['current_user'] = session_data['current_user']
                 
-                page_pathname = session_content['page'].replace(self.app_options.get('requests_pathname_prefix',''),'').replace('-',' ')
+                page_pathname = session_content['page'].replace(self.app_options.get('requests_pathname_prefix','/'),'').replace('-',' ')
 
                 page_content = self.update_page_layout(
                     page_components_list = self.components[page_pathname],
@@ -299,6 +330,11 @@ class Visualization:
                 )
 
                 return page_content, page_pathname, '', json.dumps(new_session_data)
+            
+            elif 'item' in pathname:
+                #TODO: Loading an individual item from id
+
+                pass
 
             else:
                 if self.default_page is None:
@@ -314,7 +350,7 @@ class Visualization:
                     return not_found_page, pathname, '', no_update
                 else:
                     page_content = self.update_page_layout(
-                        page_components_list = self.components[self.default_page.replace(self.app_options.get('requests_pathname_prefix',''),'').replace('-',' ')],
+                        page_components_list = self.components[self.default_page.replace(self.app_options.get('requests_pathname_prefix','/'),'').replace('-',' ')],
                         use_prefix = True,
                         session_data=session_data
                     )
@@ -325,7 +361,7 @@ class Visualization:
             new_pathname = list(self.layout_dict.keys())[ctx.triggered_id['index']]
             # If the page needs to be updated based on changes in anchor-vis-data
             page_content = self.update_page_layout(
-                page_components_list = self.components[new_pathname.replace(self.app_options.get('requests_pathname_prefix',''),'').replace('-',' ')],
+                page_components_list = self.components[new_pathname.replace(self.app_options.get('requests_pathname_prefix','/'),'').replace('-',' ')],
                 use_prefix = True,
                 session_data=session_data
             )
@@ -335,10 +371,14 @@ class Visualization:
     def initialize_stores(self):
 
         # This should be all the information necessary to reproduce the tileservers and annotations for each image
+        #TODO: Add session "id" here and add to database
         slide_store = {
             "current": [],
             "local": [],
-            "data": {}
+            "data": {},
+            'session': {
+                'id': f'guestsession{uuid.uuid4().hex[:12]}'
+            }
         }
         s_idx = 0
         t_idx = 0
@@ -352,14 +392,17 @@ class Visualization:
 
             self.local_tile_server = LocalTileServer(
                 tile_server_port=self.app_options['port'] if not self.app_options['jupyter'] else self.app_options['port']+10,
-                host = self.app_options['host']
+                host = self.app_options['host'],
+                database = self.database
             )
 
             for s_idx,(s,anns,meta) in enumerate(zip(self.local_slides,self.local_annotations,self.slide_metadata)):
                 slide_dict = {}
                 if not s is None:
                     # Adding this slide to list of local slides
+                    local_slide_id = uuid.uuid4().hex[:24]
                     self.local_tile_server.add_new_image(
+                        new_image_id = local_slide_id,
                         new_image_path = s,
                         new_annotations = anns,
                         new_metadata = meta
@@ -367,14 +410,15 @@ class Visualization:
 
                     slide_dict = {
                         'name': s.split(os.sep)[-1],
-                        'id': f'local{s_idx}',
-                        'tiles_url': self.local_tile_server.get_name_tiles_url(s.split(os.sep)[-1]),
-                        'regions_url': self.local_tile_server.get_name_regions_url(s.split(os.sep)[-1]),
-                        'image_metadata_url': self.local_tile_server.get_name_image_metadata_url(s.split(os.sep)[-1]),
-                        'metadata_url': self.local_tile_server.get_name_metadata_url(s.split(os.sep)[-1]),
-                        'annotations_url': self.local_tile_server.get_name_annotations_url(s.split(os.sep)[-1]),
-                        'annotations_metadata_url': self.local_tile_server.get_name_annotations_metadata_url(s.split(os.sep)[-1]),
-                        'annotations_region_url': self.local_tile_server.get_name_annotations_url(s.split(os.sep)[-1])
+                        'id': local_slide_id,
+                        'tiles_url': self.local_tile_server.get_tiles_url(local_slide_id),
+                        'regions_url': self.local_tile_server.get_regions_url(local_slide_id),
+                        'image_metadata_url': self.local_tile_server.get_image_metadata_url(local_slide_id),
+                        'metadata_url': self.local_tile_server.get_metadata_url(local_slide_id),
+                        'annotations_url': self.local_tile_server.get_annotations_url(local_slide_id),
+                        'annotations_metadata_url': self.local_tile_server.get_annotations_metadata_url(local_slide_id),
+                        'annotations_region_url': self.local_tile_server.get_annotations_url(local_slide_id),
+                        'cached': True
                     }
 
                 slide_store['current'].append(slide_dict)
@@ -392,31 +436,33 @@ class Visualization:
                 if type(t)==LocalTileServer:
                     slide_store['current'].extend([
                         {
-                            'name': j,
-                            'id': f'local{j_idx}',
-                            'tiles_url': t.get_name_tiles_url(j),
-                            'regions_url': t.get_name_regions_url(j),
-                            'image_metadata_url': t.get_name_image_metadata_url(j),
-                            'metadata_url': t.get_name_metadata_url(j),
-                            'annotations_url': t.get_name_annotations_url(j),
-                            'annotations_metadata_url': t.get_name_annotations_metadata_url(j),
-                            'annotations_region_url': t.get_name_annotations_url(j)
+                            'name': j.name,
+                            'id': j.id,
+                            'tiles_url': t.get_tiles_url(j.id),
+                            'regions_url': t.get_regions_url(j.id),
+                            'image_metadata_url': t.get_image_metadata_url(j.id),
+                            'metadata_url': t.get_metadata_url(j.id),
+                            'annotations_url': t.get_annotations_url(j.id),
+                            'annotations_metadata_url': t.get_annotations_metadata_url(j.id),
+                            'annotations_region_url': t.get_annotations_url(j.id),
+                            'cached': True
                         }
-                        for j_idx,j in enumerate(t['names'])
+                        for j_idx,j in enumerate(t.get_item_names_ids())
                     ])
                     slide_store['local'].extend([
                         {
-                            'name': j,
-                            'id': f'local{j_idx}',
-                            'tiles_url': t.get_name_tiles_url(j),
-                            'regions_url': t.get_name_regions_url(j),
-                            'image_metadata_url': t.get_name_image_metadata_url(j),
-                            'metadata_url': t.get_name_metadata_url(j),
-                            'annotations_url': t.get_name_annotations_url(j),
-                            'annotations_metadata_url': t.get_name_annotations_metadata_url(j),
-                            'annotations_region_url': t.get_name_annotations_url(j)
+                            'name': j.name,
+                            'id': j.id,
+                            'tiles_url': t.get_tiles_url(j.id),
+                            'regions_url': t.get_regions_url(j.id),
+                            'image_metadata_url': t.get_image_metadata_url(j.id),
+                            'metadata_url': t.get_metadata_url(j.id),
+                            'annotations_url': t.get_annotations_url(j.id),
+                            'annotations_metadata_url': t.get_annotations_metadata_url(j.id),
+                            'annotations_region_url': t.get_annotations_url(j.id),
+                            'cached': True
                         }
-                        for j_idx,j in enumerate(t['names'])
+                        for j_idx,j in enumerate(t.get_item_names_ids())
                     ])
 
                 elif type(t)==DSATileServer:
@@ -446,6 +492,8 @@ class Visualization:
                         'annotations_region_url': t.annotations_regions_url if hasattr(t,'annotations_regions_url') else None,
                         'annotations_geojson_url': t.annotations_geojson_url if hasattr(t,'annotations_geojson_url') else None
                     })
+
+        #TODO: Add initial session to database and set as default session?
 
 
         return slide_store
@@ -691,6 +739,8 @@ class Visualization:
                 'main': self.components 
             }
 
+            self.default_page = 'main'
+
         elif type(self.components)==dict:
             for page in self.components:
                 n_cols = 1
@@ -740,8 +790,10 @@ class Visualization:
                                 component_prefix = col_idx
 
                         if not type(col)==list:
+                            col.add_assets_folder(self.assets_folder)
                             col.load(component_prefix = component_prefix)
                             col.gen_layout(session_data = self.vis_store_content)
+                            col.add_database(database = self.database)
                             col_components.append(str(col))
                             
                             row_children.append(
@@ -769,8 +821,10 @@ class Visualization:
                                     if self.linkage[page_idx]=='tab':
                                         component_prefix = tab_idx
                                 
+                                tab.add_assets_folder(self.assets_folder)
                                 tab.load(component_prefix = component_prefix)
                                 tab.gen_layout(session_data = self.vis_store_content)
+                                tab.add_database(database = self.database)
                                 tab_components.append(str(tab))
 
                                 tabs_children.append(
@@ -805,8 +859,10 @@ class Visualization:
                     row_components.append(col_components)
                 else:
                     
+                    row.add_assets_folder(self.assets_folder)
                     row.load(component_prefix = component_prefix)
                     row.gen_layout(session_data = self.vis_store_content)
+                    row.add_database(database = self.database)
                     row_components.append(str(row))
 
                     row_children.append(
@@ -828,7 +884,7 @@ class Visualization:
                 )
 
             page_components.append(row_components)
-            self.layout_dict[self.app_options.get('requests_pathname_prefix','')+page.replace(" ","-")] = page_children
+            self.layout_dict[self.app_options.get('requests_pathname_prefix','/')+page.replace(" ","-")] = page_children
 
         upload_check = self.check_for_uploader(page_components)
         if upload_check:
@@ -854,6 +910,7 @@ class Visualization:
         
         for h_idx, h in enumerate(self.header):
             h.load(h_idx)
+            h.add_database(database = self.database)
 
         header_components = html.Div([
             html.Hr(),

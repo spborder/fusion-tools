@@ -1,6 +1,31 @@
 """Base classes for tools
 """
 from typing_extensions import Union
+import asyncio
+
+def asyncio_db_loop(method):
+    """Decorator for checking that an event loop is present for handling asynchronous callse
+
+    :param method: _description_
+    :type method: _type_
+    :return: _description_
+    :rtype: _type_
+    """
+    def wrapper(self, *args, **kwargs):
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError as e:
+            if str(e).startswith('There is no current event loop in thread'):
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            else:
+                raise
+
+        result = method(self, *args, **kwargs)
+        return result
+
+    return wrapper
+
 
 class Tool:
     """General class for interactive components that visualize, edit, or perform analyses on data.
@@ -10,6 +35,9 @@ class Tool:
         # visualization session
         self.session_update = False
 
+        # Initializing the database property with None
+        self.database = None
+
     def prefix_escape(self,input_id: Union[str,dict])->bool:
         """Specifying the default prefix escape for all blueprints. Basic specification is to ignore "anchor" or ids that already have a prefix
 
@@ -35,6 +63,24 @@ class Tool:
             return True
         return False
     
+    def add_database(self, database:None):
+        """Adding a database to the component, connects to the running database for this application.
+
+        :param database: Instance of fusionDB provided by Visualization.get_layout_children()
+        :type database: None
+        """
+
+        self.database = database
+
+    def add_assets_folder(self, assets_folder:str):
+        """Adding an assets folder from the Visualization component
+
+        :param assets_folder: String corresponding to assets folder path
+        :type assets_folder: str
+        """
+
+        self.assets_folder = assets_folder
+
 
 class MultiTool:
     """General class for a Tool which works on multiple slides at once
@@ -44,6 +90,9 @@ class MultiTool:
         # visualization session
         self.session_update = True
 
+        # Initializing the database property with None
+        self.database = None
+
     def prefix_escape(self,input_id: Union[str,dict])->bool:
         """Specifying the default prefix escape for all blueprints. Basic specification is to ignore "anchor" or ids that already have a prefix
 
@@ -69,7 +118,25 @@ class MultiTool:
             return True
         return False
     
+    def add_database(self, database:None):
+        """Adding a database to the component, connects to the running database for this application.
+
+        :param database: Instance of fusionDB provided by Visualization.get_layout_children()
+        :type database: None
+        """
+
+        self.database = database
     
+    def add_assets_folder(self, assets_folder:str):
+        """Adding an assets folder from the Visualization component
+
+        :param assets_folder: String corresponding to assets folder path
+        :type assets_folder: str
+        """
+
+        self.assets_folder = assets_folder
+
+
 class Handler:
     pass
 
@@ -121,4 +188,20 @@ class MapComponent:
             return True
         return False
     
+    def add_database(self, database:None):
+        """Adding a database to the component, connects to the running database for this application.
 
+        :param database: Instance of fusionDB provided by Visualization.get_layout_children()
+        :type database: None
+        """
+
+        self.database = database
+
+    def add_assets_folder(self, assets_folder:str):
+        """Adding an assets folder from the Visualization component
+
+        :param assets_folder: String corresponding to assets folder path
+        :type assets_folder: str
+        """
+
+        self.assets_folder = assets_folder

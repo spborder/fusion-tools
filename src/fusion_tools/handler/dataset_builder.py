@@ -64,10 +64,11 @@ class DatasetBuilder(DSATool):
     def gen_collections_dataframe(self,session_data:dict):
 
         collections_info = []
-        collections = self.handler.get_collections()
+        
+        collections = self.handler.get_collections(session_data.get('current_user',{}).get('token'))
         for c in collections:
             #slide_count = self.handler.get_collection_slide_count(collection_name = c['name'])
-            folder_count = self.handler.get_path_info(path = f'/collection/{c["name"]}')
+            folder_count = self.handler.get_path_info(path = f'/collection/{c["name"]}', user_token = session_data.get('current_user',{}).get('token'))
             #if slide_count>0:
             collections_info.append({
                 'Collection Name': c['name'],
@@ -1264,18 +1265,23 @@ class DatasetBuilder(DSATool):
         new_slide_info = []
         for s in new_slide_data['selected_slides']:
             if not 'local' in s:
-                slide_info = self.handler.gc.get(f'/item/{s}')
+                info_url = f'/item/{s}'
                 annotations_metadata_url = f'{self.handler.girderApiUrl}/annotation/?itemId={s}'
+                if 'current_user' in current_vis_data:
+                    annotations_metadata_url += f'&token={current_vis_data["current_user"]["token"]}'
+                    info_url += f'?token={current_vis_data["current_user"]["token"]}'
+                
+                slide_info = self.handler.gc.get(info_url)
                 annotations_metadata = requests.get(annotations_metadata_url).json()
                 if not type(annotations_metadata)==list:
                     annotations_metadata = [annotations_metadata]
                     
                 annotations_geojson_url = [f'{self.handler.girderApiUrl}/annotation/{a["_id"]}/geojson' for a in annotations_metadata]
 
-
                 new_slide_info.append(
                     {
                         'name': slide_info['name'],
+                        'id': slide_info['id'],
                         'api_url': self.handler.girderApiUrl,
                         'tiles_url': f'{self.handler.girderApiUrl}/item/{s}/tiles/zxy'+'/{z}/{x}/{y}',
                         'regions_url': f'{self.handler.girderApiUrl}/item/{s}/tiles/region',
