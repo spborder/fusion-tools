@@ -5463,6 +5463,9 @@ class GlobalPropertyPlotter(MultiTool):
                 State({'type': 'global-property-plotter-data-store','index': ALL},'data'),
                 State({'type': 'global-property-plotter-keys-store','index': ALL},'data'),
                 State('anchor-vis-store','data')
+            ],
+            running = [
+                (Output({'type': 'global-property-plotter-plot-butt','index': ALL},'disabled'),True,False)
             ]
         )(self.generate_plot)
 
@@ -5868,7 +5871,8 @@ class GlobalPropertyPlotter(MultiTool):
             data_selection['data'] = filtered_properties.to_dict('records')
 
             renamed_props = filtered_properties.rename(columns = {k:v for k,v in zip([label_keys],[label_names])} | {h:q for h,q in zip(property_keys,property_names)})
-
+            #print(f'renamed_props columns: {renamed_props.columns.tolist()}')
+            #print(f'property_names: {property_names}')
             if len(property_names)==1:
                 plot_fig = self.gen_violin_plot(renamed_props, label_names, property_names[0], [slide_col]+bbox_cols)
             elif len(property_names)==2:
