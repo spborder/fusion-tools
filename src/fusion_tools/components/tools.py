@@ -850,7 +850,7 @@ class OverlayOptions(Tool):
             for i,j in zip(range(len(ctx.outputs_list[0])),current_hideout)
         ]
 
-        print(f'Time for update_overlays: {time.time() - start}')
+        #print(f'Time for update_overlays: {time.time() - start}')
 
         return geojson_hideout, colorbar
 
@@ -1241,10 +1241,8 @@ class PropertyViewer(Tool):
 
         if not active_tab is None:
             if not active_tab=='property-viewer':
-                print(f'Not active tab: {time.time() - start}')
                 return [no_update], [no_update]
         else:
-            print(f'active_tab is None: {time.time() - start}')
             return [no_update], [no_update]
         
         slide_map_bounds = get_pattern_matching_value(slide_map_bounds)
@@ -4950,8 +4948,6 @@ class GlobalPropertyPlotter(MultiTool):
                 if req_obj.ok:
                     all_property_keys.extend(req_obj.json())
                 
-                print(f'GlobalPropertyPlotter.extract_property_keys request time: {time.time() - start}')
-
             else:
                 item_id = slide['metadata_url'].split('/')[-2]
                 # Setting LocalTileServer request string
@@ -4996,7 +4992,6 @@ class GlobalPropertyPlotter(MultiTool):
         slide_col = 'item.name'
         structure_col = 'annotation.name'
 
-        print(f'GlobalPropertyPlotter.extract_property_keys: {time.time() - start}')
 
         return property_keys, property_names, structure_col, slide_col, bbox_cols
     

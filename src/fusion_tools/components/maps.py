@@ -1384,10 +1384,11 @@ class SlideMap(MapComponent):
                 )
                 new_thread.start()    
 
-                print(f'Image: {slide_information.get("name")} has been added to cache! {time.time()-start}')
+                #print(f'Image: {slide_information.get("name")} has been added to cache! {time.time()-start}')
             else:
-                print(f'Image: {slide_information.get("name")} is already cached!')
-
+                #print(f'Image: {slide_information.get("name")} is already cached!')
+                pass
+            
         start = time.time()
         new_available_properties, new_feature_names, new_property_info = extract_geojson_properties(annotations_geojson,None,['barcode','_id','_index'],4)
         annotations_info_store = json.dumps({
@@ -1395,7 +1396,7 @@ class SlideMap(MapComponent):
             'feature_names': new_feature_names,
             'property_info': new_property_info
         })
-        print(f'Getting geojson properties: {time.time() - start}')
+        #print(f'Getting geojson properties: {time.time() - start}')
 
         return [annotations_info_store]
 
