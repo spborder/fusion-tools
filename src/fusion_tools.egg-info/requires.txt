@@ -13,6 +13,7 @@ umap-learn>=0.5.6
 statsmodels>=0.14.0
 typing-extensions>=4.8.0
 girder-job-sequence>=0.2.7
+SQLAlchemy>=2.0.0
 
 [interactive]
 dash-leaflet[all]>=1.0.15

@@ -19,6 +19,9 @@ from PIL import Image
 import lxml.etree as ET
 from copy import deepcopy
 
+import threading
+import asyncio
+
 #os.environ['PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION'] = 'python'
 
 # Dash imports
@@ -33,7 +36,7 @@ from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, Mu
 from dash_extensions.javascript import assign, arrow_function, Namespace
 
 # fusion-tools imports
-from fusion_tools import MapComponent
+from fusion_tools import MapComponent, asyncio_db_loop
 from fusion_tools.utils.shapes import (
     find_intersecting,
     spatially_aggregate,
@@ -54,15 +57,14 @@ class SlideMap(MapComponent):
     :param MapComponent: General class for components added to SlideMap
     :type MapComponent: None
     """
-    def __init__(self):
+    def __init__(self,
+                 cache: bool = False):
         """Constructor method
         """
         super().__init__()
 
-        # Add Namespace functions here:
-        self.assets_folder = os.getcwd()+'/.fusion_assets/'
-        self.get_namespace()
-    
+        self.cache = cache
+
     def load(self, component_prefix:int):
 
         self.component_prefix = component_prefix
@@ -76,6 +78,7 @@ class SlideMap(MapComponent):
         )        
 
         # Add callback functions here
+        self.get_namespace()
         self.get_callbacks()
         self.get_annotations_callbacks()
 
@@ -101,6 +104,57 @@ class SlideMap(MapComponent):
         y_scale = -((base_dims[1]) / image_metadata['sizeY'])
 
         return x_scale, y_scale
+
+    @asyncio_db_loop
+    def check_slide_in_cache(self, image_id:str, user_id: str = None, vis_session_id: str = None):
+        """Check if a new slide is present in the database
+
+        :param image_id: String uuid assigned to an image
+        :type image_id: str
+        :param user_id: String uuid assigned to a user, defaults to None
+        :type user_id: str, optional
+        :param vis_session_id: String uuid assigned to a visualization session, defaults to None
+        :type vis_session_id: str, optional
+        :return: List containing item dictionary if present in database, otherwise empty list
+        :rtype: list
+        """
+
+        filter_dict = {
+            'item': {
+                'id': image_id
+            }
+        }
+
+        if not user_id is None:
+            filter_dict = filter_dict | {
+                'user': {
+                    'id': user_id
+                }
+            }
+        
+        if not vis_session_id is None:
+            filter_dict = filter_dict | {
+                'visSession': {
+                    'id': vis_session_id
+                }
+            }
+
+        loop = asyncio.get_event_loop()
+        db_item = loop.run_until_complete(
+            asyncio.gather(
+                self.database.search(
+                    search_kwargs = {
+                        'type': 'item',
+                        'filters': filter_dict
+                    }
+                )
+            )
+        )
+        return_val = db_item[0].copy()
+        if len(return_val)==0:
+            return False
+        else:
+            return True
 
     def get_image_overlay_popup(self, st, st_idx):
         """Getting popup components for image overlay annotations
@@ -577,6 +631,10 @@ class SlideMap(MapComponent):
             [
                 Output({'type': 'map-annotations-info-store','index': ALL},'data')
             ],
+            [
+                State({'type': 'map-annotations-info-store','index': ALL},'data'),
+                State({'type': 'map-slide-information','index': ALL},'data')
+            ],
             prevent_initial_call = True
         )(self.update_ann_info)
 
@@ -751,7 +809,8 @@ class SlideMap(MapComponent):
                                     ...feature.properties.user,
                                     name: name,
                                     _id: uuidv4(),
-                                    _index: f_idx
+                                    _index: f_idx,
+                                    cluster: true
                                 }
                             }))
                         }
@@ -774,7 +833,8 @@ class SlideMap(MapComponent):
                                     ...feature.properties,
                                     name: name,
                                     _id: uuidv4(),
-                                    _index: f_idx
+                                    _index: f_idx,
+                                    cluster: true
                                 }
                             }))
                         }
@@ -783,6 +843,20 @@ class SlideMap(MapComponent):
 
                 // Initializing an error store in the event that fetch is blocked by some CORS policy
                 const annotations_error_store = [];
+
+                console.log(map_slide_information);
+
+                // If this image is cached, stop here and revert to grabbing locally:
+                if (map_slide_information.cached){
+                    annotations_error_store.push(map_slide_information);
+                    let empty_geojson = {
+                        'type': 'FeatureCollection',
+                        'features': [],
+                        'properties': {}
+                    };
+
+                    return [[empty_geojson], [JSON.stringify([empty_geojson])], [JSON.stringify(annotations_error_store)]];
+                }
 
                 // Getting the names of each annotation
                 let ann_meta_url = map_slide_information.annotations_metadata_url;
@@ -917,8 +991,15 @@ class SlideMap(MapComponent):
         vis_data = json.loads(vis_data)
         new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
 
-        #TODO: Add progress bar for loading annotations?
-        #TODO: Load marker layer from visualization session
+        # Check if slide is cached if using cache
+        get_from_cache = False
+        if self.cache:
+            cached_item = self.check_slide_in_cache(
+                image_id = new_slide.get('id')
+            )
+            if cached_item:
+                get_from_cache = True
+            
 
         # Getting data from the tileservers:
         if not 'current_user' in vis_data:
@@ -973,7 +1054,7 @@ class SlideMap(MapComponent):
                                 'type': 'FeatureCollection',
                                 'features': []
                             },
-                            #format = 'geojson',
+                            format = 'geojson',
                             id = {'type': f'{self.component_prefix}-feature-bounds','index': st_idx},
                             options = {
                                 'style': self.js_namespace('featureStyle')
@@ -998,6 +1079,8 @@ class SlideMap(MapComponent):
                                 }
                             ),
                             zoomToBounds = False,
+                            cluster = True,
+                            superClusterOptions={'radius': 100},
                             children = [
                                 dl.Popup(
                                     id = {'type': f'{self.component_prefix}-feature-popup','index': st_idx},
@@ -1064,6 +1147,8 @@ class SlideMap(MapComponent):
         new_slide_info['tiles_metadata'] = new_image_metadata
         new_slide_info = new_slide_info | new_slide
 
+        new_slide_info['cached'] = get_from_cache
+
         new_slide_info = json.dumps(new_slide_info)
 
         # Updating manual and generated ROIs divs
@@ -1082,23 +1167,24 @@ class SlideMap(MapComponent):
         non_nested_image_metadata = {}
         nested_image_metadata = []
 
-        if 'meta' in new_metadata:
-            for k,v in new_metadata['meta'].items():
-                if not type(v) in [list,dict]:
-                    non_nested_display_metadata[k] = v
-                else:
-                    nested_display_metadata.append({
-                        k: v
-                    })
+        if not new_metadata is None:
+            if 'meta' in new_metadata:
+                for k,v in new_metadata['meta'].items():
+                    if not type(v) in [list,dict]:
+                        non_nested_display_metadata[k] = v
+                    else:
+                        nested_display_metadata.append({
+                            k: v
+                        })
 
-        for k,v in new_metadata.items():
-            if not k=='meta':
-                if not type(v) in [list,dict]:
-                    non_nested_display_metadata[k] = v
-                else:
-                    nested_display_metadata.append({
-                        k:v
-                    })
+            for k,v in new_metadata.items():
+                if not k=='meta':
+                    if not type(v) in [list,dict]:
+                        non_nested_display_metadata[k] = v
+                    else:
+                        nested_display_metadata.append({
+                            k:v
+                        })
 
 
         for k,v in new_image_metadata.items():
@@ -1147,7 +1233,8 @@ class SlideMap(MapComponent):
                         title = 'Case Metadata',
                         children = non_nested_case_metadata_table + case_nested_accordions
                     )
-                ]
+                ],
+                start_collapsed=True
             )
         )
 
@@ -1159,12 +1246,20 @@ class SlideMap(MapComponent):
 
         return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
 
+    @asyncio_db_loop
     def get_annotations_backup(self, ann_error_store, vis_data):
+        """Getting annotations which are cached/if there is an error using JavaScript "fetch" API
 
+        :param ann_error_store: Slide information containing annotations_metadata/urls
+        :type ann_error_store: list
+        :param vis_data: Current session information
+        :type vis_data: list
+        """
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
         ann_error_store = json.loads(get_pattern_matching_value(ann_error_store))
+        
         if type(ann_error_store)==list:
             if len(ann_error_store)>0:
                 ann_error_store = ann_error_store[0]
@@ -1175,19 +1270,32 @@ class SlideMap(MapComponent):
             raise exceptions.PreventUpdate
         else:
             vis_data = json.loads(vis_data)
-            # Use requests to get annotations data
-            if 'annotations_geojson_url' in ann_error_store:
-                raw_geojson = []
-                for req_url in ann_error_store['annotations_geojson_url']:
-                    if 'current_user' in vis_data:
-                        req_url += f'?token={vis_data["current_user"]["token"]}'
 
-                    new_geojson = requests.get(req_url).json()
-                    raw_geojson.append(new_geojson)
+            if ann_error_store.get('cached'):
+                # Grabbing annotation data from the database:
+                loop = asyncio.get_event_loop()
+                raw_geojson = loop.run_until_complete(
+                    asyncio.gather(
+                        self.database.get_item_annotations(
+                            item_id = ann_error_store.get('id')
+                        )
+                    )
+                )[0]
+
             else:
-                raw_geojson = []
-                new_geojson = requests.get(ann_error_store['annotations_url']).json()
-                raw_geojson.extend(new_geojson)
+                # Use requests to get annotations data
+                if 'annotations_geojson_url' in ann_error_store:
+                    raw_geojson = []
+                    for req_url in ann_error_store['annotations_geojson_url']:
+                        if 'current_user' in vis_data:
+                            req_url += f'?token={vis_data["current_user"]["token"]}'
+
+                        new_geojson = requests.get(req_url).json()
+                        raw_geojson.append(new_geojson)
+                else:
+                    raw_geojson = []
+                    new_geojson = requests.get(ann_error_store['annotations_url']).json()
+                    raw_geojson.extend(new_geojson)
 
             metadata_url = ann_error_store['annotations_metadata_url']
             if 'current_user' in vis_data:
@@ -1198,7 +1306,7 @@ class SlideMap(MapComponent):
             ann_metadata = [a for a in ann_metadata if not 'image_path' in a]
 
             # Scaling geojson to map
-            scaled_geojson = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*ann_error_store['x_scale'],c[1]*ann_error_store['y_scale']),g),a) for a in raw_geojson]
+            scaled_geojson = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*ann_error_store['x_scale'],c[1]*ann_error_store['y_scale']),g),a) for a in raw_geojson if 'features' in a]
             for s,m in zip(scaled_geojson,ann_metadata):
                 if 'annotation' in m:
                     s['properties'] = {
@@ -1223,11 +1331,15 @@ class SlideMap(MapComponent):
             
         return scaled_geojson, [json.dumps(scaled_geojson)]
 
-    def update_ann_info(self, annotations_geojson):
+    def update_ann_info(self, annotations_geojson, current_ann_info, slide_information):
         """Extracting descriptive information on properties stored in GeoJSON data, referenced by other components
 
-        :param annotations_geojson: GeoJSON data
+        :param annotations_geojson: New/modified set of GeoJSON annotations
         :type annotations_geojson: list
+        :param current_ann_info: Current annotation property information
+        :type current_ann_info: list
+        :param slide_information: Current slide information
+        :type slide_information: list
         """
         if not any([i['value'] for i in ctx.triggered]):
             empty_store = {
@@ -1237,16 +1349,54 @@ class SlideMap(MapComponent):
             }
             return [json.dumps(empty_store)]
         
+        #TODO: Check if these annotations or annotations for this item are currently in the running database instance. If not, add them there.
         annotations_geojson = json.loads(get_pattern_matching_value(annotations_geojson))
+        current_ann_info = json.loads(get_pattern_matching_value(current_ann_info))
+        slide_information = json.loads(get_pattern_matching_value(slide_information))
 
+        # Checking if slide is already cached
+        if self.cache and not slide_information.get('id') is None:
+            db_item = self.check_slide_in_cache(
+                image_id = slide_information.get('id')
+            )
+            if not db_item:
+                # Then this item is not cached, add it to the database.
+                # Use the original slide CRS annotations when adding to the database:
+                slide_crs_geojson = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/slide_information['x_scale'],c[1]/slide_information['y_scale']),g),a) for a in annotations_geojson if not a is None]
+                for a,s in zip(annotations_geojson,slide_crs_geojson):
+                    s['properties'] = a['properties']
+
+                start = time.time()
+                # Adding to database on another thread:
+                new_thread = threading.Thread(
+                    target = self.database.add_slide,
+                    name = uuid.uuid4().hex[:24],
+                    kwargs = {
+                        'slide_id': slide_information.get('id'),
+                        'slide_name':slide_information.get('name'),
+                        'metadata': {},
+                        'image_metadata': {},
+                        'image_filepath': None,
+                        'annotations_metadata': {},
+                        'annotations': slide_crs_geojson
+                    },
+                    daemon = True
+                )
+                new_thread.start()    
+
+                #print(f'Image: {slide_information.get("name")} has been added to cache! {time.time()-start}')
+            else:
+                #print(f'Image: {slide_information.get("name")} is already cached!')
+                pass
+            
         start = time.time()
-        new_available_properties, new_feature_names, new_property_info = extract_geojson_properties(annotations_geojson,None,['_id','_index'],4)
-        #print(f'Getting geojson properties: {time.time() - start}')
+        new_available_properties, new_feature_names, new_property_info = extract_geojson_properties(annotations_geojson,None,['barcode','_id','_index'],4)
         annotations_info_store = json.dumps({
             'available_properties': new_available_properties,
             'feature_names': new_feature_names,
             'property_info': new_property_info
         })
+        #print(f'Getting geojson properties: {time.time() - start}')
 
         return [annotations_info_store]
 
@@ -1822,7 +1972,8 @@ class MultiFrameSlideMap(SlideMap):
     :param SlideMap: dl.Map() container where image tiles are displayed.
     :type SlideMap: None
     """
-    def __init__(self):
+    def __init__(self,
+                 cache:bool = False):
         """Constructor method
 
         :param tile_server: TileServer object in use. For remote DSA tile sources this would be DSATileServer while for local images this would be LocalTileServer
@@ -1831,7 +1982,7 @@ class MultiFrameSlideMap(SlideMap):
         :type annotations: Union[dict,list,None]
         """
 
-        super().__init__()
+        super().__init__(cache)
 
     def load(self, component_prefix:int):
 
@@ -1859,8 +2010,15 @@ class MultiFrameSlideMap(SlideMap):
         vis_data = json.loads(vis_data)
         new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
 
-        #TODO: Add progress bar for loading annotations?
-        #TODO: Load manual ROIs and marker layer from visualization session
+        # Checking if the slide is cached (if self.cache=True)
+        get_from_cache = False
+        if self.cache:
+            cached_item = self.check_slide_in_cache(
+                image_id = new_slide.get('id')
+            )
+            if cached_item:
+                get_from_cache = True
+
 
         # Getting data from the tileservers:
         if not 'current_user' in vis_data:
@@ -2007,6 +2165,8 @@ class MultiFrameSlideMap(SlideMap):
         new_slide_info['tiles_metadata'] = new_image_metadata
         new_slide_info = new_slide_info | new_slide
 
+        new_slide_info['cached'] = get_from_cache
+
         new_slide_info = json.dumps(new_slide_info)
 
         # Updating manual and generated ROIs divs
@@ -2090,7 +2250,8 @@ class MultiFrameSlideMap(SlideMap):
                         title = 'Case Metadata',
                         children = non_nested_case_metadata_table + case_nested_accordions
                     )
-                ]
+                ],
+                start_collapsed=True
             )
         )
 
@@ -2219,8 +2380,8 @@ class LargeSlideMap(SlideMap):
     """
     def __init__(self,
                  min_zoom:int,
-                 ):
-        super().__init__()
+                 cache:bool = False):
+        super().__init__(cache)
 
         self.min_zoom = min_zoom
 
@@ -2567,6 +2728,15 @@ class LargeSlideMap(SlideMap):
         vis_data = json.loads(vis_data)
         new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
 
+        # Check if slide is cached if using cache
+        get_from_cache = False
+        if self.cache:
+            cached_item = self.check_slide_in_cache(
+                image_id = new_slide.get('id')
+            )
+            if cached_item:
+                get_from_cache = True
+            
         # Getting data from the tileservers:
         if not 'current_user' in vis_data or not 'api_url' in new_slide:
             new_tile_url = new_slide['tiles_url']
@@ -2714,6 +2884,8 @@ class LargeSlideMap(SlideMap):
         new_slide_info['annotations_metadata'] = new_annotations_metadata
         new_slide_info['minZoom'] = self.min_zoom
 
+        new_slide_info['cached'] = get_from_cache
+
         new_slide_info = new_slide_info | new_slide
 
         geo_annotations = json.dumps(initial_anns)
@@ -2799,7 +2971,8 @@ class LargeSlideMap(SlideMap):
                         title = 'Case Metadata',
                         children = non_nested_case_metadata_table + case_nested_accordions
                     )
-                ]
+                ],
+                start_collapsed=True
             )
         )
 
@@ -2816,9 +2989,10 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
     :type MultiFrameSlideMap: _type_
     """
     def __init__(self,
-                 min_zoom:int):
+                 min_zoom:int,
+                 cache: bool = False):
         
-        super().__init__()
+        super().__init__(cache)
         
         self.min_zoom = min_zoom
 
@@ -3164,6 +3338,16 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
         vis_data = json.loads(vis_data)
         new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
 
+        # Check if slide is cached if using cache
+        get_from_cache = False
+        if self.cache:
+            cached_item = self.check_slide_in_cache(
+                image_id = new_slide.get('id')
+            )
+            if cached_item:
+                get_from_cache = True
+            
+
         if not 'current_user' in vis_data or not 'api_url' in new_slide:
             new_tile_url = new_slide['tiles_url']
             new_annotations_url = new_slide['annotations_url']
@@ -3311,6 +3495,8 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
         new_slide_info['annotations_metadata'] = new_annotations_metadata
         new_slide_info['minZoom'] = self.min_zoom
 
+        new_slide_info['cached'] = get_from_cache
+
         geo_annotations = json.dumps(initial_anns)
         new_slide_info = json.dumps(new_slide_info)
 
@@ -3393,7 +3579,8 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
                         title = 'Case Metadata',
                         children = non_nested_case_metadata_table + case_nested_accordions
                     )
-                ]
+                ],
+                start_collapsed=True
             )
         )
 
@@ -3409,14 +3596,11 @@ class HybridSlideMap(MultiFrameSlideMap):
     :param SlideMap: Base class for high-resolution slide visualization
     :type SlideMap: MapComponent
     """
-    def __init__(self):
+    def __init__(self,
+                 cache:bool = False):
         """Constructor method
         """
-        super().__init__()
-
-        # Place to save Namespace functions:
-        self.assets_folder = os.getcwd()+'/.fusion_assets/'
-        self.get_namespace()
+        super().__init__(cache)
 
     def load(self, component_prefix:int):
 
@@ -3431,6 +3615,8 @@ class HybridSlideMap(MultiFrameSlideMap):
         )        
 
         # Add callback functions here
+        self.get_namespace()
+
         self.get_callbacks()
         self.get_annotations_callbacks()
 
@@ -3442,9 +3628,15 @@ class HybridSlideMap(MultiFrameSlideMap):
         vis_data = json.loads(vis_data)
         new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
 
-        #TODO: Add progress bar for loading annotations?
-        #TODO: Load manual ROIs and marker layer from visualization session
-
+        # Check if slide is cached if using cache
+        get_from_cache = False
+        if self.cache:
+            cached_item = self.check_slide_in_cache(
+                image_id = new_slide.get('id')
+            )
+            if cached_item:
+                get_from_cache = True
+            
         # Getting data from the tileservers:
         if not 'current_user' in vis_data:
             new_url = new_slide['tiles_url']
@@ -3601,6 +3793,8 @@ class HybridSlideMap(MultiFrameSlideMap):
         new_slide_info['tiles_metadata'] = new_image_metadata
         new_slide_info = new_slide_info | new_slide
 
+        new_slide_info['cached'] = get_from_cache
+
         new_slide_info = json.dumps(new_slide_info)
 
         # Updating manual and generated ROIs divs
@@ -3684,7 +3878,8 @@ class HybridSlideMap(MultiFrameSlideMap):
                         title = 'Case Metadata',
                         children = non_nested_case_metadata_table + case_nested_accordions
                     )
-                ]
+                ],
+                start_collapsed=True
             )
         )
 
@@ -3747,8 +3942,10 @@ class SlideImageOverlay(MapComponent):
             'image_crs': self.image_crs,
             'image_properties': self.image_properties,
             'image_bounds': self.image_bounds,
-            'name': self.name,
-            '_id': self._id
+            'properties': {
+                'name': self.name,
+                '_id': self._id
+            }
         }
 
         return overlay_info_dict

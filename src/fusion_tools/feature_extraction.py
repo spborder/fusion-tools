@@ -260,7 +260,7 @@ class ParallelFeatureExtractor:
             mask = resize(mask,[image_region.shape[0],image_region.shape[1]],preserve_range=True,anti_aliasing=False)
 
         if not self.sub_mask is None:
-            mask = self.sub_mask(image_region,mask)
+            mask = self.sub_mask(image = image_region,mask = mask,coords = coords)
 
         bbox = self.get_bbox(coords)
 

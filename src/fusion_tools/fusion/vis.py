@@ -45,6 +45,7 @@ def get_layout(args):
     fusion_vis = Visualization(
         tileservers=[dsa_handler.get_tile_server(i) for i in initial_items],
         linkage = 'page',
+        database = args.get('database',None),
         header = [
             dsa_login_component,
             dsa_plugin_progress,
@@ -56,7 +57,9 @@ def get_layout(args):
             ],
             "Visualization": [
                 [
-                    HybridSlideMap(),
+                    HybridSlideMap(
+                        cache = True
+                    ),
                     [
                         OverlayOptions(),
                         ChannelMixer(),

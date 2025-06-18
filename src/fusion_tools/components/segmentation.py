@@ -38,9 +38,10 @@ from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 from fusion_tools.utils.shapes import find_intersecting, extract_geojson_properties, path_to_mask, process_filters_queries
 from fusion_tools import Tool
 
-#TODO: Need some kind of handler for handling where/how data is stored
-#TODO: Add schema selection for FeatureAnnotation and BulkLabels
 
+#TODO: Create an annotation folder which has a schemas module with a unified schema for each type
+# Optionally create one master annotation component which can hold the schemas and populate with one of the different levels of annotation components
+# Saving data can be routed to the fusionDB with options for extracting data into spreadsheets/files as needed
 
 class FeatureAnnotation(Tool):
     """Enables annotation (drawing) on top of structures in the SlideMap using a separate interface.
@@ -73,12 +74,9 @@ class FeatureAnnotation(Tool):
         assert self.labels_format in ['csv','json']
         assert self.annotations_format in ['one-hot','one-hot-labeled','rgb','index']
 
-        self.assets_folder = os.getcwd()+'/.fusion_assets/'
-
         if not os.path.exists(self.storage_path):
             os.makedirs(self.storage_path)
 
-        self.get_namespace()
     
     def __str__(self):
         return 'Feature Annotation'
@@ -96,6 +94,7 @@ class FeatureAnnotation(Tool):
         )
 
         # Add callbacks here
+        self.get_namespace()
         self.get_callbacks()
         self.feature_annotation_callbacks()
 
@@ -1114,7 +1113,10 @@ class FeatureAnnotation(Tool):
         elif 'feature-annotation-label-submit' in ctx.triggered_id['type']:
             figure_update = no_update
 
-            image_bbox = current_structure_data[current_structure][current_structure_data[f'{current_structure}_index']]
+            structure_names = [i['name'] for i in current_structure_data]
+            current_structure_index = current_structure_data[structure_names.index(current_structure)]['index']
+
+            image_bbox = current_structure_data[structure_names.index(current_structure)]['bboxes'][current_structure_index]
 
             if not new_label is None:
                 # Saving label to running file
@@ -1567,8 +1569,6 @@ class BulkLabels(Tool):
         self.ignore_list = ignore_list
         self.property_depth = property_depth
 
-        self.assets_folder = os.getcwd()+'/.fusion_assets/'
-        self.get_namespace()
 
     def __str__(self):
         return 'Bulk Labels'
@@ -1584,6 +1584,7 @@ class BulkLabels(Tool):
             ]
         )
 
+        self.get_namespace()
         self.get_callbacks()
 
     def get_scale_factors(self, image_metadata: dict):
