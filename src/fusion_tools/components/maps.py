@@ -19,6 +19,7 @@ from PIL import Image
 import lxml.etree as ET
 from copy import deepcopy
 
+import threading
 import asyncio
 
 #os.environ['PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION'] = 'python'
@@ -808,7 +809,8 @@ class SlideMap(MapComponent):
                                     ...feature.properties.user,
                                     name: name,
                                     _id: uuidv4(),
-                                    _index: f_idx
+                                    _index: f_idx,
+                                    cluster: true
                                 }
                             }))
                         }
@@ -831,7 +833,8 @@ class SlideMap(MapComponent):
                                     ...feature.properties,
                                     name: name,
                                     _id: uuidv4(),
-                                    _index: f_idx
+                                    _index: f_idx,
+                                    cluster: true
                                 }
                             }))
                         }
@@ -1051,7 +1054,7 @@ class SlideMap(MapComponent):
                                 'type': 'FeatureCollection',
                                 'features': []
                             },
-                            #format = 'geojson',
+                            format = 'geojson',
                             id = {'type': f'{self.component_prefix}-feature-bounds','index': st_idx},
                             options = {
                                 'style': self.js_namespace('featureStyle')
@@ -1076,6 +1079,8 @@ class SlideMap(MapComponent):
                                 }
                             ),
                             zoomToBounds = False,
+                            cluster = True,
+                            superClusterOptions={'radius': 100},
                             children = [
                                 dl.Popup(
                                     id = {'type': f'{self.component_prefix}-feature-popup','index': st_idx},
@@ -1361,22 +1366,30 @@ class SlideMap(MapComponent):
                 for a,s in zip(annotations_geojson,slide_crs_geojson):
                     s['properties'] = a['properties']
 
-                self.database.add_slide(
-                    slide_id = slide_information.get('id'),
-                    slide_name = slide_information.get('name'),
-                    metadata = {},
-                    image_metadata = {},
-                    image_filepath = None,
-                    annotations_metadata = {},
-                    annotations = slide_crs_geojson
+                start = time.time()
+                # Adding to database on another thread:
+                new_thread = threading.Thread(
+                    target = self.database.add_slide,
+                    name = uuid.uuid4().hex[:24],
+                    kwargs = {
+                        'slide_id': slide_information.get('id'),
+                        'slide_name':slide_information.get('name'),
+                        'metadata': {},
+                        'image_metadata': {},
+                        'image_filepath': None,
+                        'annotations_metadata': {},
+                        'annotations': slide_crs_geojson
+                    },
+                    daemon = True
                 )
+                new_thread.start()    
 
-                print(f'Image: {slide_information.get("name")} has been added to cache!')
+                print(f'Image: {slide_information.get("name")} has been added to cache! {time.time()-start}')
             else:
                 print(f'Image: {slide_information.get("name")} is already cached!')
 
         start = time.time()
-        new_available_properties, new_feature_names, new_property_info = extract_geojson_properties(annotations_geojson,None,['_id','_index'],4)
+        new_available_properties, new_feature_names, new_property_info = extract_geojson_properties(annotations_geojson,None,['barcode','_id','_index'],4)
         annotations_info_store = json.dumps({
             'available_properties': new_available_properties,
             'feature_names': new_feature_names,

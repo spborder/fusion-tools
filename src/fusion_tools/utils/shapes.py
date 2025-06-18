@@ -1330,7 +1330,7 @@ def extract_geojson_properties(geo_list: list, reference_object: Union[str,None]
         if len(list(ann['properties'].keys()))==0:
             continue
         feature_names.append(ann['properties']['name'])
-        for f in ann['features']:
+        for f in tqdm(ann['features']):
             f_props = [i for i in list(f['properties'].keys()) if not i in ignore_list]
             for p in f_props:
                 # Checking for sub-properties

@@ -1237,10 +1237,14 @@ class PropertyViewer(Tool):
         update_viewer = get_pattern_matching_value(update_viewer)
         active_tab = get_pattern_matching_value(active_tab)
 
+        start = time.time()
+
         if not active_tab is None:
             if not active_tab=='property-viewer':
+                print(f'Not active tab: {time.time() - start}')
                 return [no_update], [no_update]
         else:
+            print(f'active_tab is None: {time.time() - start}')
             return [no_update], [no_update]
         
         slide_map_bounds = get_pattern_matching_value(slide_map_bounds)
@@ -4923,8 +4927,11 @@ class GlobalPropertyPlotter(MultiTool):
 
     def extract_property_keys(self, session_data:dict):
 
+        start = time.time()
         all_property_keys = []
         for slide in session_data['current']:
+
+            #TODO: Check if slide is in cache
 
             # Determine whether this is a DSA slide or local
             if 'api_url' in slide:
@@ -4938,9 +4945,12 @@ class GlobalPropertyPlotter(MultiTool):
                 sep_str = '&' if '?' in request_str else '?'
                 request_str+=f'{sep_str}adjacentItems=false&sources=item,annotation,annotationelement&annotations=["__all__"]'
                 
+                req_time = time.time()
                 req_obj = requests.post(request_str)
                 if req_obj.ok:
                     all_property_keys.extend(req_obj.json())
+                
+                print(f'GlobalPropertyPlotter.extract_property_keys request time: {time.time() - start}')
 
             else:
                 item_id = slide['metadata_url'].split('/')[-2]
@@ -4985,6 +4995,8 @@ class GlobalPropertyPlotter(MultiTool):
         bbox_cols = ['bbox.x0','bbox.y0','bbox.x1','bbox.y1']
         slide_col = 'item.name'
         structure_col = 'annotation.name'
+
+        print(f'GlobalPropertyPlotter.extract_property_keys: {time.time() - start}')
 
         return property_keys, property_names, structure_col, slide_col, bbox_cols
     
@@ -5672,7 +5684,7 @@ class GlobalPropertyPlotter(MultiTool):
                 State({'type': 'global-property-plotter-structures','index': ALL},'options'),
                 State({'type': 'global-property-plotter-label-drop','index': ALL},'options'),
             ],
-            prevent_initial_call = True
+            prevent_initial_call = True,
         )
 
     def update_drop_type(self, switch_switched, keys_info):
