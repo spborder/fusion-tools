@@ -1280,8 +1280,8 @@ class DatasetBuilder(DSATool):
 
                 new_slide_info.append(
                     {
-                        'name': slide_info['name'],
-                        'id': slide_info['id'],
+                        'name': slide_info.get('name',''),
+                        'id': slide_info.get('_id',''),
                         'api_url': self.handler.girderApiUrl,
                         'tiles_url': f'{self.handler.girderApiUrl}/item/{s}/tiles/zxy'+'/{z}/{x}/{y}',
                         'regions_url': f'{self.handler.girderApiUrl}/item/{s}/tiles/region',

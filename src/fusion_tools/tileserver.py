@@ -252,7 +252,7 @@ class LocalTileServer(TileServer):
             new_local_item.processed_annotations
         )
 
-        print(f"Item names in database: {self.database.get_names('item')}")
+        #print(f"Item names in database: {self.database.get_names('item')}")
 
     def root(self):
         return {'message': "Oh yeah, now we're cooking"}
@@ -486,7 +486,6 @@ class LocalTileServer(TileServer):
         """
 
         image_item = await asyncio.gather(self.get_item(id))
-        print(image_item)
         if len(image_item[0])>0:
             image_meta = image_item[0][0].get('image_meta',{})
             return Response(content = json.dumps(image_meta),media_type = 'application/json')

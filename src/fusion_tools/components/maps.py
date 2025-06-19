@@ -579,6 +579,7 @@ class SlideMap(MapComponent):
         """
         
         # Updating based on modifications to current visualization session
+        """
         self.blueprint.callback(
             [
                 Input('anchor-vis-store','data')
@@ -587,6 +588,7 @@ class SlideMap(MapComponent):
                 Output({'type':'slide-select-drop','index': ALL},'options')
             ]
         )(self.update_vis_session)
+        """
 
         # Updating current slide and annotations
         self.blueprint.callback(
@@ -810,7 +812,6 @@ class SlideMap(MapComponent):
                                     name: name,
                                     _id: uuidv4(),
                                     _index: f_idx,
-                                    cluster: true
                                 }
                             }))
                         }
@@ -834,7 +835,6 @@ class SlideMap(MapComponent):
                                     name: name,
                                     _id: uuidv4(),
                                     _index: f_idx,
-                                    cluster: true
                                 }
                             }))
                         }
@@ -843,8 +843,6 @@ class SlideMap(MapComponent):
 
                 // Initializing an error store in the event that fetch is blocked by some CORS policy
                 const annotations_error_store = [];
-
-                console.log(map_slide_information);
 
                 // If this image is cached, stop here and revert to grabbing locally:
                 if (map_slide_information.cached){
@@ -1079,8 +1077,6 @@ class SlideMap(MapComponent):
                                 }
                             ),
                             zoomToBounds = False,
-                            cluster = True,
-                            superClusterOptions={'radius': 100},
                             children = [
                                 dl.Popup(
                                     id = {'type': f'{self.component_prefix}-feature-popup','index': st_idx},
@@ -1363,7 +1359,7 @@ class SlideMap(MapComponent):
                 # Then this item is not cached, add it to the database.
                 # Use the original slide CRS annotations when adding to the database:
                 slide_crs_geojson = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/slide_information['x_scale'],c[1]/slide_information['y_scale']),g),a) for a in annotations_geojson if not a is None]
-                for a,s in zip(annotations_geojson,slide_crs_geojson):
+                for a,s in zip([i for i in annotations_geojson if not i is None],slide_crs_geojson):
                     s['properties'] = a['properties']
 
                 start = time.time()

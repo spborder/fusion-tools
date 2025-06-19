@@ -4,6 +4,7 @@ import numpy as np
 import json
 import uuid
 
+from datetime import datetime
 
 # Dash imports
 import dash
@@ -142,6 +143,8 @@ class Visualization:
         self.default_page = self.app_options.get('default_page')
 
         self.assets_folder = self.app_options['assets_folder']
+        if not os.path.exists(self.assets_folder):
+            os.makedirs(self.assets_folder)
 
         self.initialize_database()
 
@@ -194,7 +197,8 @@ class Visualization:
                 Input({'type':'page-button','index': ALL},'n_clicks')
             ],
             [
-                State('anchor-vis-store','data')
+                State('anchor-vis-store','data'),
+                State('anchor-vis-store','modified_timestamp')
             ],
             [
                 Output('vis-container','children'),
@@ -283,7 +287,7 @@ class Visualization:
         else:
             raise exceptions.PreventUpdate
 
-    def update_page(self, pathname, path_search, path_button, session_data):
+    def update_page(self, pathname, path_search, path_button, session_data, session_modified_time):
         """Updating page in multi-page application
 
         :param pathname: Pathname or suffix of current url which is a key to the page name
@@ -293,6 +297,10 @@ class Visualization:
         #TODO: Check if the user specified in session_data['current_user'] is in the database yet
         session_data = json.loads(session_data)
 
+        # Resetting session data if going from the same tab/notebook after restarting the application
+        if datetime.fromtimestamp(session_modified_time/1e3) < self.app_start_time:
+            session_data = self.vis_store_content
+        
         if ctx.triggered_id=='anchor-page-url':
             if pathname in self.layout_dict:
                 # If that path is in the layout dict, return that page content
@@ -582,6 +590,9 @@ class Visualization:
                 storage_type = 'session'
             )   
         )
+
+        self.app_start_time = datetime.now()
+        print(f'app start time: {self.app_start_time}')
 
         if len(self.header)>0:
             header_components = self.gen_header_components()
@@ -955,7 +966,7 @@ class Visualization:
     def start(self):
         """Starting visualization session based on provided app_options
         """
-        
+
         if not self.app_options['jupyter']:
             app = FastAPI()
 
