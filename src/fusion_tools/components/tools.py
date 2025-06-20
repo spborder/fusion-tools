@@ -1260,6 +1260,7 @@ class PropertyViewer(Tool):
 
         elif 'property-view-type' in ctx.triggered_id['type']:
             view_subtype_value = []
+            update_viewer = False
 
         current_property_data['update_view'] = update_viewer
         current_property_data['property'] = view_type_value
