@@ -3481,198 +3481,201 @@ class HRAViewer(Tool):
                 }
             )
         
-        if viewer_drop_value in self.asct_b_release['Organ'].tolist():
-            
-            organ_table, table_attribution = self.get_organ_table(viewer_drop_value)
-            
-            if not organ_table is None and not table_attribution is None:
+        if not self.asct_b_release is None:
+            if viewer_drop_value in self.asct_b_release['Organ'].tolist():
                 
-                reviewers_and_authors = [
-                    dbc.Row([
-                        dbc.Col([
-                            dbc.Label(
-                                html.H4('Authors:'),
-                                html_for={'type': f'{self.component_prefix}-hra-viewer-authors','index': 0}
-                            )
-                        ])
-                    ]),
-                    dbc.Row([
-                        dbc.Col([
-                            html.Div(
-                                dmc.AvatarGroup(
-                                    id = {'type': f'{self.component_prefix}-hra-viewer-authors','index': 0},
-                                    children = [
-                                        html.A(
-                                            dmc.Tooltip(
-                                                dmc.Avatar(
-                                                    ''.join([n[0] for n in name.split()]),
-                                                    radius = 'xl',
-                                                    size = 'lg',
-                                                    color = f'rgb({np.random.randint(0,255)},{np.random.randint(0,255)},{np.random.randint(0,255)})'
-                                                ),
-                                                label = name,
-                                                position = 'bottom'
-                                            ),
-                                            href = f'https://orcid.org/{orc_id}',
-                                            target = '_blank'
-                                        )
-                                        for name,orc_id in zip(table_attribution['authors'], table_attribution['authors_orcs'])
-                                    ]
+                organ_table, table_attribution = self.get_organ_table(viewer_drop_value)
+                
+                if not organ_table is None and not table_attribution is None:
+                    
+                    reviewers_and_authors = [
+                        dbc.Row([
+                            dbc.Col([
+                                dbc.Label(
+                                    html.H4('Authors:'),
+                                    html_for={'type': f'{self.component_prefix}-hra-viewer-authors','index': 0}
                                 )
-                            )
-                        ])
-                    ],style={'marginBottom': '5px'},align='center'),
-                    dbc.Row([
-                        dbc.Col(
-                            dbc.Label(
-                                html.H6(
-                                    'Reviewers: '
-                                ),
-                                html_for={'type': f'{self.component_prefix}-hra-viewer-reviewers','index': 0}
-                            )
-                        )
-                    ]),
-                    dbc.Row([
-                        dbc.Col([
-                            html.Div(
-                                dmc.AvatarGroup(
-                                    id = {'type': f'{self.component_prefix}-hra-viewer-reviewers','index': 0},
-                                    children = [
-                                        html.A(
-                                            dmc.Tooltip(
-                                                dmc.Avatar(
-                                                    ''.join([n[0] for n in name.split()]),
-                                                    radius = 'xl',
-                                                    size = 'md',
-                                                    color = f'rgb({np.random.randint(0,255)},{np.random.randint(0,255)},{np.random.randint(0,255)})'
+                            ])
+                        ]),
+                        dbc.Row([
+                            dbc.Col([
+                                html.Div(
+                                    dmc.AvatarGroup(
+                                        id = {'type': f'{self.component_prefix}-hra-viewer-authors','index': 0},
+                                        children = [
+                                            html.A(
+                                                dmc.Tooltip(
+                                                    dmc.Avatar(
+                                                        ''.join([n[0] for n in name.split()]),
+                                                        radius = 'xl',
+                                                        size = 'lg',
+                                                        color = f'rgb({np.random.randint(0,255)},{np.random.randint(0,255)},{np.random.randint(0,255)})'
+                                                    ),
+                                                    label = name,
+                                                    position = 'bottom'
                                                 ),
-                                                label = name,
-                                                position = 'bottom'
-                                            ),
-                                            href = f'https://orcid.org/{orc_id}',
-                                            target = '_blank'
-                                        )
-                                        for name, orc_id in zip(table_attribution['reviewers'], table_attribution['reviewers_orcs'])
-                                    ]
-                                )
-                            )]
-                        )
-                    ],style = {'marginBottom':'5px'})
-                ]
-
-                general_publications = dbc.Row([
-                        dbc.Col(
-                            'General Publication(s):',
-                            md = 4
-                        ),
-                        dbc.Col(
-                            dbc.Card(
-                                dbc.CardBody(
-                                    children = [
-                                        dbc.Row(
-                                            dbc.Col(dmc.NavLink(
-                                                label = p if 'https' in p else f'https://doi.org/{p.split("DOI:")[-1]}',
-                                                href = p if 'https' in p else f'https://doi.org/{p.split("DOI:")[-1]}',
+                                                href = f'https://orcid.org/{orc_id}',
                                                 target = '_blank'
-                                            )),
-                                            align='left'
+                                            )
+                                            for name,orc_id in zip(table_attribution['authors'], table_attribution['authors_orcs'])
+                                        ]
+                                    )
+                                )
+                            ])
+                        ],style={'marginBottom': '5px'},align='center'),
+                        dbc.Row([
+                            dbc.Col(
+                                dbc.Label(
+                                    html.H6(
+                                        'Reviewers: '
+                                    ),
+                                    html_for={'type': f'{self.component_prefix}-hra-viewer-reviewers','index': 0}
+                                )
+                            )
+                        ]),
+                        dbc.Row([
+                            dbc.Col([
+                                html.Div(
+                                    dmc.AvatarGroup(
+                                        id = {'type': f'{self.component_prefix}-hra-viewer-reviewers','index': 0},
+                                        children = [
+                                            html.A(
+                                                dmc.Tooltip(
+                                                    dmc.Avatar(
+                                                        ''.join([n[0] for n in name.split()]),
+                                                        radius = 'xl',
+                                                        size = 'md',
+                                                        color = f'rgb({np.random.randint(0,255)},{np.random.randint(0,255)},{np.random.randint(0,255)})'
+                                                    ),
+                                                    label = name,
+                                                    position = 'bottom'
+                                                ),
+                                                href = f'https://orcid.org/{orc_id}',
+                                                target = '_blank'
+                                            )
+                                            for name, orc_id in zip(table_attribution['reviewers'], table_attribution['reviewers_orcs'])
+                                        ]
+                                    )
+                                )]
+                            )
+                        ],style = {'marginBottom':'5px'})
+                    ]
+
+                    general_publications = dbc.Row([
+                            dbc.Col(
+                                'General Publication(s):',
+                                md = 4
+                            ),
+                            dbc.Col(
+                                dbc.Card(
+                                    dbc.CardBody(
+                                        children = [
+                                            dbc.Row(
+                                                dbc.Col(dmc.NavLink(
+                                                    label = p if 'https' in p else f'https://doi.org/{p.split("DOI:")[-1]}',
+                                                    href = p if 'https' in p else f'https://doi.org/{p.split("DOI:")[-1]}',
+                                                    target = '_blank'
+                                                )),
+                                                align='left'
+                                            )
+                                            if 'doi' in p.lower() else dbc.Row(p)
+                                            for p in table_attribution['publications']
+                                        ],
+                                        style = {'maxHeight':'100px','overflow':'scroll'}
+                                    )
+                                    if not table_attribution['publications']=='Not Provided' else 'Not Provided'
+                                ),
+                                md = 8
+                            )
+                        ],align='center')
+                    
+                    organ_dash_table = [
+                        dash_table.DataTable(
+                            id = {'type':f'{self.component_prefix}-hra-viewer-table','index': 0},
+                            columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in organ_table.columns],
+                            data = organ_table.to_dict('records'),
+                            editable = False,
+                            filter_action='native',
+                            sort_action='native',
+                            sort_mode='multi',
+                            style_table = {
+                                'overflowX': 'auto',
+                                'maxWidth': '800px'
+                            },
+                            tooltip_data = [
+                                {
+                                    column: {'value': str(value),'type':'markdown'}
+                                    for column,value in row.items()
+                                } for row in organ_table.to_dict('records')
+                            ],
+                            tooltip_duration = None
+                        )
+                    ]
+                    
+                    data_doi = dbc.Row([
+                            dbc.Col(
+                                dmc.NavLink(
+                                    label = html.Div('Data DOI',style={'align':'center'}),
+                                    href = table_attribution['data_doi'],
+                                    target = '_blank'
+                                ),
+                                md = 12
+                            )
+                        ],align = 'center')
+                
+
+
+                    viewer_children = dbc.Row([
+                        dbc.Col([
+                            html.Div([
+                                html.Div(reviewers_and_authors),
+                                html.Hr(),
+                                dbc.Row([
+                                    dbc.Col([
+                                        html.Div(
+                                            organ_dash_table,
+                                            style = {'maxHeight': '500px','overflow': 'scroll','width': '100%'}
                                         )
-                                        if 'doi' in p.lower() else dbc.Row(p)
-                                        for p in table_attribution['publications']
-                                    ],
-                                    style = {'maxHeight':'100px','overflow':'scroll'}
-                                )
-                                if not table_attribution['publications']=='Not Provided' else 'Not Provided'
-                            ),
-                            md = 8
-                        )
-                    ],align='center')
-                
-                organ_dash_table = [
-                    dash_table.DataTable(
-                        id = {'type':f'{self.component_prefix}-hra-viewer-table','index': 0},
-                        columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in organ_table.columns],
-                        data = organ_table.to_dict('records'),
-                        editable = False,
-                        filter_action='native',
-                        sort_action='native',
-                        sort_mode='multi',
-                        style_table = {
-                            'overflowX': 'auto',
-                            'maxWidth': '800px'
-                        },
-                        tooltip_data = [
-                            {
-                                column: {'value': str(value),'type':'markdown'}
-                                for column,value in row.items()
-                            } for row in organ_table.to_dict('records')
+                                    ],md = 'auto')
+                                ]),
+                                html.Hr(),
+                                dbc.Row([
+                                    dbc.Col([
+                                        dbc.Label(
+                                            html.H6('Table Data Sources:'),
+                                            html_for={'type':f'{self.component_prefix}-hra-viewer-table-sources','index':0}
+                                        )
+                                    ],md=12)
+                                ]),
+                                general_publications,
+                                data_doi,
+                                dbc.Row([
+                                    dbc.Col(
+                                        dbc.Label('Date: ',html_for = {'type': f'{self.component_prefix}-hra-viewer-date','index': 0}),
+                                        md = 4
+                                    ),
+                                    dbc.Col(
+                                        table_attribution['date'],
+                                        md = 8
+                                    )
+                                ],align='center'),
+                                dbc.Row([
+                                    dbc.Col(
+                                        dbc.Label('Version Number: ',html_for = {'type':f'{self.component_prefix}-hra-viewer-version','index': 0}),
+                                        md = 4
+                                    ),
+                                    dbc.Col(
+                                        table_attribution['version'],
+                                        md = 8
+                                    )
+                                ],align='center')
+                            ])
                         ],
-                        tooltip_duration = None
-                    )
-                ]
-                
-                data_doi = dbc.Row([
-                        dbc.Col(
-                            dmc.NavLink(
-                                label = html.Div('Data DOI',style={'align':'center'}),
-                                href = table_attribution['data_doi'],
-                                target = '_blank'
-                            ),
-                            md = 12
-                        )
-                    ],align = 'center')
-            
+                        width = True)
+                    ],style={'width':'100%'})
 
-
-                viewer_children = dbc.Row([
-                    dbc.Col([
-                        html.Div([
-                            html.Div(reviewers_and_authors),
-                            html.Hr(),
-                            dbc.Row([
-                                dbc.Col([
-                                    html.Div(
-                                        organ_dash_table,
-                                        style = {'maxHeight': '500px','overflow': 'scroll','width': '100%'}
-                                    )
-                                ],md = 'auto')
-                            ]),
-                            html.Hr(),
-                            dbc.Row([
-                                dbc.Col([
-                                    dbc.Label(
-                                        html.H6('Table Data Sources:'),
-                                        html_for={'type':f'{self.component_prefix}-hra-viewer-table-sources','index':0}
-                                    )
-                                ],md=12)
-                            ]),
-                            general_publications,
-                            data_doi,
-                            dbc.Row([
-                                dbc.Col(
-                                    dbc.Label('Date: ',html_for = {'type': f'{self.component_prefix}-hra-viewer-date','index': 0}),
-                                    md = 4
-                                ),
-                                dbc.Col(
-                                    table_attribution['date'],
-                                    md = 8
-                                )
-                            ],align='center'),
-                            dbc.Row([
-                                dbc.Col(
-                                    dbc.Label('Version Number: ',html_for = {'type':f'{self.component_prefix}-hra-viewer-version','index': 0}),
-                                    md = 4
-                                ),
-                                dbc.Col(
-                                    table_attribution['version'],
-                                    md = 8
-                                )
-                            ],align='center')
-                        ])
-                    ],
-                    width = True)
-                ],style={'width':'100%'})
-
+                else:
+                    viewer_children = dbc.Alert(f'Unable to get ASCT+B Table for {viewer_drop_value}',color='warning')
             else:
                 viewer_children = dbc.Alert(f'Unable to get ASCT+B Table for {viewer_drop_value}',color='warning')
 

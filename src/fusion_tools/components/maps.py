@@ -1347,6 +1347,8 @@ class SlideMap(MapComponent):
         
         #TODO: Check if these annotations or annotations for this item are currently in the running database instance. If not, add them there.
         annotations_geojson = json.loads(get_pattern_matching_value(annotations_geojson))
+        if not type(annotations_geojson)==list:
+            annotations_geojson = [annotations_geojson]
         current_ann_info = json.loads(get_pattern_matching_value(current_ann_info))
         slide_information = json.loads(get_pattern_matching_value(slide_information))
 
