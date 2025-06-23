@@ -48,6 +48,9 @@ from fusion_tools.handler.dsa_handler import DSAHandler
 # Optionally create one master annotation component which can hold the schemas and populate with one of the different levels of annotation components
 # Saving data can be routed to the fusionDB with options for extracting data into spreadsheets/files as needed
 
+
+
+
 class FeatureAnnotation(Tool):
     """Enables annotation (drawing) on top of structures in the SlideMap using a separate interface.
 
