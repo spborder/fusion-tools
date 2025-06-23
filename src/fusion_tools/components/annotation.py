@@ -43,12 +43,10 @@ from fusion_tools import Tool, MultiTool
 
 from fusion_tools.handler.dsa_handler import DSAHandler
 
+#TODO: Unified schema
 
-#TODO: Create an annotation folder which has a schemas module with a unified schema for each type
-# Optionally create one master annotation component which can hold the schemas and populate with one of the different levels of annotation components
-# Saving data can be routed to the fusionDB with options for extracting data into spreadsheets/files as needed
-
-
+#TODO: Data storage method
+# Local (files, database), cloud (DSA,?), custom
 
 
 class FeatureAnnotation(Tool):

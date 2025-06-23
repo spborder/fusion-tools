@@ -300,6 +300,10 @@ class Visualization:
         # Resetting session data if going from the same tab/notebook after restarting the application
         if datetime.fromtimestamp(session_modified_time/1e3) < self.app_start_time:
             session_data = self.vis_store_content
+            print('session data updated')
+        else:
+            print('session data not updated')
+        
         
         if ctx.triggered_id=='anchor-page-url':
             if pathname in self.layout_dict:
@@ -312,7 +316,7 @@ class Visualization:
                     session_data=session_data
                 )
 
-                return page_content, no_update, no_update, no_update
+                return page_content, no_update, no_update, json.dumps(session_data)
             
             elif 'session' in pathname:
                 from fusion_tools.handler.dsa_handler import DSAHandler
@@ -355,7 +359,7 @@ class Visualization:
                         html.P(html.A(page,href=page))
                         for page in self.layout_dict
                     ])
-                    return not_found_page, pathname, '', no_update
+                    return not_found_page, pathname, '', json.dumps(session_data)
                 else:
                     page_content = self.update_page_layout(
                         page_components_list = self.components[self.default_page.replace(self.app_options.get('requests_pathname_prefix','/'),'').replace('-',' ')],
@@ -363,7 +367,7 @@ class Visualization:
                         session_data=session_data
                     )
 
-                    return page_content, no_update, no_update, no_update
+                    return page_content, no_update, no_update, json.dumps(session_data)
 
         elif ctx.triggered_id['type']=='page-button':
             new_pathname = list(self.layout_dict.keys())[ctx.triggered_id['index']]
@@ -374,7 +378,7 @@ class Visualization:
                 session_data=session_data
             )
 
-            return page_content, new_pathname, '', no_update
+            return page_content, new_pathname, '', json.dumps(session_data)
     
     def initialize_stores(self):
 

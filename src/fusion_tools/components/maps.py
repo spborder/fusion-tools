@@ -987,8 +987,10 @@ class SlideMap(MapComponent):
             raise exceptions.PreventUpdate
 
         vis_data = json.loads(vis_data)
-        new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
+        print(json.dumps(vis_data,indent=4))
 
+        new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
+        
         # Check if slide is cached if using cache
         get_from_cache = False
         if self.cache:
@@ -1011,6 +1013,7 @@ class SlideMap(MapComponent):
             image_metadata_url = new_slide['image_metadata_url']+f'?token={vis_data["current_user"]["token"]}'
             metadata_url = new_slide['metadata_url']+f'?token={vis_data["current_user"]["token"]}'
             annotations_metadata_url = new_slide['annotations_metadata_url']
+
 
         new_image_metadata = requests.get(image_metadata_url).json()
         new_metadata = requests.get(metadata_url).json()
