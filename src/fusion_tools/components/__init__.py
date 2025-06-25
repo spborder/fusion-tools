@@ -18,6 +18,6 @@ from fusion_tools.components.custom import (
     CustomFunction, FUSIONFunction
 )
 from fusion_tools.components.annotation import (
-    FeatureAnnotation, BulkLabels, SlideAnnotation, SlideAnnotationSchema
+    AnnotationSchema, FeatureAnnotation, BulkLabels, SlideAnnotation
 )
 
