@@ -7,6 +7,8 @@ import json
 import uuid
 import time
 
+from datetime import datetime
+
 from sqlalchemy import (
     not_, func, select, create_engine,
     Column, String, Boolean,ForeignKey, JSON)
@@ -78,6 +80,15 @@ class fusionDB:
             session.add(obj)
 
         return True
+    
+    def update(self, obj, session = None):
+
+        if session is None:
+            with self.get_db() as session:
+                session.update(obj)
+                session.commit()
+        else:
+            session.update(obj)
 
     def get_create(self, table_name:str, inst_id:Union[str,None] = None, kwargs:Union[dict,None] = None):
         
@@ -89,18 +100,30 @@ class fusionDB:
                     ).filter_by(id = inst_id).first()
 
                     if not get_create_result:
+                        # This is if this thing does not exist in the table
+                        updated = datetime.now()
                         get_create_result = TABLE_NAMES.get(table_name)(
                             id = inst_id,
-                            **kwargs
+                            **kwargs | {'updated': updated}
                         )
 
                         self.add(get_create_result, session)
+                    else:
+                        # This is if this thing DOES exist in the table, update
+                        updated = datetime.now()
+                        get_create_result = TABLE_NAMES.get(table_name)(
+                            id = inst_id,
+                            **kwargs | {'updated': updated}
+                        )
+
+                        self.update(get_create_result, session)
                 
                 else:
                     new_id = self.get_uuid()
+                    updated = datetime.now()
                     get_create_result = TABLE_NAMES.get(table_name)(
                         id = new_id,
-                        **kwargs
+                        **kwargs | {'updated': updated}
                     )
 
                     self.add(get_create_result, session)

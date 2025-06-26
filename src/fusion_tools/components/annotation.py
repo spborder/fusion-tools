@@ -24,6 +24,8 @@ import requests
 import time
 import geojson
 
+import asyncio
+
 from skimage.measure import label
 
 # Dash imports
@@ -39,7 +41,7 @@ from dash_extensions.javascript import Namespace, assign
 # fusion-tools imports
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 from fusion_tools.utils.shapes import find_intersecting, extract_geojson_properties, path_to_mask, process_filters_queries
-from fusion_tools import Tool, MultiTool
+from fusion_tools import Tool, MultiTool, asyncio_db_loop
 
 from fusion_tools.handler.dsa_handler import DSAHandler
 
@@ -269,6 +271,30 @@ class FeatureAnnotation(Tool):
 
         return x_scale, y_scale
 
+    def check_annotation_list(self, session_data):
+
+        feature_annotation_session_data = session_data.get('data',{}).get('feature-annotation')
+
+        annotations_list = self.annotations
+        if not feature_annotation_session_data is None:
+            current_names = [i.get('name') for i in annotations_list]
+
+            # Adding new labels/colors from session_data (non-overlapping)
+            annotations_list += [
+                i for i in feature_annotation_session_data.get('annotations',[])
+                if not i.get('name') in current_names
+            ]
+            current_names = [i.get('name') for i in annotations_list]
+
+            # Updating colors based on user selections (overlapping)
+            overlap_names = [i for i in feature_annotation_session_data.get('annotations',[]) if i.get('name') in current_names]
+            for o in overlap_names:
+                annotations_list[current_names.index(o.get('name'))] = o
+        else:
+            current_names = [i.get('name') for i in annotations_list]
+
+        return annotations_list, current_names
+
     def update_layout(self, session_data:dict, use_prefix:bool):
         """Generating layout for component
         """
@@ -291,9 +317,6 @@ class FeatureAnnotation(Tool):
             for o in overlap_names:
                 annotations_list[current_names.index(o.get('name'))] = o
 
-
-        print(self.annotations)
-
         # Adding non-pinned values to the main dropdown menu
         dropdown_vals = [
             {
@@ -307,7 +330,7 @@ class FeatureAnnotation(Tool):
         ]
 
         pinned_vals = [
-            i for i in annotations_list if i.get('pinned',False)
+            [i,idx] for idx,i in enumerate(annotations_list) if i.get('pinned',False)
         ]
 
         layout = html.Div([
@@ -364,32 +387,6 @@ class FeatureAnnotation(Tool):
                         )
                     ],style = {'marginBottom': '10px'},align='center'),
                     dbc.Row([
-                        dmc.Switch(
-                            id = {'type':'feature-annotation-grab-viewport','index': 0},
-                            size = 'lg',
-                            onLabel = 'ON',
-                            offLabel = 'OFF',
-                            checked = False,
-                            label = 'Grab structures in Viewport',
-                            description = 'Select whether or not to only grab structures in the current viewport.'
-                        )
-                    ]),
-                    dbc.Row([
-                        dbc.Col(
-                            dbc.Label('Bounding Box Padding:'),
-                            md = 4
-                        ),
-                        dbc.Col(
-                            dcc.Input(
-                                type = 'number',
-                                value = 50,
-                                id = {'type': 'feature-annotation-bbox-padding','index': 0},
-                                style = {'width': '100%'}
-                            ),
-                            md = 8
-                        )
-                    ],style = {'marginTop':'5px','marginBottom':'5px'}),
-                    dbc.Row([
                         dbc.Progress(
                             id = {'type': 'feature-annotation-progress','index': 0},
                             style = {'marginBottom':'5px','width': '100%'},
@@ -441,7 +438,8 @@ class FeatureAnnotation(Tool):
                                                     disabled = True,
                                                     type = 'numeric',
                                                     step = 1,
-                                                    id = {'type': 'feature-annotation-index-input','index': 0}
+                                                    id = {'type': 'feature-annotation-index-input','index': 0},
+                                                    style = {'width': '100%','height': '100%'}
                                                 )
                                             ],md = 4),
                                             dbc.Col([
@@ -453,7 +451,7 @@ class FeatureAnnotation(Tool):
                                                     id = {'type': 'feature-annotation-next','index': 0}
                                                 )
                                             ],md = 4)
-                                        ])
+                                        ],align='center')
                                     )
                                 ],
                                 style = {'marginTop':'10px'}
@@ -501,10 +499,15 @@ class FeatureAnnotation(Tool):
                             id = {'type': 'feature-annotation-annotation-parent-div','index': 0}
                         )
                     ]),
+                    dcc.Store(
+                        id = {'type': 'feature-annotation-store','index': 0},
+                        data = json.dumps({}),
+                        storage_type='memory'
+                    ),
                     dbc.Row([
                         html.Div(
                             children = [
-                                self.generate_pinned_components(i)
+                                self.generate_pinned_components(i[0],i[1])
                                 for i in pinned_vals
                             ],
                             id = {'type': 'feature-annotation-pinned-parent-div','index': 0}
@@ -539,7 +542,64 @@ class FeatureAnnotation(Tool):
                                 style = {'height': '100%','width': '100%'}
                             )
                         ], md = 2)
-                    ]) if self.editable else html.Div()
+                    ]) if self.editable else html.Div(),
+                    dbc.Accordion(
+                        start_collapsed = True,
+                        children = [
+                            dbc.AccordionItem(
+                                title = 'Region Options',
+                                children = [
+                                    dbc.Row([
+                                        dmc.Switch(
+                                            id = {'type':'feature-annotation-grab-viewport','index': 0},
+                                            size = 'lg',
+                                            onLabel = 'ON',
+                                            offLabel = 'OFF',
+                                            checked = False,
+                                            label = 'Grab structures in Viewport',
+                                            description = 'Select whether or not to only grab structures in the current viewport.'
+                                        )
+                                    ]),
+                                    dbc.Row([
+                                        dbc.Col(
+                                            dbc.Label('Bounding Box Padding:'),
+                                            md = 4
+                                        ),
+                                        dbc.Col(
+                                            dcc.Input(
+                                                type = 'number',
+                                                value = 50,
+                                                id = {'type': 'feature-annotation-bbox-padding','index': 0},
+                                                style = {'width': '100%'}
+                                            ),
+                                            md = 8
+                                        )
+                                    ],style = {'marginTop':'5px','marginBottom':'5px'}),
+                                ]
+                            ),
+                            dbc.AccordionItem(
+                                title = 'Progress Options',
+                                children = [
+                                    dbc.Row([
+                                        dmc.Switch(
+                                            id = {'type': 'feature-annotation-remove-labeled','index': 0},
+                                            size = 'lg',
+                                            onLabel = 'YES',
+                                            offLabel = 'NO',
+                                            checked = True,
+                                            label = 'Show Labeled',
+                                            description = 'Select YES to show both unlabeled and labeled structures, select NO to only see unlabeled structures.'
+                                        )
+                                    ])
+                                ]
+                            ),
+                            dbc.AccordionItem(
+                                title = 'Export Annotations',
+                                id = {'type': 'feature-annotation-export-accordion','index': 0},
+                                children = []
+                            )
+                        ]
+                    )
                 ])
             ])
         ],style = {'maxHeight': '100vh','overflow': 'scroll'})
@@ -564,7 +624,10 @@ class FeatureAnnotation(Tool):
             ],
             [
                 Output({'type': 'feature-annotation-slide-information','index':ALL},'data'),
-                Output({'type': 'feature-annotation-figure','index': ALL},'figure')
+                Output({'type': 'feature-annotation-figure','index': ALL},'figure'),
+                Output({'type': 'feature-annotation-next','index': ALL},'disabled'),
+                Output({'type': 'feature-annotation-previous','index': ALL},'disabled'),
+                Output({'type': 'feature-annotation-index-input','index': ALL},'disabled')
             ],
             [
                 State('anchor-vis-store','data')
@@ -613,7 +676,9 @@ class FeatureAnnotation(Tool):
             ],
             [
                 State({'type': 'feature-annotation-current-structures','index': ALL},'data'),
-                State({'type':'feature-annotation-slide-information','index':ALL},'data')
+                State({'type':'feature-annotation-slide-information','index':ALL},'data'),
+                State({'type': 'feature-annotation-drop','index': ALL},'value'),
+                State('anchor-vis-store','data')
             ]
         )(self.update_structure)
 
@@ -626,12 +691,44 @@ class FeatureAnnotation(Tool):
             [
                 Output({'type': 'feature-annotation-annotation-parent-div','index': ALL},'children'),
                 Output({'type': 'feature-annotation-drop','index': ALL},'options'),
-                Output({'type': 'feature-annotation-pinned-parent-div','index': ALL},'children')
+                Output({'type': 'feature-annotation-pinned-parent-div','index': ALL},'children'),
+                Output('anchor-vis-store','data')
             ],
             [
-                State({'type': 'feature-annotation-drop','index': ALL},'value')
+                State({'type': 'feature-annotation-drop','index': ALL},'value'),
+                State({'type': 'feature-annotation-drop','index': ALL},'options'),
+                State({'type': 'feature-annotation-pinned-parent-div','index': ALL},'children'),
+                State('anchor-vis-store','data')
             ]
         )(self.update_pinned)
+
+        # Callback for creating annotation component when selected from the dropdown menu
+        self.blueprint.callback(
+            [
+                Input({'type': 'feature-annotation-drop','index': ALL},'value')
+            ],
+            [
+                Output({'type': 'feature-annotation-annotation-parent-div','index': ALL},'children')
+            ],
+            [
+                State('anchor-vis-store','data')
+            ]
+        )(self.update_annotation_component)
+
+        # Callback for grabbing annotations as they are input/added for a given structure
+        self.blueprint.callback(
+            [
+                Input({'type': 'feature-annotation-input','index': ALL},'value'),
+                Input({'type': 'feature-annotation-figure','index': ALL},'figure')
+            ],
+            [
+                Output({'type': 'feature-annotation-store','index': ALL},'data')
+            ],
+            [
+                State({'type': 'feature-annotation-store','index': ALL},'data'),
+                State({'type': 'feature-annotation-input-info','index': ALL},'data')
+            ]
+        )(self.update_annotation)
 
         # Adding a new class/label to the available set of classes/labels
         self.blueprint.callback(
@@ -706,7 +803,6 @@ class FeatureAnnotation(Tool):
             ]
         )(self.add_label_option)
 
-
     def feature_annotation_callbacks(self):
 
         self.blueprint.clientside_callback(
@@ -755,7 +851,8 @@ class FeatureAnnotation(Tool):
                     return {
                         'name': fc_name,
                         'index': 0,
-                        'bboxes': computeBBoxes(featureCollection, bbox_padding)
+                        'bboxes': computeBBoxes(featureCollection, bbox_padding),
+                        'ids': featureCollection.features.map(f => f.properties._id)
                     };
                 });
             
@@ -835,24 +932,22 @@ class FeatureAnnotation(Tool):
         new_slide_data = json.dumps(new_slide_data)
         new_figure = go.Figure()
 
-        return [new_slide_data], [new_figure]
+        return [new_slide_data], [new_figure], [False], [False], [False]
 
     def generate_pinned_components(self, pinned:dict, pin_index: int, use_prefix:bool = False):
         """Function for generating pinned component
 
-        :param pinned: _description_
+        :param pinned: Dictionary containing information on the component to be pinned
         :type pinned: dict
-        :param pin_index: _description_
+        :param pin_index: Index to use for annotation components
         :type pin_index: int
-        :param use_prefix: _description_, defaults to False
+        :param use_prefix: Whether or not to use prefix (mostly True), defaults to False
         :type use_prefix: bool, optional
-        :return: _description_
-        :rtype: _type_
         """
         pinned_component = html.Div([
             dbc.Row([
                 dbc.Col(
-                    self.generate_annotation_component(pinned.get('name'), [pinned],pin_index),
+                    children = self.generate_annotation_component(pinned.get('name'), [pinned], pin_index),
                     md = 11
                 ),
                 dbc.Col([
@@ -861,7 +956,7 @@ class FeatureAnnotation(Tool):
                         id = {'type': 'feature-annotation-unpin-icon','index':pin_index},
                         children = [
                             html.I(
-                                className = 'bi bi-pin-angle'
+                                className = 'bi bi-pin-angle h4'
                             )
                         ]
                     ),
@@ -873,7 +968,7 @@ class FeatureAnnotation(Tool):
                     )
                 ])
             ])
-        ])
+        ],style = {'marginBottom':'5px','marginTop':'5px'})
 
         if use_prefix:
             PrefixIdTransform(prefix = f'{self.component_prefix}').transform_layout(pinned_component)
@@ -887,104 +982,141 @@ class FeatureAnnotation(Tool):
         if component_val in all_names:
             component_info = annotation_list[all_names.index(component_val)]
             if component_info.get('type','') in self.annotation_types:
-                info_col = dbc.Col([
-                    dbc.Row(component_info.get('name')),
-                    dbc.Row(component_info.get('description',''))
-                ],md = 5),
 
                 if component_info.get('type')=='class':
                     annotation_component = html.Div([
                         dbc.Row([
-                            info_col,
                             dbc.Col(
-                                dbc.Button(
-                                    'New Annotation',
-                                    className = 'd-grid col-12 mx-auto',
-                                    n_clicks = 0,
-                                    id = {'type': 'feature-annotation-annotate-new-class','index': component_index}
-                                ),
-                                md = 5
+                                children = [
+                                    dbc.InputGroup([
+                                        dbc.InputGroupText(
+                                            component_info.get('name'),
+                                            className = 'd-grid col-3'
+                                        ),
+                                        dbc.Button(
+                                            'New Annotation',
+                                            n_clicks = 0,
+                                            id = {'type': 'feature-annotation-annotate-new-class','index': component_index},
+                                            className = 'd-grid gap-0 col-9'
+                                        )
+                                    ],style = {'width': '100%'}),
+                                    component_info.get('description',''),
+                                    dcc.Store(
+                                        id = {'type': 'feature-annotation-input-info','index': component_index},
+                                        data = json.dumps(component_info),
+                                        storage_type='memory'
+                                    )
+                                ],md=12
                             )
                         ],align='center')
-                    ])
+                    ],style = {'marginTop':'5px'})
                 elif component_info.get('type')=='text':
                     annotation_component = html.Div([
                         dbc.Row([
-                            info_col,
-                            dbc.Col(
+                            dbc.Col([
                                 dbc.InputGroup([
+                                    dbc.InputGroupText(component_info.get('name')),
                                     dbc.Input(
                                         type = 'text',
                                         value = component_info.get('value',''),
                                         id = {'type': 'feature-annotation-input','index': component_index}
                                     )
-                                ]),
-                                md = 5
-                            )
+                                ],style = {'width': '100%'}),
+                                component_info.get('description',''),
+                                dcc.Store(
+                                    id = {'type': 'feature-annotation-input-info','index': component_index},
+                                    data = json.dumps(component_info),
+                                    storage_type='memory'
+                                )
+                            ])
                         ])
-                    ])
+                    ],style = {'marginTop':'5px'})
                 elif component_info.get('type')=='options':
                     annotation_component = html.Div([
                         dbc.Row([
-                            info_col,
                             dbc.Col([
                                 dbc.InputGroup([
+                                    dbc.InputGroupText(component_info.get('name')),
                                     dbc.Select(
                                         options = component_info.get('options'),
                                         value = component_info.get('value',[]),
                                         id = {'type': 'feature-annotation-input','index': component_index}
                                     )
-                                ])
-                            ],md = 5)
+                                ],style = {'width': '100%'}),
+                                component_info.get('description',''),
+                                dcc.Store(
+                                    id = {'type': 'feature-annotation-input-info','index': component_index},
+                                    data = json.dumps(component_info),
+                                    storage_type='memory'
+                                )
+                            ])
                         ])
-                    ])
+                    ],style = {'marginTop':'5px'})
                 elif component_info.get('type')=='numeric':
                     annotation_component = html.Div([
                         dbc.Row([
-                            info_col,
                             dbc.Col([
                                 dbc.InputGroup([
+                                    dbc.InputGroupText(component_info.get('name')),
                                     dbc.Input(
                                         type = 'number',
                                         value = component_info.get('value',[]),
                                         id = {'type': 'feature-annotation-input','index': component_index}
                                     )
-                                ])
-                            ],md = 5)
+                                ],style = {'width': '100%'}),
+                                component_info.get('description',''),
+                                dcc.Store(
+                                    id = {'type': 'feature-annotation-input-info','index': component_index},
+                                    data = json.dumps(component_info),
+                                    storage_type='memory'
+                                )
+                            ])
                         ])
-                    ])
+                    ],style = {'marginTop':'5px'})
 
                 elif component_info.get('type')=='checklist':
                     annotation_component = html.Div([
                         dbc.Row([
-                            info_col,
                             dbc.Col([
                                 dbc.InputGroup([
+                                    dbc.InputGroupText(component_info.get('name')),
                                     dbc.Checklist(
                                         options = component_info.get('values'),
                                         value = component_info.get('value',[]),
                                         id = {'type': 'feature-annotation-input','index': component_index}
                                     )
-                                ])
-                            ],md=5)
+                                ],style = {'width': '100%'}),
+                                component_info.get('description',''),
+                                dcc.Store(
+                                    id = {'type': 'feature-annotation-input-info','index': component_index},
+                                    data = json.dumps(component_info),
+                                    storage_type='memory'
+                                )
+                            ])
                         ])
-                    ])
+                    ],style = {'marginTop':'5px'})
 
                 elif component_info.get('type')=='radio':
                     annotation_component = html.Div([
                         dbc.Row([
-                            info_col,
                             dbc.Col([
                                 dbc.InputGroup([
+                                    dbc.InputGroupText(component_info.get('name')),
                                     dbc.RadioItems(
                                         options = component_info.get('values'),
                                         value = component_info.get('value',[]),
                                         id = {'type': 'feature-annotation-input','index': component_index}
                                     )
-                                ])
-                            ],md=5)
+                                ],style = {'width': '100%'}),
+                                component_info.get('description',''),
+                                dcc.Store(
+                                    id = {'type': 'feature-annotation-input-info','index': component_index},
+                                    data = json.dumps(component_info),
+                                    storage_type='memory'
+                                )
+                            ])
                         ])
-                    ])
+                    ],style = {'marginTop':'5px'})
         
                 return annotation_component
             else:
@@ -1194,7 +1326,38 @@ class FeatureAnnotation(Tool):
 
         return [structure_options], [new_structure_bboxes], [progress_value], [progress_label], [new_figure]
 
-    def update_structure(self, structure_drop_value, prev_click, next_click, current_structure_data, current_class_value, slide_information):
+    @asyncio_db_loop
+    def check_database(self, structure_id:Union[str,list], user_id:Union[str,list]):
+        """Check if a user(s) has any annotations for one or more structures
+
+        :param structure_id: String uuid or list of uuids for structures
+        :type structure_id: Union[str,list]
+        :param user_id: String uuid or list of uuids for users
+        :type user_id: Union[str,list]
+        """
+
+        loop = asyncio.get_event_loop()
+        db_annotations = loop.run_until_complete(
+            asyncio.gather(
+                self.database.search(
+                    search_kwargs = {
+                        'type': 'annotation',
+                        'filters': {
+                            'structure': {
+                                'id': structure_id
+                            },
+                            'user': {
+                                'id': user_id
+                            }
+                        }
+                    }
+                )
+            )
+        )
+
+        return db_annotations
+
+    def update_structure(self, structure_drop_value, prev_click, next_click, structure_index, current_structure_data, slide_information, annotation_val, session_data):
         """Updating the current structure figure based on selections
 
         :param structure_drop_value: Structure name selected from the structure dropdown menu
@@ -1205,8 +1368,6 @@ class FeatureAnnotation(Tool):
         :type next_click: list
         :param current_structure_data: Current structure bounding boxes and indices
         :type current_structure_data: list
-        :param current_class_value: Current class value from the class dropdown menu
-        :type current_class_value: list
         :return: Updated figure containing new structure, updated structure index if previous or next button is clicked, cleared label text
         :rtype: tuple
         """
@@ -1216,8 +1377,9 @@ class FeatureAnnotation(Tool):
         
         structure_drop_value = get_pattern_matching_value(structure_drop_value)
         current_structure_data = json.loads(get_pattern_matching_value(current_structure_data))
-        current_class_value = get_pattern_matching_value(current_class_value)
         slide_information = json.loads(get_pattern_matching_value(slide_information))
+        annotation_val = get_pattern_matching_value(annotation_val)
+        session_data = json.loads(session_data)
         progress_value = 0
         progress_label = '0%'
 
@@ -1225,49 +1387,45 @@ class FeatureAnnotation(Tool):
 
         if structure_drop_value is None or not structure_drop_value in structure_names:
             raise exceptions.PreventUpdate
+        
+        structure_index = structure_names.index(structure_drop_value)
+        current_feature_index = current_structure_data[structure_index]['index']
 
-        if any([i in ctx.triggered_id['type'] for i in ['feature-annotation-structure-drop','feature-annotation-class-new']]):
-            # Getting a new structure:
-            current_structure_index = current_structure_data[structure_names.index(structure_drop_value)]['index']
-            current_structure_region = current_structure_data[structure_names.index(structure_drop_value)]['bboxes'][current_structure_index]
+        prev_bbox = current_structure_data[structure_index]['bboxes'][current_feature_index]
+        prev_id = current_structure_data[structure_index]['ids'][current_feature_index]
+
+        if 'feature-annotation-structure-drop' in ctx.triggered_id['type']:
+            # Getting a new structure (not updating index):
+            current_structure_region = current_structure_data[structure_index]['bboxes'][current_feature_index]
+            current_structure_id = current_structure_data[structure_index]['ids'][current_feature_index]
 
         elif 'feature-annotation-previous' in ctx.triggered_id['type']:
             # Going to previous structure
-            current_structure_index = current_structure_data[structure_names.index(structure_drop_value)]['index']
-            if current_structure_index==0:
-                current_structure_index = len(current_structure_data[structure_names.index(structure_drop_value)]['bboxes'])-1
+            if current_feature_index==0:
+                current_feature_index = len(current_structure_data[structure_index]['bboxes'])-1
             else:
-                current_structure_index -= 1
+                current_feature_index -= 1
             
-            current_structure_region = current_structure_data[structure_names.index(structure_drop_value)]['bboxes'][current_structure_index]
-            progress_value = round(100*((current_structure_index+1) / len(current_structure_data[structure_names.index(structure_drop_value)]['bboxes'])))
+            current_structure_region = current_structure_data[structure_index]['bboxes'][current_feature_index]
+            current_structure_id = current_structure_data[structure_index]['ids'][current_feature_index]
+
+            progress_value = round(100*((current_feature_index+1) / len(current_structure_data[structure_index]['bboxes'])))
             progress_label = f'{progress_value}%'
 
         elif 'feature-annotation-next' in ctx.triggered_id['type']:
             # Going to next structure
-            current_structure_index = current_structure_data[structure_names.index(structure_drop_value)]['index']
-            if current_structure_index==len(current_structure_data[structure_names.index(structure_drop_value)]['bboxes'])-1:
-                current_structure_index = 0
+            if current_feature_index==len(current_structure_data[structure_index]['bboxes'])-1:
+                current_feature_index = 0
             else:
-                current_structure_index += 1
+                current_feature_index += 1
 
-            current_structure_region = current_structure_data[structure_names.index(structure_drop_value)]['bboxes'][current_structure_index]
+            current_structure_region = current_structure_data[structure_index]['bboxes'][current_feature_index]
+            current_structure_id = current_structure_data[structure_index]['ids'][current_feature_index]
 
-            progress_value = round(100*((current_structure_index+1) / len(current_structure_data[structure_names.index(structure_drop_value)]['bboxes'])))
+            progress_value = round(100*((current_feature_index+1) / len(current_structure_data[structure_index]['bboxes'])))
             progress_label = f'{progress_value}%'
 
-        current_structure_data[structure_names.index(structure_drop_value)]['index'] = current_structure_index
-        
-        # Getting the current selected class
-        if not current_class_value is None:
-            line_color = current_class_value
-            fill_color = current_class_value.replace('(','a(').replace(')',',0.2)')
-        else:
-            line_color = 'rgb(0,0,0)'
-            fill_color = 'rgba(0,0,0,0.2)'
-
-        # Removing old label text
-        new_label_text = []
+        current_structure_data[structure_index]['index'] = current_feature_index
 
         # Pulling out the desired region:
         image_region, marker_centroid = self.get_structure_region(current_structure_region, slide_information)
@@ -1278,10 +1436,6 @@ class FeatureAnnotation(Tool):
                 'xaxis':{'showticklabels':False,'showgrid':False},
                 'yaxis':{'showticklabels':False,'showgrid':False},
                 'dragmode':'drawclosedpath',
-                #"shapes":annotations,
-                #"newshape.line.width": line_slide,
-                "newshape.line.color": line_color,
-                "newshape.fillcolor": fill_color
             }
         )
 
@@ -1312,20 +1466,195 @@ class FeatureAnnotation(Tool):
             )
         ]
 
+        # Saving current annotation values to the database
+        #TODO: Add current annotations from feature-annotation-store to the database
+        prev_anns = self.check_database(
+            structure_id = prev_id,
+            user_id = session_data.get('current_user',{}).get('_id')
+        )
+        print(f'previous annotations: {json.dumps(prev_anns,indent=4)}')
 
-        return [image_figure], ['Save'], [json.dumps(current_structure_data)], [new_label_text], [progress_value], [progress_label], new_markers_div
+        #TODO: Add option to check session id as well as additional identifier for guest users
+        new_anns = self.check_database(
+            structure_id = current_structure_id,
+            user_id = session_data.get('current_user',{}).get('_id')
+        )
+        print(f'new annotations: {json.dumps(new_anns,indent=4)}')
+        
+        # Updating with current annotation values for selected annotation (from dropdown) and pinned annotation components
+        annotations_list, current_names = self.check_annotation_list(session_data)
+        if not annotation_val is None:
+            main_annotation_val = [
+                self.generate_annotation_component(
+                    component_val = annotation_val,
+                    annotation_list = annotations_list,
+                    component_index=current_names.index(annotation_val)
+                )
+            ]
+        else:
+            main_annotation_val = [no_update]
 
-    def update_pinned(self, pin_click, unpin_click, annotation_value):
+        pinned_annotation_vals = [
+            self.generate_pinned_components(
+                pinned = p_o,
+                pin_index=p_o_idx,
+                use_prefix = True
+            )
+            for p_o_idx,p_o in enumerate(annotations_list)
+            if p_o.get('pinned',False)
+        ]
+
+        if len(pinned_annotation_vals)==0:
+            pinned_annotation_vals = [no_update]
+
+        return [image_figure], [json.dumps(current_structure_data)], [progress_value], [progress_label], main_annotation_val, pinned_annotation_vals, new_markers_div
+
+    def update_annotation(self,annotation_inputs, annotation_classes, current_annotation_data, input_infos):
+        
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        current_annotation_data = json.loads(get_pattern_matching_value(current_annotation_data))
+        input_infos = [json.loads(i) for i in input_infos]
+        print(f'ctx.triggered_id in update_annotation: {ctx.triggered_id}')
+        print(f'annotation_inputs: {annotation_inputs}')
+        print(f'current_annotation_data: {json.dumps(current_annotation_data,indent=4)}')
+        print(f'input_infos: {json.dumps(input_infos,indent=4)}')
+
+        return [json.dumps(current_annotation_data)]
+
+    def update_annotation_component(self, annotation_val,session_data):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        session_data = json.loads(session_data)
+        annotation_val = get_pattern_matching_value(annotation_val)
+
+        annotations_list, current_names = self.check_annotation_list(session_data)
+
+        new_annotation_component = self.generate_annotation_component(
+            component_val = annotation_val,
+            annotation_list = annotations_list,
+            component_index = current_names.index(annotation_val)
+        )
+
+        PrefixIdTransform(prefix = f'{self.component_prefix}').transform_layout(new_annotation_component)
+
+        return [new_annotation_component]
+
+    def extract_pinned_name(self, component_dict):
+
+        pinned_names = ()
+        if type(component_dict)==list:
+            for c in component_dict:
+                if type(c)==dict:
+                    for key,value in c.items():
+                        if key=='children':
+                            if type(value) in [list,dict]:
+                                pinned_names += self.extract_pinned_name(value)
+                            elif type(value) == str:
+                                pinned_names += (value,)
+                        elif key=='props':
+                            pinned_names += self.extract_pinned_name(value)
+                elif type(c)==list:
+                    pinned_names += self.extract_pinned_name(c)
+                elif type(c)==str:
+                    pinned_names += (c, )
+                
+        elif type(component_dict)==dict:
+            for key,value in component_dict.items():
+                if key=='children':
+                    if type(value) in [list,dict]:
+                        pinned_names+=self.extract_pinned_name(value)
+                    elif type(value)==str:
+                        pinned_names += (value,)
+                elif key=='props':
+                    pinned_names += self.extract_pinned_name(value)
+        
+        return pinned_names
+
+    def update_pinned(self, pin_click, unpin_click, annotation_value, annotation_options, pinned_items, session_data):
         
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
 
-        print(ctx.triggered)
-        print(pin_click)
-        print(unpin_click)
-        print(annotation_value)
+        current_annotation = get_pattern_matching_value(annotation_value)
+        session_data = json.loads(session_data)
 
-        raise exceptions.PreventUpdate
+        feature_annotation_session_data = session_data.get('data',{}).get('feature-annotation')
+
+        annotations_list = self.annotations
+        if not feature_annotation_session_data is None:
+            current_names = [i.get('name') for i in annotations_list]
+
+            # Adding new labels/colors from session_data (non-overlapping)
+            annotations_list += [
+                i for i in feature_annotation_session_data.get('annotations',[])
+                if not i.get('name') in current_names
+            ]
+            current_names = [i.get('name') for i in annotations_list]
+
+            # Updating colors based on user selections (overlapping)
+            overlap_names = [i for i in feature_annotation_session_data.get('annotations',[]) if i.get('name') in current_names]
+            for o in overlap_names:
+                annotations_list[current_names.index(o.get('name'))] = o
+        else:
+            current_names = [i.get('name') for i in annotations_list]
+
+        pinned_list = self.extract_pinned_name(get_pattern_matching_value(pinned_items))
+        current_pinned_list = [i for i in pinned_list if i in current_names]
+        if not get_pattern_matching_value(annotation_options) is None:
+            current_dropdown_list = [i.get('value') for i in get_pattern_matching_value(annotation_options)]
+        else:
+            current_dropdown_list = []
+
+        if 'feature-annotation-pin-icon' in ctx.triggered_id['type']:
+            if current_annotation is None:
+                raise exceptions.PreventUpdate
+
+            # Pinning the selected annotation
+            pinned_annotations = Patch()
+            pinned_annotations.append(
+                self.generate_pinned_components(
+                    pinned = annotations_list[current_names.index(current_annotation)],
+                    pin_index = current_names.index(current_annotation),
+                    use_prefix = True
+                )
+            )
+
+            ann_drop = Patch()
+            del ann_drop[current_dropdown_list.index(current_annotation)]
+
+            annotations_list[current_names.index(current_annotation)]['pinned'] = True
+        
+        elif 'feature-annotation-unpin-icon' in ctx.triggered_id['type']:
+            # Removing pinned annotation from pinned list and adding it back to the dropdown
+            pinned_annotations = Patch()
+            del pinned_annotations[current_pinned_list.index(current_names[ctx.triggered_id['index']])]
+
+            ann_drop = Patch()
+            ann_drop.append(
+                {
+                    'label': current_names[ctx.triggered_id['index']], 
+                    'value': current_names[ctx.triggered_id['index']]
+                }
+            )
+
+            annotations_list[current_names.index(current_names[ctx.triggered_id['index']])]['pinned'] = False
+
+
+        if 'feature-annotation' in session_data['data']:
+            session_data['data']['feature-annotation']['annotations'] = annotations_list
+        else:
+            session_data['data']['feature-annotation'] = {
+                'annotations': annotations_list
+            }
+        
+        ann_parent_div = Patch()
+        ann_parent_div.clear()
+        
+        return [ann_parent_div], [ann_drop], [pinned_annotations], json.dumps(session_data)
 
     def get_structure_region(self, structure_bbox:list, slide_information: dict, scale:bool = True):
         """Using the tile server "regions_url" property to pull out a specific region of tissue
@@ -1363,6 +1692,7 @@ class FeatureAnnotation(Tool):
 
         return image_region, marker_centroid
     
+    #TODO: Update adding new annotation type to fit current schema
     def add_new_class_label(self, add_class, add_label, new_class, new_label, label_text, current_structure_data, current_structure, slide_information):
         """Adding a new class or label to the current structure
 
@@ -1420,6 +1750,7 @@ class FeatureAnnotation(Tool):
         
         return [figure_update]
     
+    #TODO: Update adding new annotation type to fit current schema
     def add_label_option(self, add_clicked, rem_clicked):
         """Adding an option for a new Option Label
 
@@ -1479,57 +1810,7 @@ class FeatureAnnotation(Tool):
 
         return [label_options]
 
-    def update_text_label(self, label_val, session_data):
-
-        if not any([i['value'] for i in ctx.triggered]):
-            raise exceptions.PreventUpdate
-        
-        session_data = json.loads(session_data)
-        label_val = get_pattern_matching_value(label_val)
-
-        label_info = session_data.get('data',{}).get('feature-annotation',{}).get('labels',[])
-
-        if not self.preset_schema is None:
-            label_info += self.preset_schema.get('labels',[])
-
-        if not len(label_info)==0:
-            label_names = [i['name'] for i in label_info]
-            if label_val in label_names:
-                matching_label = label_info[label_names.index(label_val)]
-
-                if matching_label['type']=='text':
-                    return_component = dcc.Textarea(
-                        id = {'type': f'{self.component_prefix}-feature-annotation-label-text','index': 0},
-                        maxLength = 1000,
-                        placeholder = 'Label Value',
-                        style = {'width': '100%','height': '100px'}
-                    )
-                elif matching_label['type']=='options': 
-                    return_component = dcc.Checklist(
-                        options = list(set(matching_label['options'])),
-                        id = {'type': f'{self.component_prefix}-feature-annotation-label-text','index': 0}
-                    )
-            
-            else:
-                # This shouldn't be possible, but record the label anyways
-                return_component = dcc.Textarea(
-                    id = {'type': f'{self.component_prefix}-feature-annotation-label-text','index': 0},
-                    maxLength = 1000,
-                    placeholder = 'Label Value',
-                    style = {'width': '100%','height': '100px'}
-                )
-        
-        else:
-            # This one also shouldn't be possible since you have to add to the session data when you add a new label
-            return_component = dcc.Textarea(
-                id = {'type': f'{self.component_prefix}-feature-annotation-label-text','index': 0},
-                maxLength = 1000,
-                placeholder = 'Label Value',
-                style = {'width': '100%','height': '100px'}
-            )
-
-        return [return_component]
-
+    #TODO: Update adding new annotation type to fit current schema
     def create_class_label(self, add_class_value, add_submit_click, add_class_color, add_class_name, add_label_name, current_class_options, current_label_options, add_label_options, session_data):
         """Creating a new class or label to add to the session
 
@@ -1795,6 +2076,7 @@ class FeatureAnnotation(Tool):
 
         return [add_class_drop_value], [options_div], [add_submit_disabled], [new_class_options], [new_label_options], json.dumps(session_data)
 
+    #TODO: See update_annotation for "live" saving annotations, add manual save option with callback that saves all input/class annotations
     def save_annotation(self, save_click, current_figure, current_classes, current_structure_data, current_structure, slide_information, bbox_pad):
         """Saving the current annotation in image format
 
