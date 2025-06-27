@@ -10,7 +10,7 @@ import time
 from datetime import datetime
 
 from sqlalchemy import (
-    not_, func, select, create_engine,
+    not_, func, select, create_engine, update,
     Column, String, Boolean,ForeignKey, JSON)
 from sqlalchemy.orm import declarative_base, sessionmaker, mapped_column, Session, scoped_session
 from sqlalchemy.pool import NullPool
@@ -81,15 +81,6 @@ class fusionDB:
 
         return True
     
-    def update(self, obj, session = None):
-
-        if session is None:
-            with self.get_db() as session:
-                session.update(obj)
-                session.commit()
-        else:
-            session.update(obj)
-
     def get_create(self, table_name:str, inst_id:Union[str,None] = None, kwargs:Union[dict,None] = None):
         
         with self.get_db() as session:
@@ -100,6 +91,8 @@ class fusionDB:
                     ).filter_by(id = inst_id).first()
 
                     if not get_create_result:
+                        #TODO: Add a "created" option to each model
+
                         # This is if this thing does not exist in the table
                         updated = datetime.now()
                         get_create_result = TABLE_NAMES.get(table_name)(
@@ -115,8 +108,8 @@ class fusionDB:
                             id = inst_id,
                             **kwargs | {'updated': updated}
                         )
-
-                        self.update(get_create_result, session)
+                        update_kwargs = kwargs | {'updated': updated}
+                        session.execute(update(TABLE_NAMES.get(table_name)).where(getattr(TABLE_NAMES.get(table_name),'id')==inst_id).values(update_kwargs))
                 
                 else:
                     new_id = self.get_uuid()
@@ -127,6 +120,8 @@ class fusionDB:
                     )
 
                     self.add(get_create_result, session)
+
+                session.commit()
 
                 return get_create_result
             else:

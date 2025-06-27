@@ -296,7 +296,7 @@ class Visualization:
 
         #TODO: Check if the user specified in session_data['current_user'] is in the database yet
         session_data = json.loads(session_data)
-
+        
         # Resetting session data if going from the same tab/notebook after restarting the application
         if datetime.fromtimestamp(session_modified_time/1e3) < self.app_start_time:
             session_data = self.vis_store_content

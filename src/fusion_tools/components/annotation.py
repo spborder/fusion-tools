@@ -11,6 +11,8 @@ import numpy as np
 import pandas as pd
 
 import uuid
+from copy import deepcopy
+
 
 from typing_extensions import Union
 from shapely.geometry import box, shape
@@ -40,7 +42,11 @@ from dash_extensions.javascript import Namespace, assign
 
 # fusion-tools imports
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
-from fusion_tools.utils.shapes import find_intersecting, extract_geojson_properties, path_to_mask, process_filters_queries
+from fusion_tools.utils.shapes import (
+    find_intersecting, extract_geojson_properties, 
+    path_to_mask, process_filters_queries,
+    path_to_indices, indices_to_path
+)
 from fusion_tools import Tool, MultiTool, asyncio_db_loop
 
 from fusion_tools.handler.dsa_handler import DSAHandler
@@ -101,6 +107,10 @@ class AnnotationSchema:
         self.user_spec = user_spec
         self.annotations = annotations
 
+        for a in self.annotations:
+            if a.get('id') is None:
+                a['id'] = uuid.uuid4().hex[:24]
+
         self.id = uuid.uuid4().hex[:24]
     
     def add_annotation(self, annotation_dict: dict):
@@ -109,6 +119,10 @@ class AnnotationSchema:
         :param annotation_dict: See schema description for more details on what can be added
         :type annotation_dict: dict
         """
+
+        if annotation_dict.get('id') is None:
+            annotation_dict['id'] = uuid.uuid4().hex[:24]
+
         self.annotations.append(annotation_dict)
 
     def add_user(self, user_dict:Union[dict,str], admin:bool = False):
@@ -207,6 +221,14 @@ class FeatureAnnotation(Tool):
     description = 'Used for annotating (drawing) and labeling individual structures in the SlideMap'
     
     annotation_types = ["class","text","numeric","options","radio","checklist"]
+    annotation_descriptions = [
+        "Hand-drawn annotation on top of structures.",
+        "Free text label applied to a structure.",
+        "Numeric value assigned to a structure.",
+        "Dropdown menu selection from list of possible options (one value permitted).",
+        "Filled in circle used for selecting between two or more values (one value permitted).",
+        "Set of selectable items for assigning multiple values to a single structure (multiple values permitted)."
+    ]
 
     def __init__(self,
                  editable: bool = False,
@@ -224,10 +246,19 @@ class FeatureAnnotation(Tool):
         self.editable = editable
         self.annotations = annotations
 
+        # Making sure every annotation has a unique id
         if isinstance(self.annotations,AnnotationSchema):
             self.annotations = self.annotations.annotations
         elif type(self.annotations)==dict:
+            if self.annotations.get('id') is None:
+                self.annotations['id'] = uuid.uuid4().hex[:24]
+
             self.annotations = [self.annotations]
+        elif type(self.annotations)==list:
+            for a in self.annotations:
+                if a.get('id') is None:
+                    a['id'] = uuid.uuid4().hex[:24]
+        
         elif self.annotations is None:
             self.annotations = []
     
@@ -436,10 +467,12 @@ class FeatureAnnotation(Tool):
                                                 dcc.Input(
                                                     value = [],
                                                     disabled = True,
-                                                    type = 'numeric',
+                                                    type = 'number',
+                                                    debounce = True,
                                                     step = 1,
+                                                    min = 1,
                                                     id = {'type': 'feature-annotation-index-input','index': 0},
-                                                    style = {'width': '100%','height': '100%'}
+                                                    style = {'width': '100%','height': '100%', 'text-align': 'center', 'font-size': '25','font-weight': 'bold'}
                                                 )
                                             ],md = 4),
                                             dbc.Col([
@@ -475,7 +508,7 @@ class FeatureAnnotation(Tool):
                                 placeholder = 'Annotation',
                                 id = {'type': 'feature-annotation-drop','index': 0}
                             )
-                        ], md = 9),
+                        ], md = 8),
                         dbc.Col([
                             html.A(
                                 children = [
@@ -491,8 +524,30 @@ class FeatureAnnotation(Tool):
                                 target = {'type': 'feature-annotation-pin-icon','index': 0},
                                 children = ['Pin annotation item below!']
                             )
-                        ], md = 1)
-                    ]),
+                        ], md = 'auto'),
+                        dbc.Col([
+                            html.A(
+                                children = [
+                                    html.I(
+                                        className = 'bi bi-plus-circle-fill h3'
+                                    )
+                                ],
+                                n_clicks = 0,
+                                id = {'type': 'feature-annotation-add-new-icon','index': 0},
+                                style = {'float': 'right'}
+                            ),
+                            dbc.Tooltip(
+                                target = {'type': 'feature-annotation-add-new-icon','index': 0},
+                                children = ['Add new annotation!']
+                            )
+                        ],md = 'auto') if self.editable else html.Div()
+                    ],align = 'center'),
+                    dbc.Modal(
+                        id = {'type': 'feature-annotation-add-modal','index': 0},
+                        children = [],
+                        is_open = False,
+                        size = 'xl'
+                    ),
                     dbc.Row([
                         html.Div(
                             children = [],
@@ -514,35 +569,6 @@ class FeatureAnnotation(Tool):
                         )
                     ]),
                     html.Hr(),
-                    dbc.Row([
-                        dbc.Col([
-                            dbc.Label('Add Class/Label: ',html_for={'type': 'feature-annotation-add-class','index': 0})
-                        ],md = 2),
-                        dbc.Col([
-                            dcc.Dropdown(
-                                options = ['Class','Text Label','Options Label'],
-                                value = [],
-                                placeholder = 'New Type',
-                                id = {'type': 'feature-annotation-add-class','index': 0}
-                            )
-                        ], md = 4),
-                        dbc.Col([
-                            html.Div(
-                                id = {'type':'feature-annotation-add-options','index': 0},
-                                children = [],
-                            )
-                        ], md = 4),
-                        dbc.Col([
-                            dbc.Button(
-                                'Add',
-                                id = {'type': 'feature-annotation-add-submit','index': 0},
-                                className = 'd-grid col-12 mx-auto',
-                                color = 'success',
-                                disabled = True,
-                                style = {'height': '100%','width': '100%'}
-                            )
-                        ], md = 2)
-                    ]) if self.editable else html.Div(),
                     dbc.Accordion(
                         start_collapsed = True,
                         children = [
@@ -672,7 +698,9 @@ class FeatureAnnotation(Tool):
                 Output({'type': 'feature-annotation-progress','index': ALL},'label'),
                 Output({'type': 'feature-annotation-annotation-parent-div','index': ALL},'children'),
                 Output({'type': 'feature-annotation-pinned-parent-div','index': ALL},'children'),
-                Output({'type': 'map-marker-div','index': ALL},'children')
+                Output({'type': 'feature-annotation-store','index': ALL},'data'),
+                Output({'type': 'map-marker-div','index': ALL},'children'),
+                Output({'type': 'feature-annotation-index-input','index': ALL},'value')
             ],
             [
                 State({'type': 'feature-annotation-current-structures','index': ALL},'data'),
@@ -711,6 +739,7 @@ class FeatureAnnotation(Tool):
                 Output({'type': 'feature-annotation-annotation-parent-div','index': ALL},'children')
             ],
             [
+                State({'type': 'feature-annotation-store','index': ALL},'data'),
                 State('anchor-vis-store','data')
             ]
         )(self.update_annotation_component)
@@ -719,89 +748,51 @@ class FeatureAnnotation(Tool):
         self.blueprint.callback(
             [
                 Input({'type': 'feature-annotation-input','index': ALL},'value'),
-                Input({'type': 'feature-annotation-figure','index': ALL},'figure')
+                Input({'type': 'feature-annotation-figure','index': ALL},'relayoutData')
             ],
             [
                 Output({'type': 'feature-annotation-store','index': ALL},'data')
             ],
             [
                 State({'type': 'feature-annotation-store','index': ALL},'data'),
-                State({'type': 'feature-annotation-input-info','index': ALL},'data')
+                State({'type': 'feature-annotation-input-info','index': ALL},'data'),
+                State({'type': 'feature-annotation-figure','index':ALL},'figure')
             ]
         )(self.update_annotation)
 
-        # Adding a new class/label to the available set of classes/labels
+        # Callback for new class annotation
         self.blueprint.callback(
             [
-                Input({'type': 'feature-annotation-add-class','index': ALL},'value'),
-                Input({'type': 'feature-annotation-add-submit','index': ALL},'n_clicks')
+                Input({'type': 'feature-annotation-annotate-new-class','index': ALL},'n_clicks')
             ],
             [
-                Output({'type': 'feature-annotation-add-class','index': ALL},'value'),
-                Output({'type': 'feature-annotation-add-options','index': ALL},'children'),
-                Output({'type': 'feature-annotation-add-submit','index': ALL},'disabled'),
-                Output({'type': 'feature-annotation-class-drop','index':ALL},'options'),
-                Output({'type': 'feature-annotation-label-drop','index': ALL},'options'),
-                Output('anchor-vis-store','data')
+                Output({'type': 'feature-annotation-figure','index': ALL},'figure')
             ],
             [
-                State({'type': 'feature-annotation-add-class-color', 'index': ALL},'value'),
-                State({'type': 'feature-annotation-add-class-name','index':ALL},'value'),
-                State({'type': 'feature-annotation-add-label-name', 'index': ALL},'value'),
-                State({'type': 'feature-annotation-class-drop','index': ALL},'options'),
-                State({'type': 'feature-annotation-label-drop','index': ALL},'options'),
-                State({'type': 'feature-annotation-add-label-option','index': ALL},'value'),
                 State('anchor-vis-store','data')
             ]
-        )(self.create_class_label)
+        )(self.new_class_annotation)
 
-        # Adding a new class/label to the current figure and structure
+        # Opening the add annotation modal
         self.blueprint.callback(
             [
-                Input({'type': 'feature-annotation-class-new','index': ALL},'n_clicks'),
-                Input({'type': 'feature-annotation-label-submit','index': ALL},'n_clicks')
+                Input({'type': 'feature-annotation-add-new-icon','index': ALL},'n_clicks')
             ],
             [
-                Output({'type': 'feature-annotation-figure','index': ALL},'figure'),
-            ],
-            [
-                State({'type': 'feature-annotation-class-drop','index': ALL},'value'),
-                State({'type': 'feature-annotation-label-drop','index': ALL},'value'),
-                State({'type': 'feature-annotation-label-text','index': ALL},'value'),
-                State({'type': 'feature-annotation-current-structures','index': ALL},'data'),
-                State({'type': 'feature-annotation-structure-drop','index': ALL},'value'),
-                State({'type': 'feature-annotation-slide-information','index': ALL},'data'),
+                Output({'type': 'feature-annotation-add-modal','index': ALL},'is_open'),
+                Output({'type': 'feature-annotation-add-modal','index': ALL},'children')
             ]
-        )(self.add_new_class_label)
+        )(self.open_add_modal)
 
-        # Saving the current annotation mask:
+        # Update annotation type description
         self.blueprint.callback(
             [
-                Input({'type': 'feature-annotation-save','index': ALL},'n_clicks')
+                Input({'type': 'feature-annotation-new-type-drop','index': ALL},'value')
             ],
             [
-                Output({'type': 'feature-annotation-save','index': ALL},'children')
-            ],
-            [
-                State({'type': 'feature-annotation-figure','index': ALL},'figure'),
-                State({'type': 'feature-annotation-class-drop','index': ALL},'options'),
-                State({'type': 'feature-annotation-current-structures','index': ALL},'data'),
-                State({'type': 'feature-annotation-structure-drop','index': ALL},'value'),
-                State({'type':'feature-annotation-slide-information','index':ALL},'data'),
-                State({'type':'feature-annotation-bbox-padding','index': ALL},'value')
+                Output({'type': 'feature-annotation-type-description','index': ALL},'children')
             ]
-        )(self.save_annotation)
-
-        # Callback for adding label option
-        self.blueprint.callback(
-            [
-                Input({'type': 'feature-annotation-add-label-option-icon','index': ALL},'n_clicks'),
-                Input({'type': 'feature-annotation-remove-label-option-icon','index': ALL},'n_clicks')
-            ],
-            [
-                Output({'type': 'feature-annotation-add-label-option-parent','index': ALL},'children')
-            ]
-        )(self.add_label_option)
+        )(self.update_type_description)
 
     def feature_annotation_callbacks(self):
 
@@ -1124,145 +1115,6 @@ class FeatureAnnotation(Tool):
         else:
             return html.Div()
 
-    def save_label(self, label_name, label_text, image_bbox, slide_information):
-        """Save new label to current save folder.
-
-        :param label_name: Name of label type adding label_text to (e.g. "color")
-        :type label_name: str
-        :param label_text: Label to add (e.g. "blue")
-        :type label_text: str
-        """
-
-        # Converting image bbox to slide pixel coordinates:
-        image_bbox = [
-            int(image_bbox[0]/slide_information['x_scale']),
-            int(image_bbox[3]/slide_information['y_scale']),
-            int(image_bbox[2]/slide_information['x_scale']),
-            int(image_bbox[1]/slide_information['y_scale'])
-        ]
-
-        save_path = os.path.join(self.storage_path,slide_information['name'],f'labels.{self.labels_format}')
-        if self.labels_format == 'json': 
-
-            if os.path.exists(save_path):
-                with open(save_path,'r') as f:
-                    current_labels = json.load(f)
-                    f.close()
-
-                current_labels["Labels"].append(
-                    {
-                        'slide_name': slide_information['name'],
-                        label_name: label_text,
-                        "bbox": image_bbox
-                    }
-                )
-
-            else:
-                current_labels = {
-                    "Labels": [
-                        {
-                            'slide_name': slide_information['name'],
-                            label_name: label_text,
-                            "bbox": image_bbox
-                        }
-                    ]
-                }
-
-            with open(save_path,'w') as f:
-                json.dump(current_labels,f)
-                f.close()
-        
-        else:
-
-            if os.path.exists(save_path):
-                current_labels = pd.read_csv(save_path).to_dict('records')
-            else:
-                current_labels = []
-            
-            current_labels.append(
-                {
-                    'slide_name': slide_information['name'],
-                    label_name: label_text,
-                    'bbox': image_bbox
-                }
-            )
-
-            pd.DataFrame.from_records(current_labels).to_csv(save_path)
-
-    def save_mask(self, annotations, class_options, image_bbox, slide_information):
-        """Saving annotation mask with annotated classes using pre-specified format
-
-        :param annotations: List of SVG paths from the current figure
-        :type annotations: list
-        :param class_options: List of colors and names for all classes
-        :type class_options: list
-        :param image_bbox: Bounding box for the current image
-        :type image_bbox: list
-        """
-
-        image_bbox = [
-            int(image_bbox[0] / slide_information['x_scale']),
-            int(image_bbox[3] / slide_information['y_scale']),
-            int(image_bbox[2] / slide_information['x_scale']),
-            int(image_bbox[1] / slide_information['y_scale'])
-        ]
-
-        height = int(image_bbox[3]-image_bbox[1])
-        width = int(image_bbox[2]-image_bbox[0])
-
-        all_class_colors = [i['value'] for i in class_options]
-
-        combined_mask = np.zeros((height, width, len(class_options)))
-        for a in range(len(annotations)):
-            if 'path' in annotations[a]:
-                mask = path_to_mask(annotations[a]['path'], (height,width))
-                class_color = annotations[a]['line']['color']
-                
-                combined_mask[:,:,all_class_colors.index(class_color)] += mask
-
-        # Creating mask in whichever format was specified in initialization
-        if 'one-hot' in self.annotations_format:
-            if self.annotations_format=='one-hot-labeled':
-                # Labeling instances for each class with a unique index
-                formatted_mask = np.apply_over_axes(label, combined_mask, [2])
-            else:
-                formatted_mask = combined_mask.copy()
-        elif self.annotations_format == 'rgb':
-            # Creating RGB representation of class masks (not good for overlapping classes)
-            formatted_mask = np.zeros((height,width,3))
-
-            for c_idx,color in enumerate(all_class_colors):
-                rgb_vals = [int(float(i.replace('rgb(','').replace(')',''))) for i in color.split(',')]
-
-                for r_idx,r in enumerate(rgb_vals):
-                    formatted_mask[:,:,r_idx] += (combined_mask[:,:,c_idx] * r)
-
-        elif self.annotations_format == 'index':
-            # Creating 2D representation of masks where class pixels are replaced with class index (starting with 1, 0=background) (also not good for overlaps)
-            formatted_mask = np.zeros((height,width))
-
-            for c_idx in range(combined_mask.shape[2]):
-                formatted_mask+=combined_mask[:,:,c_idx]
-
-        # Pulling image region from slide:
-        slide_image_region, marker_centroid = self.get_structure_region(image_bbox, slide_information, False)
-        # Saving annotation mask:
-        save_path = os.path.join(self.storage_path,slide_information['name'],'Annotations')
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
-            os.makedirs(save_path+'/Images/')
-            os.makedirs(save_path+'/Masks/')
-
-        mask_save_path = f'{save_path}/Masks/{"_".join([str(i) for i in image_bbox])}.png'
-        image_save_path = f'{save_path}/Images/{"_".join([str(i) for i in image_bbox])}.png'
-
-        if formatted_mask.shape[-1] in [1,3]:
-            Image.fromarray(np.uint8(formatted_mask)).save(mask_save_path)
-            slide_image_region.save(image_save_path)
-        else:
-            np.save(mask_save_path.replace('.png','.npy'),np.uint8(formatted_mask))
-            slide_image_region.save(image_save_path)
-
     def update_structure_options(self,refresh_clicked, overlay_names, current_features, slide_bounds, bbox_padding, slide_information, active_tab, get_viewport):
         """Updating the structure options based on updated slide bounds
 
@@ -1327,14 +1179,29 @@ class FeatureAnnotation(Tool):
         return [structure_options], [new_structure_bboxes], [progress_value], [progress_label], [new_figure]
 
     @asyncio_db_loop
-    def check_database(self, structure_id:Union[str,list], user_id:Union[str,list]):
+    def check_database(self, structure_id:Union[str,list,None] = None, user_id:Union[str,list,None] = None, session_id:Union[str,list,None] = None):
         """Check if a user(s) has any annotations for one or more structures
 
         :param structure_id: String uuid or list of uuids for structures
-        :type structure_id: Union[str,list]
+        :type structure_id: Union[str,list,None], optional
         :param user_id: String uuid or list of uuids for users
-        :type user_id: Union[str,list]
+        :type user_id: Union[str,list,None], optional
+        :param session_id: String uuid or list of uuids for sessions
+        :type session_id: Union[str,list,None], optional
         """
+
+        filters = {}
+        #TODO: If the SlideMap instance is not using caching, structures are not present
+
+        if not structure_id is None:
+            filters = filters | {'structure': {'id': structure_id}}
+        
+        if not user_id is None:
+            filters = filters | {'user': {'id': user_id}}
+        
+        if not session_id is None:
+            filters = filters | {'session': {'id': session_id}}
+
 
         loop = asyncio.get_event_loop()
         db_annotations = loop.run_until_complete(
@@ -1342,14 +1209,7 @@ class FeatureAnnotation(Tool):
                 self.database.search(
                     search_kwargs = {
                         'type': 'annotation',
-                        'filters': {
-                            'structure': {
-                                'id': structure_id
-                            },
-                            'user': {
-                                'id': user_id
-                            }
-                        }
+                        'filters': filters
                     }
                 )
             )
@@ -1357,19 +1217,25 @@ class FeatureAnnotation(Tool):
 
         return db_annotations
 
-    def update_structure(self, structure_drop_value, prev_click, next_click, structure_index, current_structure_data, slide_information, annotation_val, session_data):
+    def update_structure(self, structure_drop_value, prev_click, next_click, structure_index_input, current_structure_data, slide_information, annotation_val, session_data):
         """Updating the current structure figure based on selections
 
-        :param structure_drop_value: Structure name selected from the structure dropdown menu
+        :param structure_drop_value: Structure name selected from dropdown menu
         :type structure_drop_value: list
-        :param prev_click: Previous button clicked
+        :param prev_click: Number of times Previous was clicked
         :type prev_click: list
-        :param next_click: Next button clicked
+        :param next_click: Number of times Next was clicked
         :type next_click: list
-        :param current_structure_data: Current structure bounding boxes and indices
+        :param structure_index_input: Index input value
+        :type structure_index_input: list
+        :param current_structure_data: Bounding box/id/etc. information for each structure
         :type current_structure_data: list
-        :return: Updated figure containing new structure, updated structure index if previous or next button is clicked, cleared label text
-        :rtype: tuple
+        :param slide_information: Information for the current slide (x_scale, y_scale used)
+        :type slide_information: list
+        :param annotation_val: Main annotation value selected
+        :type annotation_val: list
+        :param session_data: Visualization session data
+        :type session_data: list
         """
 
         if not any([i['value'] for i in ctx.triggered]):
@@ -1377,6 +1243,7 @@ class FeatureAnnotation(Tool):
         
         structure_drop_value = get_pattern_matching_value(structure_drop_value)
         current_structure_data = json.loads(get_pattern_matching_value(current_structure_data))
+        structure_index_input = get_pattern_matching_value(structure_index_input)
         slide_information = json.loads(get_pattern_matching_value(slide_information))
         annotation_val = get_pattern_matching_value(annotation_val)
         session_data = json.loads(session_data)
@@ -1425,6 +1292,22 @@ class FeatureAnnotation(Tool):
             progress_value = round(100*((current_feature_index+1) / len(current_structure_data[structure_index]['bboxes'])))
             progress_label = f'{progress_value}%'
 
+        elif 'feature-annotation-index-input' in ctx.triggered_id['type']:
+            # Going to structure at this number
+            if structure_index_input<0:
+                structure_index_input = 1
+            elif structure_index_input>len(current_structure_data[structure_index]['bboxes']):
+                structure_index_input = len(current_structure_data[structure_index]['bboxes'])
+            
+            # Structure index input starts at 1 (0 interpreted as False)
+            current_feature_index = structure_index_input - 1
+            current_structure_region = current_structure_data[structure_index]['bboxes'][current_feature_index]
+            current_structure_id = current_structure_data[structure_index]['ids'][current_feature_index]
+
+            progress_value = round(100*((current_feature_index+1) / len(current_structure_data[structure_index]['bboxes'])))
+            progress_label = f'{progress_value}%'
+
+            
         current_structure_data[structure_index]['index'] = current_feature_index
 
         # Pulling out the desired region:
@@ -1467,30 +1350,66 @@ class FeatureAnnotation(Tool):
         ]
 
         # Saving current annotation values to the database
-        #TODO: Add current annotations from feature-annotation-store to the database
-        prev_anns = self.check_database(
-            structure_id = prev_id,
-            user_id = session_data.get('current_user',{}).get('_id')
-        )
-        print(f'previous annotations: {json.dumps(prev_anns,indent=4)}')
-
-        #TODO: Add option to check session id as well as additional identifier for guest users
         new_anns = self.check_database(
             structure_id = current_structure_id,
-            user_id = session_data.get('current_user',{}).get('_id')
+            user_id = session_data.get('current_user',{}).get('_id'),
+            session_id = session_data.get('session',{}).get('id')
         )
-        print(f'new annotations: {json.dumps(new_anns,indent=4)}')
         
+        if len(new_anns[0])==0:
+            updated_annotation_store = json.dumps(
+                {
+                    'id': uuid.uuid4().hex[:24],
+                    'user': session_data.get('current_user',{}).get('_id'),
+                    'session': session_data.get('session',{}).get('id'),
+                    'structure': current_structure_id,
+                    'data': []
+                }
+            )
+        else:
+            # datetime isn't JSON serializable
+            last_update = new_anns[0][0].pop('updated')
+            updated_annotation_store = json.dumps(new_anns[0][0])
+
         # Updating with current annotation values for selected annotation (from dropdown) and pinned annotation components
         annotations_list, current_names = self.check_annotation_list(session_data)
+        if not len(new_anns[0])==0:
+            prev_ann_values = new_anns[0][0]['data']
+            layout_shape_list = []
+            for p in prev_ann_values:
+                annotations_list[current_names.index(p.get('name'))]['value'] = p.get('value')
+
+                if p.get('type')=='class':
+                    for s in p.get('shapes',[]):
+                        path_string = indices_to_path(s)
+                        line_color = p.get('color')
+                        if 'a' in line_color:
+                            fill_color = line_color.replace(line_color.split(',')[-1],'0.2)')
+                        else:
+                            fill_color = line_color.replace('(','a(').replace(')',',0.2)')
+                        
+                        layout_shape_list.append({
+                            'path': path_string,
+                            'line': {
+                                'color': line_color
+                            },
+                            'fillcolor': fill_color
+                        })
+
+            if len(layout_shape_list)>0:
+                image_figure.update_layout({
+                    'shapes': layout_shape_list
+                })
+
         if not annotation_val is None:
-            main_annotation_val = [
-                self.generate_annotation_component(
-                    component_val = annotation_val,
-                    annotation_list = annotations_list,
-                    component_index=current_names.index(annotation_val)
-                )
-            ]
+            main_ann_comp = self.generate_annotation_component(
+                component_val = annotation_val,
+                annotation_list = annotations_list,
+                component_index=current_names.index(annotation_val)
+            )
+            PrefixIdTransform(prefix = f'{self.component_prefix}').transform_layout(main_ann_comp)
+
+            main_annotation_val = [main_ann_comp]
         else:
             main_annotation_val = [no_update]
 
@@ -1507,31 +1426,91 @@ class FeatureAnnotation(Tool):
         if len(pinned_annotation_vals)==0:
             pinned_annotation_vals = [no_update]
 
-        return [image_figure], [json.dumps(current_structure_data)], [progress_value], [progress_label], main_annotation_val, pinned_annotation_vals, new_markers_div
+        return [image_figure], [json.dumps(current_structure_data)], [progress_value], [progress_label], main_annotation_val, pinned_annotation_vals, [updated_annotation_store], new_markers_div, [current_feature_index+1]
 
-    def update_annotation(self,annotation_inputs, annotation_classes, current_annotation_data, input_infos):
+    def update_annotation(self,annotation_inputs, annotation_classes, current_annotation_data, input_infos, feature_figure):
         
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
         current_annotation_data = json.loads(get_pattern_matching_value(current_annotation_data))
         input_infos = [json.loads(i) for i in input_infos]
-        print(f'ctx.triggered_id in update_annotation: {ctx.triggered_id}')
-        print(f'annotation_inputs: {annotation_inputs}')
-        print(f'current_annotation_data: {json.dumps(current_annotation_data,indent=4)}')
-        print(f'input_infos: {json.dumps(input_infos,indent=4)}')
+        
+        if len(list(current_annotation_data.keys()))>0:
+
+            # Processing annotation input components
+            current_ann_ids = [i.get('id') for i in current_annotation_data['data']]
+            non_class_inputs = [i for i in input_infos if not i.get('type')=='class']
+            for info, ann in zip(non_class_inputs,annotation_inputs):
+                if type(ann)==list:
+                    if len(ann)==0:
+                        continue
+                
+                elif type(ann)==str:
+                    if ann=='':
+                        continue
+
+                if info.get('id') in current_ann_ids:
+                    current_annotation_data['data'][current_ann_ids.index(info.get('id'))] = info | {'value': ann}
+                else:
+                    current_annotation_data['data'].append(info | {'value': ann})
+
+            # Processing class inputs from figure.layout.shapes
+            current_class_colors = [i.get('color') for i in current_annotation_data['data'] if i.get('type')=='class']
+            input_class_info = [i for i in input_infos if i.get('type')=='class']
+            input_class_color = [i.get('color') for i in input_infos if i.get('type')=='class']
+            
+            feature_figure = get_pattern_matching_value(feature_figure)
+            if not feature_figure is None:
+                layout_data = feature_figure.get('layout')
+                if 'shapes' in layout_data:
+                    # Getting all unique annotated shape colors:
+                    shape_colors = list(set([i.get('line',{}).get('color') for i in layout_data['shapes'] if 'path' in i]))
+
+                    for s in shape_colors:
+                        # Skip colors not in schema
+                        if not s in input_class_color or not s in current_class_colors:
+                            continue
+                        all_class_shapes = [i.get('path') for i in layout_data['shapes'] if i.get('line',{}).get('color','')==s]
+                        all_class_shapes = [i for i in all_class_shapes if not i is None]
+                        
+                        class_shape_indices = []
+                        for a in all_class_shapes:
+                            path_indices = path_to_indices(a)
+                            class_shape_indices.append(path_indices.tolist())
+                        
+                        if s in current_class_colors:
+                            current_annotation_data['data'][current_class_colors.index(s)] = current_annotation_data['data'][current_class_colors.index(s)] | {'shapes': class_shape_indices}
+                        else:
+                            current_annotation_data['data'].append(
+                                input_class_info[input_class_color.index(s)] | {'shapes': class_shape_indices}
+                            )
+
+            if len(current_annotation_data['data'])>0:
+                db_dict = deepcopy(current_annotation_data)
+                ann_id = db_dict.pop('id')
+                get_create_result = self.database.get_create(
+                    table_name = 'annotation',
+                    inst_id = ann_id,
+                    kwargs = db_dict
+                )
 
         return [json.dumps(current_annotation_data)]
 
-    def update_annotation_component(self, annotation_val,session_data):
+    def update_annotation_component(self, annotation_val,annotation_data, session_data):
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
         session_data = json.loads(session_data)
+        annotation_data = json.loads(get_pattern_matching_value(annotation_data))
         annotation_val = get_pattern_matching_value(annotation_val)
 
         annotations_list, current_names = self.check_annotation_list(session_data)
+        if len(list(annotation_data.keys()))>0:
+            if not len(annotation_data['data'])==0:
+                for p in annotation_data['data']:
+                    annotations_list[current_names.index(p.get('name'))]['value'] = p.get('value')
 
         new_annotation_component = self.generate_annotation_component(
             component_val = annotation_val,
@@ -1627,6 +1606,10 @@ class FeatureAnnotation(Tool):
             del ann_drop[current_dropdown_list.index(current_annotation)]
 
             annotations_list[current_names.index(current_annotation)]['pinned'] = True
+
+            # Only clearing the parent div children when pinning the current annotation
+            ann_parent_div = Patch()
+            ann_parent_div.clear()
         
         elif 'feature-annotation-unpin-icon' in ctx.triggered_id['type']:
             # Removing pinned annotation from pinned list and adding it back to the dropdown
@@ -1643,6 +1626,8 @@ class FeatureAnnotation(Tool):
 
             annotations_list[current_names.index(current_names[ctx.triggered_id['index']])]['pinned'] = False
 
+            # Not updating the annotation parent div when removing a pinned annotation
+            ann_parent_div = no_update
 
         if 'feature-annotation' in session_data['data']:
             session_data['data']['feature-annotation']['annotations'] = annotations_list
@@ -1651,8 +1636,6 @@ class FeatureAnnotation(Tool):
                 'annotations': annotations_list
             }
         
-        ann_parent_div = Patch()
-        ann_parent_div.clear()
         
         return [ann_parent_div], [ann_drop], [pinned_annotations], json.dumps(session_data)
 
@@ -1692,64 +1675,96 @@ class FeatureAnnotation(Tool):
 
         return image_region, marker_centroid
     
-    #TODO: Update adding new annotation type to fit current schema
-    def add_new_class_label(self, add_class, add_label, new_class, new_label, label_text, current_structure_data, current_structure, slide_information):
-        """Adding a new class or label to the current structure
-
-        :param add_class: Add class clicked
-        :type add_class: list
-        :param add_label: Add label clicked
-        :type add_label: list
-        :param new_class: New class to add to the current structure
-        :type new_class: list
-        :param new_label: New label name to add for the current structure
-        :type new_label: list
-        :param label_text: New label text to add for the current structure
-        :type label_text: list
-        :param current_structure_data: Current structure bounding boxes and indices
-        :type current_structure_data: list
-        :param current_structure: Current structure selection
-        :type current_structure: list
-        :return: Returning updated figure with new line color, fill color and saving the new label to the save directory
-        :rtype: list
-        """
+    def new_class_annotation(self, clicked, session_data):
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
-        new_class = get_pattern_matching_value(new_class)
-        new_label = get_pattern_matching_value(new_label)
-        label_text = get_pattern_matching_value(label_text)
-        current_structure_data = json.loads(get_pattern_matching_value(current_structure_data))
-        current_structure = get_pattern_matching_value(current_structure)
-        slide_information = json.loads(get_pattern_matching_value(slide_information))
+        session_data = json.loads(session_data)
+        annotations_list, current_names = self.check_annotation_list(session_data)
 
-        # Updating the figure "newshape.line.color" and "newshape.fillcolor" properties
-        if 'feature-annotation-class-new' in ctx.triggered_id['type']:
-            if not new_class is None:
-                figure_update = Patch()
-                figure_update['layout']['newshape']['line']['color'] = new_class
-                figure_update['layout']['newshape']['fillcolor'] = new_class.replace('(','a(').replace(')',',0.2)')
-            else:
-                raise exceptions.PreventUpdate
+        updated_figure = Patch()
+        new_line_color = annotations_list[ctx.triggered_id['index']].get('color')
+        if 'a' in new_line_color:
+            new_fill_color = new_line_color.replace(new_line_color.split(',')[-1],'0.2)')
+        else:
+            new_fill_color = new_line_color.replace('(','a(').replace(')',',0.2)')
+
+        updated_figure['layout']['newshape']['line']['color'] = new_line_color
+        updated_figure['layout']['newshape']['fillcolor'] = new_fill_color
         
-        # Adding a label to 
-        elif 'feature-annotation-label-submit' in ctx.triggered_id['type']:
-            figure_update = no_update
+        return [updated_figure]       
 
-            structure_names = [i['name'] for i in current_structure_data]
-            current_structure_index = current_structure_data[structure_names.index(current_structure)]['index']
+    def open_add_modal(self, clicked):
 
-            image_bbox = current_structure_data[structure_names.index(current_structure)]['bboxes'][current_structure_index]
-
-            if not new_label is None:
-                # Saving label to running file
-                self.save_label(new_label, label_text, image_bbox, slide_information)
-            else:
-                raise exceptions.PreventUpdate
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
         
-        return [figure_update]
-    
+        add_modal_children = html.Div(
+            dbc.Card([
+                html.H4('Add new annotation'),
+                html.Hr(),
+                html.P('Select a new annotation type below to get started.'),
+                html.Hr(),
+                dbc.Row([
+                    dbc.InputGroup([
+                        dbc.InputGroupText('Annotation Types: '),
+                        dbc.Select(
+                            id = {'type': 'feature-annotation-new-type-drop','index': 0},
+                            value = [],
+                            options = self.annotation_types
+                        ),
+                        dbc.Button(
+                            'Select Type',
+                            id = {'type': 'feature-annotation-new-type-submit','index': 0}
+                        )
+                    ]),
+                    html.Div(
+                        id = {'type': 'feature-annotation-type-description','index': 0},
+                        children = []
+                    ),
+                    html.Hr()
+                ]),
+                dbc.Row(
+                    html.Div(
+                        id = {'type': 'feature-annotation-new-type-options-div','index': 0},
+                        children = []
+                    )
+                ),
+                dbc.Row(
+                    dbc.Button(
+                        'Add to Session!',
+                        id = {'type': 'feature-annotation-new-submit','index': 0},
+                        className = 'd-grid col-9 mx-auto',
+                        n_clicks = 0,
+                        disabled = True
+                    )
+                )
+            ]),
+            style = {'padding': '15px 15px 15px 15px'}
+        )
+
+        PrefixIdTransform(prefix = f'{self.component_prefix}').transform_layout(add_modal_children)
+
+        return [True], [add_modal_children]
+
+    def update_type_description(self, annotation_type):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        annotation_type = get_pattern_matching_value(annotation_type)
+        if not annotation_type is None:
+            if annotation_type in self.annotation_types:
+                type_description = self.annotation_descriptions[self.annotation_types.index(annotation_type)]
+            else:
+                type_description = ''
+        else:
+            type_description = ''
+
+        return [type_description]
+
+
     #TODO: Update adding new annotation type to fit current schema
     def add_label_option(self, add_clicked, rem_clicked):
         """Adding an option for a new Option Label

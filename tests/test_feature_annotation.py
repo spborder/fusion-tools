@@ -89,10 +89,13 @@ def main():
         tileservers=[dsa_handler.get_tile_server(i) for i in item_id],
         components = [
             [
-                SlideMap(),
+                SlideMap(
+                    cache = True
+                ),
                 [
                     FeatureAnnotation(
-                        annotations = test_feature_schema
+                        annotations = test_feature_schema,
+                        editable = True
                     ),
                     #BulkLabels(),
                     #SlideAnnotation(

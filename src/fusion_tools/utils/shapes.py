@@ -1746,6 +1746,14 @@ def path_to_indices(path):
     ]
     return np.rint(np.array(indices_str, dtype=float)).astype(int)
 
+def indices_to_path(indices):
+    """
+    From numpy array of coordinates to path string for adding to plotly figure layout
+    """    
+    path_str = d = ' '.join(['%s%d %d' % (['M', 'L'][idx>0], i[0], i[1]) for idx, i in enumerate(indices)]) + f'L{indices[0][0]} {indices[0][1]}'
+
+    return path_str
+
 def path_to_mask(path, shape):
     """
     From SVG path to a boolean array where all pixels enclosed by the path
