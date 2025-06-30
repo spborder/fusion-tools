@@ -296,14 +296,16 @@ class Visualization:
 
         #TODO: Check if the user specified in session_data['current_user'] is in the database yet
         session_data = json.loads(session_data)
-        
+
         # Resetting session data if going from the same tab/notebook after restarting the application
         if datetime.fromtimestamp(session_modified_time/1e3) < self.app_start_time:
             session_data = self.vis_store_content
+            session_data['session']['id'] = f'guestsession{uuid.uuid4().hex[:12]}'
             print('session data updated')
         else:
             print('session data not updated')
         
+        print(session_data.get('session').get('id'))
         
         if ctx.triggered_id=='anchor-page-url':
             if pathname in self.layout_dict:
