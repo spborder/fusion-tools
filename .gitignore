@@ -9,3 +9,5 @@ src/*/__pycache__/*
 tests/.fusion_assets/*
 .fusion_assets/*.js
 .fusion_assets/*.db
+build/lib/*
+fusion_venv/*
