@@ -198,13 +198,15 @@ class Visualization:
             ],
             [
                 State('anchor-vis-store','data'),
-                State('anchor-vis-store','modified_timestamp')
+                State('anchor-vis-store','modified_timestamp'),
+                State('anchor-vis-memory-store','data')
             ],
             [
                 Output('vis-container','children'),
                 Output('anchor-page-url','pathname'),
                 Output('anchor-page-url','search'),
-                Output('anchor-vis-store','data')
+                Output('anchor-vis-store','data'),
+                Output('anchor-vis-memory-store','data')
             ],
             prevent_initial_call = True
         )(self.update_page)
@@ -287,7 +289,7 @@ class Visualization:
         else:
             raise exceptions.PreventUpdate
 
-    def update_page(self, pathname, path_search, path_button, session_data, session_modified_time):
+    def update_page(self, pathname, path_search, path_button, session_data, session_modified_time,in_memory_store):
         """Updating page in multi-page application
 
         :param pathname: Pathname or suffix of current url which is a key to the page name
@@ -296,14 +298,31 @@ class Visualization:
 
         #TODO: Check if the user specified in session_data['current_user'] is in the database yet
         session_data = json.loads(session_data)
+        in_memory_store = json.loads(in_memory_store)
+        print(json.dumps(in_memory_store,indent=4))
+        if in_memory_store.get('id') is None:
+            print('Get a new id')
+            if session_data.get('current_user',{}).get('_id') is None:
+                in_memory_store['id'] = f'guestsession{uuid.uuid4().hex[:12]}'
+            else:
+                in_memory_store['id'] = uuid.uuid4().hex[:24]
+        else:
+            print('Keep same id')
+
+        print(f'session_modified_time: {session_modified_time}')
 
         # Resetting session data if going from the same tab/notebook after restarting the application
-        if datetime.fromtimestamp(session_modified_time/1e3) < self.app_start_time:
-            session_data = self.vis_store_content
-            session_data['session']['id'] = f'guestsession{uuid.uuid4().hex[:12]}'
-            print('session data updated')
+        if session_modified_time is None:
+            if datetime.fromtimestamp(session_modified_time/1e3) < self.app_start_time:
+                session_data = self.vis_store_content
+                session_data['session']['id'] = in_memory_store.get('id')
+                print('session data updated')
+            else:
+                print('session data not updated')
         else:
-            print('session data not updated')
+            session_data = self.vis_store_content
+            session_data['session']['id'] = in_memory_store.get('id')
+            print('session data updated')
         
         print(session_data.get('session').get('id'))
         
@@ -318,7 +337,7 @@ class Visualization:
                     session_data=session_data
                 )
 
-                return page_content, no_update, no_update, json.dumps(session_data)
+                return page_content, no_update, no_update, json.dumps(session_data), json.dumps(in_memory_store)
             
             elif 'session' in pathname:
                 from fusion_tools.handler.dsa_handler import DSAHandler
@@ -343,7 +362,9 @@ class Visualization:
                     session_data=new_session_data
                 )
 
-                return page_content, page_pathname, '', json.dumps(new_session_data)
+                in_memory_store['id'] = path_search.replace('?id=','')
+
+                return page_content, page_pathname, '', json.dumps(new_session_data), json.dumps(in_memory_store)
             
             elif 'item' in pathname:
                 #TODO: Loading an individual item from id
@@ -361,7 +382,7 @@ class Visualization:
                         html.P(html.A(page,href=page))
                         for page in self.layout_dict
                     ])
-                    return not_found_page, pathname, '', json.dumps(session_data)
+                    return not_found_page, pathname, '', json.dumps(session_data), json.dumps(in_memory_store)
                 else:
                     page_content = self.update_page_layout(
                         page_components_list = self.components[self.default_page.replace(self.app_options.get('requests_pathname_prefix','/'),'').replace('-',' ')],
@@ -369,7 +390,7 @@ class Visualization:
                         session_data=session_data
                     )
 
-                    return page_content, no_update, no_update, json.dumps(session_data)
+                    return page_content, no_update, no_update, json.dumps(session_data), json.dumps(in_memory_store)
 
         elif ctx.triggered_id['type']=='page-button':
             new_pathname = list(self.layout_dict.keys())[ctx.triggered_id['index']]
@@ -380,7 +401,7 @@ class Visualization:
                 session_data=session_data
             )
 
-            return page_content, new_pathname, '', json.dumps(session_data)
+            return page_content, new_pathname, '', json.dumps(session_data), json.dumps(in_memory_store)
     
     def initialize_stores(self):
 
@@ -589,13 +610,20 @@ class Visualization:
             style={'marginBottom':'20px'}
         )
 
-        vis_data = html.Div(
+        vis_data = html.Div([
             dcc.Store(
                 id = 'anchor-vis-store',
                 data = json.dumps(self.vis_store_content),
                 storage_type = 'session'
-            )   
-        )
+            ),
+            dcc.Store(
+                id = 'anchor-vis-memory-store',
+                data = json.dumps({
+                    'id': None
+                }),
+                storage_type='memory'
+            )
+        ])
 
         self.app_start_time = datetime.now()
         print(f'app start time: {self.app_start_time}')

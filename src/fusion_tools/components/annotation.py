@@ -638,23 +638,23 @@ class FeatureAnnotation(Tool):
                                     ],style = {'marginTop':'5px','marginBottom':'5px'}),
                                 ]
                             ),
-                            dbc.AccordionItem(
-                                title = 'Progress Options',
-                                item_id = 'progress-options',
-                                children = [
-                                    dbc.Row([
-                                        dmc.Switch(
-                                            id = {'type': 'feature-annotation-remove-labeled','index': 0},
-                                            size = 'lg',
-                                            onLabel = 'YES',
-                                            offLabel = 'NO',
-                                            checked = True,
-                                            label = 'Show Labeled',
-                                            description = 'Select YES to show both unlabeled and labeled structures, select NO to only see unlabeled structures.'
-                                        )
-                                    ])
-                                ]
-                            ),
+                            #dbc.AccordionItem(
+                            #    title = 'Progress Options',
+                            #    item_id = 'progress-options',
+                            #    children = [
+                            #        dbc.Row([
+                            #            dmc.Switch(
+                            #                id = {'type': 'feature-annotation-remove-labeled','index': 0},
+                            #                size = 'lg',
+                            #                onLabel = 'YES',
+                            #                offLabel = 'NO',
+                            #                checked = True,
+                            #                label = 'Show Labeled',
+                            #                description = 'Select YES to show both unlabeled and labeled structures, select NO to only see unlabeled structures.'
+                            #            )
+                            #        ])
+                            #    ]
+                            #),
                             dbc.AccordionItem(
                                 title = 'Export Annotations',
                                 item_id = 'export-annotations',
@@ -910,8 +910,6 @@ class FeatureAnnotation(Tool):
                 State('anchor-vis-store','data')
             ]
         )(self.export_annotation_data)
-
-
 
     def feature_annotation_callbacks(self):
 
@@ -1498,7 +1496,6 @@ class FeatureAnnotation(Tool):
             for p in prev_ann_values:
                 annotations_list[current_names.index(p.get('name'))]['value'] = p.get('value')
                 if p.get('type')=='class':
-                    print(f'len of shapes: {len(p.get("shapes",[]))}')
                     for s in p.get('shapes',[]):
                         path_string = indices_to_path(s)
                         line_color = p.get('color')
@@ -2256,6 +2253,11 @@ class FeatureAnnotation(Tool):
         return [dcc.send_data_frame(annotation_df.to_csv,"fusion_FeatureAnnotation_data.csv")]
 
 
+#TODO: BulkLabels updates
+# Integrate database for filtering structures (can spatial filters be added?)
+# Adding annotations to database instead of local store
+# Integrate annotation schema with user-spec
+#   - Is there a way to pre-specify which labels/combinations are needed? Probably not.
 
 class BulkLabels(Tool):
     """Add labels to many structures at the same time
@@ -2263,6 +2265,11 @@ class BulkLabels(Tool):
     :param Tool: General class for interactive components that visualize, edit, or perform analyses on data
     :type Tool: None
     """
+
+    title = 'Bulk Labels'
+    description = 'Apply labels to structures based on several different inclusion and exclusion criteria.'
+
+
     def __init__(self,
                  ignore_list: list = [],
                  property_depth: int = 4):
@@ -2273,14 +2280,12 @@ class BulkLabels(Tool):
         self.ignore_list = ignore_list
         self.property_depth = property_depth
 
-
     def __str__(self):
-        return 'Bulk Labels'
+        return self.title
 
     def load(self, component_prefix:int):
 
         self.component_prefix = component_prefix
-        self.title = 'Bulk Labels'
         self.blueprint = DashBlueprint(
             transforms=[
                 PrefixIdTransform(prefix=f'{self.component_prefix}'),
@@ -2371,11 +2376,11 @@ class BulkLabels(Tool):
             dbc.Card([
                 dbc.CardBody([
                     dbc.Row(
-                        html.H3('Bulk Labels')
+                        html.H3(self.title)
                     ),
                     html.Hr(),
                     dbc.Row(
-                        'Apply labels to structures based on several different inclusion and exclusion criteria.'
+                        self.description
                     ),
                     html.Hr(),
                     dbc.Row([
@@ -3724,6 +3729,13 @@ class BulkLabels(Tool):
             updated_labels = json.dumps({})
 
         return [updated_labels]
+
+
+#TODO: SlideAnnotation updates
+# Integrate database for adding annotations to slides for multiple users 
+# Annotation Schema for user-specs
+#   - Extracting annotations for one/more users
+# This could be efficiently made a standalone if annotations aren't needed (tiles)
 
 
 class SlideAnnotation(MultiTool):
