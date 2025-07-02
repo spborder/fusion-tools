@@ -21,7 +21,7 @@ from dash import dcc, callback, ctx, ALL, MATCH, exceptions, Patch, no_update, d
 from dash.dash_table.Format import Format, Scheme
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-import dash_treeview_antd as dta
+#import dash_treeview_antd as dta
 from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform, BlockingCallbackTransform
 from dash_extensions.javascript import Namespace, arrow_function
 
