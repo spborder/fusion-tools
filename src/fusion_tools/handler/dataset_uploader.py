@@ -18,7 +18,7 @@ dash._dash_renderer._set_react_version('18.2.0')
 from dash import dcc, callback, ctx, ALL, MATCH, exceptions, Patch, no_update, dash_table
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-import dash_treeview_antd as dta
+#import dash_treeview_antd as dta
 from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform
 import dash_uploader as du
 
