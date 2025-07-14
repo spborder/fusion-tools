@@ -3,7 +3,7 @@ Defining models for fusionDB
 """
 
 from sqlalchemy import (
-    Column, String, Boolean,ForeignKey, JSON)
+    Column, String, Boolean,ForeignKey, JSON, DateTime)
 from sqlalchemy.orm import declarative_base, mapped_column
 
 from shapely.geometry import box
@@ -20,6 +20,7 @@ class User(Base):
     email = Column(String)
 
     admin = Column(Boolean)
+    updated = Column(DateTime)
 
     def to_dict(self):
         user_dict = {
@@ -28,7 +29,8 @@ class User(Base):
             'firstName': self.firstName,
             'lastName': self.lastName,
             'email': self.email,
-            'admin': self.admin
+            'admin': self.admin,
+            'updated': self.updated
         }
 
         return user_dict
@@ -41,11 +43,15 @@ class VisSession(Base):
 
     # Visualization session data stored as JSON
     data = Column(JSON)
+    updated = Column(DateTime)
+
 
     def to_dict(self):
         vis_dict = {
             'id': self.id,
-            'user': self.user
+            'user': self.user,
+            'data': self.data,
+            'updated': self.updated
         }
 
         return vis_dict
@@ -61,6 +67,8 @@ class Item(Base):
     filepath = Column(String)
 
     session = mapped_column(ForeignKey("visSession.id"))
+    updated = Column(DateTime)
+
 
     def to_dict(self):
         item_dict = {
@@ -70,7 +78,8 @@ class Item(Base):
             'image_meta': self.image_meta,
             'ann_meta': self.ann_meta,
             'filepath': self.filepath,
-            'session': self.session
+            'session': self.session,
+            'updated': self.updated
         }
 
         return item_dict
@@ -81,11 +90,15 @@ class Layer(Base):
     name = Column(String)
     item = mapped_column(ForeignKey("item.id"))
 
+    updated = Column(DateTime)
+
+
     def to_dict(self):
         layer_dict = {
             'id': self.id,
             'name': self.name,
-            'item': self.item
+            'item': self.item,
+            'updated': self.updated
         }
 
         return layer_dict
@@ -99,13 +112,16 @@ class Structure(Base):
 
     layer = mapped_column(ForeignKey('layer.id'))
     item = mapped_column(ForeignKey('item.id'))
+    updated = Column(DateTime)
+
 
     def to_dict(self):
         structure_dict = {
             'id': self.id,
             'geom': self.geom,
             'properties': self.properties,
-            'layer': self.layer
+            'layer': self.layer,
+            'updated': self.updated
         }
 
         return structure_dict
@@ -128,6 +144,8 @@ class ImageOverlay(Base):
     image_src = Column(String)
 
     layer = mapped_column(ForeignKey('layer.id'))
+    updated = Column(DateTime)
+
 
     def to_dict(self):
         img_overlay_dict = {
@@ -135,7 +153,8 @@ class ImageOverlay(Base):
             'bounds': self.bounds,
             'properties': self.properties,
             'image_src': self.image_src,
-            'layer': self.layer
+            'layer': self.layer,
+            'updated': self.updated
         }
 
         return img_overlay_dict
@@ -159,8 +178,9 @@ class Annotation(Base):
     layer = mapped_column(ForeignKey('layer.id'))
     structure = mapped_column(ForeignKey('structure.id'))
 
-    classifications = Column(JSON)
-    segmentations = Column(JSON)
+    # Storing all annotation data as JSON
+    data = Column(JSON)
+    updated = Column(DateTime)
 
     def to_dict(self):
         ann_dict = {
@@ -170,8 +190,8 @@ class Annotation(Base):
             'item': self.item,
             'layer': self.layer,
             'structure': self.structure,
-            'classifications': self.classifications,
-            'segmentations': self.segmentations
+            'data': self.data,
+            'updated': self.updated
         }
 
         return ann_dict

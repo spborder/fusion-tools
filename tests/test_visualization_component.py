@@ -14,19 +14,6 @@ from fusion_tools.utils.shapes import load_visium
 
 def main():
  
-    # Test 1) Visualization with slides and annotations as input arguments that is then 
-    # extended to all components where that is required  
-    # Test 2) TileServers with multiple slides, switching between slides and 
-    # their respective annotations. (DSA and Local)
-    # Test 3) Reconfigure "start" function to allow for expanded app_options and 
-    # servers. Try and bundle LocalTileServer.start() in here as well to run silently/verbosely
-
-    # There should be some option for just creating a server which has images and their annotations
-    # and then referencing them with something similar to the DSAHandler (LocalDataHandler?).
-    # Should allow for a DSAHandler class with some list of names/item Ids.
-
-    # Main thing is that there should be a way to establish that one set of annotations belongs to one slide
-
     base_dir = 'C:\\Users\\samuelborder\\Desktop\\HIVE_Stuff\\FUSION\\Test Upload\\'
     local_slide_list = [
         base_dir+'XY01_IU-21-015F_001.svs',

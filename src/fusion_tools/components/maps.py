@@ -987,8 +987,6 @@ class SlideMap(MapComponent):
             raise exceptions.PreventUpdate
 
         vis_data = json.loads(vis_data)
-        print(json.dumps(vis_data,indent=4))
-
         new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
         
         # Check if slide is cached if using cache
@@ -1348,7 +1346,6 @@ class SlideMap(MapComponent):
             }
             return [json.dumps(empty_store)]
         
-        #TODO: Check if these annotations or annotations for this item are currently in the running database instance. If not, add them there.
         annotations_geojson = json.loads(get_pattern_matching_value(annotations_geojson))
         if not type(annotations_geojson)==list:
             annotations_geojson = [annotations_geojson]

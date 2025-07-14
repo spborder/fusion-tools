@@ -7,11 +7,11 @@ import threading
 sys.path.append('./src/')
 from fusion_tools.visualization import Visualization
 from fusion_tools.handler.dsa_handler import DSAHandler
-from fusion_tools.components import SlideMap, FeatureAnnotation, BulkLabels, SlideAnnotation, SlideAnnotationSchema
+from fusion_tools.components import SlideMap, FeatureAnnotation, BulkLabels, SlideAnnotation
 
 import pandas as pd
 
-test_schema = SlideAnnotationSchema(
+test_schema = [
     {
         "name": "Test Slide Annotation",
         "description": "This is a test of the SlideAnnotation component",
@@ -45,30 +45,27 @@ test_schema = SlideAnnotationSchema(
             }
         ]
     }
-)
+]
 
-test_feature_schema = {
-    'classes': [
-        {
-            'name': 'Test Class',
-            'color': 'rgb(255,0,0)'
-        }
-    ],
-    'labels': [
-        {
-            'name': 'Test Text Label',
-            'type': 'text'
-        },
-        {
-            'name': 'Test Options Label',
-            'type': 'options',
-            'options': [
-                'Option 1',
-                'Option 2'
-            ]
-        }
-    ]
-}
+test_feature_schema =  [
+    {
+        'name': 'Test Class',
+        'type': 'class',
+        'color': 'rgba(255,0,0,1.0)'
+    },
+    {
+        'name': 'Test Text Label',
+        'type': 'text'
+    },
+    {
+        'name': 'Test Options Label',
+        'type': 'options',
+        'options': [
+            'Option 1',
+            'Option 2'
+        ]
+    }
+]
 
 def main():
 
@@ -92,18 +89,18 @@ def main():
         tileservers=[dsa_handler.get_tile_server(i) for i in item_id],
         components = [
             [
-                SlideMap(),
+                SlideMap(
+                    cache = True
+                ),
                 [
                     FeatureAnnotation(
-                        storage_path = os.getcwd()+'\\tests\\Test_Annotations\\',
-                        labels_format = 'json',
-                        annotations_format = 'rgb',
-                        preset_schema = test_feature_schema
+                        annotations = test_feature_schema,
+                        editable = True
                     ),
-                    BulkLabels(),
-                    SlideAnnotation(
-                        preload_schema=test_schema
-                    )
+                    #BulkLabels(),
+                    #SlideAnnotation(
+                    #    preload_schema=test_schema
+                    #)
                 ]
             ]
         ]

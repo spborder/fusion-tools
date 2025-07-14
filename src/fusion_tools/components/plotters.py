@@ -841,11 +841,10 @@ class PropertyPlotter(Tool):
                 Input({'type': 'map-annotations-info-store','index':ALL},'data')
             ],
             [
-                Output({'type': 'property-list','index': ALL},'data'),
+                Output({'type': 'property-plotter-property-drop','index': ALL},'options'),
                 Output({'type': 'label-list','index': ALL},'options'),
                 Output({'type': 'property-graph','index': ALL},'figure'),
                 Output({'type': 'property-graph-tabs-div','index': ALL},'children'),
-                Output({'type': 'property-plotter-keys','index': ALL},'data')
             ]
         )(self.update_slide)
 
@@ -860,9 +859,8 @@ class PropertyPlotter(Tool):
                 Output({'type': 'property-plotter-store','index': ALL},'data')
             ],
             [
-                State({'type':'property-list','index': ALL},'checked'),
+                State({'type':'property-plotter-property-drop','index': ALL},'value'),
                 State({'type': 'label-list','index': ALL},'value'),
-                State({'type': 'property-plotter-keys','index': ALL},'data'),
                 State({'type': 'map-slide-information','index': ALL},'data'),
                 State({'type': 'property-plotter-store','index': ALL},'data')
             ]
@@ -938,12 +936,13 @@ class PropertyPlotter(Tool):
         new_annotations_info = json.loads(get_pattern_matching_value(new_annotations_info))
         new_available_properties = new_annotations_info['available_properties']
 
-        new_property_dict, new_property_keys = self.generate_property_dict(new_available_properties)
+        #TODO: Update this to not require use of dta
+        # Return something that is used in a dropdown
+        #new_property_dict, new_property_keys = self.generate_property_dict(new_available_properties)
         new_figure = go.Figure()
         new_graph_tabs_children = []
-        new_property_keys = json.dumps(new_property_keys)
 
-        return [new_property_dict], [new_available_properties], [new_figure], [new_graph_tabs_children], [new_property_keys]
+        return [new_available_properties], [new_available_properties], [new_figure], [new_graph_tabs_children]
         
     def gen_layout(self, session_data:dict):
         """Generating layout for PropertyPlotter Tool
@@ -986,14 +985,20 @@ class PropertyPlotter(Tool):
                                 html.Div(
                                     id = {'type': 'property-list-div','index': 0},
                                     children = [
-                                        dta.TreeView(
-                                            id = {'type': 'property-list','index': 0},
+                                        #dta.TreeView(
+                                        #    id = {'type': 'property-list','index': 0},
+                                        #    multiple = True,
+                                        #    checkable = True,
+                                        #    checked = [],
+                                        #    selected = [],
+                                        #    expanded = [],
+                                        #    data = {}
+                                        #)
+                                        dcc.Dropdown(
+                                            id = {'type': 'property-plotter-property-drop','index': 0},
                                             multiple = True,
-                                            checkable = True,
-                                            checked = [],
-                                            selected = [],
-                                            expanded = [],
-                                            data = {}
+                                            options = [],
+                                            value = []
                                         )
                                     ],
                                     style = {'maxHeight': '250px','overflow':'scroll'}
@@ -1064,17 +1069,16 @@ class PropertyPlotter(Tool):
 
         return property_data_list   
 
-    def update_property_graph(self, plot_butt_click, property_list, label_list, property_keys, slide_information,current_plot_data):
+    #TODO: Update this callback to use dropdown values instead of dta keys
+    def update_property_graph(self, plot_butt_click, property_names, label_list, slide_information,current_plot_data):
         """Updating the property plotter graph based on selected properties/labels
 
         :param plot_butt_click: Plot button clicked
         :type plot_butt_click: list
-        :param property_list: List of checked keys from the property tree
-        :type property_list: list
+        :param property_names: List of selected properties from dropdown menu
+        :type property_names: list
         :param label_list: Selected label from dropdown menu
         :type label_list: list
-        :param property_keys: Key for translating checked key to property name
-        :type property_keys: list
         :param slide_information: Information for the current slide
         :type slide_information: list
         :param current_plot_data: Data currently in use for the plot (rows = structure, columns = properties)
@@ -1087,19 +1091,11 @@ class PropertyPlotter(Tool):
 
         slide_information = json.loads(get_pattern_matching_value(slide_information))
 
-        property_list = get_pattern_matching_value(property_list)
+        property_names = get_pattern_matching_value(property_names)
         label_names = get_pattern_matching_value(label_list)
 
-        property_keys = json.loads(get_pattern_matching_value(property_keys))
-
-        # Don't do anything if not given properties
-        if property_list is None:
+        if property_names is None:
             raise exceptions.PreventUpdate
-        elif type(property_list)==list:
-            if len(property_list)==0:
-                raise exceptions.PreventUpdate
-
-        property_names = [property_keys[i] for i in property_list if i in property_keys]
 
         property_data = self.get_data_from_database(
             slide_info = slide_information,

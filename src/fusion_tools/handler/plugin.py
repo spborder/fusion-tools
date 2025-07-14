@@ -1321,8 +1321,8 @@ class DSAPluginProgress(DSATool):
             )
         )
 
+        table_rows = []
         if len(user_jobs)>0:
-            table_rows = []
             for job_idx,job in enumerate(user_jobs):
                 job_row = []
                 for prop in job_properties:
@@ -1366,7 +1366,7 @@ class DSAPluginProgress(DSATool):
             if next_clicks>0:
                 table_rows.append(
                     dmc.Tr([
-                        'You have exceed all of the jobs for this user!'
+                        'You have exceeded all of the jobs for this user!'
                     ])
                 )
             else:
@@ -1375,6 +1375,13 @@ class DSAPluginProgress(DSATool):
                         'You have not run any jobs yet!'
                     ])
                 )
+
+        if len(table_rows)==0:
+            table_rows.append(
+                dmc.Tr([
+                    'You have not run any jobs yet!'
+                ])
+            )
 
         table_caption = dmc.TableCaption([
             dbc.Stack([

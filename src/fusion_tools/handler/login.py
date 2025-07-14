@@ -50,12 +50,23 @@ class DSALoginComponent(DSATool):
     
     def update_layout(self, session_data:dict, use_prefix:bool):
         
-                
+        
+
+        current_user_children = ''
+        if 'current_user' in session_data:
+            current_user_children = f'Welcome, {session_data.get("current_user",{}).get("login","")}!'
+            logout_button_disable = False
+
+        else:
+            current_user_children = 'Welcome, Guest!'
+            logout_button_disable = True
+
+
         layout = html.Div([
             html.H4(
                 id = {'type': 'dsa-login-current-user','index': 0},
                 children = [
-                    f'Welcome, {session_data["current_user"]["login"]}!' if "current_user" in session_data else 'Welcome, Guest!'
+                    current_user_children
                 ]
             ),
             html.Hr(),
