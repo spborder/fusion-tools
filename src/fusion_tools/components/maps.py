@@ -3810,24 +3810,25 @@ class HybridSlideMap(MultiFrameSlideMap):
         nested_display_metadata = []
         non_nested_image_metadata = {}
         nested_image_metadata = []
+        
+        if not new_metadata is None:
+            if 'meta' in new_metadata:
+                for k,v in new_metadata['meta'].items():
+                    if not type(v) in [list,dict]:
+                        non_nested_display_metadata[k] = v
+                    else:
+                        nested_display_metadata.append({
+                            k: v
+                        })
 
-        if 'meta' in new_metadata:
-            for k,v in new_metadata['meta'].items():
-                if not type(v) in [list,dict]:
-                    non_nested_display_metadata[k] = v
-                else:
-                    nested_display_metadata.append({
-                        k: v
-                    })
-
-        for k,v in new_metadata.items():
-            if not k=='meta':
-                if not type(v) in [list,dict]:
-                    non_nested_display_metadata[k] = v
-                else:
-                    nested_display_metadata.append({
-                        k:v
-                    })
+            for k,v in new_metadata.items():
+                if not k=='meta':
+                    if not type(v) in [list,dict]:
+                        non_nested_display_metadata[k] = v
+                    else:
+                        nested_display_metadata.append({
+                            k:v
+                        })
 
 
         for k,v in new_image_metadata.items():
