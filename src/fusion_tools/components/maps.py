@@ -1994,6 +1994,7 @@ class MultiFrameSlideMap(SlideMap):
             ]
         )
 
+        super().get_namespace()
         super().get_callbacks()
         super().get_annotations_callbacks()
     
