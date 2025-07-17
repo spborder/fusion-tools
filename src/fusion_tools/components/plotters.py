@@ -996,7 +996,7 @@ class PropertyPlotter(Tool):
                                         #)
                                         dcc.Dropdown(
                                             id = {'type': 'property-plotter-property-drop','index': 0},
-                                            multiple = True,
+                                            multi = True,
                                             options = [],
                                             value = []
                                         )
