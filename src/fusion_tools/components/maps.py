@@ -4263,6 +4263,18 @@ class ChannelMixer(MapComponent):
                     for c_idx,c in enumerate(['red','green','blue'])
                 ]
             }
+        
+        elif len(frame_names)==3:
+            # Assuming RGB for 3-frame images
+            rgb_style_dict = {
+                "bands": [
+                    {
+                        "palette": ["rgba(0,0,0,0)",'rgba('+','.join(['255' if i==c_idx else '0' for i in range(3)]+['0'])+')'],
+                        "framedelta": c_idx
+                    }
+                    for c_idx,c in enumerate(['red','green','blue'])
+                ]
+            }
 
         else:
             rgb_style_dict = None

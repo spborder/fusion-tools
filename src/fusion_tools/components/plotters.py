@@ -936,13 +936,10 @@ class PropertyPlotter(Tool):
         new_annotations_info = json.loads(get_pattern_matching_value(new_annotations_info))
         new_available_properties = new_annotations_info['available_properties']
 
-        #TODO: Update this to not require use of dta
-        # Return something that is used in a dropdown
-        #new_property_dict, new_property_keys = self.generate_property_dict(new_available_properties)
         new_figure = go.Figure()
         new_graph_tabs_children = []
 
-        return [new_available_properties], [new_available_properties], [new_figure], [new_graph_tabs_children]
+        return [new_available_properties.copy()], [new_available_properties.copy()], [new_figure], [new_graph_tabs_children]
         
     def gen_layout(self, session_data:dict):
         """Generating layout for PropertyPlotter Tool
@@ -985,23 +982,13 @@ class PropertyPlotter(Tool):
                                 html.Div(
                                     id = {'type': 'property-list-div','index': 0},
                                     children = [
-                                        #dta.TreeView(
-                                        #    id = {'type': 'property-list','index': 0},
-                                        #    multiple = True,
-                                        #    checkable = True,
-                                        #    checked = [],
-                                        #    selected = [],
-                                        #    expanded = [],
-                                        #    data = {}
-                                        #)
                                         dcc.Dropdown(
                                             id = {'type': 'property-plotter-property-drop','index': 0},
+                                            placeholder = 'Select a property',
                                             multi = True,
                                             options = [],
-                                            value = []
                                         )
                                     ],
-                                    style = {'maxHeight': '250px','overflow':'scroll'}
                                 )
                             ]
                         )

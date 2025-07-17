@@ -1,6 +1,6 @@
 [project]
 name = "fusion-tools"
-version = "3.6.22"
+version = "3.6.25"
 description = "Modular visualization and analysis dashboard creation for high-resolution microscopy images."
 authors = [
     {name = "Sam Border", email = "sam.border2256@gmail.com"}
@@ -24,7 +24,7 @@ dependencies = [
     "pandas (>=2.3.0,<3.0.0)",
     "scikit-image (>=0.25.2,<0.26.0)",
     "statsmodels (>=0.14.4,<0.15.0)",
-    "large-image (>=1.32.11,<2.0.0)",
+    "large-image[multi,ometiff,openjpeg,openslide,pil,tifffile,zarr] (>=1.32.11,<2.0.0)",
     "sqlalchemy (>=2.0.41,<3.0.0)",
     "geojson (>=3.2.0,<4.0.0)",
     "lxml (>=5.3.1)",
@@ -43,4 +43,5 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.group.build.dependencies]
 build = "^1.2.2.post1"
+
 

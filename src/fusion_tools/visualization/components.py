@@ -313,7 +313,7 @@ class Visualization:
         #print(f'session_modified_time: {session_modified_time}')
 
         # Resetting session data if going from the same tab/notebook after restarting the application
-        if session_modified_time is None:
+        if not session_modified_time is None:
             if datetime.fromtimestamp(session_modified_time/1e3) < self.app_start_time:
                 session_data = self.vis_store_content
                 session_data['session']['id'] = in_memory_store.get('id')
