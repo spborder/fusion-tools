@@ -42,6 +42,7 @@ from fusion_tools.utils.shapes import (
     spatially_aggregate,
     histomics_to_geojson,
     detect_image_overlay,
+    detect_histomics,
     aperio_to_geojson,
     extract_geojson_properties
 )
@@ -1722,8 +1723,14 @@ class SlideMap(MapComponent):
 
             if not uploaded_shape is None:
                 upload_shape_type = uploaded_shape.split(',')[0]
+
+                #TODO: Add a check here for large-image vs. GeoJSON format
                 if 'json' in upload_shape_type:
                     uploaded_roi = json.loads(base64.b64decode(uploaded_shape.split(',')[-1]).decode())
+
+                    if detect_histomics(uploaded_roi):
+                        uploaded_roi = histomics_to_geojson(uploaded_roi)
+                        
                 elif 'xml' in upload_shape_type:
                     uploaded_roi = ET.fromstring(base64.b64decode(uploaded_shape.split(',')[-1]).decode())
                     uploaded_roi = aperio_to_geojson(uploaded_roi)
@@ -1734,34 +1741,35 @@ class SlideMap(MapComponent):
                 if type(uploaded_roi)==dict:
                     uploaded_roi = [uploaded_roi]
                 
-                for up_idx, up in enumerate(uploaded_roi):
-                    scaled_upload = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*x_scale,c[1]*y_scale),g),up)
+                if not uploaded_roi is None:
+                    for up_idx, up in enumerate(uploaded_roi):
+                        scaled_upload = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*x_scale,c[1]*y_scale),g),up)
 
-                    # Checking if there is a name or _id property:
-                    if 'properties' in scaled_upload:
-                        if 'name' in scaled_upload['properties']:
-                            if 'Manual' in scaled_upload['properties']['name']:
-                                scaled_upload['properties']['name'] = scaled_upload['properties']['name'].replace('Manual','Upload')
-                        
-                        scaled_upload['properties']['_id'] = uuid.uuid4().hex[:24]
+                        # Checking if there is a name or _id property:
+                        if 'properties' in scaled_upload:
+                            if 'name' in scaled_upload['properties']:
+                                if 'Manual' in scaled_upload['properties']['name']:
+                                    scaled_upload['properties']['name'] = scaled_upload['properties']['name'].replace('Manual','Upload')
+                            
+                            scaled_upload['properties']['_id'] = uuid.uuid4().hex[:24]
 
-                    else:
-                        scaled_upload['properties'] = {
-                            'name': f'Upload {len([i for i in annotation_names if "Upload" in i])+1+up_idx}',
-                            '_id': uuid.uuid4().hex[:24]
-                        }
+                        else:
+                            scaled_upload['properties'] = {
+                                'name': f'Upload {len([i for i in annotation_names if "Upload" in i])+1+up_idx}',
+                                '_id': uuid.uuid4().hex[:24]
+                            }
 
-                    # Aggregate if any initial annotations are present
-                    new_roi_name = scaled_upload['properties']['name']
-                    if len(initial_annotations)>0:
-                        # Spatial aggregation performed just between individual manual ROIs and initial annotations (no manual ROI to manual ROI aggregation)
-                        new_roi = spatially_aggregate(scaled_upload, initial_annotations,separate=separate_switch,summarize=summarize_switch)
-                    else:
-                        new_roi = scaled_upload
+                        # Aggregate if any initial annotations are present
+                        new_roi_name = scaled_upload['properties']['name']
+                        if len(initial_annotations)>0:
+                            # Spatial aggregation performed just between individual manual ROIs and initial annotations (no manual ROI to manual ROI aggregation)
+                            new_roi = spatially_aggregate(scaled_upload, initial_annotations,separate=separate_switch,summarize=summarize_switch)
+                        else:
+                            new_roi = scaled_upload
 
-                    added_rois.append(new_roi)
-                    added_roi_names.append(new_roi_name)
-                    manual_roi_idxes.append(max(manual_roi_idxes)+1+up_idx)
+                        added_rois.append(new_roi)
+                        added_roi_names.append(new_roi_name)
+                        manual_roi_idxes.append(max(manual_roi_idxes)+1+up_idx)
 
         # Checking for deleted manual ROIs
         for m_idx,(m,man_idx) in enumerate(zip(manual_rois,manual_roi_idx)):
