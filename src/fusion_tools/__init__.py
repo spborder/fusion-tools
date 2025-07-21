@@ -6,10 +6,8 @@ import asyncio
 def asyncio_db_loop(method):
     """Decorator for checking that an event loop is present for handling asynchronous callse
 
-    :param method: _description_
-    :type method: _type_
-    :return: _description_
-    :rtype: _type_
+    :param method: Function which has asynchronous process
+    :type method: None
     """
     def wrapper(self, *args, **kwargs):
         try:

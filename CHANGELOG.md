@@ -1,6 +1,13 @@
 # Changelog
 
 <!--next-version-placeholder-->
+## v3.6.18+ (07/2025)
+
+- Upgrading to Dash 3+
+- Removal of dash_treeview_antd (doesn't comply with Dash 3+)
+- Navigation to pyproject.toml through Poetry for dependency definitions
+
+
 ## v3.6.0 (06/2025)
 
 ### Features:

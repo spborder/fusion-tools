@@ -4,12 +4,7 @@ Modular visualization and analysis dashboard creation for high-resolution micros
 
 ## Installation
 
-To access interactive dashboard components and functionality use:
-```bash
-$ pip install fusion-tools[interactive]
-```
-
-To just use the `shapes` utility functions and `dataset` classes (`SegmentationDataset` and `ClassificationDataset`) use:
+`fusion-tools` is deployed through PyPI and can be installed using:
 ```bash
 $ pip install fusion-tools
 ```
@@ -232,6 +227,16 @@ vis_sess.start()
 </div>
 
 
+## Examples:
+
+For more examples including how to load specific types of spatial --omics datasets (*10x Visium, VisiumHD, MxIF, etc.*) see this dedicated example page:
+
+https://spborder.github.io/fusion-welcome-page/
+
+<div align="center">
+    <img src="docs/images/fusion-welcome-page.png">
+</div>
+
 ## Contributing
 
 Open to contributions. Feel free to submit a PR or post feature requests in [Issues](https://github.com/spborder/fusion-tools/issues)
@@ -239,7 +244,6 @@ Open to contributions. Feel free to submit a PR or post feature requests in [Iss
 ### Open Projects:
 - Automated segmentation workflow for locally stored images (active-learning, SAM, etc.)
 - Monitoring long-running model training/other external processes
-- Import anndata spatial --omics dataset (UPDATE (v2.0.0): see `utils.shapes.load_visium` for example loading *10x Visium* dataset)
 
 
 ## License
