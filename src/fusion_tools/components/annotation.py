@@ -1086,7 +1086,7 @@ class FeatureAnnotation(Tool):
     def generate_annotation_component(self, component_val:str, annotation_list: list, component_index: int):
         
         all_names = [i.get('name') for i in annotation_list]
-
+        
         if component_val in all_names:
             component_info = annotation_list[all_names.index(component_val)]
             if component_info.get('type','') in self.annotation_types:
@@ -1615,6 +1615,7 @@ class FeatureAnnotation(Tool):
         return [json.dumps(current_annotation_data)]
 
     def update_annotation_component(self, annotation_val,annotation_data, session_data):
+        
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
@@ -1622,6 +1623,8 @@ class FeatureAnnotation(Tool):
         session_data = json.loads(session_data)
         annotation_data = json.loads(get_pattern_matching_value(annotation_data))
         annotation_val = get_pattern_matching_value(annotation_val)
+        if annotation_val is None:
+            return [html.Div()]
 
         annotations_list, current_names = self.check_annotation_list(session_data)
         if len(list(annotation_data.keys()))>0:
@@ -1725,8 +1728,7 @@ class FeatureAnnotation(Tool):
             annotations_list[current_names.index(current_annotation)]['pinned'] = True
 
             # Only clearing the parent div children when pinning the current annotation
-            ann_parent_div = Patch()
-            ann_parent_div.clear()
+            ann_parent_div = html.Div()
         
         elif 'feature-annotation-unpin-icon' in ctx.triggered_id['type']:
             # Removing pinned annotation from pinned list and adding it back to the dropdown
