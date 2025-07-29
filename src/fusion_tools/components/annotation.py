@@ -113,6 +113,22 @@ class AnnotationSchema:
 
         self.id = uuid.uuid4().hex[:24]
     
+    @classmethod
+    def from_dict(cls,dict_data):
+
+        schema = dict_data.get('schema')
+        name = dict_data.get('name','FUSION Annotation Schema')
+        description = dict_data.get('description','')
+        user_spec = dict_data.get('user_spec')
+        annotations = dict_data.get('annotations')
+
+        return cls(
+            schema = schema,
+            name = name,
+            description = description,
+            user_spec = user_spec,
+            annotations = annotations)
+
     def add_annotation(self, annotation_dict: dict):
         """Add annotation to AnnotationSchema
 
@@ -638,23 +654,6 @@ class FeatureAnnotation(Tool):
                                     ],style = {'marginTop':'5px','marginBottom':'5px'}),
                                 ]
                             ),
-                            #dbc.AccordionItem(
-                            #    title = 'Progress Options',
-                            #    item_id = 'progress-options',
-                            #    children = [
-                            #        dbc.Row([
-                            #            dmc.Switch(
-                            #                id = {'type': 'feature-annotation-remove-labeled','index': 0},
-                            #                size = 'lg',
-                            #                onLabel = 'YES',
-                            #                offLabel = 'NO',
-                            #                checked = True,
-                            #                label = 'Show Labeled',
-                            #                description = 'Select YES to show both unlabeled and labeled structures, select NO to only see unlabeled structures.'
-                            #            )
-                            #        ])
-                            #    ]
-                            #),
                             dbc.AccordionItem(
                                 title = 'Export Annotations',
                                 item_id = 'export-annotations',
@@ -1086,7 +1085,7 @@ class FeatureAnnotation(Tool):
     def generate_annotation_component(self, component_val:str, annotation_list: list, component_index: int):
         
         all_names = [i.get('name') for i in annotation_list]
-        
+
         if component_val in all_names:
             component_info = annotation_list[all_names.index(component_val)]
             if component_info.get('type','') in self.annotation_types:
@@ -3134,19 +3133,20 @@ class BulkLabels(Tool):
                         })
                     else:
                         distance_div = div['props']['children'][1]['props']['children']
-                        if 'value' in distance_div[0]['props']:
-                            query_distance = distance_div[0]['props']['value']
-                            #print(f'query_distance: {query_distance}')
-                            if not any([i is None for i in [query_mod,query_type,query_structure,query_distance]]):
-                                try:
-                                    processed_queries.append({
-                                        'mod': query_mod,
-                                        'type': query_type,
-                                        'structure': query_structure,
-                                        'distance': query_distance*x_scale
-                                    })
-                                except TypeError:
-                                    continue
+                        if len(distance_div)>0:
+                            if 'value' in distance_div[0]['props']:
+                                query_distance = distance_div[0]['props']['value']
+                                #print(f'query_distance: {query_distance}')
+                                if not any([i is None for i in [query_mod,query_type,query_structure,query_distance]]):
+                                    try:
+                                        processed_queries.append({
+                                            'mod': query_mod,
+                                            'type': query_type,
+                                            'structure': query_structure,
+                                            'distance': query_distance*x_scale
+                                        })
+                                    except TypeError:
+                                        continue
 
         return processed_queries
 
@@ -3193,6 +3193,8 @@ class BulkLabels(Tool):
 
         filter_data = json.loads(get_pattern_matching_value(filter_data))
 
+        #TODO: Replace this function to utilize the fusionDB
+        # at least processing the property search criteria, not all spatial operations are available
         filtered_geojson, filtered_ref_list = process_filters_queries(filter_data["Filters"], filter_data["Spatial"], include_structures, current_features)
 
         new_structures_div = [
@@ -3745,6 +3747,9 @@ class SlideAnnotation(MultiTool):
     :param MultiTool: General class for tool which works on multiple slides at once
     :type MultiTool: None
     """
+    title = 'Slide Annotation'
+    description = 'Used for annotating whole slides following pre-specified schema'
+
     def __init__(self,
                  handler: Union[None,DSAHandler] = None,
                  preload_schema: Union[None, str, dict, list, AnnotationSchema] = None
@@ -3775,7 +3780,6 @@ class SlideAnnotation(MultiTool):
     def load(self, component_prefix: int):
 
         self.component_prefix = component_prefix
-        self.title = 'Slide Annotation'
         self.blueprint = DashBlueprint(
             transforms = [
                 PrefixIdTransform(prefix = f'{self.component_prefix}'),
@@ -3935,13 +3939,13 @@ class SlideAnnotation(MultiTool):
                 dbc.CardBody([
                     dbc.Row(
                         dbc.Col(
-                            html.H3('Slide Annotation')
+                            html.H3(self.title)
                         )
                     ),
                     html.Hr(),
                     dbc.Row(
                         dbc.Col(
-                            'Used for annotating whole slides following pre-specified schema'
+                            self.description
                         )
                     ),
                     html.Hr(),
@@ -3962,8 +3966,8 @@ class SlideAnnotation(MultiTool):
                             dcc.Dropdown(
                                 options = [
                                     {
-                                        'label': n.schema_data['name'],
-                                        'value': n.schema_data['name']
+                                        'label': n.name,
+                                        'value': n.name
                                     }
                                     for n in self.schemas
                                 ],
@@ -4037,19 +4041,17 @@ class SlideAnnotation(MultiTool):
                 f.close()
 
         if type(schema)==dict:
-            new_schema = [SlideAnnotationSchema(
-                schema_data = schema
-            )]
+            new_schema = [
+                AnnotationSchema.from_dict(schema)
+            ]
         
         elif type(schema)==list:
             new_schema = [
-                SlideAnnotationSchema(
-                    schema_data = s
-                )
+                AnnotationSchema.from_dict(s)
                 for s in schema
             ]
         
-        elif type(schema)==SlideAnnotationSchema:
+        elif type(schema)==AnnotationSchema:
             new_schema = [schema]
 
         else:
@@ -4152,11 +4154,11 @@ class SlideAnnotation(MultiTool):
 
     def make_annotation_components(self, schema_key, slide_name, session_data):
 
-        if not schema_key in [i.schema_data['name'] for i in self.schemas]:
+        if not schema_key in [i.name for i in self.schemas]:
             return f'Schema: {schema_key} Not Found!'
         
-        schema_index = [i.schema_data['name'] for i in self.schemas].index(schema_key)
-        schema_info = self.schemas[schema_index].schema_data
+        schema_index = [i.name for i in self.schemas].index(schema_key)
+        schema_info = self.schemas[schema_index]
 
         # Check if this schema has any data already in the session
         if 'slide-annotation' in session_data['data']:
@@ -4189,7 +4191,7 @@ class SlideAnnotation(MultiTool):
                 dbc.CardHeader(html.H4(schema_key)),
                 dbc.CardBody([
                     dbc.Row(
-                        schema_info.get('description')
+                        schema_info.description
                     ),
                     html.Hr(),
                     html.Div(
@@ -4201,7 +4203,7 @@ class SlideAnnotation(MultiTool):
                     html.Div(
                         children = [
                             self.make_input_component(i,idx, slide_input_vals)
-                            for idx,i in enumerate(schema_info.get('annotations',[]))
+                            for idx,i in enumerate(schema_info.annotations)
                         ]
                     ),
                     dbc.Row([

@@ -99,10 +99,10 @@ def main():
                         annotations = test_feature_schema,
                         editable = True
                     ),
-                    #BulkLabels(),
-                    #SlideAnnotation(
-                    #    preload_schema=test_schema
-                    #)
+                    BulkLabels(),
+                    SlideAnnotation(
+                        preload_schema=test_schema
+                    )
                 ]
             ]
         ]
