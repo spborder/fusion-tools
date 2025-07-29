@@ -70,14 +70,16 @@ test_feature_schema =  [
 def main():
 
     # Grabbing first item from demo DSA instance
-    #base_url = 'https://demo.kitware.com/histomicstk/api/v1'
-    #item_id = ['5bbdeed1e629140048d01bcb','58b480ba92ca9a000b08c89d']
+    base_url = 'https://demo.kitware.com/histomicstk/api/v1'
+    item_id = ['5bbdeed1e629140048d01bcb','58b480ba92ca9a000b08c89d']
+    """
     base_url = os.environ.get('DSA_URL')
 
     item_id = [
         '6495a4e03e6ae3107da10dc5',
         '6495a4df3e6ae3107da10dc2'
-    ] 
+    ]
+    """ 
 
 
     # Starting the DSAHandler to grab information:

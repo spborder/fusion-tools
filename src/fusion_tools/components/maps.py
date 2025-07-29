@@ -605,7 +605,7 @@ class SlideMap(MapComponent):
                 Output({'type': 'map-tile-layer-holder','index': MATCH},'children'),
                 Output({'type': 'map-slide-information','index': MATCH},'data'),
                 Output({'type': 'map-slide-metadata-div','index': MATCH},'children'),
-                Output({'type': 'map-annotations-fetch-error-backup-store','index': MATCH},'data')
+                #Output({'type': 'map-annotations-fetch-error-backup-store','index': MATCH},'data')
             ],
             [
                 State('anchor-vis-store','data')
@@ -999,7 +999,6 @@ class SlideMap(MapComponent):
             if cached_item:
                 get_from_cache = True
             
-
         # Getting data from the tileservers:
         if not 'current_user' in vis_data:
             new_url = new_slide['tiles_url']
@@ -1242,7 +1241,8 @@ class SlideMap(MapComponent):
         # Clearing markers from previous slide
         new_marker_div = html.Div()
 
-        return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
+        #return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
+        return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div
 
     @asyncio_db_loop
     def get_annotations_backup(self, ann_error_store, vis_data):
@@ -1268,8 +1268,10 @@ class SlideMap(MapComponent):
             raise exceptions.PreventUpdate
         else:
             vis_data = json.loads(vis_data)
-
-            if ann_error_store.get('cached'):
+            db_item = self.check_slide_in_cache(
+                image_id = ann_error_store.get('id')
+            )
+            if ann_error_store.get('cached') and db_item:
                 # Grabbing annotation data from the database:
                 loop = asyncio.get_event_loop()
                 raw_geojson = loop.run_until_complete(
@@ -1278,7 +1280,8 @@ class SlideMap(MapComponent):
                             item_id = ann_error_store.get('id')
                         )
                     )
-                )[0]
+                )
+                raw_geojson = raw_geojson[0]
 
             else:
                 # Use requests to get annotations data
@@ -1326,6 +1329,12 @@ class SlideMap(MapComponent):
                     else:
                         f['properties'] = {'_index': f_idx, '_id': uuid.uuid4().hex[:24], 'name': s['properties']['name']}
 
+            #print(f'len of scaled_geojson: {len(scaled_geojson)}')
+            """
+            if len(scaled_geojson) != len(ctx.outputs_list[0]):
+                print('Length of scaled geojson not equal to expected output length')
+                raise exceptions.PreventUpdate
+            """
             
         return scaled_geojson, [json.dumps(scaled_geojson)]
 
@@ -1354,7 +1363,8 @@ class SlideMap(MapComponent):
         slide_information = json.loads(get_pattern_matching_value(slide_information))
 
         # Checking if slide is already cached
-        if self.cache and not slide_information.get('id') is None:
+        #TODO: This checks if the current anntotations are at least the same length as the expected number of annotations
+        if self.cache and not slide_information.get('id') is None and len(annotations_geojson)>=len(slide_information.get('annotations_metadata')):
             db_item = self.check_slide_in_cache(
                 image_id = slide_information.get('id')
             )

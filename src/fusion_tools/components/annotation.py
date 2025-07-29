@@ -2269,7 +2269,6 @@ class BulkLabels(Tool):
     title = 'Bulk Labels'
     description = 'Apply labels to structures based on several different inclusion and exclusion criteria.'
 
-
     def __init__(self,
                  ignore_list: list = [],
                  property_depth: int = 4):
