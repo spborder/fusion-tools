@@ -287,11 +287,6 @@ class fusionDB:
             }
         )
 
-        print('fusionDB.add_slide:')
-        print(new_item)
-        print(slide_id)
-        print(f'len(annotations): {len(annotations)}')
-
         for ann_idx, ann in enumerate(annotations):
             # Adding layer
             new_layer = self.get_create(
@@ -302,7 +297,6 @@ class fusionDB:
                     'item': slide_id
                 }
             )
-            print(f'new_layer: {new_layer}')
 
             if 'image_path' in ann:
                 # Adding image overlay layer
@@ -411,8 +405,6 @@ class fusionDB:
                 }
             }
         )
-        print('fusionDB.get_item_annotations:')
-        print(item_layers)
 
         for l in item_layers:
             layer_name = l.get('name')
