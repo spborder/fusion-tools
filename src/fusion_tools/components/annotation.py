@@ -3754,7 +3754,7 @@ class SlideAnnotation(MultiTool):
     title = 'Slide Annotation'
     description = 'Used for annotating whole slides following pre-specified schema'
 
-    annotation_types = ["roi","text","numeric","options"]
+    annotation_types = ["roi","text","numeric","options","radio","checklist"]
     annotation_descriptions = [
         "Hand-drawn regions on a slide",
         "Free text label applied to a structure.",
@@ -3789,7 +3789,7 @@ class SlideAnnotation(MultiTool):
         self.schemas = local_schemas+cloud_schemas
 
     def __str__(self):
-        return 'Slide Annotation'
+        return self.title
     
     def load(self, component_prefix: int):
 
@@ -3828,6 +3828,7 @@ class SlideAnnotation(MultiTool):
             ]
         )(self.update_slide)
 
+        # Selecting a slide annotation schema from the initial list
         self.blueprint.callback(
             [
                 Input({'type':'slide-annotation-schema-drop','index': ALL},'value')
@@ -3842,6 +3843,7 @@ class SlideAnnotation(MultiTool):
             ]
         )(self.update_schema)
 
+        # Refreshing available schemas (TODO)
         self.blueprint.callback(
             [
                 Input({'type': 'slide-annotation-schema-refresh-icon','index': ALL},'n_clicks')
@@ -3854,6 +3856,7 @@ class SlideAnnotation(MultiTool):
             ]
         )(self.refresh_schemas)
 
+        # Opening the edit modal with options to edit individual annotations information
         self.blueprint.callback(
             [
                 Input({'type': 'slide-annotation-edit-input','index': ALL},'n_clicks')
@@ -3867,6 +3870,56 @@ class SlideAnnotation(MultiTool):
             ]
         )(self.open_edit_modal)
 
+        # Updating the edit modal content based on selections
+        self.blueprint.callback(
+            [
+                Input({'type': 'slide-annotation-edit-type-dropdown','index': ALL},'value')
+            ],
+            [
+                State({'type': 'slide-annotation-edit-store','index': ALL},'data')
+            ],
+            [
+                Output({'type': 'slide-annotation-edit-option-div','index': ALL},'children')
+            ]
+        )(self.update_edit_option_div)
+
+        # Updating options based on whether remove or add was clicked
+        self.blueprint.callback(
+            [
+                Input({'type': 'slide-annotation-edit-option-add','index': ALL},'n_clicks'),
+                Input({'type': 'slide-annotation-edit-option-remove','index':ALL},'n_clicks')
+            ],
+            [
+                State({'type': 'slide-annotation-edit-option','index': ALL},'id')
+            ],
+            [
+                Output({'type': 'slide-annotation-edit-option-parent-div','index': ALL},'children')
+            ]
+        )(self.update_edit_options)
+
+        self.blueprint.callback(
+            [
+                Input({'type': 'slide-annotation-remove-input','index': ALL},'n_clicks'),
+                Input({'type': 'slide-annotation-edit-update-input','index': ALL},'n_clicks')
+            ],
+            [
+                State({'type': 'slide-annotation-edit-name-text','index': ALL},'value'),
+                State({'type': 'slide-annotation-edit-description-text','index': ALL},'value'),
+                State({'type': 'slide-annotation-edit-type-dropdown','index': ALL},'value'),
+                State({'type': 'slide-annotation-edit-roi-dropdown','index': ALL},'value'),
+                State({'type': 'slide-annotation-edit-editable-dropdown','index': ALL},'value'),
+                State({'type': 'slide-annotation-edit-option','index': ALL},'value'),
+                State({'type': 'slide-annotation-edit-store','index': ALL},'data'),
+                State({'type': 'slide-annotation-schema-drop','index': ALL},'value')
+            ],
+            [
+                Output({'type': 'slide-annotation-modal','index': ALL},'is_open'),
+                Output({'type': 'slide-annotation-schema-parent-div','index': ALL},'children'),
+                Output({'type': 'slide-annotation-schema-drop','index': ALL},'value')
+            ]
+        )(self.update_edit)
+
+        # Opening the ROI modal to add ROIs to the slide
         self.blueprint.callback(
             [
                 Input({'type': 'slide-annotation-roi-input','index': ALL},'n_clicks')
@@ -3882,6 +3935,7 @@ class SlideAnnotation(MultiTool):
             ]
         )(self.open_roi_modal)
 
+        # Submitting input labels for a slide
         self.blueprint.callback(
             [
                 Input({'type': 'slide-annotation-submit-labels','index': ALL},'n_clicks')
@@ -3900,6 +3954,7 @@ class SlideAnnotation(MultiTool):
             ]
         )(self.submit_labels)
 
+        # Submitting a drawn ROI
         self.blueprint.callback(
             [
                 Input({'type': 'slide-annotation-roi-done-button','index': ALL},'n_clicks')
@@ -3916,6 +3971,7 @@ class SlideAnnotation(MultiTool):
             ]
         )(self.submit_roi)
 
+        # Downloading annotations for the current session
         self.blueprint.callback(
             [
                 Input({'type': 'slide-annotation-download-button','index': ALL},'n_clicks')
@@ -4438,35 +4494,56 @@ class SlideAnnotation(MultiTool):
         
         input_info = json.loads(get_pattern_matching_value(input_info))
 
-        #TODO: Populate with current options if input_info.get('type') in ['options','checklist']
         if input_info.get('type','') in ['options','checklist']:
-            options_div = html.Div([
-                html.Div([
-                    dbc.Row([
-                        dbc.InputGroup([
-                            dbc.InputGroupText('Option: '),
-                            dbc.Input(
-                                type = 'text',
-                                value = o
-                            ),
-                            dbc.Button(
-                                html.I(
-                                    className = 'fa-solid fa-circle-xmark',
-                                    style = {'color': 'rgb(255,0,0)'}
+            options_div = html.Div(
+                id = {'type':'slide-annotation-edit-option-div','index': 0},
+                children = [
+                    html.Div(
+                        id = {'type':'slide-annotation-edit-option-parent-div','index': 0},
+                        children = [
+                            dbc.Row([
+                                dbc.InputGroup([
+                                    dbc.InputGroupText('Option: '),
+                                    dbc.Input(
+                                        type = 'text',
+                                        value = o,
+                                        id = {'type': 'slide-annotation-edit-option','index': o_idx}
+                                    ),
+                                    dbc.Button(
+                                        children = [
+                                            html.H4('X',style = {'color': 'rgb(0,0,0)'})
+                                        ],
+                                        id = {'type': 'slide-annotation-edit-option-remove','index': o_idx}
+                                    )
+                                ])
+                            ],style = {'marginBottom':'5px'})
+                            for o_idx,o in enumerate(input_info.get('options',[]))
+                        ]                    
+                    ),
+                    dbc.Row(
+                        children = [
+                            dbc.Col(
+                                html.A(
+                                    html.I(
+                                        className = 'bi bi-plus-circle-fill h3',
+                                        style = {'color': 'rgb(0,255,0)'},
+                                        n_clicks = len(input_info.get('options',[])),
+                                        id = {'type': 'slide-annotation-edit-option-add','index': 0}
+                                    )
                                 ),
-                                id = {'type': 'slide-annotation-edit-option-remove','index': o_idx}
+                                width = 'auto', align = 'center'
                             )
-                        ])
-                    ],style = {'marginBottom':'5px'})
-                    for o_idx,o in enumerate(input_info.get('options'))
-                ]), #TODO: Make sure to add the parent div id for new options to be added to
-                html.Div(
-                    children = [] #TODO: This should be the button that adds a new option
-                )
-            ])
+                        ],
+                        align = 'center',justify='center'
+                    ),
+                    html.Hr()
+                ]
+            )
         else:
-            options_div = html.Div()
-
+            options_div = html.Div(
+                id = {'type':'slide-annotation-edit-option-div','index': 0},
+                children = []
+            )
 
         edit_modal_content = dbc.Card([
             dbc.CardBody([
@@ -4545,6 +4622,12 @@ class SlideAnnotation(MultiTool):
                     )
                 ], style = {'marginBottom': '10px'}),
                 html.Hr(),
+                options_div,
+                dcc.Store(
+                    id = {'type': 'slide-annotation-edit-store','index': 0},
+                    data = json.dumps(input_info),
+                    storage_type = 'memory'
+                ),
                 dbc.Row([
                     dbc.Col([
                         dbc.Button(
@@ -4571,7 +4654,158 @@ class SlideAnnotation(MultiTool):
 
         
         return [True], [edit_modal_content]
-    
+
+    def update_edit_option_div(self, edit_value, input_info):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        input_info = json.loads(get_pattern_matching_value(input_info))
+        edit_value = get_pattern_matching_value(edit_value)
+        if edit_value in ['options','checklist','radio']:
+            options_div = html.Div([
+                html.Div(
+                    id = {'type':'slide-annotation-edit-option-parent-div','index': 0},
+                    children = [
+                        dbc.Row([
+                            dbc.InputGroup([
+                                dbc.InputGroupText('Option: '),
+                                dbc.Input(
+                                    type = 'text',
+                                    value = o,
+                                    id = {'type': 'slide-annotation-edit-option','index': o_idx}
+                                ),
+                                dbc.Button(
+                                    children = [
+                                        html.H4('X',style = {'color': 'rgb(0,0,0)'})
+                                    ],
+                                    id = {'type': 'slide-annotation-edit-option-remove','index': o_idx}
+                                )
+                            ])
+                        ],style = {'marginBottom':'5px'})
+                        for o_idx,o in enumerate(input_info.get('options',[]))
+                    ]                    
+                ),
+                dbc.Row(
+                    children = [
+                        dbc.Col(
+                            html.A(
+                                html.I(
+                                    className = 'bi bi-plus-circle-fill h3',
+                                    style = {'color': 'rgb(0,255,0)'},
+                                    n_clicks = len(input_info.get('options',[])),
+                                    id = {'type': 'slide-annotation-edit-option-add','index': 0}
+                                )
+                            ),
+                            width = 'auto', align = 'center'
+                        )
+                    ],
+                    align = 'center',justify='center'
+                ),
+                html.Hr()
+            ])
+
+            PrefixIdTransform(prefix = f'{self.component_prefix}').transform_layout(options_div)
+
+            return [options_div]
+        else:
+            return [html.Div()]
+
+    def update_edit_options(self, add_click,rem_click, option_ids):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        add_click = get_pattern_matching_value(add_click)
+
+        options_parent = Patch()
+        def make_new_option(click_idx):
+            new_row =  dbc.Row([
+                    dbc.InputGroup([
+                        dbc.InputGroupText('Option: '),
+                        dbc.Input(
+                            type = 'text',
+                            value = '',
+                            id = {'type': 'slide-annotation-edit-option','index': click_idx}
+                        ),
+                        dbc.Button(
+                            children = [
+                                html.H4('X',style = {'color': 'rgb(0,0,0)'})
+                            ],
+                            id = {'type': 'slide-annotation-edit-option-remove','index': click_idx}
+                        )
+                    ])
+                ],style = {'marginBottom':'5px'})
+
+            PrefixIdTransform(prefix = f'{self.component_prefix}').transform_layout(new_row)
+
+            return new_row
+
+        if 'slide-annotation-edit-option-add' in ctx.triggered_id['type']:
+        
+            options_parent.append(make_new_option(add_click))
+            
+        elif 'slide-annotation-edit-option-remove' in ctx.triggered_id['type']:
+            
+            del options_parent[rem_click.index(1)]
+        
+
+        return [options_parent]
+
+    def update_edit(self,remove_click, update_click, update_name, update_desc, update_type, update_roi, update_editable, update_options, edit_store, schema_name):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        update_name = get_pattern_matching_value(update_name)
+        update_desc = get_pattern_matching_value(update_desc)
+        update_type = get_pattern_matching_value(update_type)
+        update_roi = get_pattern_matching_value(update_roi)
+        update_editable = get_pattern_matching_value(update_editable)
+        
+        edit_store = json.loads(get_pattern_matching_value(edit_store))
+        schema_name = get_pattern_matching_value(schema_name)
+
+        available_schema_names = [
+            i.name
+            for i in self.schemas
+        ]
+
+        if schema_name in available_schema_names:
+            current_schema = self.schemas[available_schema_names.index(schema_name)]
+
+            schema_ann_names = [
+                i.get('name') for i in current_schema.annotations
+            ]
+
+            update_ann = current_schema.annotations[schema_ann_names.index(edit_store.get('name'))]
+
+            if 'slide-annotation-edit-remove-input' in ctx.triggered_id['type']:
+                del current_schema.annotations[schema_ann_names.index(edit_store.get('name'))]
+                
+            elif 'slide-annotation-edit-update-input' in ctx.triggered_id['type']:
+
+                update_ann = update_ann | {
+                    'name': update_name,
+                    'description': update_desc,
+                    'type': update_type,
+                    'roi': update_roi,
+                    'editable': update_editable
+                }
+
+                if update_type in ['options','radio','checklist']:
+                    update_ann['options'] = update_options
+                
+                current_schema.annotations[schema_ann_names.index(edit_store.get('name'))] = update_ann
+
+        
+        modal_open = False
+        parent_div_children = html.Div()
+        schema_drop_value = []
+
+        return [modal_open], [parent_div_children], [modal_open]
+        
+
     def open_roi_modal(self, clicked, input_info, tile_url, tile_size):
 
         if not any([i['value'] for i in ctx.triggered]):
@@ -4615,9 +4849,6 @@ class SlideAnnotation(MultiTool):
         ]
 
         return [True], modal_children
-
-    def edit_schema(self):
-        pass
 
     def submit_labels(self, submit_clicked, input_vals, input_infos, schema_name, slide_information, session_data):
         

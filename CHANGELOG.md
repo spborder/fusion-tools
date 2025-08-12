@@ -1,7 +1,7 @@
 # Changelog
 
 <!--next-version-placeholder-->
-## v3.6.31 (08/12/2025)
+## v3.6.32 (08/12/2025)
 
 - Increasing flexibility of `SlideAnnotation` components
 
