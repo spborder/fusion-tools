@@ -67,6 +67,7 @@ class Item(Base):
     filepath = Column(String)
 
     session = mapped_column(ForeignKey("visSession.id"))
+    user = mapped_column(ForeignKey("user.id"))
     updated = Column(DateTime)
 
 
@@ -79,6 +80,7 @@ class Item(Base):
             'ann_meta': self.ann_meta,
             'filepath': self.filepath,
             'session': self.session,
+            'user': self.user,
             'updated': self.updated
         }
 

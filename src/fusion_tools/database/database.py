@@ -80,9 +80,31 @@ class fusionDB:
             session.add(obj)
 
         return True
+
+    def remove(self, obj, session = None):
+        # Using sessionmaker in a context manager
+        # (closes automatically and rolls back in the event of a database error)
+        # Testing if the session object also has a .delete method
+        if session is None:
+            with self.get_db() as session:
+                session.delete(obj)
+                session.commit()
+        else:
+            session.delete(obj)
+        
+        return True
     
     def get_create(self, table_name:str, inst_id:Union[str,None] = None, kwargs:Union[dict,None] = None):
-        
+        """Function for updating or adding items to the database based on whether or not that particular instance already exists
+
+        :param table_name: Name of table that the instance belongs/should belong to
+        :type table_name: str
+        :param inst_id: A unique id assigned to the new/updated instance, defaults to None
+        :type inst_id: Union[str,None], optional
+        :param kwargs: Additional arguments used in the creation/updation of an instance, defaults to None
+        :type kwargs: Union[dict,None], optional
+        :return: Returns the newly created instance if the table name exists 
+        """
         with self.get_db() as session:
             if table_name in TABLE_NAMES:
                 if not inst_id is None:
@@ -124,6 +146,54 @@ class fusionDB:
                 session.commit()
 
                 return get_create_result
+            else:
+                return None
+
+    def get_remove(self, table_name:str, inst_id:Union[str,None] = None, user_id: Union[str,None] = None, vis_session_id: Union[str,None] = None):
+        """The opposite of self.get_create, checks if an item is present in the table and if it is, deletes it.
+
+        :param table_name: Name of table that the instance belongs to
+        :type table_name: str
+        :param inst_id: A unique id assigned to the instance, defaults to None
+        :type inst_id: Union[str,None], optional
+        :return: Returns True if the removal was successful/the table name exists and that instance is in the table
+        """
+        with self.get_db() as session:
+            if table_name in TABLE_NAMES:
+                if not inst_id is None:
+                    get_remove_result = session.query(
+                        TABLE_NAMES.get(table_name)
+                    ).filter_by(id = inst_id)
+
+                    if not get_remove_result:
+                        #print("Instance not present in db")
+                        # If this thing isn't in the table, don't do anything
+                        pass
+                    else:
+                        # This is if this thing DOES exist in the table, remove it
+                        if not user_id is None:
+                            get_remove_result = get_remove_result.filter(
+                                getattr(TABLE_NAMES.get(table_name),'user')==user_id
+                            )
+
+                        if not vis_session_id is None:
+                            get_remove_result = get_remove_result.filter(
+                                getattr(TABLE_NAMES.get(table_name),'session')==vis_session_id
+                            )
+
+                        if get_remove_result:
+                            for r in get_remove_result.all():
+                                self.remove(r,session)
+                        else:
+                            #print('Not found for this user/visSession')
+                            pass
+                else:
+                    # Don't delete anything if no instance id is provided
+                    get_remove_result = None
+
+                session.commit()
+
+                return get_remove_result
             else:
                 return None
 
@@ -245,7 +315,6 @@ class fusionDB:
             # Applying filters
             search_filters = search_kwargs.get('filters')
             if not search_filters is None:
-                
                 table_joins = list(set(list(search_filters.keys())))
                 for t in table_joins:
                     if t in TABLE_NAMES:
@@ -269,11 +338,20 @@ class fusionDB:
                 if idx>=offset:
                     return_list.append(i.to_dict())
 
+            #print(json.dumps(search_kwargs,indent=4))
             #print(f'n returned from db_search: {len(return_list)}')
-            
+            #print(return_list)
             return return_list
       
-    def add_slide(self, slide_id:str, slide_name:str, metadata: dict, image_metadata: dict, image_filepath:Union[str,None], annotations_metadata:dict,annotations:Union[list,dict,None]):
+    def add_slide(self,
+        slide_id:str, 
+        slide_name:str, 
+        metadata: dict, 
+        image_metadata: dict, 
+        image_filepath:Union[str,None], 
+        annotations_metadata:dict,annotations:Union[list,dict,None],
+        user_id:Union[str,None] = None,
+        vis_session_id: Union[str,None] = None):
 
         new_item = self.get_create(
             table_name = 'item',
@@ -283,7 +361,9 @@ class fusionDB:
                 'meta': metadata,
                 'image_meta': image_metadata,
                 'ann_meta': annotations_metadata,
-                'filepath': image_filepath
+                'filepath': image_filepath,
+                'user': user_id,
+                'session': vis_session_id
             }
         )
 

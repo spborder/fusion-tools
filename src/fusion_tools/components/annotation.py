@@ -1486,6 +1486,7 @@ class FeatureAnnotation(Tool):
             # datetime isn't JSON serializable
             last_update = new_anns[0][0].pop('updated')
             updated_annotation_store = json.dumps(new_anns[0][0])
+        
 
         # Updating with current annotation values for selected annotation (from dropdown) and pinned annotation components
         annotations_list, current_names = self.check_annotation_list(session_data)
@@ -2239,9 +2240,12 @@ class FeatureAnnotation(Tool):
             session_id_filter = session_data.get('session',{}).get('id')
         elif user_status=='user':
             user_id_filter = session_data.get('current_user',{}).get('_id')
+            # This filter is based on session row selections made by the user
             session_id_filter = []
         elif user_status=='admin':
+            # This filter is based on user row selections made by the user
             user_id_filter = []
+            # This filter is based on session row selections made by the user (populates with selected users)
             session_id_filter = []
         
         annotation_data = self.check_database(
@@ -3750,6 +3754,16 @@ class SlideAnnotation(MultiTool):
     title = 'Slide Annotation'
     description = 'Used for annotating whole slides following pre-specified schema'
 
+    annotation_types = ["roi","text","numeric","options"]
+    annotation_descriptions = [
+        "Hand-drawn regions on a slide",
+        "Free text label applied to a structure.",
+        "Numeric value assigned to a structure.",
+        "Dropdown menu selection from list of possible options (one value permitted).",
+        "Filled in circle used for selecting between two or more values (one value permitted).",
+        "Set of selectable items for assigning multiple values to a single structure (multiple values permitted)."
+    ]
+
     def __init__(self,
                  handler: Union[None,DSAHandler] = None,
                  preload_schema: Union[None, str, dict, list, AnnotationSchema] = None
@@ -4299,7 +4313,7 @@ class SlideAnnotation(MultiTool):
             id = {'type': 'slide-annotation-roi-input','index': input_index},
             color = roi_input_color,
             n_clicks = 0,
-            disabled= roi_input_color=='secondary'
+            disabled= roi_input_color=='secondary' or input_spec['type']=='roi'
         ) 
 
         if input_spec['type']=='text':
@@ -4382,6 +4396,39 @@ class SlideAnnotation(MultiTool):
                 html.Hr()
             ])
 
+        elif input_spec['type']=='checklist':
+            input_component = html.Div([
+                dbc.Row([
+                    dbc.Col(input_desc_column,md=5),
+                    dbc.Col([
+                        dbc.InputGroup([
+                            dbc.Checklist(
+                                options = input_spec['options'],
+                                value = use_val,
+                                id = {'type': 'slide-annotation-input','index': iput_index}
+                            ),
+                            roi_button,
+                            edit_button
+                        ])
+                    ],md=7)
+                ]),
+                html.Hr()
+            ])
+
+        elif input_spec['type']=='roi':
+            input_component = html.Div([
+                dbc.Row([
+                    dbc.Col(input_desc_column,md=5),
+                    dbc.Col([
+                        dbc.InputGroup([
+                            roi_button,
+                            edit_button
+                        ])
+                    ],md=7)
+                ]),
+                html.Hr()
+            ])
+
         return input_component
 
     def open_edit_modal(self, clicked, input_info):
@@ -4390,8 +4437,140 @@ class SlideAnnotation(MultiTool):
             raise exceptions.PreventUpdate
         
         input_info = json.loads(get_pattern_matching_value(input_info))
+
+        #TODO: Populate with current options if input_info.get('type') in ['options','checklist']
+        if input_info.get('type','') in ['options','checklist']:
+            options_div = html.Div([
+                html.Div([
+                    dbc.Row([
+                        dbc.InputGroup([
+                            dbc.InputGroupText('Option: '),
+                            dbc.Input(
+                                type = 'text',
+                                value = o
+                            ),
+                            dbc.Button(
+                                html.I(
+                                    className = 'fa-solid fa-circle-xmark',
+                                    style = {'color': 'rgb(255,0,0)'}
+                                ),
+                                id = {'type': 'slide-annotation-edit-option-remove','index': o_idx}
+                            )
+                        ])
+                    ],style = {'marginBottom':'5px'})
+                    for o_idx,o in enumerate(input_info.get('options'))
+                ]), #TODO: Make sure to add the parent div id for new options to be added to
+                html.Div(
+                    children = [] #TODO: This should be the button that adds a new option
+                )
+            ])
+        else:
+            options_div = html.Div()
+
+
+        edit_modal_content = dbc.Card([
+            dbc.CardBody([
+                dbc.Row([
+                    html.H4(f"Editing: {input_info.get('name')}")
+                ]),
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col(
+                        html.H5('Name: '),
+                        md = 3
+                    ),
+                    dbc.Col([
+                        dbc.InputGroup([
+                            dbc.Input(
+                                type = 'text',
+                                value = input_info.get('name',''),
+                                id = {'type': 'slide-annotation-edit-name-text','index': 0}
+                            )
+                        ])
+                    ], md = 9)
+                ], style = {'marginBottom': '10px'}),
+                dbc.Row([
+                    dbc.Col(
+                        html.H5('Description: '),
+                        md = 3
+                    ),
+                    dbc.Col([
+                        dbc.InputGroup([
+                            dbc.Input(
+                                type = 'text',
+                                value = input_info.get('description',''),
+                                id = {'type': 'slide-annotation-edit-description-text','index': 0}
+                            )
+                        ]),
+                    ], md = 9)
+                ], style = {'marginBottom': '10px'}),
+                dbc.Row([
+                    dbc.Col(
+                        dbc.InputGroup([
+                            dbc.InputGroupText('Type: '),
+                            dbc.Select(
+                                options = self.annotation_types,
+                                value = input_info.get('type',[]),
+                                id = {'type': 'slide-annotation-edit-type-dropdown','index': 0}
+                            )
+                        ])
+                    )
+                ], style = {'marginBottom': '10px'}),
+                dbc.Row([
+                    dbc.Col(
+                        dbc.InputGroup([
+                            dbc.InputGroupText('ROI: '),
+                            dbc.Select(
+                                options = [
+                                    'True', 'False'
+                                ],
+                                value = 'True' if input_info.get('roi',False) else 'False',
+                                id = {'type': 'slide-annotation-edit-roi-dropdown','index': 0}
+                            )
+                        ])
+                    )
+                ], style = {'marginBottom': '10px'}),
+                dbc.Row([
+                    dbc.Col(
+                        dbc.InputGroup([
+                            dbc.InputGroupText('Editable: '),
+                            dbc.Select(
+                                options = [
+                                    'True', 'False'
+                                ],
+                                value = 'True' if input_info.get('editable',False) else 'False',
+                                id = {'type': 'slide-annotation-edit-editable-dropdown','index': 0}
+                            )
+                        ])
+                    )
+                ], style = {'marginBottom': '10px'}),
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Button(
+                            'Remove Annotation Input',
+                            className = 'd-grid col-12 mx-auto',
+                            color = 'danger',
+                            id = {'type': 'slide-annotation-edit-remove-input','index': 0}
+                        )
+                    ],md=6),
+                    dbc.Col([
+                        dbc.Button(
+                            'Update Annotation Input',
+                            className = 'd-grid col-12 mx-auto',
+                            color = 'success',
+                            id = {'type': 'slide-annotation-edit-update-input','index': 0}
+                        )
+                    ])
+                ])
+            ])
+        ])
+
+
+        PrefixIdTransform(prefix = f'{self.component_prefix}').transform_layout(edit_modal_content)
+
         
-        return [True], [json.dumps(input_info,indent=4)]
+        return [True], [edit_modal_content]
     
     def open_roi_modal(self, clicked, input_info, tile_url, tile_size):
 

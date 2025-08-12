@@ -88,11 +88,13 @@ def main():
     )
     
     vis_session = Visualization(
-        tileservers=[dsa_handler.get_tile_server(i) for i in item_id],
+        tileservers=[
+            dsa_handler.get_tile_server(i) for i in item_id
+        ],
         components = [
             [
                 SlideMap(
-                    cache = True
+                    cache = False
                 ),
                 [
                     FeatureAnnotation(

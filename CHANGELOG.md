@@ -1,6 +1,16 @@
 # Changelog
 
 <!--next-version-placeholder-->
+## v3.6.31 (08/12/2025)
+
+- Increasing flexibility of `SlideAnnotation` components
+
+### Features:
+- Adding functionality to the editable tag for items in the `SlideAnnotation` component's schema
+
+### Fixes:
+- Updating caching so that the current slide's annotations are cached but they are cleared when moving to the next one. Enables usage of the database for annotation components without storing large amounts of memory in `dcc.Store` components
+
 ## v3.6.18+ (07/2025)
 
 - Upgrading to Dash 3+

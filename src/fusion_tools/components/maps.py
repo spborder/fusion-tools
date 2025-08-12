@@ -107,11 +107,11 @@ class SlideMap(MapComponent):
         return x_scale, y_scale
 
     @asyncio_db_loop
-    def check_slide_in_cache(self, image_id:str, user_id: str = None, vis_session_id: str = None):
+    def check_slide_in_cache(self, image_id:Union[str,None]=None, user_id: str = None, vis_session_id: str = None):
         """Check if a new slide is present in the database
 
-        :param image_id: String uuid assigned to an image
-        :type image_id: str
+        :param image_id: String uuid assigned to an image, defaults to None
+        :type image_id: Union[str,None], optional
         :param user_id: String uuid assigned to a user, defaults to None
         :type user_id: str, optional
         :param vis_session_id: String uuid assigned to a visualization session, defaults to None
@@ -120,24 +120,23 @@ class SlideMap(MapComponent):
         :rtype: list
         """
 
-        filter_dict = {
-            'item': {
-                'id': image_id
+
+        filter_dict = {}
+        if not image_id is None:
+            filter_dict = filter_dict | {
+                'item': {
+                    'id': image_id
+                }
             }
-        }
 
         if not user_id is None:
             filter_dict = filter_dict | {
-                'user': {
-                    'id': user_id
-                }
+                'user': user_id
             }
         
         if not vis_session_id is None:
             filter_dict = filter_dict | {
-                'visSession': {
-                    'id': vis_session_id
-                }
+                'session': vis_session_id
             }
 
         loop = asyncio.get_event_loop()
@@ -152,10 +151,14 @@ class SlideMap(MapComponent):
             )
         )
         return_val = db_item[0].copy()
-        if len(return_val)==0:
-            return False
+
+        if image_id is not None:
+            if len(return_val)==0:
+                return False
+            else:
+                return True
         else:
-            return True
+            return return_val
 
     def get_image_overlay_popup(self, st, st_idx):
         """Getting popup components for image overlay annotations
@@ -636,7 +639,8 @@ class SlideMap(MapComponent):
             ],
             [
                 State({'type': 'map-annotations-info-store','index': ALL},'data'),
-                State({'type': 'map-slide-information','index': ALL},'data')
+                State({'type': 'map-slide-information','index': ALL},'data'),
+                State('anchor-vis-store','data')
             ],
             prevent_initial_call = True
         )(self.update_ann_info)
@@ -1338,7 +1342,7 @@ class SlideMap(MapComponent):
             
         return scaled_geojson, [json.dumps(scaled_geojson)]
 
-    def update_ann_info(self, annotations_geojson, current_ann_info, slide_information):
+    def update_ann_info(self, annotations_geojson, current_ann_info, slide_information, session_data):
         """Extracting descriptive information on properties stored in GeoJSON data, referenced by other components
 
         :param annotations_geojson: New/modified set of GeoJSON annotations
@@ -1347,6 +1351,8 @@ class SlideMap(MapComponent):
         :type current_ann_info: list
         :param slide_information: Current slide information
         :type slide_information: list
+        :param session_data: Current session information
+        :type session_data: str
         """
         if not any([i['value'] for i in ctx.triggered]):
             empty_store = {
@@ -1362,10 +1368,14 @@ class SlideMap(MapComponent):
         current_ann_info = json.loads(get_pattern_matching_value(current_ann_info))
         slide_information = json.loads(get_pattern_matching_value(slide_information))
 
+        session_data = json.loads(session_data)
+
         # Checking if slide is already cached
         #TODO: This checks if the current anntotations are at least the same length as the expected number of annotations
         if self.cache and not slide_information.get('id') is None and len(annotations_geojson)>=len(slide_information.get('annotations_metadata')):
             db_item = self.check_slide_in_cache(
+                user_id = session_data.get('current_user',{}).get('id'),
+                vis_session_id = session_data.get('session',{}).get('id'),
                 image_id = slide_information.get('id')
             )
             if not db_item:
@@ -1387,7 +1397,9 @@ class SlideMap(MapComponent):
                         'image_metadata': {},
                         'image_filepath': None,
                         'annotations_metadata': {},
-                        'annotations': slide_crs_geojson
+                        'annotations': slide_crs_geojson,
+                        'user_id': session_data.get('current_user',{}).get('id'),
+                        'vis_session_id': session_data.get('session',{}).get('id')
                     },
                     daemon = True
                 )
@@ -1397,6 +1409,60 @@ class SlideMap(MapComponent):
             else:
                 #print(f'Image: {slide_information.get("name")} is already cached!')
                 pass
+        
+        elif not self.cache and not slide_information.get('id') is None:
+            # If not using caching, only the current slide's annotations are added to the database and previous annotations for that session/user are removed
+            user_session_slides = self.check_slide_in_cache(
+                user_id = session_data.get('current_user',{}).get('id'),
+                vis_session_id = session_data.get('session',{}).get('id'),
+                image_id = None 
+            )
+            #print(f'user_session_slides: {user_session_slides}')
+            for i in user_session_slides:
+                #print(f'Removing: {i.get("id")}')
+                self.database.get_remove(
+                    table_name = 'item',
+                    inst_id = i.get('id'),
+                    user_id = session_data.get('current_user',{}).get('id'),
+                    vis_session_id = session_data.get('session',{}).get('id')
+                )
+
+            if not slide_information.get('id') is None and len(annotations_geojson)>=0:
+                #print(f'This slide has annotations and an id: {slide_information.get("name")}')
+                # Checking if current slide is in the cache
+                db_item = self.check_slide_in_cache(
+                    user_id = session_data.get('current_user',{}).get('id'),
+                    vis_session_id = session_data.get('session',{}).get('id'),
+                    image_id = slide_information.get('id')
+                )
+                if not db_item:
+                    #print('Adding current slide to database')
+                    # Then this item is not cached, add it to the database.
+                    # Use the original slide CRS annotations when adding to the database:
+                    slide_crs_geojson = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/slide_information['x_scale'],c[1]/slide_information['y_scale']),g),a) for a in annotations_geojson if not a is None]
+                    for a,s in zip([i for i in annotations_geojson if not i is None],slide_crs_geojson):
+                        s['properties'] = a['properties']
+
+                    start = time.time()
+                    # Adding to database on another thread:
+                    new_thread = threading.Thread(
+                        target = self.database.add_slide,
+                        name = uuid.uuid4().hex[:24],
+                        kwargs = {
+                            'slide_id': slide_information.get('id'),
+                            'slide_name':slide_information.get('name'),
+                            'metadata': {},
+                            'image_metadata': {},
+                            'image_filepath': None,
+                            'annotations_metadata': {},
+                            'annotations': slide_crs_geojson,
+                            'user_id': session_data.get('current_user',{}).get('id'),
+                            'vis_session_id': session_data.get('session',{}).get('id')
+                        },
+                        daemon = True
+                    )
+                    new_thread.start()
+            
             
         start = time.time()
         new_available_properties, new_feature_names, new_property_info = extract_geojson_properties(annotations_geojson,None,['barcode','_id','_index'],4)
