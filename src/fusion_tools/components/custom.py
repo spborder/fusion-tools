@@ -39,7 +39,6 @@ from dash import dcc, callback, ctx, ALL, MATCH, exceptions, Patch, no_update, d
 from dash.dash_table.Format import Format, Scheme
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-#import dash_treeview_antd as dta
 from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform, BlockingCallbackTransform
 from dash_extensions.javascript import Namespace, arrow_function
 
@@ -60,17 +59,38 @@ from fusion_tools import Tool, MultiTool
 import time
 
 
-
 class FUSIONFunction:
+    """Specification for a function supplied to FUSION for creation of a custom component
+    """
     def __init__(self,
                 title: str,
                 description: str = '',
                 urls: Union[str,list,None] = None,
                 function =  None,
-                function_type: str = 'forEach',
+                function_type: str = 'structure',
                 input_spec: Union[list,dict] = [],
                 output_spec: Union[list,dict] = [],
                 output_callbacks: Union[list,None] = None):
+        """Constructor method
+
+        :param title: Title to be used for this function in the layout
+        :type title: str
+        :param description: Description for this function to be incorporated into the layout, defaults to ''
+        :type description: str, optional
+        :param urls: Any associated URLs associated with this function that you would like displayed, defaults to None
+        :type urls: Union[str,list,None], optional
+        :param function: A lambda function or other callable which takes inputs specified in input_spec and outputs items in output_spec, defaults to None
+        :type function: None, optional
+        :param function_type: The "type" of function supplied. This defines what the function is meant to operate on. Choose one of "structure", "layer", "ROI", or "item"., defaults to 'structure'
+        :type function_type: str, optional
+        :param input_spec: List or dictionary specifying input parameter name, description, type (numeric, image, mask, annotation, string, boolean, options, region). Numeric types may have min and max kwargs. Options types have an "options" kwarg for list of options. defaults to []
+        :type input_spec: Union[list,dict], optional
+        :param output_spec: List or dictionary specifying outputs of the function and how they should be rendered. Includes name, description, and type (image, annotation, numeric, string, and function). Function outputs should include a function kwarg specifying a lambda/callable that takes the output and an integer index as input, defaults to []
+        :type output_spec: Union[list,dict], optional
+        :param output_callbacks: List of any callbacks to be used with generated components as a part of "function" output types. Include inputs, outputs, and function kwargs specifying the callback inputs, outputs, and what the callback function should be., defaults to None
+        :type output_callbacks: Union[list,None], optional
+        """
+
         
         self.title = title
         self.description = description
@@ -81,17 +101,53 @@ class FUSIONFunction:
         self.output_spec = output_spec
         self.output_callbacks = output_callbacks
 
-        # forEach = function is run on each feature individually
+        # structure = function is run on an individual structure
         # ROI = function is run on a broad region of the image/annotations in that ROI
-        assert function_type in ['forEach','ROI']
+        assert function_type in ['structure', 'ROI', 'layer', 'item']
+
+        if type(self.input_spec)==list:
+            for i in self.input_spec:
+                assert type(i)==dict
+                # Description not required
+                assert all([j in list(i.keys()) for j in ['name','type']])
+                assert i.get('type') in ['numeric','image','annotation','mask','string','boolean','options','region']
+        elif type(self.input_spec)==dict:
+            assert all([j in self.input_spec.keys() for j in ['name','type']])
+            assert self.input_spec.get('type') in ['numeric','image','annotation','mask','string','boolean','options','region']
+
+        if type(self.output_spec)==list:
+            for i in self.output_spec:
+                assert type(i)==dict
+                assert 'type' in i.keys()
+        elif type(self.output_spec)==dict:
+            assert 'type' in self.output_spec.keys()
+
+        if not self.output_callbacks is None:
+            if type(self.output_callbacks)==list:
+                for o in self.output_callbacks:
+                    assert all([j in o.keys() for j in ['inputs','outputs','function']])
+
+            elif type(self.output_callbacks)==dict:
+                assert all([j in self.output_callbacks.keys() for j in ['inputs','outputs','function']])
 
 
 class CustomFunction(Tool):
+    """CustomFunction component used for running customized Python functions on structures, regions, or whole items within FUSION
+    """
     def __init__(self,
                  title = 'Custom Function',
                  description = '',
                  custom_function: Union[list,FUSIONFunction,None] = None
                  ):
+        """Constructor method
+
+        :param title: A title to use for this component, defaults to 'Custom Function'
+        :type title: str, optional
+        :param description: A description to use for this component, defaults to ''
+        :type description: str, optional
+        :param custom_function: One or more FUSIONFunctions to include in this component, defaults to None
+        :type custom_function: Union[list,FUSIONFunction,None], optional
+        """
         
         super().__init__()
         self.title = title
@@ -119,7 +175,8 @@ class CustomFunction(Tool):
         self.output_callbacks()
 
     def output_callbacks(self):
-
+        """Registering callbacks passed by users to the layout
+        """
         for c in self.custom_function:
             if c.output_callbacks is not None:
                 for callback in c.output_callbacks:
@@ -143,10 +200,11 @@ class CustomFunction(Tool):
         # Running function with specified inputs
         self.blueprint.callback(
             [
-                Input({'type': 'custom-function-run','index': ALL},'n_clicks')
+                Input({'type': 'custom-function-run','index': ALL},'n_clicks'),
             ],
             [
-                Output({'type': 'custom-function-output-div','index': ALL},'children')
+                Output({'type': 'custom-function-output-div','index': ALL},'children'),
+                Output({'type': 'custom-function-output-data-store','index': ALL},'data')
             ],
             [
                 State({'type': 'custom-function-drop','index': ALL},'value'),
@@ -155,12 +213,23 @@ class CustomFunction(Tool):
                 State({'type': 'custom-function-structure-drop','index': ALL},'value'),
                 State({'type': 'custom-function-structure-number','index': ALL},'value'),
                 State({'type': 'custom-function-main-roi-store','index': ALL},'data'),
-                State({'type': 'map-annotations-store','index': ALL},'data'),
                 State({'type': 'map-slide-information','index': ALL},'data'),
                 State({'type': 'feature-overlay','index': ALL},'name'),
                 State('anchor-vis-store','data')
             ]
         )(self.run_function)
+
+        self.blueprint.callback(
+            [
+                Input({'type': 'custom-function-download-button','index': ALL},'n_clicks')
+            ],
+            [
+                State({'type': 'custom-function-output-data-store','index': ALL},'data')
+            ],
+            [
+                Output({'type': 'custom-function-download-data','index': ALL},'data')
+            ]
+        )(self.download_data)
 
         # Updating available structure names
         self.blueprint.callback(
@@ -175,18 +244,19 @@ class CustomFunction(Tool):
             ]
         )(self.update_structures)
 
-        # Downloading derived data
-
-
+        #TODO: Downloading derived data
         # Open region selection modal
         self.blueprint.callback(
             [
                 Input({'type': 'custom-function-roi-input','index': ALL},'n_clicks'),
-                Input({'type':'custom-function-main-roi','index': ALL},'n_clicks')
+                Input({'type':'custom-function-main-roi','index': ALL},'n_clicks'),
+                Input({'type': 'custom-function-view-annotations','index': ALL},'n_clicks')
             ],
             [
                 State({'type': 'map-tile-layer','index': ALL},'url'),
-                State({'type': 'map-tile-layer','index': ALL},'tileSize')
+                State({'type': 'map-tile-layer','index': ALL},'tileSize'),
+                State({'type': 'map-slide-information','index': ALL},'data'),
+                State({'type': 'custom-function-output-annotation-store','index': ALL},'data')
             ],
             [
                 Output({'type': 'custom-function-modal','index': ALL},'is_open'),
@@ -215,10 +285,10 @@ class CustomFunction(Tool):
             ]
         )(self.submit_roi)
 
+
     def update_layout(self, session_data:dict, use_prefix:bool):
-        
-        # Hard to save session data for custom functions since the components might have the same name?
-        # Maybe just create a unique id for each one
+        """Initializing layout for component
+        """
         layout = html.Div([
             dbc.Card([
                 dbc.CardBody([
@@ -273,7 +343,11 @@ class CustomFunction(Tool):
         return layout
     
     def get_function_layout(self, function_selection):
-        
+        """Generating input components for the selected function
+
+        :param function_selection: Title attribute for one of the passed functions
+        :type function_selection: list
+        """
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
 
@@ -286,8 +360,9 @@ class CustomFunction(Tool):
             raise exceptions.PreventUpdate
 
 
-        if function_info.function_type=='forEach':
-            for_each_components = html.Div([
+        if function_info.function_type=='layer':
+            #TODO: Add an All checkbox or something instead of putting in the number
+            function_type_components = html.Div([
                 dbc.Row([
                     dbc.Col(dbc.Label('Structure: '),md = 3),
                     dbc.Col(
@@ -327,7 +402,37 @@ class CustomFunction(Tool):
                     )
                 ],style = {'marginBottom':'5px'})
             ])
-        else:
+
+        elif function_info.function_type=='structure':
+            function_type_components = html.Div([
+                dbc.Row([
+                    dbc.Col(dbc.Label('Structure: '),md = 3),
+                    dbc.Col(
+                        dcc.Dropdown(
+                            options = [],
+                            value = [],
+                            id = {'type': 'custom-function-structure-drop','index': 0},
+                            multi = True
+                        ),
+                        md = 7
+                    ),
+                    dbc.Col([
+                        html.A(
+                            html.I(
+                                className = 'fa-solid fa-rotate fa-xl',
+                                n_clicks = 0,
+                                id = {'type': 'custom-function-refresh-icon','index': 0}
+                            )
+                        ),
+                        dbc.Tooltip(
+                            target = {'type': 'custom-function-refresh-icon','index': 0},
+                            children = 'Click to reset labeling components'
+                        )
+                    ],md=2)
+                ],style = {'marginBottom':'5px'}),
+                html.Hr()
+            ])
+        elif function_info.function_type=='ROI':
             roi_button = dbc.Button(
                 children = [
                     html.A(
@@ -350,7 +455,7 @@ class CustomFunction(Tool):
                 n_clicks = 0,
             ) 
 
-            for_each_components = html.Div([
+            function_type_components = html.Div([
                 dbc.Row([
                     dbc.Col(
                         dbc.InputGroup([
@@ -360,6 +465,11 @@ class CustomFunction(Tool):
                     )
                 ],align='center',justify='center')
             ],style = {'marginBottom':'5px','width': '100%'})
+
+        elif function_info.function_type=='item':
+            function_type_components = html.Div([
+                html.H5('Running on current slide')            
+            ])
 
         function_layout = html.Div([
             dbc.Row(
@@ -375,7 +485,7 @@ class CustomFunction(Tool):
             ),
             html.Hr(),
             dbc.Row(
-                for_each_components,
+                function_type_components,
             ),
             dbc.Row([
                 self.make_input_component(i,idx)
@@ -401,6 +511,11 @@ class CustomFunction(Tool):
             ]),
             html.Hr(),
             dbc.Row([
+                dcc.Store(
+                    id = {'type': 'custom-function-output-data-store','index': 0},
+                    data = json.dumps({}),
+                    storage_type = 'memory'
+                ),
                 dbc.Button(
                     'Download Results',
                     id = {'type': 'custom-function-download-button','index': 0},
@@ -424,7 +539,8 @@ class CustomFunction(Tool):
         self.blueprint.layout = self.update_layout(session_data,use_prefix=False)
 
     def make_input_component(self, input_spec, input_index):
-        
+        """Making an input component based on provided input_specs
+        """
         input_desc_column = [
             dbc.Row(html.H6(input_spec.get('name'))),
             dbc.Row(html.P(input_spec.get('description'))),
@@ -595,24 +711,26 @@ class CustomFunction(Tool):
                 if type(output)==np.ndarray:
                     image_data = px.imshow(Image.fromarray(output))
                 else:
-                    image_data = px.imshow(output)                   
+                    image_data = px.imshow(output)
 
+            image_data.update_layout(
+                margin = {'t':0,'b':0,'l':0,'r':0}
+            )
+            
             output_component = html.Div([
                 dbc.Row([
                     dbc.Col(output_desc_column,md=5),
                     dbc.Col([
                         dcc.Graph(
                             figure = go.Figure(
-                                data = image_data,
-                                layout = {
-                                    'margin': {'t': 0,'b':0,'l':0,'r':0}
-                                }
+                                image_data
                             )
                         )
                     ],md = 7)
                 ]),
                 html.Hr()
             ])
+
         elif output_spec['type']=='numeric':
 
             if type(output)==list:
@@ -626,18 +744,33 @@ class CustomFunction(Tool):
                 dbc.Row([
                     dbc.Col(output_desc_column,md=5),
                     dbc.Col(
-                        number_output,
+                        html.H5(str(number_output)),
                         md = 7
                     )
                 ])
             ])
         elif output_spec['type']=='annotation':
-
+            #TODO: This output type should enable visualization of the generated annotations relative to the whole slide
+            annotations_view_component = html.Div([
+                dbc.Button(
+                    'View Annotations',
+                    n_clicks = 0,
+                    className = 'd-grid col-12 mx-auto',
+                    color = 'secondary',
+                    id = {'type': 'custom-function-view-annotations','index': 0}
+                ),
+                dcc.Store(
+                    id = {'type': 'custom-function-output-annotation-store','index': 0},
+                    data = json.dumps(output),
+                    storage_type = 'memory'
+                )
+            ])
+            
             output_component = html.Div([
                 dbc.Row([
                     dbc.Col(output_desc_column,md=5),
                     dbc.Col(
-                        'Placeholder for map with annotations',
+                        annotations_view_component,
                         md = 7
                     )
                 ])
@@ -649,7 +782,7 @@ class CustomFunction(Tool):
                 dbc.Row([
                     dbc.Col(output_desc_column,md=5),
                     dbc.Col(
-                        output,
+                        html.H5(output),
                         md = 7
                     )
                 ])
@@ -670,11 +803,6 @@ class CustomFunction(Tool):
 
 
         return output_component
-
-    def download_results(self, download_click, output_data):
-        #TODO: Need some way to export generated data in some specific format
-        # image, numeric, annotation, string, bool, etc.
-        pass
 
     def update_structures(self, clicked, overlay_names):
 
@@ -728,7 +856,7 @@ class CustomFunction(Tool):
 
         return feature_image, feature_mask
 
-    def open_roi_modal(self, clicked, main_clicked, tile_url, tile_size):
+    def open_roi_modal(self, clicked, main_clicked, view_clicked, tile_url, tile_size, map_slide_information,output_anns):
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
@@ -739,45 +867,105 @@ class CustomFunction(Tool):
         if any([i is None for i in [tile_url, tile_size]]):
             raise exceptions.PreventUpdate
         
-        modal_children = [
-            html.Div([
-                dl.Map(
-                    crs = 'Simple',
-                    center = [-120,120],
-                    zoom = 0,
-                    children = [
-                        dl.TileLayer(
-                            url = tile_url,
-                            tileSize=tile_size
-                        ),
-                        dl.FeatureGroup(
-                            children = [
-                                dl.EditControl(
-                                    id = {'type': f'{self.component_prefix}-custom-function-edit-control','index': 0}
-                                )
-                            ]
-                        )
-                    ],
-                    style = {'height': '40vh','width': '100%','margin': 'auto','display': 'inline-block'}
-                ),
-                dbc.Button(
-                    'Done!',
-                    className = 'd-grid col-12 mx-auto',
-                    color = 'success',
-                    n_clicks = 0,
-                    id = {'type': f'{self.component_prefix}-custom-function-roi-done-button','index': 0}
-                ),
-                dcc.Store(
-                    id = {'type': f'{self.component_prefix}-custom-function-roi-trigger','index': 0},
-                    data = json.dumps(
-                        {
-                            'main': 'main' in ctx.triggered_id['type']
-                        }
+        if not 'custom-function-view-annotations' in ctx.triggered_id['type']:
+            modal_children = [
+                html.Div([
+                    dl.Map(
+                        crs = 'Simple',
+                        center = [-120,120],
+                        zoom = 0,
+                        children = [
+                            dl.TileLayer(
+                                url = tile_url,
+                                tileSize=tile_size
+                            ),
+                            dl.FeatureGroup(
+                                children = [
+                                    dl.EditControl(
+                                        id = {'type': f'{self.component_prefix}-custom-function-edit-control','index': 0}
+                                    )
+                                ]
+                            )
+                        ],
+                        style = {'height': '40vh','width': '100%','margin': 'auto','display': 'inline-block'}
                     ),
-                    storage_type='memory'
-                )
-            ], style = {'padding': '10px 10px 10px 10px'})
-        ]
+                    dbc.Button(
+                        'Done!',
+                        className = 'd-grid col-12 mx-auto',
+                        color = 'success',
+                        n_clicks = 0,
+                        id = {'type': f'{self.component_prefix}-custom-function-roi-done-button','index': 0}
+                    ),
+                    dcc.Store(
+                        id = {'type': f'{self.component_prefix}-custom-function-roi-trigger','index': 0},
+                        data = json.dumps(
+                            {
+                                'main': 'main' in ctx.triggered_id['type']
+                            }
+                        ),
+                        storage_type='memory'
+                    )
+                ], style = {'padding': '10px 10px 10px 10px'})
+            ]
+
+        else:
+
+            output_anns = [json.loads(i) for i in output_anns]
+            scaled_geojson = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*slide_information['x_scale'],c[1]*slide_information['y_scale']),g),o) for o in output_anns]
+            ann_names = [
+                o.get('properties',{}).get('name',f'Layer {o_idx+1}')
+                for o_idx,o in enuemrate(output_anns)
+            ]
+
+            modal_children = [
+                html.Div([
+                    dl.Map(
+                        crs = 'Simple',
+                        center = [-120,120],
+                        zoom = 0,
+                        children = [
+                            dl.TileLayer(
+                                url = tile_url,
+                                tileSize=tile_size
+                            ),
+                            dl.LayersControl(
+                                children = [
+                                    dl.Overlay(
+                                        dl.LayerGroup(
+                                            dl.GeoJSON(
+                                                data = o_ann,
+                                                format = 'geojson',
+                                                options = {
+                                                    'style': self.js_namespace('featureStyle')
+                                                },
+                                                hideout = {
+                                                    'lineColor': {
+                                                        k: '#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255))
+                                                        for k in ann_names
+                                                    }
+                                                },
+                                                hoverStyle = arrow_function(
+                                                    {
+                                                        'weight': 5,
+                                                        'color': '#9caf00',
+                                                        'dashArray': ''
+                                                    }
+                                                ),
+                                                zoomToBounds = True
+                                            )
+                                        ),
+                                        name = ann_name,
+                                        checked = True
+                                    )
+                                    for o_ann,ann_name in zip(scaled_geojson,ann_names)
+                                ]
+                            )
+                        ],
+                        style = {'height': '40vh','width': '100%','margin': 'auto','display': 'inline-block'}
+                    ),
+                ], style = {'padding': '10px 10px 10px 10px'})
+            ]
+
 
         return [True], modal_children
 
@@ -820,7 +1008,7 @@ class CustomFunction(Tool):
 
         return update_infos, main_updated_info, modal_open, roi_button_color, main_button_color
 
-    def run_function(self, clicked, function_name, function_inputs, function_input_info, structure_names, structure_number, main_roi_store, current_annotations, current_slide_information, overlay_names, session_data):
+    def run_function(self, clicked, function_name, function_inputs, function_input_info, structure_names, structure_number, main_roi_store, current_slide_information, overlay_names, session_data):
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
@@ -829,8 +1017,10 @@ class CustomFunction(Tool):
         all_function_names = [i.title for i in self.custom_function]
         function_info = self.custom_function[all_function_names.index(function_name)]
 
-        current_annotations = json.loads(get_pattern_matching_value(current_annotations))
+        # Used in structure and layer type function types
         structure_names = get_pattern_matching_value(structure_names)
+
+        # Used only in layer function types
         structure_number = get_pattern_matching_value(structure_number)
         current_slide_information = json.loads(get_pattern_matching_value(current_slide_information))
         session_data = json.loads(session_data)
@@ -847,41 +1037,68 @@ class CustomFunction(Tool):
         all_input_names = [i['name'] for i in function_info.input_spec]
         all_input_types = [i['type'] for i in function_info.input_spec]
 
-        if not structure_names is None:
-            selected_structure_indices = [idx for idx,i in enumerate(overlay_names) if i in structure_names]
-            current_annotations = [current_annotations[i] for i in selected_structure_indices]
+        if function_info.function_type=='layer':
+            # For functions which are called on a whole layer
+            # Getting the layer id
+            slide_annotation_metadata = current_slide_information.get('annotation_metadata')
+            slide_annotation_names = [
+                i.get('name') for i in slide_annotation_metadata
+            ]            
+            layer_id = slide_annotation_metadata[slide_annotation_names.index(structure_names)]['_id']
+            structure_generator = self.database.get_structure_generator(layer_id = layer_id)
 
-        structure_props = [i['properties'] for i in current_annotations]
-        scaled_annotations = []
-        for c,s in zip(current_annotations,structure_props):
-            scaled_c = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/current_slide_information['x_scale'],c[1]/current_slide_information['y_scale']),g),c)
-            scaled_c['properties'] = s
-            scaled_annotations.append(scaled_c)
-
-        if function_info.function_type=='forEach':
-            # For functions which are called on each structure/feature individually
             function_output = []
-            for a in scaled_annotations:
-                f_output = []
-                for f in a['features'][:structure_number]:
-                    if any([i in all_input_types for i in ['image','mask']]):
-                        f_img, f_mask = self.get_feature_image(
-                            feature = f,
-                            slide_information = current_slide_information,
-                            return_mask = 'mask' in all_input_types,
-                            return_image = 'image' in all_input_types
-                        )
-                        if not f_img is None:
-                            kwarg_inputs[all_input_names[all_input_types.index('image')]] = f_img
-                        
-                        if not f_mask is None:
-                            kwarg_inputs[all_input_names[all_input_types.index('mask')]] = f_mask
+            for f in structure_generator:
+                if any([i in all_input_types for i in ['image','mask']]):
+                    f_img, f_mask = self.get_feature_image(
+                        feature = {'type': 'Feature', 'geometry': f.geom, 'properties': {'id': f.id} | f.properties},
+                        slide_information = current_slide_information,
+                        return_mask = 'mask' in all_input_types,
+                        return_image = 'image' in all_input_types
+                    )
+                    if not f_img is None:
+                        kwarg_inputs[all_input_names[all_input_types.index('image')]] = f_img
+                    
+                    if not f_mask is None:
+                        kwarg_inputs[all_input_names[all_input_types.index('mask')]] = f_mask
 
-                    if 'annotation' in all_input_types:
-                        kwarg_inputs[all_input_names[all_input_types.index('annotation')]] = f
+                if 'annotation' in all_input_types:
+                    kwarg_inputs[all_input_names[all_input_types.index('annotation')]] = {'type': 'Feature', 'geometry': f.geom, 'properties': {'id': f.id} | f.properties}
 
-                    f_output.append(function_info.function(**kwarg_inputs))
-                function_output.extend(f_output)
+                function_output.extend(function_info.function(**kwarg_inputs))
+
+        elif function_info.function_type=='structure':
+            # For functions which are called on each structure/feature individually
+            # Getting the layer id
+            slide_annotation_metadata = current_slide_information.get('annotation_metadata')
+            slide_annotation_names = [
+                i.get('name') for i in slide_annotation_metadata
+            ]            
+            layer_id = slide_annotation_metadata[slide_annotation_names.index(structure_names)]['_id']
+            structure_generator = self.database.get_structure_generator(layer_id = layer_id)
+
+
+            function_output = []
+            for f in structure_generator:
+                if any([i in all_input_types for i in ['image','mask']]):
+                    f_img, f_mask = self.get_feature_image(
+                        feature = {'type': 'Feature', 'geometry': f.geom, 'properties': {'id': f.id} | f.properties},
+                        slide_information = current_slide_information,
+                        return_mask = 'mask' in all_input_types,
+                        return_image = 'image' in all_input_types
+                    )
+                    if not f_img is None:
+                        kwarg_inputs[all_input_names[all_input_types.index('image')]] = f_img
+                    
+                    if not f_mask is None:
+                        kwarg_inputs[all_input_names[all_input_types.index('mask')]] = f_mask
+
+                if 'annotation' in all_input_types:
+                    kwarg_inputs[all_input_names[all_input_types.index('annotation')]] = {'type': 'Feature', 'geometry': f.geom, 'properties': {'id': f.id} | f.properties}
+
+                function_output.extend(function_info.function(**kwarg_inputs))
+                break
+
         elif function_info.function_type=='ROI':
 
             main_roi = json.loads(get_pattern_matching_value(main_roi_store))['roi']         
@@ -890,25 +1107,43 @@ class CustomFunction(Tool):
             # for ROI-level functions
             if 'annotation' in all_input_types:
                 scaled_intersecting_anns = []
-                for s in scaled_annotations:
-                    s_gdf = gpd.GeoDataFrame.from_features(s['features'])
-                    try:
-                        s_gdf = s_gdf.intersection(shape(main_roi['features'][0]['geometry']))
-                    except:
-                        s_gdf = s_gdf.make_valid()
-                        s_gdf = s_gdf.intersection(shape(main_roi['features'][0]['geometry']))
 
-                    s_gdf = s_gdf[~s_gdf.is_empty]
+                slide_annotation_metadata = current_slide_information.get('annotation_metadata')
+                for s in slide_annotation_metadata:
+                    intersecting_structure_ids = self.database.get_structures_in_bbox(
+                        bbox = main_bounds,
+                        item_id = current_slide_information.get('id'),
+                        layer_id = s.get('_id')
+                    )
 
-                    s_geo = s_gdf.__geo_interface__
-                    s_geo = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]-main_bounds[0],c[1]-main_bounds[1]),g),s_geo)
+                    if len(intersecting_structure_ids)>0:
+                        structure_generator = self.database.get_structure_generator(
+                            structure_id = intersecting_structure_ids
+                        )
 
-                    s_geo['properties'] = s['properties']
-                    scaled_intersecting_anns.append(s_geo)
+                        intersecting_in_layer = {
+                            'type': 'FeatureCollection',
+                            'features': [
+                                {
+                                    'type': 'Feature',
+                                    'geometry': geojson.utils.map_geometries(
+                                        lambda g: geojson.utils.map_tuples(lambda c: (c[0]-main_bounds[0],c[1] - main_bounds[1]),g),
+                                        f.geom
+                                    ),
+                                    'properties': {'id': f.id} | f.properties
+                                }
+                                for f in structure_generator
+                            ],
+                            'properties': {
+                                'id': s.get('_id'),
+                                'name': s.get('name')
+                            }
+                        }
+
+                        scaled_intersecting_anns.append(s_geo)
 
                 kwarg_inputs[all_input_names[all_input_types.index('annotation')]] = scaled_intersecting_anns
             
-            #TODO: Pull image region from selected ROI (maybe have a scale factor argument? low-res vs. full-res?)
             if 'image' in all_input_types:
                 roi_img, _ = self.get_feature_image(
                     feature = main_roi['features'][0],
@@ -927,14 +1162,24 @@ class CustomFunction(Tool):
             function_output = [function_output]
 
         output_children = []
-        for o_idx, (output,spec) in enumerate(zip(function_output,function_info.output_spec)):
-            output_children.append(
-                self.make_output(output,spec,o_idx)
-            )
+        output_data = []
+        if 'custom-function-run' in ctx.triggered_id['type']:
+            for o_idx, (output,spec) in enumerate(zip(function_output,function_info.output_spec)):
+                output_children.append(
+                    self.make_output(output,spec,o_idx)
+                )
+
+            output_data.append(no_update)
+
 
         return [output_children]
 
+    def download_data(self, clicked, data):
 
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        
 
 
 
