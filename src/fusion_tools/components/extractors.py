@@ -61,6 +61,10 @@ import time
 
 
 class DataExtractor(Tool):
+
+    title = 'Data Extractor'
+    description = 'Download select properties from indicated structures in the current slide.'
+
     def __init__(self):
 
         super().__init__()
@@ -99,13 +103,12 @@ class DataExtractor(Tool):
         }
 
     def __str__(self):
-        return 'Data Extractor'
+        return self.title
 
     def load(self, component_prefix:int):
 
         self.component_prefix = component_prefix
 
-        self.title = 'Data Extractor'
         self.blueprint = DashBlueprint(
             transforms = [
                 PrefixIdTransform(prefix = f'{self.component_prefix}',escape = lambda input_id: self.prefix_escape(input_id)),
@@ -142,11 +145,11 @@ class DataExtractor(Tool):
             dbc.Card(
                 dbc.CardBody([
                     dbc.Row(
-                        html.H3('Data Extractor')
+                        html.H3(self.title)
                     ),
                     html.Hr(),
                     dbc.Row(
-                        'Download select properties from indicated structures in the current slide.'
+                        self.description
                     ),
                     html.Hr(),
                     html.Div([

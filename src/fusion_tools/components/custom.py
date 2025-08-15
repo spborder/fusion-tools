@@ -1162,27 +1162,58 @@ class CustomFunction(Tool):
             function_output = [function_output]
 
         output_children = []
-        output_data = []
-        if 'custom-function-run' in ctx.triggered_id['type']:
-            for o_idx, (output,spec) in enumerate(zip(function_output,function_info.output_spec)):
-                output_children.append(
-                    self.make_output(output,spec,o_idx)
+        output_content = []
+        for o_idx, (output,spec) in enumerate(zip(function_output,function_info.output_spec)):
+            output_children.append(
+                self.make_output(output,spec,o_idx)
+            )
+
+            #Adding outputs to the output_content list
+            # available types include string, numeric, annotation, image, and function
+            if spec.type in ['string','numeric','annotation']:
+                if spec.type=='numeric':
+                    if type(output)==np.ndarray:
+                        output_content.append(output.tolist())
+                    else:
+                        output_content.append(output)
+                else:
+                    output_content.append(output)
+            elif spec.type=='image':
+                output_content.append(
+                    f'/tmp/image_output_{o_idx}.png'
                 )
 
-            output_data.append(no_update)
+            elif spec.type=='function':
+                output_content.append(
+                    'function-output'
+                )
+            
+        #TODO: Specifying output data here depending on what the function output is
+
+        output_data = json.dumps({
+            'content': output_content,
+            'filename': f'{function_info.title}_output.json'
+        })
 
 
-        return [output_children]
+        return [output_children], [output_data]
 
     def download_data(self, clicked, data):
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
 
+        data = json.loads(get_pattern_matching_value(data))
+
+        # Checking if any images or function outputs are present
+        img_present = any(['.png' in i for i in data.get('content')])
+        func_present = any(['function-output'==i for i in data.get('content')])
+
+        if not img_present and not func_present:
+            return [{'content': json.dumps(data.get('content'),indent=4),'filename': data.get('filename')}]
         
-
-
-
+        else:
+            raise exceptions.PreventUpdate
 
 
 
