@@ -285,7 +285,6 @@ class CustomFunction(Tool):
             ]
         )(self.submit_roi)
 
-
     def update_layout(self, session_data:dict, use_prefix:bool):
         """Initializing layout for component
         """

@@ -61,12 +61,19 @@ class DSASurvey(DSATool):
     :param Tool: General class for components that perform visualization and analysis of data.
     :type Tool: None
     """
+
+    title = 'DSA Survey'
+    description = ''
+
     def __init__(self,
                  dsa_handler,
                  survey: SurveyType):
         
         self.dsa_handler = dsa_handler
         self.survey = survey
+
+    def __str__(self):
+        return self.title
 
     def load(self, component_prefix:int):
 
@@ -87,7 +94,7 @@ class DSASurvey(DSATool):
             dbc.Card(
                 dbc.CardBody([
                     dbc.Row(
-                        html.H3('DSA Survey')
+                        html.H3(self.title)
                     ),
                     html.Hr(),
                     dbc.Row()

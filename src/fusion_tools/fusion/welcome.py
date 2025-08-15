@@ -23,6 +23,10 @@ from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 from fusion_tools import Tool
 
 class WelcomePage(Tool):
+
+    title = 'Welcome Page'
+    description = ''
+
     def __init__(self):
         super().__init__()
 
@@ -237,13 +241,12 @@ class WelcomePage(Tool):
         }
 
     def __str__(self):
-        return "Welcome Page"
+        return self.title
 
     def load(self,component_prefix:int):
 
         self.component_prefix = component_prefix
         
-        self.title = 'Welcome Page'
         self.blueprint = DashBlueprint(
             transforms = [
                 PrefixIdTransform(prefix = f'{self.component_prefix}'),

@@ -34,6 +34,11 @@ class DatasetBuilder(DSATool):
     :param DSATool: Sub-class of Tool specific to DSA components. Updates with session data by default.
     :type DSATool: None
     """
+
+    title = 'Dataset Builder'
+    description = 'Search through available collections, folders, and slides to assemble a visualization session.'
+
+
     def __init__(self,
                  handler,
                  include_only: Union[list,None] = None
@@ -44,13 +49,12 @@ class DatasetBuilder(DSATool):
         self.handler = handler
 
     def __str__(self):
-        return 'Dataset Builder'
+        return self.title
 
     def load(self, component_prefix:int):
 
         self.component_prefix = component_prefix
 
-        self.title = 'Dataset Builder'
         self.blueprint = DashBlueprint(
             transforms=[
                 PrefixIdTransform(prefix=f'{component_prefix}',escape = lambda input_id: self.prefix_escape(input_id)),
@@ -136,11 +140,11 @@ class DatasetBuilder(DSATool):
             dbc.Card(
                 dbc.CardBody([
                     dbc.Row(
-                        html.H3('Dataset Builder')
+                        html.H3(self.title)
                     ),
                     html.Hr(),
                     dbc.Row(
-                        'Search through available collections, folders, and slides to assemble a visualization session.'
+                        self.description
                     ),
                     html.Hr(),
                     dbc.Row([
