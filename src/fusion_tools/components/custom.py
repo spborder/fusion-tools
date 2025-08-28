@@ -1208,6 +1208,8 @@ class CustomFunction(Tool):
         img_present = any(['.png' in i for i in data.get('content')])
         func_present = any(['function-output'==i for i in data.get('content')])
 
+        #TODO: Currently this method for downloading data only works for string/numeric output types
+        # Need some kind of dynamic method for storing/re-generating output to save for image/function types
         if not img_present and not func_present:
             return [{'content': json.dumps(data.get('content'),indent=4),'filename': data.get('filename')}]
         

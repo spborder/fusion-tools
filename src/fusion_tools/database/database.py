@@ -349,7 +349,8 @@ class fusionDB:
         metadata: dict, 
         image_metadata: dict, 
         image_filepath:Union[str,None], 
-        annotations_metadata:dict,annotations:Union[list,dict,None],
+        annotations_metadata:dict,
+        annotations:Union[list,dict,None],
         user_id:Union[str,None] = None,
         vis_session_id: Union[str,None] = None):
 

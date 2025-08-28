@@ -322,7 +322,7 @@ class DSALoginComponent(DSATool):
                             required = True,
                             value = [],
                             maxLength = 1000,
-                            pattern = "^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$"
+                            pattern = r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$"
                         )
                     ]),
                     html.Div(
