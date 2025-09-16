@@ -1022,9 +1022,12 @@ class SlideMap(MapComponent):
             annotations_metadata_url = new_slide['annotations_metadata_url']
 
         #TODO: Requests require SSL verification when running through a proxy
-        new_image_metadata = requests.get(image_metadata_url).json()
-        new_metadata = requests.get(metadata_url).json()
-        annotations_metadata = requests.get(annotations_metadata_url).json()
+        verify = False
+        if not verify:
+            print(f'{verify=}')
+        new_image_metadata = requests.get(image_metadata_url,verify = verify).json()
+        new_metadata = requests.get(metadata_url,verify = verify).json()
+        annotations_metadata = requests.get(annotations_metadata_url,verify = verify).json()
 
         # Detecting DSA-formatted annotations
         if any(['annotation' in i for i in annotations_metadata]):
