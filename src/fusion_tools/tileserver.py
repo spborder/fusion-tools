@@ -531,7 +531,7 @@ class LocalTileServer(TileServer):
         else:
             return Response(content = 'invalid image id',media_type='application/json',status_code=400)
     
-    def get_region(self, id:str, top: int, left: int, bottom:int, right:int,style:Union[None,str] = None):
+    async def get_region(self, id:str, top: int, left: int, bottom:int, right:int,style:Union[None,str] = None):
         """
         Grabbing a specific region in the image based on bounding box coordinates
         """
@@ -540,8 +540,9 @@ class LocalTileServer(TileServer):
         :return: Image region (bytes encoded)
         :rtype: Response
         """
-        tile_source = self.get_tile_source(id,style)
-
+        tile_source = await asyncio.gather(self.get_tile_source(id,style))
+        tile_source = tile_source[0]
+        
         if tile_source is None:
             return Response(content = 'invalid image id', media_type = 'application/json', status_code = 400)
 
