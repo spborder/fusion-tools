@@ -203,22 +203,22 @@ class LocalTileServer(TileServer):
         self.app = FastAPI()
 
         self.router = APIRouter()
-        self.router.add_api_route('/',self.root,methods=["GET"])
+        self.router.add_api_route('/',self.root,methods=["GET","OPTIONS"])
 
         # GET id's, GET {id}/metadata, GET {}
 
-        self.router.add_api_route('/ids',self.get_ids,methods=["GET"])
-        self.router.add_api_route('/names',self.get_names,methods=["GET"])
-        self.router.add_api_route('/{id}/info',self.get_id_info,methods=["GET"])
-        self.router.add_api_route('/{id}/tiles/{z}/{x}/{y}',self.get_tile,methods=["GET"])
-        self.router.add_api_route('/{id}/image_metadata',self.get_image_metadata,methods=["GET"])
-        self.router.add_api_route('/{id}/metadata',self.get_metadata,methods=["GET"])
-        self.router.add_api_route('/{id}/tiles/region',self.get_region,methods=["GET"])
-        self.router.add_api_route('/{id}/tiles/thumbnail',self.get_thumbnail,methods=["GET"])
-        self.router.add_api_route('/{id}/annotations',self.get_annotations,methods=["GET"])
-        self.router.add_api_route('/{id}/annotations/metadata',self.get_annotations_metadata,methods=["GET"])
-        self.router.add_api_route('/{id}/annotations/data/list',self.get_annotations_property_keys,methods=["GET"])
-        self.router.add_api_route('/{id}/annotations/data',self.get_annotations_property_data,methods=["GET"])
+        self.router.add_api_route('/ids',self.get_ids,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/names',self.get_names,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{id}/info',self.get_id_info,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{id}/tiles/{z}/{x}/{y}',self.get_tile,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{id}/image_metadata',self.get_image_metadata,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{id}/metadata',self.get_metadata,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{id}/tiles/region',self.get_region,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{id}/tiles/thumbnail',self.get_thumbnail,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{id}/annotations',self.get_annotations,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{id}/annotations/metadata',self.get_annotations_metadata,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{id}/annotations/data/list',self.get_annotations_property_keys,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{id}/annotations/data',self.get_annotations_property_data,methods=["GET","OPTIONS"])
 
     def __str__(self):
         return f'TileServer class to {self.host}:{self.tile_server_port}'
