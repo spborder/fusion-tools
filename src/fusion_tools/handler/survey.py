@@ -31,7 +31,7 @@ from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, Pr
 from fusion_tools.utils.shapes import load_annotations, detect_histomics
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 
-from fusion_tools import DSATool
+from fusion_tools.components.base import DSATool
 
 
 class SurveyType:

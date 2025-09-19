@@ -13,7 +13,7 @@ import dash_bootstrap_components as dbc
 from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform
 
 from typing_extensions import Union
-from fusion_tools import DSATool
+from fusion_tools.components.base import DSATool
 
 
 class DSAResourceSelector(DSATool):
