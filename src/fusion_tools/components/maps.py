@@ -896,6 +896,7 @@ class SlideMap(MapComponent):
                                     }
                                 })
                                 .then((response) => response.json())
+                                .then((json_data) => json_data.flat())
                                 .then(function(json_data){return process_json(json_data,idx,ann_meta)})
                                 .then((geojson_anns) => annotations_list.splice(idx,1,geojson_anns))
                             );
@@ -911,6 +912,7 @@ class SlideMap(MapComponent):
                                     }
                                 })
                                 .then((response) => response.json())
+                                .then((json_data) => json_data.flat())
                                 .then((json_data) => annotations_list.push(process_json(json_data,idx,ann_meta)))
                             );
                             const promise_await = await Promise.all(promises);
@@ -1187,7 +1189,8 @@ class SlideMap(MapComponent):
                         'Value': v
                     }
                     for k,v in non_nested_image_metadata.items()
-                ])
+                ]),
+                id = {'type': f'{self.component_prefix}-non-nested-image-metadata', 'index': 0}
             )
         ]
 
@@ -1199,7 +1202,8 @@ class SlideMap(MapComponent):
                         'Value': v
                     }
                     for k,v in non_nested_display_metadata.items()
-                ])
+                ]),
+                id = {'type': f'{self.component_prefix}-non-nested-case-metadata-table','index': 0}
             )
         ]
 

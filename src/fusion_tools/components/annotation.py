@@ -48,9 +48,7 @@ from fusion_tools.utils.shapes import (
     path_to_indices, indices_to_path
 )
 from fusion_tools import asyncio_db_loop
-from fusion_tools.components.base import Tool, MultiTool, BaseSchema
-
-from fusion_tools.handler.dsa_handler import DSAHandler
+from fusion_tools.components.base import Tool, MultiTool, BaseSchema, Handler
 
 
 class AnnotationSchema(BaseSchema):
@@ -3720,7 +3718,7 @@ class SlideAnnotation(MultiTool):
     ]
 
     def __init__(self,
-                 handler: Union[None,DSAHandler] = None,
+                 handler: Union[None,Handler] = None,
                  preload_schema: Union[None, str, dict, list, AnnotationSchema] = None
                 ):
 

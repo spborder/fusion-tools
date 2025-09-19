@@ -134,10 +134,10 @@ class BaseComponent:
 
         return layout
 
-    def make_dash_table(self, df:pd.DataFrame, id: dict, editable: bool = False, deletable: bool = False, selectable: bool = True):
+    def make_dash_table(self, df:pd.DataFrame, id: Union[dict,None] = None, editable: bool = False, deletable: bool = False, selectable: bool = True):
         
         return_table = dash_table.DataTable(
-            id = id,
+            id = id if not id is None else {},
             columns = [{'name':i,'id':i,'deletable':deletable,'selectable':selectable} for i in df],
             data = df.to_dict('records'),
             editable=editable,                                        

@@ -13,6 +13,7 @@ import pandas as pd
 
 test_schema = [
     {
+        'schema': 'slide',
         "name": "Test Slide Annotation",
         "description": "This is a test of the SlideAnnotation component",
         "annotations": [
@@ -81,6 +82,9 @@ def main():
     ]
     """ 
 
+    path_to_slide = 'tests/test_images/histology_image.svs'
+    path_to_anns = 'tests/test_images/histology_annotations.xml'
+
 
     # Starting the DSAHandler to grab information:
     dsa_handler = DSAHandler(
@@ -88,6 +92,8 @@ def main():
     )
     
     vis_session = Visualization(
+        local_slides = [path_to_slide],
+        local_annotations = [path_to_anns],
         tileservers=[
             dsa_handler.get_tile_server(i) for i in item_id
         ],
