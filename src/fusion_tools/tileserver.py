@@ -438,27 +438,45 @@ class LocalTileServer(TileServer):
         return item_names_ids
 
     def get_tiles_url(self,slide_id):
-        tiles_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/tiles/'+'{z}/{x}/{y}'
+        if not self.host in ['0.0.0.0','localhost']:
+            tiles_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/tiles/'+'{z}/{x}/{y}'
+        else:
+            tiles_url = f'{self.host}:{self.tile_server_port}/{slide_id}/tiles/'+'{z}/{x}/{y}'
         return tiles_url
 
     def get_regions_url(self,slide_id):
-        regions_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/tiles/region'
+        if not self.host in ['0.0.0.0','localhost']:
+            regions_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/tiles/region'
+        else:
+            regions_url = f'{self.host}:{self.tile_server_port}/{slide_id}/tiles/region'
         return regions_url
 
     def get_annotations_url(self,slide_id):
-        annotations_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/annotations'
+        if not self.host in ['0.0.0.0','localhost']:
+            annotations_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/annotations'
+        else:
+            annotations_url = f'{self.host}:{self.tile_server_port}/{slide_id}/annotations'
         return annotations_url
 
     def get_annotations_metadata_url(self,slide_id):
-        annotations_metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/annotations/metadata'
+        if not self.host in ['0.0.0.0','localhost']:
+            annotations_metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/annotations/metadata'
+        else:
+            annotations_metadata_url = f'{self.host}:{self.tile_server_port}/{slide_id}/annotations/metadata'
         return annotations_metadata_url
 
     def get_metadata_url(self,slide_id):
-        metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/metadata'
+        if not self.host in ['0.0.0.0','localhost']:
+            metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/metadata'
+        else:
+            metadata_url = f'{self.host}:{self.tile_server_port}/{slide_id}/metadata'
         return metadata_url
         
     def get_image_metadata_url(self,slide_id):
-        image_metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/image_metadata'
+        if not self.host in ['0.0.0.0','localhost']:
+            image_metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/image_metadata'
+        else:
+            image_metadata_url = f'{self.host}:{self.tile_server_port}/{slide_id}/image_metadata'
         return image_metadata_url
 
     async def get_tile(self,id:str,z:int, x:int, y:int, style:Union[None,str] = None):
