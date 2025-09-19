@@ -16,7 +16,6 @@ from dash_extensions.enrich import DashProxy, html, MultiplexerTransform, Prefix
 
 from typing_extensions import Union
 from fusion_tools.tileserver import TileServer, DSATileServer, LocalTileServer, CustomTileServer
-from fusion_tools.handler.dataset_uploader import DSAUploadHandler
 from fusion_tools.database.database import fusionDB
 import threading
 
@@ -934,6 +933,7 @@ class Visualization:
 
         upload_check = self.check_for_uploader(page_components)
         if upload_check:
+            from fusion_tools.handler.dataset_uploader import DSAUploadHandler
             du.configure_upload(
                 self.viewer_app, 
                 Path(self.assets_folder+'/tmp/uploads'),
