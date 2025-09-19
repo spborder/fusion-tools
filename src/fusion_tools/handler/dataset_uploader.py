@@ -25,7 +25,7 @@ import dash_uploader as du
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 from fusion_tools.utils.shapes import load_annotations
 
-from fusion_tools import DSATool
+from fusion_tools.components.base import DSATool, BaseSchema
 from fusion_tools.handler.plugin import DSAPluginRunner, DSAPluginGroup
 from fusion_tools.handler.resource_selector import DSAResourceSelector
 
@@ -44,7 +44,7 @@ WSI_TYPES = [i for i in list(large_image.listSources()['extensions'].keys()) if 
 ANN_TYPES = ['json','geojson','xml','csv']
 
 
-class DSAUploadType:
+class DSAUploadType(BaseSchema):
     """Formatted upload type for a DSAUploader Component.
     """
     def __init__(self,
@@ -339,6 +339,10 @@ class DSAUploader(DSATool):
     :param DSATool: Sub-class of Tool specific to DSA components. Updates with session data by default.
     :type DSATool: None
     """
+
+    title = 'DSA Uploader'
+    description = 'Uploading slides and associated files to a particular folder on attached DSA instance. Access pre-processing plugins.'
+
     def __init__(self,
                  handler,
                  dsa_upload_types: Union[DSAUploadType,list] = []):
@@ -348,14 +352,10 @@ class DSAUploader(DSATool):
         self.handler = handler
         self.dsa_upload_types = dsa_upload_types
 
-    def __str__(self):
-        return 'DSA Uploader'
-
     def load(self,component_prefix:int):
 
         self.component_prefix = component_prefix
 
-        self.title = 'Dataset Uploader'
         self.blueprint = DashBlueprint(
             transforms=[
                 PrefixIdTransform(prefix=f'{component_prefix}',escape = lambda input_id: self.prefix_escape(input_id)),
@@ -364,13 +364,6 @@ class DSAUploader(DSATool):
         )
 
         self.get_callbacks()
-
-        # Loading resource selector
-        #self.resource_selector = DSAResourceSelector(
-        #    handler = self.handler
-        #)
-
-        #self.resource_selector.load(self.component_prefix)
 
         self.plugin_inputs_handler = DSAPluginGroup(
             handler = self.handler
@@ -392,16 +385,6 @@ class DSAUploader(DSATool):
             self.plugin_inputs_handler.update_layout(session_data,use_prefix=use_prefix)
             uploader_children = html.Div([
                 dbc.Row([
-                    #dbc.Modal(
-                    #    id = {'type': 'dsa-uploader-selector-modal','index': 0},
-                    #    centered = True,
-                    #    is_open = False,
-                    #    size = 'xl',
-                    #    className = None,
-                    #    children = [
-                    #        self.resource_selector.blueprint.embed(self.blueprint)
-                    #    ]
-                    #),
                     dcc.Loading(
                         html.Div(
                             id = {'type': 'dsa-uploader-collection-or-user-div','index': 0},
@@ -458,11 +441,11 @@ class DSAUploader(DSATool):
             dbc.Card(
                 dbc.CardBody([
                     dbc.Row(
-                        html.H3('Dataset Uploader')
+                        html.H3(self.title)
                     ),
                     html.Hr(),
                     dbc.Row(
-                        'Uploading slides and associated files to a particular folder on attached DSA instance. Access pre-processing plugins.'
+                        self.description
                     ),
                     html.Hr(),
                     html.Div(
@@ -478,10 +461,6 @@ class DSAUploader(DSATool):
             PrefixIdTransform(prefix=self.component_prefix,escape = lambda input_id: self.prefix_escape(input_id)).transform_layout(layout)
 
         return layout
-
-    def gen_layout(self,session_data:Union[dict,None]):
-
-        self.blueprint.layout = self.update_layout(session_data,use_prefix=False)
         
     def get_callbacks(self):
 

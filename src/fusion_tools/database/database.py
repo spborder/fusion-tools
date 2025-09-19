@@ -338,9 +338,6 @@ class fusionDB:
                 if idx>=offset:
                     return_list.append(i.to_dict())
 
-            #print(json.dumps(search_kwargs,indent=4))
-            #print(f'n returned from db_search: {len(return_list)}')
-            #print(return_list)
             return return_list
       
     def add_slide(self,
@@ -459,6 +456,25 @@ class fusionDB:
                         return_names.append(a[0])
 
             return return_names
+
+    def get_ids(self, table_name: str, size:Union[int,None] = None, offset = 0):
+
+        return_ids = []
+        with self.get_db() as session:
+
+            if table_name in TABLE_NAMES:
+                id_query = session.execute(
+                    select(getattr(TABLE_NAMES.get(table_name),'id'))
+                )
+
+                for a_idx, a in enumerate(id_query.all()):
+                    if not size is None:
+                        if len(return_ids)==size:
+                            break
+                    if a_idx>=offset:
+                        return_ids.append(a[0])
+            
+            return return_ids
 
     async def get_item_annotations(self, item_id:str, user_id:Union[str,None] = None, vis_session_id:Union[str,None] = None)->list:
         """Loading annotations from item database

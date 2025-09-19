@@ -24,7 +24,7 @@ from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, Pr
 
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 
-from fusion_tools import DSATool
+from fusion_tools.components.base import DSATool
 
 
 
@@ -34,6 +34,9 @@ class DatasetBuilder(DSATool):
     :param DSATool: Sub-class of Tool specific to DSA components. Updates with session data by default.
     :type DSATool: None
     """
+    title = 'Dataset Builder'
+    description = 'Search through available collections, folders, and slides to assemble a visualization session.'
+
     def __init__(self,
                  handler,
                  include_only: Union[list,None] = None
@@ -43,14 +46,10 @@ class DatasetBuilder(DSATool):
         self.include_only = include_only
         self.handler = handler
 
-    def __str__(self):
-        return 'Dataset Builder'
-
     def load(self, component_prefix:int):
 
         self.component_prefix = component_prefix
 
-        self.title = 'Dataset Builder'
         self.blueprint = DashBlueprint(
             transforms=[
                 PrefixIdTransform(prefix=f'{component_prefix}',escape = lambda input_id: self.prefix_escape(input_id)),
@@ -136,11 +135,11 @@ class DatasetBuilder(DSATool):
             dbc.Card(
                 dbc.CardBody([
                     dbc.Row(
-                        html.H3('Dataset Builder')
+                        html.H3(self.title)
                     ),
                     html.Hr(),
                     dbc.Row(
-                        'Search through available collections, folders, and slides to assemble a visualization session.'
+                        self.description
                     ),
                     html.Hr(),
                     dbc.Row([
@@ -244,15 +243,6 @@ class DatasetBuilder(DSATool):
             PrefixIdTransform(prefix = self.component_prefix).transform_layout(layout)
         
         return layout
-
-    def gen_layout(self, session_data: Union[dict,None]):
-        """Generating DatasetBuilder layout, adding to DashBlueprint() object to be embedded in larger layout.
-
-        :param session_data: Data on current session, not used in this component.
-        :type session_data: Union[dict,None]
-        """
-
-        self.blueprint.layout = self.update_layout(session_data,use_prefix=False)
 
     def get_callbacks(self):
 

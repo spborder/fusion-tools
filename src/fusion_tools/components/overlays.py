@@ -4,58 +4,29 @@ Components which handle overlay colormapping/filtering/general handling on Slide
 
 """
 
-import os
-import sys
 import json
 import geojson
-import geopandas as gpd
 import numpy as np
-import pandas as pd
-import textwrap
-import re
 import uuid
-import threading
-import zipfile
-from shutil import rmtree
-from copy import deepcopy
 
-from typing_extensions import Union
-from shapely.geometry import box, shape
-import plotly.express as px
-import plotly.graph_objects as go
-from umap import UMAP
-
-from PIL import Image, ImageOps
-
-from io import BytesIO
-import requests
 
 # Dash imports
 import dash
 dash._dash_renderer._set_react_version('18.2.0')
 import dash_leaflet as dl
 import dash_leaflet.express as dlx
-from dash import dcc, callback, ctx, ALL, MATCH, exceptions, Patch, no_update, dash_table
-from dash.dash_table.Format import Format, Scheme
+from dash import dcc, callback, ctx, ALL, MATCH, exceptions, Patch, no_update
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-#import dash_treeview_antd as dta
-from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform, BlockingCallbackTransform
+from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform
 from dash_extensions.javascript import Namespace, arrow_function
 
 # fusion-tools imports
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
-from fusion_tools.utils.shapes import (
-    find_intersecting, 
-    extract_geojson_properties, 
+from fusion_tools.utils.shapes import ( 
     process_filters_queries,
-    detect_histomics,
-    histomics_to_geojson,
-    export_annotations
 )
-from fusion_tools.utils.images import get_feature_image, write_ome_tiff, format_intersecting_masks
-from fusion_tools.utils.stats import get_label_statistics, run_wilcox_rank_sum
-from fusion_tools import Tool, MultiTool
+from fusion_tools.components.base import Tool, MultiTool
 
 import time
 
@@ -66,16 +37,16 @@ class OverlayOptions(Tool):
     :param Tool: General class for interactive components that visualize, edit, or perform analyses on data.
     :type Tool: None
     """
+
+    title = 'Overlay Options'
+    description = 'Select options below to adjust overlay color, transparency, and line color for structures on your slide.'
+
     def __init__(self,
                  ignore_list: list = ["_id", "_index"],
                  property_depth: int = 4
                  ):
         """Constructor method
 
-        :param geojson_anns: Individual or list of GeoJSON formatted annotations.
-        :type geojson_anns: Union[list,dict]
-        :param reference_object: Path to larger object containing information on GeoJSON features, defaults to None
-        :type reference_object: Union[str,None], optional
         :param ignore_list: List of properties to exclude from visualization. These can include any internal or private properties that are not desired to be viewed by the user or used for filtering/overlay colors., defaults to []
         :type ignore_list: list, optional
         :param property_depth: Depth at which to search for nested properties. Properties which are nested further than this will be ignored.
@@ -85,10 +56,7 @@ class OverlayOptions(Tool):
         super().__init__()
         self.ignore_list = ignore_list
         self.property_depth = property_depth
-    
-    def __str__(self):
-        return 'Overlay Options'
-        
+            
     def load(self,component_prefix:int):
 
         self.component_prefix = component_prefix
@@ -101,6 +69,7 @@ class OverlayOptions(Tool):
             ]
         )
 
+        #TODO: This is an interesting case where the component references another components js_namespace
         self.js_namespace = Namespace("fusionTools","slideMap")
 
         # Add callbacks here
@@ -135,11 +104,11 @@ class OverlayOptions(Tool):
             dbc.Card(
                 dbc.CardBody([
                     dbc.Row(
-                        html.H3('Overlay Options')
+                        html.H3(self.title)
                     ),
                     html.Hr(),
                     dbc.Row(
-                        'Select options below to adjust overlay color, transparency, and line color for structures on your slide.'
+                        self.description
                     ),
                     html.Hr(),
                     dbc.Row([

@@ -13,7 +13,7 @@ import dash_bootstrap_components as dbc
 from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform
 
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
-from fusion_tools import DSATool
+from fusion_tools.components.base import DSATool
 
 
 class DSALoginComponent(DSATool):

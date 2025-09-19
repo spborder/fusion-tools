@@ -36,7 +36,8 @@ from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, Mu
 from dash_extensions.javascript import assign, arrow_function, Namespace
 
 # fusion-tools imports
-from fusion_tools import MapComponent, asyncio_db_loop
+from fusion_tools import asyncio_db_loop
+from fusion_tools.components.base import MapComponent
 from fusion_tools.utils.shapes import (
     find_intersecting,
     spatially_aggregate,
@@ -58,6 +59,9 @@ class SlideMap(MapComponent):
     :param MapComponent: General class for components added to SlideMap
     :type MapComponent: None
     """
+    title = 'Slide Map'
+    description = ''
+
     def __init__(self,
                  cache: bool = False):
         """Constructor method
@@ -70,7 +74,6 @@ class SlideMap(MapComponent):
 
         self.component_prefix = component_prefix
 
-        self.title = 'Slide Map'
         self.blueprint = DashBlueprint(
             transforms = [
                 PrefixIdTransform(prefix=f'{self.component_prefix}'),
@@ -82,29 +85,6 @@ class SlideMap(MapComponent):
         self.get_namespace()
         self.get_callbacks()
         self.get_annotations_callbacks()
-
-    def __str__(self):
-        return 'Slide Map'
-
-    def get_scale_factors(self, image_metadata: dict):
-        """Function used to initialize scaling factors applied to GeoJSON annotations to project annotations into the SlideMap CRS (coordinate reference system)
-
-        :return: x and y (horizontal and vertical) scale factors applied to each coordinate in incoming annotations
-        :rtype: float
-        """
-
-        base_dims = [
-            image_metadata['sizeX']/(2**(image_metadata['levels']-1)),
-            image_metadata['sizeY']/(2**(image_metadata['levels']-1))
-        ]
-
-        #x_scale = (base_dims[0]*(240/image_metadata['tileHeight'])) / image_metadata['sizeX']
-        #y_scale = -((base_dims[1]*(240/image_metadata['tileHeight'])) / image_metadata['sizeY'])
-
-        x_scale = base_dims[0] / image_metadata['sizeX']
-        y_scale = -((base_dims[1]) / image_metadata['sizeY'])
-
-        return x_scale, y_scale
 
     @asyncio_db_loop
     def check_slide_in_cache(self, image_id:Union[str,None]=None, user_id: str = None, vis_session_id: str = None):
@@ -1332,13 +1312,6 @@ class SlideMap(MapComponent):
                                 f['properties'] = f['properties'] | {'_index': f_idx, '_id': uuid.uuid4().hex[:24], 'name': s['properties']['name']}
                     else:
                         f['properties'] = {'_index': f_idx, '_id': uuid.uuid4().hex[:24], 'name': s['properties']['name']}
-
-            #print(f'len of scaled_geojson: {len(scaled_geojson)}')
-            """
-            if len(scaled_geojson) != len(ctx.outputs_list[0]):
-                print('Length of scaled geojson not equal to expected output length')
-                raise exceptions.PreventUpdate
-            """
             
         return scaled_geojson, [json.dumps(scaled_geojson)]
 
@@ -1482,34 +1455,8 @@ class SlideMap(MapComponent):
 
         if upload_clicked:
             return [not is_open]
-
-    def make_dash_table(self, df:pd.DataFrame):
-        """
-        Populate dash_table.DataTable
-        """
-        return_table = dash_table.DataTable(
-            columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in df],
-            data = df.to_dict('records'),
-            editable=False,                                        
-            sort_mode='multi',
-            sort_action = 'native',
-            page_current=0,
-            page_size=5,
-            style_cell = {
-                'overflow':'hidden',
-                'textOverflow':'ellipsis',
-                'maxWidth':0
-            },
-            tooltip_data = [
-                {
-                    column: {'value':str(value),'type':'markdown'}
-                    for column, value in row.items()
-                } for row in df.to_dict('records')
-            ],
-            tooltip_duration = None
-        )
-
-        return return_table
+        else:
+            raise exceptions.PreventUpdate
     
     def make_sub_accordion(self, input_data: Union[list,dict]):
         """Recursively generating sub-accordion objects for nested properties
@@ -1535,7 +1482,7 @@ class SlideMap(MapComponent):
                     main_list.append(
                         dbc.AccordionItem([
                             html.Div([
-                                self.make_dash_table(pd.DataFrame.from_records(non_nested_data))
+                                self.make_dash_table(df = pd.DataFrame.from_records(non_nested_data), id = {'type': f'{self.component_prefix}-popup-accordion-item','index': len(main_list)+1})
                             ])
                         ],title = title)
                     )
@@ -2054,6 +2001,9 @@ class MultiFrameSlideMap(SlideMap):
     :param SlideMap: dl.Map() container where image tiles are displayed.
     :type SlideMap: None
     """
+    title = 'Multi-Frame Slide Map'
+    description = ''
+
     def __init__(self,
                  cache:bool = False):
         """Constructor method
@@ -2070,7 +2020,6 @@ class MultiFrameSlideMap(SlideMap):
 
         self.component_prefix = component_prefix
 
-        self.title = 'Multi-Frame Slide Map'
         self.blueprint = DashBlueprint(
             transforms = [
                 PrefixIdTransform(prefix = f'{self.component_prefix}'),
@@ -2083,7 +2032,7 @@ class MultiFrameSlideMap(SlideMap):
         super().get_annotations_callbacks()
     
     def __str__(self):
-        return 'Multi-Frame Slide Map'
+        return self.title
     
     def update_slide(self, slide_selected, vis_data):
         
@@ -2459,9 +2408,12 @@ class MultiFrameSlideMap(SlideMap):
 class LargeSlideMap(SlideMap):
     """This is a subclass of SlideMap used for LARGE amounts of annotations (>50k)
 
-    :param SlideMap: _description_
-    :type SlideMap: _type_
+    :param SlideMap: dl.Map() container where image tiles are displayed.
+    :type SlideMap: None
     """
+    title = 'Large Slide Map'
+    description = ''
+
     def __init__(self,
                  min_zoom:int,
                  cache:bool = False):
@@ -2473,7 +2425,6 @@ class LargeSlideMap(SlideMap):
 
         self.component_prefix = component_prefix
 
-        self.title = 'Large Slide Map'
         self.blueprint = DashBlueprint(
             transforms = [
                 PrefixIdTransform(prefix = f'{self.component_prefix}'),
@@ -2486,7 +2437,7 @@ class LargeSlideMap(SlideMap):
         self.large_map_callbacks()
 
     def __str__(self):
-        return "Large Slide Map"
+        return self.title
     
     def get_namespace(self):
 
@@ -3070,9 +3021,12 @@ class LargeSlideMap(SlideMap):
 class LargeMultiFrameSlideMap(MultiFrameSlideMap):
     """This is a sub-class of MultiFrameSlideMap used for LARGE amounts of annotations (>50k)
 
-    :param MultiFrameSlideMap: _description_
-    :type MultiFrameSlideMap: _type_
+    :param MultiFrameSlideMap: A SlideMap component specialized for multi-frame slides
+    :type MultiFrameSlideMap: None
     """
+    title = 'Large Multi-Frame Slide Map'
+    description = ''
+
     def __init__(self,
                  min_zoom:int,
                  cache: bool = False):
@@ -3082,7 +3036,7 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
         self.min_zoom = min_zoom
 
     def __str__(self):
-        return "Large Multi Frame Slide Map"
+        return self.title
 
     def get_namespace(self):
         
@@ -3245,7 +3199,6 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
 
         self.component_prefix = component_prefix
 
-        self.title = 'Large Multi-Frame Slide Map'
         self.blueprint = DashBlueprint(
             transforms = [
                 PrefixIdTransform(prefix = f'{self.component_prefix}'),
@@ -3682,17 +3635,22 @@ class HybridSlideMap(MultiFrameSlideMap):
     :param SlideMap: Base class for high-resolution slide visualization
     :type SlideMap: MapComponent
     """
+    title = 'Hybrid Slide Map'
+    description = ''
+
     def __init__(self,
                  cache:bool = False):
         """Constructor method
         """
         super().__init__(cache)
 
+    def __str__(self):
+        return self.title
+
     def load(self, component_prefix:int):
 
         self.component_prefix = component_prefix
 
-        self.title = 'Hybrid Slide Map'
         self.blueprint = DashBlueprint(
             transforms = [
                 PrefixIdTransform(prefix=f'{self.component_prefix}'),
@@ -3985,6 +3943,9 @@ class SlideImageOverlay(MapComponent):
     :param MapComponent: General component class for children of SlideMap
     :type MapComponent: None
     """
+    title = 'Slide Image Overlay'
+    description = ''
+
     def __init__(self,
                  image_path: str,
                  image_crs: list = [0,0],
@@ -4043,6 +4004,9 @@ class ChannelMixer(MapComponent):
     :param MapComponent: General component class for children of SlideMap
     :type MapComponent: None
     """
+    title = 'Channel Mixer'
+    description = 'Select one or more channels and colors to view at the same time.'
+
     def __init__(self):
         """Constructor method
 
@@ -4052,22 +4016,6 @@ class ChannelMixer(MapComponent):
         :type tiles_url: str
         """
         super().__init__()
-
-    def __str__(self):
-        return 'Channel Mixer'
-
-    def load(self, component_prefix: int):
-
-        self.component_prefix = component_prefix
-        self.title = 'Channel Mixer'
-        self.blueprint = DashBlueprint(
-            transforms = [
-                PrefixIdTransform(prefix = f'{self.component_prefix}'),
-                MultiplexerTransform()
-            ]
-        )
-
-        self.get_callbacks()
 
     def process_frames(self, image_metadata:dict):
         """Extracting names for each frame for easy reference
@@ -4096,11 +4044,11 @@ class ChannelMixer(MapComponent):
             dbc.Card([
                 dbc.CardBody([
                     dbc.Row([
-                        html.H3('Channel Mixer')
+                        html.H3(self.title)
                     ]),
                     html.Hr(),
                     dbc.Row(
-                        'Select one or more channels and colors to view at the same time.'
+                        self.description
                     ),
                     html.Hr(),
                     dbc.Row(
@@ -4140,11 +4088,6 @@ class ChannelMixer(MapComponent):
             PrefixIdTransform(prefix = f'{self.component_prefix}').transform_layout(layout)
 
         return layout
-
-    def gen_layout(self, session_data:dict):
-        """Generating layout for ChannelMixer component
-        """
-        self.blueprint.layout = self.update_layout(session_data, use_prefix=False)
 
     def get_callbacks(self):
         """Initializing callbacks and adding to DashBlueprint

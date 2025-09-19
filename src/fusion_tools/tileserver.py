@@ -203,17 +203,22 @@ class LocalTileServer(TileServer):
         self.app = FastAPI()
 
         self.router = APIRouter()
-        self.router.add_api_route('/',self.root,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/names',self.get_names,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{id}/tiles/{z}/{x}/{y}',self.get_tile,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{id}/image_metadata',self.get_image_metadata,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{id}/metadata',self.get_metadata,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{id}/tiles/region',self.get_region,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{id}/tiles/thumbnail',self.get_thumbnail,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{id}/annotations',self.get_annotations,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{id}/annotations/metadata',self.get_annotations_metadata,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{id}/annotations/data/list',self.get_annotations_property_keys,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{id}/annotations/data',self.get_annotations_property_data,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/',self.root,methods=["GET"])
+
+        # GET id's, GET {id}/metadata, GET {}
+
+        self.router.add_api_route('/ids',self.get_ids,methods=["GET"])
+        self.router.add_api_route('/names',self.get_names,methods=["GET"])
+        self.router.add_api_route('/{id}/info',self.get_id_info,methods=["GET"])
+        self.router.add_api_route('/{id}/tiles/{z}/{x}/{y}',self.get_tile,methods=["GET"])
+        self.router.add_api_route('/{id}/image_metadata',self.get_image_metadata,methods=["GET"])
+        self.router.add_api_route('/{id}/metadata',self.get_metadata,methods=["GET"])
+        self.router.add_api_route('/{id}/tiles/region',self.get_region,methods=["GET"])
+        self.router.add_api_route('/{id}/tiles/thumbnail',self.get_thumbnail,methods=["GET"])
+        self.router.add_api_route('/{id}/annotations',self.get_annotations,methods=["GET"])
+        self.router.add_api_route('/{id}/annotations/metadata',self.get_annotations_metadata,methods=["GET"])
+        self.router.add_api_route('/{id}/annotations/data/list',self.get_annotations_property_keys,methods=["GET"])
+        self.router.add_api_route('/{id}/annotations/data',self.get_annotations_property_data,methods=["GET"])
 
     def __str__(self):
         return f'TileServer class to {self.host}:{self.tile_server_port}'
@@ -388,6 +393,26 @@ class LocalTileServer(TileServer):
         )
 
         return {'message': item_names}
+
+    def get_ids(self):
+        """Get all available ids in the database
+        """
+        item_ids = self.database.get_ids(
+            table_name = 'item'
+        )
+
+        return {'message': item_ids}
+    
+    async def get_id_info(self, id:str):
+        """Get info for a single id
+        """
+        image_item = await asyncio.gather(self.get_item(id))
+
+        if len(image_item[0])>0:
+            item_info = image_item[0][0]
+            return Response(content = json.dumps(item_info,default=str),media_type = 'application/json')
+        else:
+            return Response(content = 'invalid image id',media_type='application/json',status_code=400)
     
     def get_item_names_ids(self, filters = None, size = None, offset = 0):
         """Get list of names and ids of all locally stored images in this tileserver

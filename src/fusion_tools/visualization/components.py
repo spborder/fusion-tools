@@ -422,7 +422,14 @@ class Visualization:
             self.local_tile_server = LocalTileServer(
                 tile_server_port=self.app_options['port'] if not self.app_options['jupyter'] else self.app_options['port']+10,
                 host = self.app_options['host'],
-                database = self.database
+                database = self.database,
+                cors_options = {
+                    'origins': ['*'],
+                    'allow_methods': ['*'], 
+                    'allow_headers': ['*'], 
+                    'expose_headers': ['*'], 
+                    'max_age': '36000000'
+                }
             )
 
             for s_idx,(s,anns,meta) in enumerate(zip(self.local_slides,self.local_annotations,self.slide_metadata)):

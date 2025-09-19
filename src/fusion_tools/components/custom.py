@@ -55,7 +55,7 @@ from fusion_tools.utils.shapes import (
 )
 from fusion_tools.utils.images import get_feature_image, write_ome_tiff, format_intersecting_masks
 from fusion_tools.utils.stats import get_label_statistics, run_wilcox_rank_sum
-from fusion_tools import Tool, MultiTool
+from fusion_tools.components.base import Tool, MultiTool
 
 import time
 
@@ -87,6 +87,12 @@ class FUSIONFunction:
 
 
 class CustomFunction(Tool):
+    """
+    Component which can be used for deploying/sharing custom Python functions executed on annotations/images
+    """
+    title = 'Custom Function'
+    description = ''
+
     def __init__(self,
                  title = 'Custom Function',
                  description = '',
@@ -101,9 +107,6 @@ class CustomFunction(Tool):
             self.custom_function = [custom_function]
         else:
             self.custom_function = custom_function
-
-    def __str__(self):
-        return self.title
     
     def load(self, component_prefix:int):
 
@@ -418,10 +421,6 @@ class CustomFunction(Tool):
 
 
         return [function_layout]
-
-    def gen_layout(self, session_data:dict):
-
-        self.blueprint.layout = self.update_layout(session_data,use_prefix=False)
 
     def make_input_component(self, input_spec, input_index):
         

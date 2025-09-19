@@ -27,7 +27,7 @@ from dash_extensions.javascript import Namespace, arrow_function
 
 # fusion-tools imports
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
-from fusion_tools import Tool
+from fusion_tools.components.base import Tool
 
 import time
 from tqdm import tqdm
@@ -41,6 +41,10 @@ class HRAViewer(Tool):
     :param Tool: General class for interactive components that visualize, edit, or perform analyses on data.
     :type Tool: None
     """
+
+    title = 'HRA Viewer'
+    description = 'Select one of the embedded components below or select an organ to view the ASCT+B table for that organ'
+
     def __init__(self):
         """Constructor method
         """
@@ -65,10 +69,6 @@ class HRAViewer(Tool):
             self.organ_table_options = []
 
             self.show_asct_b_error = True
-
-
-    def __str__(self):
-        return "HRA Viewer"
 
     def fetch_json(self, purl_str: str):
         """Run GET request and return JSON data
@@ -193,19 +193,6 @@ class HRAViewer(Tool):
             
         return tables
 
-    def load(self, component_prefix: int):
-        
-        self.component_prefix = component_prefix
-        self.title = 'HRA Viewer'
-        self.blueprint = DashBlueprint(
-            transforms = [
-                PrefixIdTransform(prefix = f'{self.component_prefix}'),
-                MultiplexerTransform()
-            ]
-        )
-
-        self.get_callbacks()
-
     def gen_layout(self, session_data: dict):
         """Generate layout for HRA Viewer component
         """
@@ -214,11 +201,11 @@ class HRAViewer(Tool):
             dbc.Card([
                 dbc.CardBody([
                     dbc.Row(
-                        dbc.Col(html.H3('Human Reference Atlas (HRA) Viewers'))
+                        dbc.Col(html.H3(self.title))
                     ),
                     html.Hr(),
                     dbc.Row(
-                        dbc.Col('Select one of the embedded components below or select an organ to view the ASCT+B table for that organ')
+                        dbc.Col(self.description)
                     ),
                     html.Hr(),
                     html.Div(

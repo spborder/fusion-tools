@@ -47,12 +47,13 @@ from fusion_tools.utils.shapes import (
     path_to_mask, process_filters_queries,
     path_to_indices, indices_to_path
 )
-from fusion_tools import Tool, MultiTool, asyncio_db_loop
+from fusion_tools import asyncio_db_loop
+from fusion_tools.components.base import Tool, MultiTool, BaseSchema
 
 from fusion_tools.handler.dsa_handler import DSAHandler
 
 
-class AnnotationSchema:
+class AnnotationSchema(BaseSchema):
     """Annotation schema that can be ingested by all annotation components in FUSION
     """
     def __init__(self,
@@ -113,22 +114,6 @@ class AnnotationSchema:
 
         self.id = uuid.uuid4().hex[:24]
     
-    @classmethod
-    def from_dict(cls,dict_data):
-
-        schema = dict_data.get('schema')
-        name = dict_data.get('name','FUSION Annotation Schema')
-        description = dict_data.get('description','')
-        user_spec = dict_data.get('user_spec')
-        annotations = dict_data.get('annotations')
-
-        return cls(
-            schema = schema,
-            name = name,
-            description = description,
-            user_spec = user_spec,
-            annotations = annotations)
-
     def add_annotation(self, annotation_dict: dict):
         """Add annotation to AnnotationSchema
 
@@ -284,9 +269,6 @@ class FeatureAnnotation(Tool):
         elif self.annotations is None:
             self.annotations = []
     
-    def __str__(self):
-        return self.title
-
     def load(self, component_prefix:int):
 
         self.component_prefix = component_prefix
@@ -347,33 +329,6 @@ class FeatureAnnotation(Tool):
             current_names = [i.get('name') for i in annotations_list]
 
         return annotations_list, current_names
-
-    def make_dash_table(self, df:pd.DataFrame, id: dict):
-        
-        return_table = dash_table.DataTable(
-            id = id,
-            columns = [{'name':i,'id':i,'deletable':False,'selectable':True} for i in df],
-            data = df.to_dict('records'),
-            editable=False,                                        
-            sort_mode='multi',
-            sort_action = 'native',
-            page_current=0,
-            page_size=5,
-            style_cell = {
-                'overflow':'hidden',
-                'textOverflow':'ellipsis',
-                'maxWidth':0
-            },
-            tooltip_data = [
-                {
-                    column: {'value':str(value),'type':'markdown'}
-                    for column, value in row.items()
-                } for row in df.to_dict('records')
-            ],
-            tooltip_duration = None
-        )
-
-        return return_table
 
     def update_layout(self, session_data:dict, use_prefix:bool):
         """Generating layout for component
