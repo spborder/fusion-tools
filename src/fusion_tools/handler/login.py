@@ -23,6 +23,10 @@ class DSALoginComponent(DSATool):
     :type DSATool: None
 
     """
+
+    title = 'DSA Login Component'
+    description = ''
+
     def __init__(self,
                  handler,
                  default_user: Union[dict,None] = None
@@ -34,11 +38,13 @@ class DSALoginComponent(DSATool):
 
         self.modal_size = 'lg'
 
+    def __str__(self):
+        return self.title
+
     def load(self,component_prefix:int):
 
         self.component_prefix = component_prefix
 
-        self.title = 'DSA Login Component'
         self.blueprint = DashBlueprint(
             transforms=[
                 PrefixIdTransform(prefix=f'{component_prefix}'),
@@ -50,8 +56,6 @@ class DSALoginComponent(DSATool):
     
     def update_layout(self, session_data:dict, use_prefix:bool):
         
-        
-
         current_user_children = ''
         if 'current_user' in session_data:
             current_user_children = f'Welcome, {session_data.get("current_user",{}).get("login","")}!'
@@ -318,7 +322,7 @@ class DSALoginComponent(DSATool):
                             required = True,
                             value = [],
                             maxLength = 1000,
-                            pattern = "^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$"
+                            pattern = r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*$"
                         )
                     ]),
                     html.Div(

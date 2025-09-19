@@ -349,7 +349,8 @@ class fusionDB:
         metadata: dict, 
         image_metadata: dict, 
         image_filepath:Union[str,None], 
-        annotations_metadata:dict,annotations:Union[list,dict,None],
+        annotations_metadata:dict,
+        annotations:Union[list,dict,None],
         user_id:Union[str,None] = None,
         vis_session_id: Union[str,None] = None):
 
@@ -659,10 +660,45 @@ class fusionDB:
                 if shape(structure_geom).intersects(query_box):
                     return_list.append(structure_id)
 
-
-            print(f'Time for get_structures_in_bbox: {time.time() - start}')
-
-
             return return_list
 
+    def get_structure_generator(self, item_id: Union[str,list,None] = None, layer_id:Union[str,list,None] = None, structure_id: Union[str,list,None] = None):
+
+
+        with self.get_db() as session:
+            search_query = session.query(
+                Structure.id,
+                Structure.geom,
+                Structure.properties
+            ).filter(Structure.layer == Layer.id).filter(Layer.item==Item.id)
+
+            if not item_id is None:
+                if type(item_id)==list:
+                    search_query = search_query.filter(Item.id.in_(item_id))
+                elif type(item_id)==str:
+                    search_query = search_query.filter(Item.id == item_id)
+
+            if not layer_id is None:
+                if type(layer_id)==list:
+                    search_query = search_query.filter(Layer.id.in_(layer_id))
+                elif type(layer_id)==str:
+                    search_query = search_query.filter(Layer.id==layer_id)
+
+            if not structure_id is None:
+                if type(structure_id)==list:
+                    search_query = search_query.filter(Structure.id.in_(structure_id))
+                elif type(structure_id)==str:
+                    search_query = search_query.filter(Structure.id==structure_id)
+            
+            #returned_props = ['structure.id','geometry','structure.properties']
+            #return_list = []
+            #for idx,i in enumerate(search_query.all()):
+            #    i_dict = {'_index': idx}
+            #    for prop,prop_name in zip(i,returned_props):
+            #        i_dict[prop_name] = prop
+
+            #    return_list.append(i_dict)
+
+            #return return_list
+            return search_query.all()
 

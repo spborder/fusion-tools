@@ -81,6 +81,9 @@ def main():
     ]
     """ 
 
+    local_slide_path = '/home/sam/Desktop/Example Data/Simple Histology/histology_image.svs'
+    local_slide_anns = local_slide_path.replace('histology_image.svs','histology_annotations.xml')
+
 
     # Starting the DSAHandler to grab information:
     dsa_handler = DSAHandler(
@@ -88,6 +91,8 @@ def main():
     )
     
     vis_session = Visualization(
+        local_slides = [local_slide_path],
+        local_annotations = [local_slide_anns],
         tileservers=[
             dsa_handler.get_tile_server(i) for i in item_id
         ],
@@ -109,6 +114,9 @@ def main():
             ]
         ]
     )
+
+
+
 
     vis_session.start()
 

@@ -339,6 +339,10 @@ class DSAUploader(DSATool):
     :param DSATool: Sub-class of Tool specific to DSA components. Updates with session data by default.
     :type DSATool: None
     """
+
+    title = 'DSA Uploader'
+    description = 'Uploading slides and associated files to a particular folder on attached DSA instance. Access pre-processing plugins.'
+
     def __init__(self,
                  handler,
                  dsa_upload_types: Union[DSAUploadType,list] = []):
@@ -349,13 +353,12 @@ class DSAUploader(DSATool):
         self.dsa_upload_types = dsa_upload_types
 
     def __str__(self):
-        return 'DSA Uploader'
+        return self.title
 
     def load(self,component_prefix:int):
 
         self.component_prefix = component_prefix
 
-        self.title = 'Dataset Uploader'
         self.blueprint = DashBlueprint(
             transforms=[
                 PrefixIdTransform(prefix=f'{component_prefix}',escape = lambda input_id: self.prefix_escape(input_id)),
@@ -458,11 +461,11 @@ class DSAUploader(DSATool):
             dbc.Card(
                 dbc.CardBody([
                     dbc.Row(
-                        html.H3('Dataset Uploader')
+                        html.H3(self.title)
                     ),
                     html.Hr(),
                     dbc.Row(
-                        'Uploading slides and associated files to a particular folder on attached DSA instance. Access pre-processing plugins.'
+                        self.description
                     ),
                     html.Hr(),
                     html.Div(

@@ -17,6 +17,12 @@ from fusion_tools import DSATool
 
 
 class DSAResourceSelector(DSATool):
+    """A small embeddable tool for selecting different folders/slides in a connected DSA instance
+    """
+
+    title = 'DSA Resource Selector'
+    description = ''
+
     def __init__(self,
                  handler,
                  selector_type:str = 'item',
@@ -34,13 +40,12 @@ class DSAResourceSelector(DSATool):
         self.base_id = 'dsa-resource-selector'
 
     def __str__(self):
-        return 'DSA Resource Selector'
+        return self.title
 
     def load(self, component_prefix: int):
 
         self.component_prefix = component_prefix
 
-        self.title = 'DSA Resource Selector'
         self.blueprint = DashBlueprint(
             transforms=[
                 PrefixIdTransform(prefix=f'{self.component_prefix}',escape = lambda input_id: self.prefix_escape(input_id)),

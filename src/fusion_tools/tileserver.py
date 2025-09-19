@@ -184,7 +184,8 @@ class LocalTileServer(TileServer):
                  tile_server_port:int = 8050,
                  host: str = 'localhost',
                  protocol: str = 'http',
-                 cors_options: dict = {'origins': ['*'], 'allow_methods': ['*'], 'allow_headers': ['*'], 'expose_headers': ['*'], 'max_age': '36000000'}
+                 cors_options: dict = {'origins': ['*'], 'allow_methods': ['*'], 'allow_headers': ['*'], 'expose_headers': ['*'], 'max_age': '36000000'},
+                 jupyter_server_url: Union[str,None] = None
                  ):
         """Constructor method
 
@@ -199,6 +200,12 @@ class LocalTileServer(TileServer):
         self.host = host
         self.protocol = protocol
         self.cors_options = cors_options
+        self.jupyter_server_url = jupyter_server_url
+
+        if self.jupyter_server_url is None or self.jupyter_server_url=='':
+            self.access_url = f'{self.protocol}://{self.host}:{self.tile_server_port}'
+        else:
+            self.access_url = self.jupyter_server_url
 
         self.app = FastAPI()
 
@@ -413,27 +420,27 @@ class LocalTileServer(TileServer):
         return item_names_ids
 
     def get_tiles_url(self,slide_id):
-        tiles_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/tiles/'+'{z}/{x}/{y}'
+        tiles_url = f'{self.access_url}/{slide_id}/tiles/'+'{z}/{x}/{y}'
         return tiles_url
 
     def get_regions_url(self,slide_id):
-        regions_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/tiles/region'
+        regions_url = f'{self.access_url}/{slide_id}/tiles/region'
         return regions_url
 
     def get_annotations_url(self,slide_id):
-        annotations_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/annotations'
+        annotations_url = f'{self.access_url}/{slide_id}/annotations'
         return annotations_url
 
     def get_annotations_metadata_url(self,slide_id):
-        annotations_metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/annotations/metadata'
+        annotations_metadata_url = f'{self.access_url}/{slide_id}/annotations/metadata'
         return annotations_metadata_url
 
     def get_metadata_url(self,slide_id):
-        metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/metadata'
+        metadata_url = f'{self.access_url}/{slide_id}/metadata'
         return metadata_url
         
     def get_image_metadata_url(self,slide_id):
-        image_metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/image_metadata'
+        image_metadata_url = f'{self.access_url}/{slide_id}/image_metadata'
         return image_metadata_url
 
     async def get_tile(self,id:str,z:int, x:int, y:int, style:Union[None,str] = None):
@@ -506,7 +513,7 @@ class LocalTileServer(TileServer):
         else:
             return Response(content = 'invalid image id',media_type='application/json',status_code=400)
     
-    def get_region(self, id:str, top: int, left: int, bottom:int, right:int,style:Union[None,str] = None):
+    async def get_region(self, id:str, top: int, left: int, bottom:int, right:int,style:Union[None,str] = None):
         """
         Grabbing a specific region in the image based on bounding box coordinates
         """
@@ -515,7 +522,8 @@ class LocalTileServer(TileServer):
         :return: Image region (bytes encoded)
         :rtype: Response
         """
-        tile_source = self.get_tile_source(id,style)
+        tile_source = await asyncio.gather(self.get_tile_source(id,style))
+        tile_source = tile_source[0]
 
         if tile_source is None:
             return Response(content = 'invalid image id', media_type = 'application/json', status_code = 400)
@@ -531,14 +539,15 @@ class LocalTileServer(TileServer):
 
         return Response(content = image_region, media_type = 'image/png')
 
-    def get_thumbnail(self, id:str, style:Union[None,str] = None):
+    async def get_thumbnail(self, id:str, style:Union[None,str] = None):
         """Grabbing an image thumbnail
 
         :param image: _description_
         :type image: int
         """
 
-        tile_source = self.get_tile_source(id,style)
+        tile_source = await asyncio.gather(self.get_tile_source(id,style))
+        tile_source = tile_source[0]
 
         if tile_source is None:
             return Response(content = 'invalid image index', media_type = 'application/json', status_code=400)
@@ -878,7 +887,7 @@ class LocalTileServer(TileServer):
             CORSMiddleware,
             allow_origins=self.cors_options['origins'],
             allow_methods=self.cors_options['allow_methods'],
-            allow_credentials = True,
+            #allow_credentials = True,
             allow_headers=self.cors_options['allow_headers'],
             expose_headers=self.cors_options['expose_headers'],
             max_age=self.cors_options['max_age']
