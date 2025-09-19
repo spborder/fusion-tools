@@ -3020,7 +3020,9 @@ class LargeSlideMap(SlideMap):
 
         new_marker_div = html.Div()
 
-        return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
+        #return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
+        return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div
+
 
 class LargeMultiFrameSlideMap(MultiFrameSlideMap):
     """This is a sub-class of MultiFrameSlideMap used for LARGE amounts of annotations (>50k)
@@ -3631,7 +3633,8 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
 
         new_marker_div = html.Div()
 
-        return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
+        #return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
+        return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div
 
 class HybridSlideMap(MultiFrameSlideMap):
     """This is a version of SlideMap that combines SlideMap and MultiFrameSlideMap so you only need to initialize one
@@ -3937,7 +3940,8 @@ class HybridSlideMap(MultiFrameSlideMap):
 
         new_marker_div = html.Div()
 
-        return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
+        #return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
+        return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div
 
 
 #TODO: This can be rewritten as its own embeddable blueprint
