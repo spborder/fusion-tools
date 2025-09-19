@@ -1,6 +1,11 @@
 # Changelog
 
 <!--next-version-placeholder-->
+## v3.6.33-34 (09/19/2025)
+
+- Updates to `CustomFunction` input/output schemas, utilizing database
+
+
 ## v3.6.32 (08/12/2025)
 
 - Increasing flexibility of `SlideAnnotation` components
