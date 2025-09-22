@@ -204,9 +204,6 @@ class LocalTileServer(TileServer):
 
         self.router = APIRouter()
         self.router.add_api_route('/',self.root,methods=["GET","OPTIONS"])
-
-        # GET id's, GET {id}/metadata, GET {}
-
         self.router.add_api_route('/ids',self.get_ids,methods=["GET","OPTIONS"])
         self.router.add_api_route('/names',self.get_names,methods=["GET","OPTIONS"])
         self.router.add_api_route('/{id}/info',self.get_id_info,methods=["GET","OPTIONS"])
@@ -438,45 +435,33 @@ class LocalTileServer(TileServer):
         return item_names_ids
 
     def get_tiles_url(self,slide_id):
-        if not self.host in ['0.0.0.0','localhost']:
-            tiles_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/tiles/'+'{z}/{x}/{y}'
-        else:
-            tiles_url = f'{self.host}:{self.tile_server_port}/{slide_id}/tiles/'+'{z}/{x}/{y}'
+        tiles_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/tiles/'+'{z}/{x}/{y}'
+
         return tiles_url
 
     def get_regions_url(self,slide_id):
-        if not self.host in ['0.0.0.0','localhost']:
-            regions_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/tiles/region'
-        else:
-            regions_url = f'{self.host}:{self.tile_server_port}/{slide_id}/tiles/region'
+        regions_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/tiles/region'
+
         return regions_url
 
     def get_annotations_url(self,slide_id):
-        if not self.host in ['0.0.0.0','localhost']:
-            annotations_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/annotations'
-        else:
-            annotations_url = f'{self.host}:{self.tile_server_port}/{slide_id}/annotations'
+        annotations_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/annotations'
+
         return annotations_url
 
     def get_annotations_metadata_url(self,slide_id):
-        if not self.host in ['0.0.0.0','localhost']:
-            annotations_metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/annotations/metadata'
-        else:
-            annotations_metadata_url = f'{self.host}:{self.tile_server_port}/{slide_id}/annotations/metadata'
+        annotations_metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/annotations/metadata'
+
         return annotations_metadata_url
 
     def get_metadata_url(self,slide_id):
-        if not self.host in ['0.0.0.0','localhost']:
-            metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/metadata'
-        else:
-            metadata_url = f'{self.host}:{self.tile_server_port}/{slide_id}/metadata'
+        metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/metadata'
+
         return metadata_url
         
     def get_image_metadata_url(self,slide_id):
-        if not self.host in ['0.0.0.0','localhost']:
-            image_metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/image_metadata'
-        else:
-            image_metadata_url = f'{self.host}:{self.tile_server_port}/{slide_id}/image_metadata'
+        image_metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/image_metadata'
+
         return image_metadata_url
 
     async def get_tile(self,id:str,z:int, x:int, y:int, style:Union[None,str] = None):
@@ -531,7 +516,10 @@ class LocalTileServer(TileServer):
         image_item = await asyncio.gather(self.get_item(id))
         if len(image_item[0])>0:
             image_meta = image_item[0][0].get('image_meta',{})
-            return Response(content = json.dumps(image_meta),media_type = 'application/json')
+            if not image_meta is None:
+                return Response(content = json.dumps(image_meta),media_type = 'application/json')
+            else:
+                return Response(content = json.dumps({}),media_type = 'application/json')
         else:
             return Response(content = 'invalid image id',media_type='application/json', status_code=400)
         
@@ -545,7 +533,10 @@ class LocalTileServer(TileServer):
 
         if len(image_item[0])>0:
             item_meta = image_item[0][0].get('meta',{})
-            return Response(content = json.dumps(item_meta),media_type = 'application/json')
+            if not item_meta is None:
+                return Response(content = json.dumps(item_meta),media_type = 'application/json')
+            else:
+                return Response(content = json.dumps({}),media_type = 'application/json')
         else:
             return Response(content = 'invalid image id',media_type='application/json',status_code=400)
     
