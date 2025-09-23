@@ -848,12 +848,12 @@ class SlideMap(MapComponent):
                     var ann_meta_response = await fetch(
                         ann_meta_url, {
                             method: 'GET',
+                            mode: 'cors',
                             headers: {
                                 'Content-Type': 'application/json',
                             }
                         }
                     ); 
-
                     if (!ann_meta_response.ok) {
                         throw new Error(`Oh no! Error encountered: ${ann_meta_response.status}`)
                     }
@@ -891,6 +891,7 @@ class SlideMap(MapComponent):
                             const promises = map_slide_information.annotations_geojson_url.map((url,idx) =>
                                 fetch(url, {
                                     method: 'GET',
+                                    mode: 'cors',
                                     headers: {
                                         'Content-Type': 'application/json',
                                     }
@@ -907,6 +908,7 @@ class SlideMap(MapComponent):
                             const promises = [map_slide_information.annotations_url].map((url,idx) =>
                                 fetch(url, {
                                     method: 'GET',
+                                    mode: 'cors',
                                     headers: {
                                         'Content-Type': 'application/json',
                                     }
@@ -997,7 +999,6 @@ class SlideMap(MapComponent):
             image_metadata_url = new_slide['image_metadata_url']+f'?token={vis_data["current_user"]["token"]}'
             metadata_url = new_slide['metadata_url']+f'?token={vis_data["current_user"]["token"]}'
             annotations_metadata_url = new_slide['annotations_metadata_url']
-
 
         new_image_metadata = requests.get(image_metadata_url).json()
         new_metadata = requests.get(metadata_url).json()
@@ -1290,7 +1291,7 @@ class SlideMap(MapComponent):
             if 'current_user' in vis_data:
                 metadata_url += f'?token={vis_data["current_user"]["token"]}'
 
-            ann_metadata = requests.get(metadata_url).json()
+            ann_metadata = requests.get(metadata_url,headers={'origin':'http://localhost:8080'}).json()
             # Filtering out overlaid images
             ann_metadata = [a for a in ann_metadata if not 'image_path' in a]
 
@@ -2639,12 +2640,13 @@ class LargeSlideMap(SlideMap):
                         try {
                             let ann_url = map_slide_information.annotations_region_url + annotation._id+"?top="+scaled_map_bounds[2]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[0]+"&right="+scaled_map_bounds[3]
                             var ann_response = await fetch(
-                                ann_url, {
+                                ann_url,
                                 method: 'GET',
+                                mode: 'cors',
                                 headers: {
                                     'Content-Type': 'application/json'    
                                 }
-                            });
+                            );
 
                             if (!ann_response.ok) {
                                 throw new Error(`Oh no! Error encountered: ${ann_response.status}`)
@@ -2698,12 +2700,13 @@ class LargeSlideMap(SlideMap):
                     try {
                         let ann_url = map_slide_information.annotations_region_url+"?top="+scaled_map_bounds[0]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[2]+"&right="+scaled_map_bounds[3];
                         var ann_response = await fetch(
-                            ann_url, {
+                            ann_url,
                             method: 'GET',
+                            mode: 'cors',
                             headers: {
                                 'Content-Type': 'application/json'    
                             }
-                        });
+                        );
 
                         if (!ann_response.ok) {
                             throw new Error(`Oh no! Error encountered: ${ann_response.status}`)
@@ -3254,12 +3257,13 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
                         try {
                             let ann_url = map_slide_information.annotations_region_url + annotation._id+"?top="+scaled_map_bounds[2]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[0]+"&right="+scaled_map_bounds[3]
                             var ann_response = await fetch(
-                                ann_url, {
+                                ann_url,
                                 method: 'GET',
+                                mode: 'cors',
                                 headers: {
                                     'Content-Type': 'application/json'    
                                 }
-                            });
+                            );
 
                             if (!ann_response.ok) {
                                 throw new Error(`Oh no! Error encountered: ${ann_response.status}`)
@@ -3313,12 +3317,13 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
                     try {
                         let ann_url = map_slide_information.annotations_region_url+"?top="+scaled_map_bounds[0]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[2]+"&right="+scaled_map_bounds[3];
                         var ann_response = await fetch(
-                            ann_url, {
+                            ann_url,
                             method: 'GET',
+                            mode: 'cors',
                             headers: {
                                 'Content-Type': 'application/json'    
                             }
-                        });
+                        );
 
                         if (!ann_response.ok) {
                             throw new Error(`Oh no! Error encountered: ${ann_response.status}`)

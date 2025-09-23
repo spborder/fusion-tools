@@ -19,7 +19,10 @@ def main():
             [
                 SlideMap(),
             ]
-        ]
+        ],
+        app_options = {
+            'host': '192.168.86.24'
+        }
     )
 
     vis.start()

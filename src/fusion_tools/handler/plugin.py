@@ -36,6 +36,8 @@ class DSAPluginGroup(DSATool):
     :param DSATool: Class for components that integrate with DSA
     :type DSATool: None
     """
+    title = 'DSA Plugin Group'
+
     def __init__(self,
                  handler:None
                 ):

@@ -22,6 +22,7 @@ import threading
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.wsgi import WSGIMiddleware
+from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 import nest_asyncio
 
@@ -121,6 +122,14 @@ class Visualization:
             'host': 'localhost',
             'debug': False,
             'layout_style': {},
+            'cors': {
+                'allow_origins': ['*'],
+                'allow_methods': ['GET','OPTIONS'],
+                'allow_credentials': False,
+                'allow_headers': ['*'],
+                'expose_headers': ['*'],
+                'max_age': '36000000'
+            },
             'external_stylesheets': [
                 dbc.themes.LUX,
                 dbc.themes.BOOTSTRAP,
@@ -418,17 +427,13 @@ class Visualization:
             if self.slide_metadata is None:
                 self.slide_metadata = [None]*len(self.local_slides)
 
+            # Initializing a LocalTileServer instance.
+            #TODO: Check if it's still necessary to serve from a different port in Jupyter deployments. New mounting procedure ({host}:{port}/tileserver/...)
             self.local_tile_server = LocalTileServer(
-                tile_server_port=self.app_options['port'] if not self.app_options['jupyter'] else self.app_options['port']+10,
+                #tile_server_port=self.app_options['port'] if not self.app_options['jupyter'] else self.app_options['port']+10,
+                tile_server_port = self.app_options['port'],
                 host = self.app_options['host'],
-                database = self.database,
-                cors_options = {
-                    'origins': ['*'],
-                    'allow_methods': ['*'], 
-                    'allow_headers': ['*'], 
-                    'expose_headers': ['*'], 
-                    'max_age': '36000000'
-                }
+                database = self.database
             )
 
             for s_idx,(s,anns,meta) in enumerate(zip(self.local_slides,self.local_annotations,self.slide_metadata)):
@@ -446,15 +451,8 @@ class Visualization:
                     slide_dict = {
                         'name': s.split(os.sep)[-1],
                         'id': local_slide_id,
-                        'tiles_url': self.local_tile_server.get_tiles_url(local_slide_id),
-                        'regions_url': self.local_tile_server.get_regions_url(local_slide_id),
-                        'image_metadata_url': self.local_tile_server.get_image_metadata_url(local_slide_id),
-                        'metadata_url': self.local_tile_server.get_metadata_url(local_slide_id),
-                        'annotations_url': self.local_tile_server.get_annotations_url(local_slide_id),
-                        'annotations_metadata_url': self.local_tile_server.get_annotations_metadata_url(local_slide_id),
-                        'annotations_region_url': self.local_tile_server.get_annotations_url(local_slide_id),
                         'cached': True
-                    }
+                    } | self.local_tile_server.get_slide_urls(local_slide_id)
 
                 slide_store['current'].append(slide_dict)
                 slide_store['local'].append(slide_dict)
@@ -473,30 +471,16 @@ class Visualization:
                         {
                             'name': j.name,
                             'id': j.id,
-                            'tiles_url': t.get_tiles_url(j.id),
-                            'regions_url': t.get_regions_url(j.id),
-                            'image_metadata_url': t.get_image_metadata_url(j.id),
-                            'metadata_url': t.get_metadata_url(j.id),
-                            'annotations_url': t.get_annotations_url(j.id),
-                            'annotations_metadata_url': t.get_annotations_metadata_url(j.id),
-                            'annotations_region_url': t.get_annotations_url(j.id),
                             'cached': True
-                        }
+                        } | t.get_slide_urls(j.id, standalone = True)
                         for j_idx,j in enumerate(t.get_item_names_ids())
                     ])
                     slide_store['local'].extend([
                         {
                             'name': j.name,
                             'id': j.id,
-                            'tiles_url': t.get_tiles_url(j.id),
-                            'regions_url': t.get_regions_url(j.id),
-                            'image_metadata_url': t.get_image_metadata_url(j.id),
-                            'metadata_url': t.get_metadata_url(j.id),
-                            'annotations_url': t.get_annotations_url(j.id),
-                            'annotations_metadata_url': t.get_annotations_metadata_url(j.id),
-                            'annotations_region_url': t.get_annotations_url(j.id),
-                            'cached': True
-                        }
+                            'cached': True,
+                        } | j.get_slide_urls(j.id,standalone=True)
                         for j_idx,j in enumerate(t.get_item_names_ids())
                     ])
 
@@ -998,22 +982,90 @@ class Visualization:
 
         return header_components
 
+    def create_app(self):
+
+        app = FastAPI()
+
+        allowed_origins = [
+            'http://localhost',
+            'http://localhost:8080',
+            'http://0.0.0.0:8080',
+            'http://0.0.0.0',
+            'http://127.0.0.1:8080',
+            'http://127.0.0.1',
+            'http://'+self.app_options.get('host'),
+            'http://'+self.app_options.get('host')+':'+str(self.app_options.get('port'))
+        ]
+
+        if not self.app_options.get('jupyter_server_url') is None:
+            allowed_origins.append(
+                self.app_options.get('jupyter_server_url')
+            )
+
+        allowed_origins += [
+            i.replace('http://','')
+            for i in allowed_origins
+        ]
+        allowed_origins += [
+            i+'/'
+            for i in allowed_origins
+        ]
+
+        allowed_origins = list(set(allowed_origins))
+        cors_options = self.app_options.get('cors')
+
+        if self.local_tile_server is not None:
+            self.local_tile_server.app.include_router(self.local_tile_server.router)
+            app.mount(
+                path = self.app_options.get('requests_pathname_prefix','/')+'tileserver/',
+                app = CORSMiddleware(
+                    self.local_tile_server.app,
+                    allow_origins = allowed_origins if not cors_options.get('allow_origins')==['*'] else ['*'],
+                    allow_methods = cors_options.get('allow_methods',['GET','OPTIONS']),
+                    allow_headers = cors_options.get('allow_headers',['*']),
+                    allow_credentials = cors_options.get('allow_credentials',False),
+                    expose_headers = cors_options.get('expose_headers',['*']),
+                    max_age = cors_options.get('max_age','36000000')
+                )
+            )
+        
+        app.mount(
+            path = self.app_options.get('requests_pathname_prefix','/'), 
+            app = CORSMiddleware(
+                WSGIMiddleware(self.viewer_app.server),
+                    allow_origins = allowed_origins if not cors_options.get('allow_origins')==['*'] else ['*'],
+                    allow_methods = cors_options.get('allow_methods',['GET','OPTIONS']),
+                    allow_headers = cors_options.get('allow_headers',['*']),
+                    allow_credentials = cors_options.get('allow_credentials',False),
+                    expose_headers = cors_options.get('expose_headers',['*']),
+                    max_age = cors_options.get('max_age','36000000')
+            )
+        )
+
+        return CORSMiddleware(
+            app,
+            allow_origins = allowed_origins if not cors_options.get('allow_origins')==['*'] else ['*'],
+            allow_methods = cors_options.get('allow_methods',['GET','OPTIONS']),
+            allow_headers = cors_options.get('allow_headers',['*']),
+            allow_credentials = cors_options.get('allow_credentials',False),
+            expose_headers = cors_options.get('expose_headers',['*']),
+            max_age = cors_options.get('max_age','36000000')
+        )
+
+
     def start(self):
         """Starting visualization session based on provided app_options
         """
 
         if not self.app_options['jupyter']:
-            app = FastAPI()
 
-            if not self.local_tile_server is None:
-                app.include_router(self.local_tile_server.router)
-            
-            app.mount(path = self.app_options.get('requests_pathname_prefix','/'), app=WSGIMiddleware(self.viewer_app.server))
-
-            uvicorn.run(app,host=self.app_options['host'],port=self.app_options['port'])
+            uvicorn.run(
+                self.create_app(),
+                host=self.app_options['host'],
+                port=self.app_options['port']
+            )
 
         else:
-
             if not self.local_tile_server is None:      
                 nest_asyncio.apply()      
                 new_thread = threading.Thread(
