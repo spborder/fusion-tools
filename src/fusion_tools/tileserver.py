@@ -199,6 +199,12 @@ class LocalTileServer(TileServer):
         self.host = host
         self.protocol = protocol
         self.cors_options = cors_options
+        self.jupyter_server_url = jupyter_server_url
+
+        if self.jupyter_server_url is None or self.jupyter_server_url=='':
+            self.access_url = f'{self.protocol}://{self.host}:{self.tile_server_port}'
+        else:
+            self.access_url = self.jupyter_server_url
 
         self.app = FastAPI()
 
@@ -602,6 +608,7 @@ class LocalTileServer(TileServer):
             )
     
     async def get_region(self, id:str, top: int, left: int, bottom:int, right:int,style:Union[None,str] = None):
+    async def get_region(self, id:str, top: int, left: int, bottom:int, right:int,style:Union[None,str] = None):
         """
         Grabbing a specific region in the image based on bounding box coordinates
         """
@@ -634,14 +641,15 @@ class LocalTileServer(TileServer):
             media_type = 'image/png',
         )
 
-    def get_thumbnail(self, id:str, style:Union[None,str] = None):
+    async def get_thumbnail(self, id:str, style:Union[None,str] = None):
         """Grabbing an image thumbnail
 
         :param image: _description_
         :type image: int
         """
 
-        tile_source = self.get_tile_source(id,style)
+        tile_source = await asyncio.gather(self.get_tile_source(id,style))
+        tile_source = tile_source[0]
 
         if tile_source is None:
             return Response(

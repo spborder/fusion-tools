@@ -36,7 +36,10 @@ class DSAPluginGroup(DSATool):
     :param DSATool: Class for components that integrate with DSA
     :type DSATool: None
     """
+
     title = 'DSA Plugin Group'
+    description = ''
+
 
     def __init__(self,
                  handler:None
@@ -52,13 +55,12 @@ class DSAPluginGroup(DSATool):
         self.base_id = 'dsa-plugin'
 
     def __str__(self):
-        return 'DSA Plugin Group'
+        return self.title
 
     def load(self, component_prefix: int):
         
         self.component_prefix = component_prefix
 
-        self.title = 'DSA Plugin Group'
         self.blueprint = DashBlueprint(
             transforms=[
                 PrefixIdTransform(prefix=f'{component_prefix}',escape = lambda input_id: self.prefix_escape(input_id)),
@@ -1092,6 +1094,10 @@ class DSAPluginRunner(DSATool):
     :param DSATool: Class for components that integrate with DSA.
     :type DSATool: None
     """
+
+    title = 'DSA Plugin Runner'
+    description = 'Select a plugin to run on the cloud!'
+
     def __init__(self,
                  handler: None
                  ):
@@ -1106,11 +1112,13 @@ class DSAPluginRunner(DSATool):
 
         self.base_id = 'dsa-plugin-runner'
 
+    def __str__(self):
+        return self.title
+
     def load(self, component_prefix: int):
         
         self.component_prefix = component_prefix
 
-        self.title = 'DSA Plugin Runner'
         self.blueprint = DashBlueprint(
             transforms=[
                 PrefixIdTransform(prefix=f'{component_prefix}', escape = lambda input_id: self.prefix_escape(input_id)),
@@ -1138,11 +1146,11 @@ class DSAPluginRunner(DSATool):
             dbc.Card([
                 dbc.CardBody([
                     dbc.Row(
-                        html.H3('DSA Plugin Runner')
+                        html.H3(self.title)
                     ),
                     html.Hr(),
                     dbc.Row(
-                        'Select a plugin to run on the cloud!'
+                        self.description
                     ),
                     html.Hr(),
                     dbc.Row([
@@ -1260,6 +1268,10 @@ class DSAPluginProgress(DSATool):
     :param Tool: General class for components that perform visualization and analysis of data.
     :type Tool: None
     """
+
+    title = 'DSA Plugin Progress'
+    description = 'Monitor the progress of currently running plugins.'
+
     def __init__(self,
                  handler):
         
@@ -1285,13 +1297,11 @@ class DSAPluginProgress(DSATool):
         self.modal_className = 'mw-100 p-5'
 
     def __str__(self):
-        return 'DSA Plugin Progress'
+        return self.title
 
     def load(self,component_prefix:int):
         
         self.component_prefix = component_prefix
-
-        self.title = 'DSA Plugin Progress'
 
         self.blueprint = DashBlueprint(
             transforms=[
@@ -1432,11 +1442,11 @@ class DSAPluginProgress(DSATool):
             dbc.Card(
                 dbc.CardBody([
                     dbc.Row(
-                        html.H3('DSA Plugin Progress')
+                        html.H3(self.title)
                     ),
                     html.Hr(),
                     dbc.Row(
-                        'Monitor the progress of currently running plugins.'
+                        self.description
                     ),
                     dbc.Row(
                         html.Div(

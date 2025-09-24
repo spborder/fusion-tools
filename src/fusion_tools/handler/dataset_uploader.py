@@ -343,6 +343,10 @@ class DSAUploader(DSATool):
     title = 'DSA Uploader'
     description = 'Uploading slides and associated files to a particular folder on attached DSA instance. Access pre-processing plugins.'
 
+
+    title = 'DSA Uploader'
+    description = 'Uploading slides and associated files to a particular folder on attached DSA instance. Access pre-processing plugins.'
+
     def __init__(self,
                  handler,
                  dsa_upload_types: Union[DSAUploadType,list] = []):
@@ -442,9 +446,11 @@ class DSAUploader(DSATool):
                 dbc.CardBody([
                     dbc.Row(
                         html.H3(self.title)
+                        html.H3(self.title)
                     ),
                     html.Hr(),
                     dbc.Row(
+                        self.description
                         self.description
                     ),
                     html.Hr(),

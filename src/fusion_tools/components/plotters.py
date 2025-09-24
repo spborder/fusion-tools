@@ -3699,10 +3699,12 @@ class GlobalPropertyPlotter(MultiTool):
                 selected_image_list.append(image_region)
 
         if len(selected_image_list)==1:
-            selected_image = go.Figure(
-                data = px.imshow(selected_image_list[0]),
-                layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
-                )
+            selected_image = px.imshow(
+                selected_image_list[0]
+            )
+
+            selected_image.update_layout(margin = {'t':0,'b':0,'l':0,'r':0})
+
         elif len(selected_image_list)>1:
             image_dims = [np.array(i).shape for i in selected_image_list]
             max_height = max([i[0] for i in image_dims])
@@ -3731,10 +3733,17 @@ class GlobalPropertyPlotter(MultiTool):
                 )
                 modded_images.append(mod_img)
 
-            selected_image = go.Figure(
-                data = px.imshow(np.stack(modded_images,axis=0),animation_frame=0,binary_string=True),
-                layout = {'margin':{'t':0,'b':0,'l':0,'r':0}}
-                )
+            selected_image = px.imshow(
+                np.stack(
+                    modded_images,
+                    axis=0
+                ),
+                animation_frame=0,
+                binary_string=True
+            )
+            selected_image.update_layout(margin = {'t':0,'b':0,'l':0,'r':0})
+
+
         else:
             selected_image = go.Figure()
             print(f'No images found')

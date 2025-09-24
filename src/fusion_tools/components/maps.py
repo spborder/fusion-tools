@@ -844,6 +844,7 @@ class SlideMap(MapComponent):
                 // Getting the names of each annotation
                 let ann_meta_url = map_slide_information.annotations_metadata_url;
 
+                // TODO: This could need some additional headers for CORS
                 try {
                     var ann_meta_response = await fetch(
                         ann_meta_url, {
@@ -883,6 +884,7 @@ class SlideMap(MapComponent):
 
                     // Initializing empty annotations list
                     var annotations_list = new Array(ann_meta.length);
+                    // TODO: This could need some additional headers for CORS
                     try {
                         if ('annotations_geojson_url' in map_slide_information){
                             // This slide has a specific url for getting individual GeoJSON formatted annotations
@@ -905,6 +907,7 @@ class SlideMap(MapComponent):
                             const promise_await = await Promise.all(promises);
 
                         } else {
+                            // TODO: This could need some additional headers for CORS
                             const promises = [map_slide_information.annotations_url].map((url,idx) =>
                                 fetch(url, {
                                     method: 'GET',
@@ -914,6 +917,7 @@ class SlideMap(MapComponent):
                                     }
                                 })
                                 .then((response) => response.json())
+                                .then((json_data) => json_data.flat())
                                 .then((json_data) => json_data.flat())
                                 .then((json_data) => annotations_list.push(process_json(json_data,idx,ann_meta)))
                             );
@@ -2637,6 +2641,7 @@ class LargeSlideMap(SlideMap):
                     for (let ann = 0; ann<map_slide_information.annotations_metadata.length; ann++) {
                         var annotation = map_slide_information.annotations_metadata[ann];
 
+                        // TODO: This could need some additional headers for CORS
                         try {
                             let ann_url = map_slide_information.annotations_region_url + annotation._id+"?top="+scaled_map_bounds[2]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[0]+"&right="+scaled_map_bounds[3]
                             var ann_response = await fetch(
@@ -2697,6 +2702,7 @@ class LargeSlideMap(SlideMap):
                     }
                 } else {
                     // General case.
+                    // TODO: Could need some additional headers for CORS
                     try {
                         let ann_url = map_slide_information.annotations_region_url+"?top="+scaled_map_bounds[0]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[2]+"&right="+scaled_map_bounds[3];
                         var ann_response = await fetch(
@@ -3254,6 +3260,7 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
                     for (let ann = 0; ann<map_slide_information.annotations_metadata.length; ann++) {
                         var annotation = map_slide_information.annotations_metadata[ann];
 
+                        // TODO: Could need some additional headers for CORS
                         try {
                             let ann_url = map_slide_information.annotations_region_url + annotation._id+"?top="+scaled_map_bounds[2]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[0]+"&right="+scaled_map_bounds[3]
                             var ann_response = await fetch(
@@ -3314,6 +3321,7 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
                     }
                 } else {
                     // General case.
+                    // TODO: Could need some additional headers for CORS
                     try {
                         let ann_url = map_slide_information.annotations_region_url+"?top="+scaled_map_bounds[0]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[2]+"&right="+scaled_map_bounds[3];
                         var ann_response = await fetch(

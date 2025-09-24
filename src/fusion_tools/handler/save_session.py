@@ -25,18 +25,21 @@ class DSASession(DSATool):
     :param DSATool: Sub-class of Tool specific to DSA components. Updates with session data by default.
     :type DSATool: _type_
     """
+
+    title = 'DSA Session'
+    description = 'Click the button to save your current session on DSA'
+
     def __init__(self,
                  handler):
         
         self.handler = handler
 
     def __str__(self):
-        return 'DSA Session'
+        return self.title
 
     def load(self, component_prefix:int):
         self.component_prefix = component_prefix
 
-        self.title = 'DSA Session'
         self.blueprint = DashBlueprint(
             transforms=[
                 PrefixIdTransform(prefix=f'{component_prefix}'),
@@ -51,7 +54,7 @@ class DSASession(DSATool):
         layout = html.Div([
             html.H4(
                 children = [
-                    f'Click the button to save your current session on DSA'
+                    self.description
                 ]
             ),
             html.Hr(),

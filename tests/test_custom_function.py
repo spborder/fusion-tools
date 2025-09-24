@@ -49,12 +49,11 @@ buffer_shapes_component = FUSIONFunction(
         'https://shapely.readthedocs.io/en/stable/manual.html#constructive-methods'
     ],
     function = lambda feature,radius: buffer_shapes(feature,radius),
-    function_type = 'forEach',
+    function_type = 'layer',
     input_spec = [
         {
             'name': 'feature',
             'type': 'annotation',
-            'property': 'feature'
         },
         {
             'name': 'buffer_radius',
@@ -164,6 +163,7 @@ def stain_mask(image, mask, nuc_thresh, eosin_thresh):
     final_mask += 3*sub_comp_image[:,:,2]
 
     final_mask[~mask] = 0
+
     return final_mask
 
 # Defining CustomFunction component for sub-compartment segmentation
@@ -174,19 +174,17 @@ stain_mask_component = FUSIONFunction(
         'https://github.com/SarderLab/HistoLens'
     ],
     function = lambda image,mask,nuc_thresh,eosin_thresh: stain_mask(image,mask,nuc_thresh,eosin_thresh),
-    function_type = 'forEach',
+    function_type = 'structure',
     input_spec = [
         {
             'name': 'image',
             'description': 'Raw RGB image containing IHC-stained histology',
             'type': 'image',
-            'property': 'image'
         },
         {
             'name': 'mask',
             'description': 'Boundary mask generated from exterior vertices',
             'type': 'mask',
-            'property': 'mask'
         },
         {
             'name': 'nuc_thresh',
@@ -352,14 +350,14 @@ interstitium_thickness = FUSIONFunction(
 def main():
 
     # Grabbing first item from demo DSA instance
-    #base_url = 'https://demo.kitware.com/histomicstk/api/v1'
-    #item_id = ['5bbdeed1e629140048d01bcb','58b480ba92ca9a000b08c89d']
-    base_url = os.environ.get('DSA_URL')
+    base_url = 'https://demo.kitware.com/histomicstk/api/v1'
+    item_id = ['5bbdeed1e629140048d01bcb','58b480ba92ca9a000b08c89d']
+    #base_url = os.environ.get('DSA_URL')
 
-    item_id = [
-        '6495a4e03e6ae3107da10dc5',
-        '6495a4df3e6ae3107da10dc2'
-    ] 
+    #item_id = [
+    #    '6495a4e03e6ae3107da10dc5',
+    #    '6495a4df3e6ae3107da10dc2'
+    #] 
 
     # Starting the DSAHandler to grab information:
     dsa_handler = DSAHandler(
