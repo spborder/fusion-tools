@@ -4,7 +4,7 @@ Tile server components
 
 """
 import os
-from fastapi import FastAPI, APIRouter, Response
+from fastapi import FastAPI, APIRouter, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
 import large_image
 import requests
@@ -184,8 +184,7 @@ class LocalTileServer(TileServer):
                  tile_server_port:int = 8050,
                  host: str = 'localhost',
                  protocol: str = 'http',
-                 cors_options: dict = {'origins': ['*'], 'allow_methods': ['*'], 'allow_headers': ['*'], 'expose_headers': ['*'], 'max_age': '36000000'},
-                 jupyter_server_url: Union[str,None] = None
+                 cors_options: dict = {}
                  ):
         """Constructor method
 
@@ -211,14 +210,18 @@ class LocalTileServer(TileServer):
 
         self.router = APIRouter()
         self.router.add_api_route('/',self.root,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/ids',self.get_ids,methods=["GET","OPTIONS"])
         self.router.add_api_route('/names',self.get_names,methods=["GET","OPTIONS"])
+        self.router.add_api_route('/{id}/info',self.get_id_info,methods=["GET","OPTIONS"])
         self.router.add_api_route('/{id}/tiles/{z}/{x}/{y}',self.get_tile,methods=["GET","OPTIONS"])
         self.router.add_api_route('/{id}/image_metadata',self.get_image_metadata,methods=["GET","OPTIONS"])
         self.router.add_api_route('/{id}/metadata',self.get_metadata,methods=["GET","OPTIONS"])
         self.router.add_api_route('/{id}/tiles/region',self.get_region,methods=["GET","OPTIONS"])
         self.router.add_api_route('/{id}/tiles/thumbnail',self.get_thumbnail,methods=["GET","OPTIONS"])
         self.router.add_api_route('/{id}/annotations',self.get_annotations,methods=["GET","OPTIONS"])
-        self.router.add_api_route('/{id}/annotations/metadata',self.get_annotations_metadata,methods=["GET","OPTIONS"])
+
+        self.router.add_api_route('/{id}/annotations/metadata',self.get_annotations_metadata,methods=["GET", "OPTIONS"])
+
         self.router.add_api_route('/{id}/annotations/data/list',self.get_annotations_property_keys,methods=["GET","OPTIONS"])
         self.router.add_api_route('/{id}/annotations/data',self.get_annotations_property_data,methods=["GET","OPTIONS"])
 
@@ -395,6 +398,33 @@ class LocalTileServer(TileServer):
         )
 
         return {'message': item_names}
+
+    def get_ids(self):
+        """Get all available ids in the database
+        """
+        item_ids = self.database.get_ids(
+            table_name = 'item'
+        )
+
+        return {'message': item_ids}
+    
+    async def get_id_info(self, id:str):
+        """Get info for a single id
+        """
+        image_item = await asyncio.gather(self.get_item(id))
+
+        if len(image_item[0])>0:
+            item_info = image_item[0][0]
+            return Response(
+                content = json.dumps(item_info,default=str),
+                media_type = 'application/json'
+            )
+        else:
+            return Response(
+                content = 'invalid image id',
+                media_type='application/json',
+                status_code=400,
+            )
     
     def get_item_names_ids(self, filters = None, size = None, offset = 0):
         """Get list of names and ids of all locally stored images in this tileserver
@@ -419,31 +449,62 @@ class LocalTileServer(TileServer):
 
         return item_names_ids
 
+    def get_slide_urls(self,slide_id,standalone = False):
+
+        if not standalone:
+            slide_url_dict = {
+                'tiles_url': f'{self.protocol}://{self.host}:{self.tile_server_port}/tileserver/{slide_id}/tiles/'+'{z}/{x}/{y}',
+                'regions_url': f'{self.protocol}://{self.host}:{self.tile_server_port}/tileserver/{slide_id}/tiles/region',
+                'image_metadata_url': f'{self.protocol}://{self.host}:{self.tile_server_port}/tileserver/{slide_id}/image_metadata',
+                'metadata_url': f'{self.protocol}://{self.host}:{self.tile_server_port}/tileserver/{slide_id}/metadata',
+                'annotations_url': f'{self.protocol}://{self.host}:{self.tile_server_port}/tileserver/{slide_id}/annotations',
+                'annotations_metadata_url':f'{self.protocol}://{self.host}:{self.tile_server_port}/tileserver/{slide_id}/annotations/metadata',
+                'annotations_region_url':f'{self.protocol}://{self.host}:{self.tile_server_port}/tileserver/{slide_id}/annotations'
+            }
+        else:
+            slide_url_dict = {
+                'tiles_url': f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/tiles/'+'{z}/{x}/{y}',
+                'regions_url': f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/tiles/region',
+                'image_metadata_url': f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/image_metadata',
+                'metadata_url': f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/metadata',
+                'annotations_url': f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/annotations',
+                'annotations_metadata_url':f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/annotations/metadata',
+                'annotations_region_url':f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/annotations'
+            }
+
+        return slide_url_dict
+
     def get_tiles_url(self,slide_id):
-        tiles_url = f'{self.access_url}/{slide_id}/tiles/'+'{z}/{x}/{y}'
+        tiles_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/tiles/'+'{z}/{x}/{y}'
+
         return tiles_url
 
     def get_regions_url(self,slide_id):
-        regions_url = f'{self.access_url}/{slide_id}/tiles/region'
+        regions_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/tiles/region'
+
         return regions_url
 
     def get_annotations_url(self,slide_id):
-        annotations_url = f'{self.access_url}/{slide_id}/annotations'
+        annotations_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/annotations'
+
         return annotations_url
 
     def get_annotations_metadata_url(self,slide_id):
-        annotations_metadata_url = f'{self.access_url}/{slide_id}/annotations/metadata'
+        annotations_metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/annotations/metadata'
+
         return annotations_metadata_url
 
     def get_metadata_url(self,slide_id):
-        metadata_url = f'{self.access_url}/{slide_id}/metadata'
+        metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/metadata'
+
         return metadata_url
         
     def get_image_metadata_url(self,slide_id):
-        image_metadata_url = f'{self.access_url}/{slide_id}/image_metadata'
+        image_metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/image_metadata'
+
         return image_metadata_url
 
-    async def get_tile(self,id:str,z:int, x:int, y:int, style:Union[None,str] = None):
+    async def get_tile(self,id:str,z:int, x:int, y:int, style:Union[None,str] = None, request:Request = None):
         """Tiles endpoint, returns an image tyle based on provided coordinates
 
         :param id: Local item id
@@ -462,7 +523,11 @@ class LocalTileServer(TileServer):
         tile_source = await asyncio.gather(self.get_tile_source(id,style))
         tile_source = tile_source[0]
         if tile_source is None:
-            return Response(content = 'invalid image id', media_type='application/json',status_code=400)
+            return Response(
+                content = 'invalid image id', 
+                media_type='application/json',
+                status_code=400,
+            )
 
         tile_metadata = tile_source.getMetadata()
 
@@ -483,7 +548,10 @@ class LocalTileServer(TileServer):
                 dtype=np.uint8
             ).tobytes()
 
-        return Response(content = raw_tile, media_type='image/png')
+        return Response(
+            content = raw_tile, 
+            media_type='image/png',
+        )
     
     async def get_image_metadata(self,id:str):
         """Getting large-image metadata for image
@@ -495,9 +563,22 @@ class LocalTileServer(TileServer):
         image_item = await asyncio.gather(self.get_item(id))
         if len(image_item[0])>0:
             image_meta = image_item[0][0].get('image_meta',{})
-            return Response(content = json.dumps(image_meta),media_type = 'application/json')
+            if not image_meta is None:
+                return Response(
+                    content = json.dumps(image_meta),
+                    media_type = 'application/json',
+                )
+            else:
+                return Response(
+                    content = json.dumps({}),
+                    media_type = 'application/json',
+                )
         else:
-            return Response(content = 'invalid image id',media_type='application/json', status_code=400)
+            return Response(
+                content = 'invalid image id',
+                media_type='application/json', 
+                status_code=400,
+            )
         
     async def get_metadata(self, id:str):
         """Getting metadata associated with slide/case/patient
@@ -509,10 +590,24 @@ class LocalTileServer(TileServer):
 
         if len(image_item[0])>0:
             item_meta = image_item[0][0].get('meta',{})
-            return Response(content = json.dumps(item_meta),media_type = 'application/json')
+            if not item_meta is None:
+                return Response(
+                    content = json.dumps(item_meta),
+                    media_type = 'application/json',
+                )
+            else:
+                return Response(
+                    content = json.dumps({}),
+                    media_type = 'application/json',
+                )
         else:
-            return Response(content = 'invalid image id',media_type='application/json',status_code=400)
+            return Response(
+                content = 'invalid image id',
+                media_type='application/json',
+                status_code=400,
+            )
     
+    async def get_region(self, id:str, top: int, left: int, bottom:int, right:int,style:Union[None,str] = None):
     async def get_region(self, id:str, top: int, left: int, bottom:int, right:int,style:Union[None,str] = None):
         """
         Grabbing a specific region in the image based on bounding box coordinates
@@ -524,9 +619,13 @@ class LocalTileServer(TileServer):
         """
         tile_source = await asyncio.gather(self.get_tile_source(id,style))
         tile_source = tile_source[0]
-
+        
         if tile_source is None:
-            return Response(content = 'invalid image id', media_type = 'application/json', status_code = 400)
+            return Response(
+                content = 'invalid image id',
+                media_type = 'application/json',
+                status_code = 400,
+            )
 
         image_region, mime_type = tile_source.getRegion(
             region = {
@@ -537,7 +636,10 @@ class LocalTileServer(TileServer):
             },
         )
 
-        return Response(content = image_region, media_type = 'image/png')
+        return Response(
+            content = image_region,
+            media_type = 'image/png',
+        )
 
     async def get_thumbnail(self, id:str, style:Union[None,str] = None):
         """Grabbing an image thumbnail
@@ -550,11 +652,18 @@ class LocalTileServer(TileServer):
         tile_source = tile_source[0]
 
         if tile_source is None:
-            return Response(content = 'invalid image index', media_type = 'application/json', status_code=400)
+            return Response(
+                content = 'invalid image index', 
+                media_type = 'application/json', 
+                status_code=400,
+            )
 
         thumbnail, mime_type = tile_source.getThumbnail(encoding='PNG')
         
-        return Response(content = thumbnail, media_type = 'image/png')
+        return Response(
+            content = thumbnail, 
+            media_type = 'image/png',
+        )
 
     async def get_annotations(self,id:str, top:Union[int,None]=None, left:Union[int,None]=None, bottom: Union[int,None]=None, right: Union[int,None]=None):
         """Getting annotations for a given item id, optionally specifying a region within which to grab annotations.
@@ -579,7 +688,7 @@ class LocalTileServer(TileServer):
                 # Returning all annotations by default
                 return Response(
                     content = json.dumps(image_annotations),
-                    media_type='application/json'
+                    media_type='application/json',
                 )
             else:
                 # Parsing region of annotations:
@@ -633,23 +742,24 @@ class LocalTileServer(TileServer):
                             print(f'Unrecognized annotation format found for image: {id}')
                     return Response(
                         content = json.dumps(image_region_anns), 
-                        media_type='application/json'
+                        media_type='application/json',
                     )
 
         else:
             return Response(
                 content = 'invalid image id',
                 media_type = 'application/json', 
-                status_code = 400
+                status_code = 400,
             )
 
-    async def get_annotations_metadata(self,id:str):
+    async def get_annotations_metadata(self,id:str, request: Request):
         """Getting metadata for annotations for an item
 
         :param id: String uuid for locally stored image
         :type id: str
         :return: Metadata associated with annotations for that image
         """
+
         image_item = await asyncio.gather(self.get_item(id))
         if len(image_item[0])==0:
             return Response(
@@ -661,9 +771,10 @@ class LocalTileServer(TileServer):
         image_item = image_item[0][0]
 
         ann_meta = image_item.get('ann_meta',[])
+
         return Response(
             content = json.dumps(ann_meta),
-            media_type='application/json'
+            media_type = 'application/json'
         )
 
     async def get_annotations_property_keys(self,id:str):
@@ -779,7 +890,7 @@ class LocalTileServer(TileServer):
         return Response(
             content = json.dumps(property_list),
             media_type='application/json',
-            status_code=200
+            status_code=200,
         )
 
     async def get_annotations_property_data(self,id:str,include_keys:Union[str,None] = None,include_anns:Union[str,None] = None):
@@ -871,7 +982,7 @@ class LocalTileServer(TileServer):
         return Response(
             content = json.dumps({'data': data_list, 'columns': include_keys}),
             media_type='application/json',
-            status_code=200
+            status_code=200,
         )
 
     def start(self):
@@ -885,12 +996,11 @@ class LocalTileServer(TileServer):
         # Enabling CORS (https://fastapi.tiangolo.com/tutorial/cors/#use-corsmiddleware)
         self.app.add_middleware(
             CORSMiddleware,
-            allow_origins=self.cors_options['origins'],
-            allow_methods=self.cors_options['allow_methods'],
-            #allow_credentials = True,
-            allow_headers=self.cors_options['allow_headers'],
-            expose_headers=self.cors_options['expose_headers'],
-            max_age=self.cors_options['max_age']
+            allow_origins=self.cors_options.get('allow_origins',['*']),
+            allow_methods=self.cors_options.get('allow_methods',['GET','OPTIONS']),
+            allow_headers = self.cors_options.get('allow_headers',['*']),
+            expose_headers = self.cors_options.get('expose_headers',['*']),
+            allow_credentials = self.cors_options.get('allow_credentials',False)
         )
 
         uvicorn.run(self.app,host=self.host,port=self.tile_server_port)

@@ -13,6 +13,7 @@ import pandas as pd
 
 test_schema = [
     {
+        'schema': 'slide',
         "name": "Test Slide Annotation",
         "description": "This is a test of the SlideAnnotation component",
         "annotations": [

@@ -4,20 +4,10 @@ Interactive components which handle plot generation from data in a SlideMap comp
 
 """
 
-import os
-import sys
 import json
-import geojson
-import geopandas as gpd
 import numpy as np
 import pandas as pd
 import textwrap
-import re
-import uuid
-import threading
-import zipfile
-from shutil import rmtree
-from copy import deepcopy
 
 from typing_extensions import Union
 from shapely.geometry import box, shape
@@ -34,12 +24,10 @@ import requests
 import dash
 dash._dash_renderer._set_react_version('18.2.0')
 import dash_leaflet as dl
-import dash_leaflet.express as dlx
 from dash import dcc, callback, ctx, ALL, MATCH, exceptions, Patch, no_update, dash_table
 from dash.dash_table.Format import Format, Scheme
 import dash_bootstrap_components as dbc
 import dash_mantine_components as dmc
-#import dash_treeview_antd as dta
 from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform, BlockingCallbackTransform
 from dash_extensions.javascript import Namespace, arrow_function
 
@@ -47,15 +35,9 @@ from dash_extensions.javascript import Namespace, arrow_function
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 from fusion_tools.utils.shapes import (
     find_intersecting, 
-    extract_geojson_properties, 
-    process_filters_queries,
-    detect_histomics,
-    histomics_to_geojson,
-    export_annotations
 )
-from fusion_tools.utils.images import get_feature_image, write_ome_tiff, format_intersecting_masks
 from fusion_tools.utils.stats import get_label_statistics, run_wilcox_rank_sum
-from fusion_tools import Tool, MultiTool
+from fusion_tools.components.base import Tool, MultiTool
 
 import time
 
@@ -66,6 +48,10 @@ class PropertyViewer(Tool):
     :param Tool: General class for interactive components that visualize, edit, or perform analyses on data
     :type Tool: None
     """
+
+    title = 'Property Viewer'
+    description = 'Pan around on the slide to view select properties across regions of interest'
+
     def __init__(self,
                  ignore_list: list = [],
                  property_depth: int = 6
@@ -82,24 +68,6 @@ class PropertyViewer(Tool):
         self.ignore_list = ignore_list
         self.property_depth = property_depth   
 
-    def __str__(self):
-        return 'Property Viewer'
-
-    def load(self, component_prefix: int):
-
-        self.component_prefix = component_prefix
-
-        self.title = 'Property Viewer'
-        self.blueprint = DashBlueprint(
-            transforms = [
-                PrefixIdTransform(prefix = f'{self.component_prefix}'),
-                MultiplexerTransform(),
-                BlockingCallbackTransform()
-            ]
-        )
-
-        self.get_callbacks()   
-
     def gen_layout(self, session_data:dict):
         """Generating layout for PropertyViewer Tool
 
@@ -110,11 +78,11 @@ class PropertyViewer(Tool):
             dbc.Card([
                 dbc.CardBody([
                     dbc.Row(
-                        html.H3('Property Viewer')
+                        html.H3(self.title)
                     ),
                     html.Hr(),
                     dbc.Row(
-                        'Pan around on the slide to view select properties across regions of interest'
+                        self.description
                     ),
                     html.Hr(),
                     html.Div(
@@ -673,6 +641,8 @@ class PropertyViewer(Tool):
 
         return plot_tabs
 
+
+
 class PropertyPlotter(Tool):
     """PropertyPlotter Tool which enables more detailed selection of properties across the entire tissue. 
     Allows for generation of violin plots, scatter plots, and UMAP plots.
@@ -680,6 +650,10 @@ class PropertyPlotter(Tool):
     :param Tool: General class for interactive components that visualize, edit, or perform analyses on data.
     :type Tool: None
     """
+
+    title = 'Property Plotter'
+    description = 'Select one or a combination of properties to generate a plot.'
+
     def __init__(self,
                  ignore_list: list = [],
                  property_depth: int = 6
@@ -699,25 +673,6 @@ class PropertyPlotter(Tool):
         super().__init__()
         self.ignore_list = ignore_list
         self.property_depth = property_depth
-
-
-    def __str__(self):
-        return 'Property Plotter'
-
-    def load(self, component_prefix:int):
-
-        self.component_prefix = component_prefix
-
-        self.title = 'Property Plotter'
-        self.blueprint = DashBlueprint(
-            transforms = [
-                PrefixIdTransform(prefix = f'{self.component_prefix}'),
-                MultiplexerTransform()
-            ]
-        )        
-        
-        self.get_callbacks()
-        self.get_namespace()
 
     def get_namespace(self):
         """Adding JavaScript functions to the PropertyPlotter Namespace
@@ -761,75 +716,6 @@ class PropertyPlotter(Tool):
         self.js_namespace.dump(
             assets_folder = self.assets_folder
         )
-
-    def generate_property_dict(self, available_properties, title: str = 'Features'):
-        all_properties = {
-            'title': title,
-            'key': '0',
-            'children': []
-        }
-
-        def add_prop_level(level_children, prop, index_list):
-            new_keys = {}
-            if len(level_children)==0:
-                if not prop[0] in self.ignore_list:
-                    new_key = f'{"-".join(index_list)}-0'
-                    p_dict = {
-                        'title': prop[0],
-                        'key': new_key,
-                        'children': []
-                    }
-                    l_dict = p_dict['children']
-                    if len(prop)==1:
-                        new_keys[new_key] = prop[0]
-                    for p_idx,p in enumerate(prop[1:]):
-                        if not p in self.ignore_list:
-                            new_key = f'{"-".join(index_list+["0"]*(p_idx+2))}'
-                            l_dict.append({
-                                'title': p,
-                                'key': new_key,
-                                'children': []
-                            })
-                            l_dict = l_dict[0]['children']
-
-                            new_keys[new_key] = ' --> '.join(prop[:p_idx+2])
-
-                    level_children.append(p_dict)
-            else:
-                for p_idx,p in enumerate(prop):
-                    if not p in self.ignore_list:
-                        if any([p==i['title'] for i in level_children]):
-                            title_idx = [i['title'] for i in level_children].index(p)
-                            level_children = level_children[title_idx]['children']
-                            index_list.append(str(title_idx))
-                        else:
-                            new_key = f'{"-".join(index_list)}-{len(level_children)}'
-                            other_children = len(level_children)
-                            level_children.append({
-                                'title': p,
-                                'key': new_key,
-                                'children': []
-                            })
-                            level_children = level_children[-1]['children']
-                            index_list.append(str(other_children))
-                            if p_idx==len(prop)-1:
-                                new_keys[new_key] = ' --> '.join(prop[:p_idx+1])
-            
-            return new_keys
-        
-        list_levels = [i.split(' --> ') if '-->' in i else [i] for i in available_properties]
-        unique_levels = list(set([len(i) for i in list_levels]))
-        sorted_level_idxes = np.argsort(unique_levels)[::-1]
-        property_keys = {}
-        for s in sorted_level_idxes:
-            depth_count = unique_levels[s]
-            props_with_level = [i for i in list_levels if len(i)==depth_count]
-            for p in props_with_level:
-                feature_children = all_properties['children']
-                property_keys = property_keys | add_prop_level(feature_children,p,['0'])
-
-
-        return all_properties, property_keys
 
     def get_callbacks(self):
         """Initializing callbacks for PropertyPlotter Tool
@@ -951,11 +837,11 @@ class PropertyPlotter(Tool):
             dbc.Card([
                 dbc.CardBody([
                     dbc.Row([
-                        html.H3('Property Plotter')
+                        html.H3(self.title)
                     ]),
                     html.Hr(),
                     dbc.Row(
-                        'Select one or a combination of properties to generate a plot.'
+                        self.description
                     ),
                     html.Hr(),
                     dbc.Row(
@@ -1132,134 +1018,6 @@ class PropertyPlotter(Tool):
         #print(f'Time for update_property_graph: {time.time() - start}')
 
         return [plot_figure], [property_graph_tabs_div], [current_plot_data]
-
-    def extract_property(self, feature: dict, properties:list, labels:list)->dict:
-        """Extracting list of properties and labels from a single feature in a GeoJSON FeatureCollection
-
-        :param feature: One Feature in GeoJSON FeatureCollection
-        :type feature: dict
-        :param properties: List of property names to extract
-        :type properties: list
-        :param labels: List of properties used as labels to extract
-        :type labels: list
-        :return: Dictionary of properties and labels for a single Feature
-        :rtype: dict
-        """
-
-        f_dict = {}
-        for p in properties:
-            if '-->' not in p:
-                if p in feature['properties']:
-                    if not type(feature['properties'][p])==dict:
-                        try:
-                            f_dict[p] = float(feature['properties'][p])
-                        except ValueError:
-                            f_dict[p] = feature['properties'][p]
-            else:
-                split_p = p.split(' --> ')
-                f_props = feature['properties'].copy()
-                for sp in split_p:
-                    if not f_props is None and not type(f_props)==float:
-                        if sp in f_props:
-                            f_props = f_props[sp]
-                        else:
-                            f_props = None
-                    else:
-                        f_props = None
-
-                if not type(f_props)==dict and not f_props is None:
-                    try:
-                        f_dict[p] = float(f_props)
-                    except ValueError:
-                        f_dict[p] = f_props
-
-        if not labels is None:
-            if type(labels)==list:
-                for l in labels:
-                    if not '-->' in l:
-                        if l in feature['properties']:
-                            f_dict[l] = feature['properties'][l]
-                    else:
-                        l_parts = l.split(' --> ')
-                        f_props_copy = feature['properties'].copy()
-                        for l in l_parts:
-                            if l in f_props_copy:
-                                f_props_copy = f_props_copy[l]
-                            else:
-                                f_props_copy = 0
-                                break    
-                        
-                        try:
-                            f_dict[l] = float(f_props_copy)
-                        except ValueError:
-                            f_dict[l] = f_props_copy
-
-
-            elif type(labels)==str:
-                if not '-->' in labels:
-                    if labels in feature['properties']:
-                        try:
-                            f_dict[labels] = float(feature['properties'][labels])
-                        except ValueError:
-                            f_dict[labels] = feature['properties'][labels]
-                else:
-                    l_parts = labels.split(' --> ')
-                    f_props_copy = feature['properties'].copy()
-                    for l in l_parts:
-                        if l in f_props_copy:
-                            f_props_copy = f_props_copy[l]
-                        else:
-                            f_props_copy = 0
-                            break
-                    try:
-                        f_dict[labels] = float(f_props_copy)
-                    except ValueError:
-                        f_dict[labels] = f_props_copy
-
-        # Getting bounding box info
-        f_bbox = list(shape(feature['geometry']).bounds)
-        f_dict['bbox'] = f_bbox
-
-        return f_dict
-
-    def extract_data_from_features(self, geo_list:list, properties:list, labels:list, filter_list: Union[list,None] = None)->list:
-        """Iterate through properties and extract data based on selection
-
-
-        :param geo_list: List of current GeoJSON features 
-        :type geo_list: list
-        :param properties: List of properties to use in the current plot
-        :type properties: list
-        :param labels: List of labels to use in the current plot (should just be one element)
-        :type labels: list
-        :param filter_list: List of dictionaries containing g_idx and f_idx corresponding to the layers and features to extract data from
-        :param filter_list: Union[list,None], optional
-        :return: Extracted data to use for the plot
-        :rtype: list
-        """
-        extract_data = []
-        if filter_list is None:
-            for g_idx, g in enumerate(geo_list):
-                for f_idx, f in enumerate(g['features']):
-                    
-                    f_dict = self.extract_property(f, properties, labels)
-                    f_dict['point_info'] = {'g_idx': g_idx, 'f_idx': f_idx}
-
-                    extract_data.append(f_dict)
-
-        else:
-            unique_gs = list(set([i['g_idx'] for i in filter_list]))
-            fs_for_gs = [[i['f_idx'] for i in filter_list if i['g_idx']==g] for g in unique_gs]
-
-            for f_list,g in zip(fs_for_gs,unique_gs):
-                for f in f_list:
-
-                    f_dict = self.extract_property(geo_list[g]['features'][f], properties, labels)
-                    f_dict['point_info'] = {'g_idx': g, 'f_idx': f}
-
-                    extract_data.append(f_dict)
-
-        return extract_data
 
     def gen_violin_plot(self, data_df:pd.DataFrame, label_col: Union[str,None], property_column: str, customdata_columns:list):
         """Generating a violin plot using provided data, property columns, and customdata
@@ -2231,6 +1989,13 @@ class PropertyPlotter(Tool):
 
 
 class GlobalPropertyPlotter(MultiTool):
+    """
+    This is a Property Plotter component which can be used for generating plots across multiple different slides
+    """
+
+    title = 'Global Property Plotter'
+    description = 'Select one or a combination of properties to generate a plot.'
+
     def __init__(self,
                  ignore_list: list = [],
                  property_depth: int = 6,
@@ -2252,13 +2017,9 @@ class GlobalPropertyPlotter(MultiTool):
 
         if not self.preloaded_properties is None:
             self.preloaded_options = [i for i in self.preloaded_properties.columns.tolist() if not i in ignore_list]
-            self.property_tree, self.property_keys = self.generate_property_dict(self.preloaded_options)
 
         else:
             self.preloaded_options = None
-
-    def __str__(self):
-        return "Global Property Plotter"
 
     def extract_property_keys(self, session_data:dict):
 
@@ -2426,7 +2187,6 @@ class GlobalPropertyPlotter(MultiTool):
     def load(self, component_prefix: int):
         self.component_prefix = component_prefix
 
-        self.title = 'Global Property Plotter'
         self.blueprint = DashBlueprint(
             transforms = [
                 PrefixIdTransform(prefix = f'{self.component_prefix}'),
@@ -2437,81 +2197,7 @@ class GlobalPropertyPlotter(MultiTool):
         self.get_callbacks()
         self.global_property_plotter_callbacks()
 
-    def __str__(self):
-        return 'Global Property Plotter'
-
-    def generate_property_dict(self, available_properties, title: str = 'Properties'):
-        all_properties = {
-            'title': title,
-            'key': '0',
-            'children': []
-        }
-
-        def add_prop_level(level_children, prop, index_list):
-            new_keys = {}
-            if len(level_children)==0:
-                if not prop[0] in self.ignore_list:
-                    new_key = f'{"-".join(index_list)}-0'
-                    p_dict = {
-                        'title': prop[0],
-                        'key': new_key,
-                        'children': []
-                    }
-                    l_dict = p_dict['children']
-                    if len(prop)==1:
-                        new_keys[new_key] = prop[0]
-                    for p_idx,p in enumerate(prop[1:]):
-                        if not p in self.ignore_list:
-                            new_key = f'{"-".join(index_list+["0"]*(p_idx+2))}'
-                            l_dict.append({
-                                'title': p,
-                                'key': new_key,
-                                'children': []
-                            })
-                            l_dict = l_dict[0]['children']
-
-                            new_keys[new_key] = self.nested_prop_sep.join(prop[:p_idx+2])
-
-                    level_children.append(p_dict)
-            else:
-                for p_idx,p in enumerate(prop):
-                    if not p in self.ignore_list:
-                        if any([p==i['title'] for i in level_children]):
-                            title_idx = [i['title'] for i in level_children].index(p)
-                            level_children = level_children[title_idx]['children']
-                            index_list.append(str(title_idx))
-                        else:
-                            new_key = f'{"-".join(index_list)}-{len(level_children)}'
-                            other_children = len(level_children)
-                            level_children.append({
-                                'title': p,
-                                'key': new_key,
-                                'children': []
-                            })
-                            level_children = level_children[-1]['children']
-                            index_list.append(str(other_children))
-                            if p_idx==len(prop)-1:
-                                new_keys[new_key] = self.nested_prop_sep.join(prop[:p_idx+1])
-            
-            return new_keys
-        
-        list_levels = [i.split(self.nested_prop_sep) if self.nested_prop_sep in i else [i] for i in available_properties]
-        unique_levels = list(set([len(i) for i in list_levels]))
-        sorted_level_idxes = np.argsort(unique_levels)[::-1]
-        property_keys = {}
-        for s in sorted_level_idxes:
-            depth_count = unique_levels[s]
-            props_with_level = [i for i in list_levels if len(i)==depth_count]
-            for p in props_with_level:
-                feature_children = all_properties['children']
-                property_keys = property_keys | add_prop_level(feature_children,p,['0'])
-
-
-        return all_properties, property_keys
-
     def extract_property_info(self, property_data):
-
-        #if not self.preloaded_properties is None:
             
         property_info = {}
         for p in property_data:
@@ -2534,30 +2220,25 @@ class GlobalPropertyPlotter(MultiTool):
                 print(f'property: {p} has dtype {property_data[p].dtype} which is not implemented!')
 
         return property_info
-        #else:
-        #    return None
 
     def update_layout(self, session_data:dict, use_prefix:bool):
-        
         
         property_keys = []
         property_names = []
         structure_col = []
         slide_col = []
         bbox_cols = []
-        property_tree = []
-        property_names_key = []
         structure_names = []
 
         layout = html.Div([
             dbc.Card([
                 dbc.CardBody([
                     dbc.Row([
-                        html.H3('Global Property Plotter')
+                        html.H3(self.title)
                     ]),
                     html.Hr(),
                     dbc.Row(
-                        'Select one or a combination of properties to generate a plot.'
+                        self.description
                     ),
                     html.Hr(),
                     dbc.Row([
@@ -2575,10 +2256,6 @@ class GlobalPropertyPlotter(MultiTool):
                         id = {'type': 'global-property-plotter-keys-store','index': 0},
                         data = json.dumps({
                             'dropdown': property_names,
-                            'tree': {
-                                'name_key': property_names_key,
-                                'full': property_tree 
-                            },
                             'slide_col': slide_col,
                             'structure_col': structure_col,
                             'bbox_cols': bbox_cols,
@@ -2711,10 +2388,6 @@ class GlobalPropertyPlotter(MultiTool):
 
         return layout
 
-    def gen_layout(self, session_data: dict):
-        
-        self.blueprint.layout = self.update_layout(session_data,use_prefix=False)
-
     def get_callbacks(self):
         
         #TODO: Callbacks
@@ -2818,19 +2491,6 @@ class GlobalPropertyPlotter(MultiTool):
                 State('anchor-vis-store','data')
             ]
         )(self.select_data_from_plot)
-
-        self.blueprint.callback(
-            [
-                Input({'type': 'global-property-plotter-property-info','index': ALL},'data')
-            ],
-            [
-                State({'type': 'global-property-plotter-keys-store','index': ALL},'data')
-            ],
-            [
-                Output({'type': 'global-property-plotter-keys-store','index': ALL},'data')
-            ],
-            prevent_initial_call = True
-        )(self.update_tree_data)
 
     def global_property_plotter_callbacks(self):
         
@@ -4091,23 +3751,6 @@ class GlobalPropertyPlotter(MultiTool):
 
         return [dcc.Graph(figure = selected_image)]
 
-    def update_tree_data(self, property_info, keys_info):
-
-
-        if not any([i['value'] for i in ctx.triggered]):
-            raise exceptions.PreventUpdate
-        
-        keys_info = json.loads(get_pattern_matching_value(keys_info))
-        property_info = json.loads(get_pattern_matching_value(property_info))
-
-        tree_data, tree_keys = self.generate_property_dict([i['key'].replace('.',self.nested_prop_sep) for i in property_info])
-
-        keys_info['tree'] = {
-            'full': tree_data,
-            'name_key': tree_keys
-        }
-
-        return [json.dumps(keys_info)]
 
 
 

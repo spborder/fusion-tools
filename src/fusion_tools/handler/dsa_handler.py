@@ -22,7 +22,7 @@ from fusion_tools.handler.dataset_uploader import DSAUploader
 from fusion_tools.handler.dataset_builder import DatasetBuilder
 from fusion_tools.handler.plugin import DSAPluginProgress, DSAPluginRunner
 from fusion_tools.handler.save_session import DSASession
-from fusion_tools import Handler
+from fusion_tools.components.base import Handler
 
 def tokenator(method):
     """Token decorator function to handle setting and unsetting girder user tokens for select functions

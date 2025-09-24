@@ -55,12 +55,14 @@ from fusion_tools.utils.shapes import (
 )
 from fusion_tools.utils.images import get_feature_image, write_ome_tiff, format_intersecting_masks
 from fusion_tools.utils.stats import get_label_statistics, run_wilcox_rank_sum
-from fusion_tools import Tool, MultiTool
+from fusion_tools.components.base import Tool, MultiTool
 
 import time
 
 
 class DataExtractor(Tool):
+    """
+    """
 
     title = 'Data Extractor'
     description = 'Download select properties from indicated structures in the current slide.'
@@ -102,22 +104,6 @@ class DataExtractor(Tool):
             }
         }
 
-    def __str__(self):
-        return self.title
-
-    def load(self, component_prefix:int):
-
-        self.component_prefix = component_prefix
-
-        self.blueprint = DashBlueprint(
-            transforms = [
-                PrefixIdTransform(prefix = f'{self.component_prefix}',escape = lambda input_id: self.prefix_escape(input_id)),
-                MultiplexerTransform()
-            ]
-        )
-
-        self.get_callbacks()
-
     def get_scale_factors(self, image_metadata: dict):
         """Function used to initialize scaling factors applied to GeoJSON annotations to project annotations into the SlideMap CRS (coordinate reference system)
 
@@ -146,9 +132,11 @@ class DataExtractor(Tool):
                 dbc.CardBody([
                     dbc.Row(
                         html.H3(self.title)
+                        html.H3(self.title)
                     ),
                     html.Hr(),
                     dbc.Row(
+                        self.description
                         self.description
                     ),
                     html.Hr(),
