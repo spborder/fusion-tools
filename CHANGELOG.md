@@ -1,6 +1,12 @@
 # Changelog
 
 <!--next-version-placeholder-->
+## v3.6.35 (09/24/2025)
+
+- Implementing CORS options for `Visualization` and `LocalTileServer` FastAPI apps
+    - "app_options" in a `Visualization` object can now accept the following "cors" settings: "allow_origins", "allow_methods", "allow_credentials", "allow_headers", "expose_headers", and "max_age"
+    - See Issue [#17](https://github.com/spborder/fusion-tools/issues/17) for more details
+
 ## v3.6.33-34 (09/19/2025)
 
 - Updates to `CustomFunction` input/output schemas, utilizing database
