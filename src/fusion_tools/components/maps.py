@@ -899,7 +899,7 @@ class SlideMap(MapComponent):
                                     }
                                 })
                                 .then((response) => response.json())
-                                .then((json_data) => json_data.flat())
+                                //.then((json_data) => json_data.flat())
                                 .then(function(json_data){return process_json(json_data,idx,ann_meta)})
                                 .then((geojson_anns) => annotations_list.splice(idx,1,geojson_anns))
                             );
@@ -907,7 +907,6 @@ class SlideMap(MapComponent):
                             const promise_await = await Promise.all(promises);
 
                         } else {
-                            // TODO: This could need some additional headers for CORS
                             const promises = [map_slide_information.annotations_url].map((url,idx) =>
                                 fetch(url, {
                                     method: 'GET',

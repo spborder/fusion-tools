@@ -184,7 +184,8 @@ class LocalTileServer(TileServer):
                  tile_server_port:int = 8050,
                  host: str = 'localhost',
                  protocol: str = 'http',
-                 cors_options: dict = {}
+                 cors_options: dict = {},
+                 jupyter_server_url: Union[str,None] = None
                  ):
         """Constructor method
 
