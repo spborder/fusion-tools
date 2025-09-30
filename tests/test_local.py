@@ -11,10 +11,8 @@ def main():
     #test_ann_path = '/home/sam/Desktop/Example Data/HuBMAP Portal/Visium/secondary_analysis.h5ad'
 
     vis = Visualization(
-        local_slides = ['./tests/test_images/histology_image.svs']*2,
-        #local_annotations = ['./tests/test_images/histology_annotations.json'],
-        #local_slides = [test_slide_path],
-        #local_annotations = [[test_ann_path]],
+        local_slides = ['./tests/test_images/histology_image.svs'],
+        local_annotations = ['./tests/test_images/histology_annotations.json'],
         components = [
             [
                 SlideMap(),
