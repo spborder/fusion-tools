@@ -918,7 +918,6 @@ class SlideMap(MapComponent):
                                 })
                                 .then((response) => response.json())
                                 .then((json_data) => json_data.flat())
-                                .then((json_data) => json_data.flat())
                                 .then((json_data) => annotations_list.push(process_json(json_data,idx,ann_meta)))
                             );
                             const promise_await = await Promise.all(promises);
