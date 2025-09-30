@@ -608,7 +608,6 @@ class LocalTileServer(TileServer):
             )
     
     async def get_region(self, id:str, top: int, left: int, bottom:int, right:int,style:Union[None,str] = None):
-    async def get_region(self, id:str, top: int, left: int, bottom:int, right:int,style:Union[None,str] = None):
         """
         Grabbing a specific region in the image based on bounding box coordinates
         """
