@@ -220,9 +220,7 @@ class LocalTileServer(TileServer):
         self.router.add_api_route('/{id}/tiles/region',self.get_region,methods=["GET","OPTIONS"])
         self.router.add_api_route('/{id}/tiles/thumbnail',self.get_thumbnail,methods=["GET","OPTIONS"])
         self.router.add_api_route('/{id}/annotations',self.get_annotations,methods=["GET","OPTIONS"])
-
         self.router.add_api_route('/{id}/annotations/metadata',self.get_annotations_metadata,methods=["GET", "OPTIONS"])
-
         self.router.add_api_route('/{id}/annotations/data/list',self.get_annotations_property_keys,methods=["GET","OPTIONS"])
         self.router.add_api_route('/{id}/annotations/data',self.get_annotations_property_data,methods=["GET","OPTIONS"])
 

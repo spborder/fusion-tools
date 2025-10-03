@@ -2243,14 +2243,6 @@ class GlobalPropertyPlotter(MultiTool):
                     html.Hr(),
                     dbc.Row([
                         dbc.Label('Select properties below: ',html_for = {'type': 'global-property-plotter-drop','index': 0}),
-                        dmc.Switch(
-                            id = {'type': 'global-property-plotter-drop-type','index': 0},
-                            offLabel = 'Dropdown',
-                            onLabel = 'Tree',
-                            size = 'lg',
-                            checked = False,
-                            description = 'Select related properties in groups with "Tree View" or select properties individually with "Dropdown Menu"'
-                        )
                     ]),
                     dcc.Store(
                         id = {'type': 'global-property-plotter-keys-store','index': 0},
@@ -2394,19 +2386,6 @@ class GlobalPropertyPlotter(MultiTool):
         # Callback for updating type of feature selector (either dropdown or tree)
         # Callback for running statistics
         # Callback for exporting plot data
-
-        # Changing type of property selector (from dropdown to tree and back)
-        self.blueprint.callback(
-            [
-                Input({'type': 'global-property-plotter-drop-type','index':ALL},'checked')
-            ],
-            [
-                Output({'type': 'global-property-plotter-drop-div','index': ALL},'children')
-            ],
-            [
-                State({'type': 'global-property-plotter-keys-store','index': ALL},'data')
-            ]
-        )(self.update_drop_type)
 
         # Updating filters
         self.blueprint.callback(
@@ -2681,40 +2660,6 @@ class GlobalPropertyPlotter(MultiTool):
             ],
             prevent_initial_call = True,
         )
-
-    def update_drop_type(self, switch_switched, keys_info):
-        """Update the property selection mode (either dropdown menu or tree view)
-
-        :param switch_switched: Switch selected
-        :type switch_switched: list
-        :return: New property selector component
-        :rtype: list
-        """
-
-        switch_switched = get_pattern_matching_value(switch_switched)
-        keys_info = json.loads(get_pattern_matching_value(keys_info))
-
-        if switch_switched:
-            # This is using the Tree View
-            property_drop = dta.TreeView(
-                id = {'type': f'{self.component_prefix}-global-property-plotter-drop','index': 0},
-                multiple = True,
-                checkable = True,
-                checked = [],
-                selected = [],
-                expanded = [],
-                data = keys_info['tree']['full']
-            )
-        else:
-            property_drop = dcc.Dropdown(
-                options = [] if keys_info['dropdown'] is None else keys_info['dropdown'],
-                value = [],
-                id = {'type': f'{self.component_prefix}-global-property-plotter-drop','index': 0},
-                multi = True,
-                placeholder = 'Properties'
-            )
-
-        return [property_drop]
 
     def update_properties_and_filters(self, property_selection, property_checked, structure_selection, label_selection, filter_prop_mod, filter_prop_remove, filter_prop_selector, property_divs,current_data, keys_info, property_info):
         """Updating the properties, structures, and filters incorporated into the main plot

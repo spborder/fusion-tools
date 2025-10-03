@@ -899,7 +899,6 @@ class SlideMap(MapComponent):
                                     }
                                 })
                                 .then((response) => response.json())
-                                .then((json_data) => json_data.flat())
                                 .then(function(json_data){return process_json(json_data,idx,ann_meta)})
                                 .then((geojson_anns) => annotations_list.splice(idx,1,geojson_anns))
                             );
