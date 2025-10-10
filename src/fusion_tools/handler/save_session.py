@@ -115,7 +115,7 @@ class DSASession(DSATool):
         
         session_data = json.loads(session_data)
 
-        if not 'current_user' in session_data:
+        if not 'user' in session_data:
             session_status_div = html.Div(
                 dbc.Alert(
                     'Sign in first to save a session',
@@ -130,10 +130,10 @@ class DSASession(DSATool):
             'page': pathname,
             'current': session_data['current'],
             'data': session_data['data'],
-            'user_session': session_data['current_user']['login']
+            'user_session': session_data['user']['login']
         }
 
-        uploaded_file_details = self.handler.upload_session(saved_session_data,user_token = session_data['current_user']['token'])
+        uploaded_file_details = self.handler.upload_session(saved_session_data,user_token = session_data['user']['token'])
         
         # Find a way to extract the window url or something
         page_name = '/'+pathname.split('/')[-1]

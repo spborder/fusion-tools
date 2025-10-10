@@ -64,10 +64,10 @@ class DatasetBuilder(DSATool):
 
         collections_info = []
         
-        collections = self.handler.get_collections(session_data.get('current_user',{}).get('token'))
+        collections = self.handler.get_collections(session_data.get('user',{}).get('token'))
         for c in collections:
             #slide_count = self.handler.get_collection_slide_count(collection_name = c['name'])
-            folder_count = self.handler.get_path_info(path = f'/collection/{c["name"]}', user_token = session_data.get('current_user',{}).get('token'))
+            folder_count = self.handler.get_path_info(path = f'/collection/{c["name"]}', user_token = session_data.get('user',{}).get('token'))
             #if slide_count>0:
             collections_info.append({
                 'Collection Name': c['name'],
@@ -77,13 +77,13 @@ class DatasetBuilder(DSATool):
                 'Last Updated': folder_count['updated']
             } | c['meta'])
 
-        if 'current_user' in session_data:
+        if 'user' in session_data:
             collections_info.append({
-                'Collection Name': f'User: {session_data["current_user"]["login"]}',
-                'Collection ID': session_data["current_user"]['_id'],
+                'Collection Name': f'User: {session_data["user"]["login"]}',
+                'Collection ID': session_data["user"]['_id'],
                 'Number of Folder': 2,
                 'Last Updated': '-',
-                'token': session_data['current_user']['token']
+                'token': session_data['user']['token']
             })
             
         collections_df = pd.DataFrame.from_records(collections_info)
@@ -393,7 +393,7 @@ class DatasetBuilder(DSATool):
                 folder_path = folder_info['_id'],
                 folder_type = folder_info['_modelType'],
                 ignore_histoqc=ignore_histoqc,
-                user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
+                user_token = session_data['user']['token'] if 'user' in session_data else None
             )
 
             folder_slides_folders = [i['folderId'] for i in all_folder_slides]
@@ -405,11 +405,11 @@ class DatasetBuilder(DSATool):
                     # This grabs parent folders of this folder
                     u_folder_info = self.handler.get_folder_info(
                         folder_id=u,
-                        user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
+                        user_token = session_data['user']['token'] if 'user' in session_data else None
                     )
                     u_folder_rootpath = self.handler.get_folder_rootpath(
                         u,
-                        user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
+                        user_token = session_data['user']['token'] if 'user' in session_data else None
                     )
                     # Folders in order from collection-->child folder-->etc.
                     folder_ids = [i['object']['_id'] for i in u_folder_rootpath]
@@ -429,7 +429,7 @@ class DatasetBuilder(DSATool):
 
                     child_folder_path_info = self.handler.get_path_info(
                         path = child_folder_path,
-                        user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
+                        user_token = session_data['user']['token'] if 'user' in session_data else None
                     )
                     if not child_folder_path_info['_id'] in folders_in_folder:
                         folders_in_folder.append(child_folder_path_info['_id'])
@@ -464,7 +464,7 @@ class DatasetBuilder(DSATool):
             for u_f in user_folders:
                 user_folder_info = self.handler.get_path_info(
                     path = f'/user/{folder_info["login"]}/{u_f}',
-                    user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
+                    user_token = session_data['user']['token'] if 'user' in session_data else None
                 )
 
                 folder_folders.append({
@@ -483,15 +483,15 @@ class DatasetBuilder(DSATool):
             empty_folders = self.handler.get_folder_folders(
                 folder_id = folder_info['_id'],
                 folder_type = folder_info['_modelType'],
-                user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
+                user_token = session_data['user']['token'] if 'user' in session_data else None
             )
             
             for f in empty_folders:
                 if not f['_id'] in folders_in_folder and not f['_id'] in unique_folders:
-                    if not 'current_user' in session_data:
+                    if not 'user' in session_data:
                         folder_info = self.handler.gc.get(f'/folder/{f["_id"]}/details')
                     else:
-                        folder_info = self.handler.gc.get(f'/folder/{f["_id"]}/details?token={session_data["current_user"]["token"]}')
+                        folder_info = self.handler.gc.get(f'/folder/{f["_id"]}/details?token={session_data["user"]["token"]}')
                     folder_folders.append(
                         {
                             'Folder Name': f['name'],
@@ -673,7 +673,7 @@ class DatasetBuilder(DSATool):
                 folder_slides, folder_folders = self.organize_folder_contents(
                     folder_info = self.handler.get_path_info(
                         f'/collection/{collection_info["Collection Name"]}',
-                        user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
+                        user_token = session_data['user']['token'] if 'user' in session_data else None
                     ),
                     session_data = session_data
                 )
@@ -681,7 +681,7 @@ class DatasetBuilder(DSATool):
                 folder_slides, folder_folders = self.organize_folder_contents(
                     folder_info=self.handler.get_path_info(
                         f'/user/{collection_info["Collection Name"].replace("User: ","")}',
-                        user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
+                        user_token = session_data['user']['token'] if 'user' in session_data else None
                     ),
                     session_data = session_data
                 )
@@ -1259,9 +1259,9 @@ class DatasetBuilder(DSATool):
             if not 'local' in s:
                 info_url = f'/item/{s}'
                 annotations_metadata_url = f'{self.handler.girderApiUrl}/annotation/?itemId={s}'
-                if 'current_user' in current_vis_data:
-                    annotations_metadata_url += f'&token={current_vis_data["current_user"]["token"]}'
-                    info_url += f'?token={current_vis_data["current_user"]["token"]}'
+                if 'user' in current_vis_data:
+                    annotations_metadata_url += f'&token={current_vis_data["user"]["token"]}'
+                    info_url += f'?token={current_vis_data["user"]["token"]}'
                 
                 slide_info = self.handler.gc.get(info_url)
                 annotations_metadata = requests.get(annotations_metadata_url).json()

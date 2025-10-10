@@ -15,7 +15,7 @@ import dash_mantine_components as dmc
 from dash_extensions.enrich import DashProxy, html, MultiplexerTransform, PrefixIdTransform, Input, State, Output
 
 from typing_extensions import Union
-from fusion_tools.tileserver import TileServer, DSATileServer, LocalTileServer, CustomTileServer
+from fusion_tools.tileserver import Slide, TileServer, DSATileServer, LocalTileServer, CustomTileServer
 from fusion_tools.database.database import fusionDB
 import threading
 
@@ -59,7 +59,7 @@ class Visualization:
     """
     
     def __init__(self,
-                 local_slides: Union[list,str,None] = None,
+                 local_slides: Union[Slide,list,str,None] = None,
                  local_annotations: Union[list,dict,None] = None,
                  slide_metadata: Union[list,dict,None] = None,
                  tileservers: Union[list,TileServer,None] = None,
@@ -98,6 +98,8 @@ class Visualization:
         self.header = header
         self.app_options = app_options
         self.linkage = linkage
+
+        self.access_count = 0
 
         # New parameter defining how unique components can be linked
         # page = components in the same page can communicate
@@ -304,30 +306,75 @@ class Visualization:
         :type pathname: str
         """
 
-        #TODO: Check if the user specified in session_data['current_user'] is in the database yet
         session_data = json.loads(session_data)
         in_memory_store = json.loads(in_memory_store)
-        if in_memory_store.get('id') is None:
-            if session_data.get('current_user',{}).get('_id') is None:
-                in_memory_store['id'] = f'guestsession{uuid.uuid4().hex[:12]}'
-            else:
-                in_memory_store['id'] = uuid.uuid4().hex[:24]
-        else:
-            pass
 
+        self.access_count +=1
+        # session_data is preserved in the tab (not cleared on refresh)
+        # in_memory_store is preserved in that instance of that tab (cleared on refreshing)
+        current_user_ids = self.database.get_ids('user')
+        current_vis_session_ids = self.database.get_ids('vis_session')
 
-        # Resetting session data if going from the same tab/notebook after restarting the application
-        if not session_modified_time is None:
-            if datetime.fromtimestamp(session_modified_time/1e3) < self.app_start_time:
-                session_data = self.vis_store_content
-                session_data['session']['id'] = in_memory_store.get('id')
-            else:
-                pass
-        else:
-            session_data = self.vis_store_content
-            session_data['session']['id'] = in_memory_store.get('id')
-        
-        
+        if self.access_count == 1:
+            print('-----------------First Access-------------')
+            # This is the first time the app has been accessed, set to the created guest User and VisSession
+            in_memory_store['user'] = session_data.get('user')
+            in_memory_store['session'] = session_data.get('session')
+
+        elif self.access_count > 1:
+            
+            current_user_ids = self.database.get_ids('user')
+            current_vis_session_ids = self.database.get_ids('vis_session')
+
+            if in_memory_store.get('user') is None:
+                print(f'---------New Window/New User-------------')
+                # This is a new user, hasn't entered the application from this tab
+                new_user = self.new_user(guest = True)
+                new_session = self.new_session(guest = True)
+
+                session_data['current'] = [i for i in self.vis_store_content.get('current') if i.get('public')]
+                session_data['local'] = self.vis_store_content.get('local')
+
+                in_memory_store['user'] = new_user
+                in_memory_store['session'] = new_session
+                session_data['user'] = new_user
+                session_data['session'] = new_session
+
+            elif in_memory_store.get('user').get('id') not in current_user_ids:
+                print('--------New User/New Session---------------')
+                # Not None user, not in current_user_ids
+                new_user = self.new_user(guest = False, id = in_memory_store.get('user').get('id'))
+                new_session = self.new_session(guest = not 'guest' in in_memory_store.get('user').get('id'))
+
+                # Since this user is not registered in User, they only have access to 'public' Items
+                session_data['current'] = [i for i in self.vis_store_content.get('current') if i.get('public')]
+                session_data['local'] = self.vis_store_content.get('local')
+
+                in_memory_store['user'] = new_user
+                in_memory_store['session'] = new_session
+                session_data['user'] = new_user
+                session_data['session'] = new_session
+            
+            elif in_memory_store.get('user') in current_user_ids:
+                print('------------Previous User/New Session---------------')
+                # Not None user, in current_user_ids
+                # Creating a new session id
+                new_session = self.new_session(guest = not 'guest' in in_memory_store.get('user'))
+                # Checking which items this user has specific access to
+                prev_user_access = self.check_user_access(user_id = in_memory_store.get('user').get('id'), admin = in_memory_store.get('user').get('admin',False))
+                # Adding public items and items this user has access to
+                session_data['current'] = [i for i in self.vis_store_content.get('current') if i.get('public') or i.get('id') in prev_user_access]
+                session_data['local'] = self.vis_store_content.get('local')
+
+                in_memory_store['session'] = new_session
+                session_data['user'] = in_memory_store.get('user')
+                session_data['session'] = new_session
+
+                # Adding vis_session
+                self.database.add_vis_session(
+                    session_data
+                )
+
         if ctx.triggered_id=='anchor-page-url':
             if pathname in self.layout_dict:
                 # If that path is in the layout dict, return that page content
@@ -353,8 +400,8 @@ class Visualization:
                     'data': session_content['data'],
                 }
 
-                if 'current_user' in session_data:
-                    new_session_data['current_user'] = session_data['current_user']
+                if 'user' in session_data:
+                    new_session_data['user'] = session_data['user']
                 
                 page_pathname = session_content['page'].replace(self.app_options.get('requests_pathname_prefix','/'),'').replace('-',' ')
 
@@ -405,18 +452,40 @@ class Visualization:
 
             return page_content, new_pathname, '', json.dumps(session_data), json.dumps(in_memory_store)
     
+    def new_user(self, guest: bool = True, id: Union[str,None] = None):
+
+        user_dict = {
+            'id': f'guestuser{uuid.uuid4().hex[:15]}' if guest and id is None else id,
+            'login': 'guest',
+            'firstName': 'Guest',
+            'lastName': 'User',
+            'token': uuid.uuid4().hex[:24]
+        }
+
+        return user_dict
+
+    def new_session(self, guest: bool = True):
+
+        session_dict = {
+            'id': f'guestsession{uuid.uuid4().hex[:12]}' if guest else uuid.uuid4().hex[:24],
+            'data': {}
+        }
+
+        return session_dict
+
     def initialize_stores(self):
 
         # This should be all the information necessary to reproduce the tileservers and annotations for each image
-        #TODO: Add session "id" here and add to database
         slide_store = {
             "current": [],
             "local": [],
             "data": {},
-            'session': {
-                'id': f'guestsession{uuid.uuid4().hex[:12]}'
-            }
+            'session': self.new_session(guest = True),
+            'user': self.new_user(guest = True)
         }
+
+        self.database.add_vis_session(slide_store)
+
         s_idx = 0
         t_idx = 0
 
@@ -442,25 +511,42 @@ class Visualization:
                 if not s is None:
                     # Adding this slide to list of local slides
                     local_slide_id = uuid.uuid4().hex[:24]
-                    self.local_tile_server.add_new_image(
-                        new_image_id = local_slide_id,
-                        new_image_path = s,
-                        new_annotations = anns,
-                        new_metadata = meta
-                    )
+                    if not isinstance(s,Slide):
+                        self.local_tile_server.add_new_image(
+                            new_image_id = local_slide_id,
+                            new_image_path = s,
+                            new_annotations = anns,
+                            new_metadata = meta,
+                            session_id = slide_store.get('session').get('id'),
+                            user_id = slide_store.get('user').get('id')
+                        )
 
-                    slide_dict = {
-                        'name': s.split(os.sep)[-1],
-                        'id': local_slide_id,
-                        'cached': True
-                    } | self.local_tile_server.get_slide_urls(local_slide_id)
+                        slide_dict = {
+                            'name': s.split(os.sep)[-1],
+                            'id': local_slide_id,
+                            'cached': True,
+                            'public': False
+                        } | self.local_tile_server.get_slide_urls(local_slide_id)
+                    else:
+                        self.local_tile_server.add_new_slide(
+                            slide_id = local_slide_id,
+                            slide_obj = s,
+                            session_id = slide_store.get('session').get('id'),
+                            user_id = slide_store.get('user').get('id') if not s.public else None
+                        )
+
+                        slide_dict = {
+                            'name': s.image_filepath.split(os.sep)[-1],
+                            'id': local_slide_id,
+                            'cached': True,
+                            'public': s.public
+                        } | self.local_tile_server.get_slide_urls(local_slide_id)
 
                 slide_store['current'].append(slide_dict)
                 slide_store['local'].append(slide_dict)
 
         else:
             self.local_tile_server = None
-
 
         if not self.tileservers is None:
             if isinstance(self.tileservers,TileServer):
@@ -512,9 +598,6 @@ class Visualization:
                         'annotations_region_url': t.annotations_regions_url if hasattr(t,'annotations_regions_url') else None,
                         'annotations_geojson_url': t.annotations_geojson_url if hasattr(t,'annotations_geojson_url') else None
                     })
-
-        #TODO: Add initial session to database and set as default session?
-
 
         return slide_store
 
@@ -599,14 +682,14 @@ class Visualization:
             dcc.Store(
                 id = 'anchor-vis-store',
                 data = json.dumps(self.vis_store_content),
-                storage_type = 'session'
+                storage_type = 'session',
+                modified_timestamp = -1
             ),
             dcc.Store(
                 id = 'anchor-vis-memory-store',
-                data = json.dumps({
-                    'id': None
-                }),
-                storage_type='memory'
+                data = json.dumps({}),
+                storage_type='memory',
+                modified_timestamp = -1
             )
         ])
 
@@ -631,7 +714,6 @@ class Visualization:
                 )
             ]
         )
-
 
         return layout
 
@@ -1052,7 +1134,6 @@ class Visualization:
             expose_headers = cors_options.get('expose_headers',['*']),
             max_age = cors_options.get('max_age','36000000')
         )
-
 
     def start(self):
         """Starting visualization session based on provided app_options

@@ -1421,7 +1421,7 @@ class FeatureAnnotation(Tool):
         # Saving current annotation values to the database
         new_anns = self.check_database(
             structure_id = current_structure_id,
-            user_id = session_data.get('current_user',{}).get('_id'),
+            user_id = session_data.get('user',{}).get('_id'),
             session_id = session_data.get('session',{}).get('id')
         )
         
@@ -1429,7 +1429,7 @@ class FeatureAnnotation(Tool):
             updated_annotation_store = json.dumps(
                 {
                     'id': uuid.uuid4().hex[:24],
-                    'user': session_data.get('current_user',{}).get('_id'),
+                    'user': session_data.get('user',{}).get('_id'),
                     'session': session_data.get('session',{}).get('id'),
                     'structure': current_structure_id,
                     'data': []
@@ -2093,7 +2093,7 @@ class FeatureAnnotation(Tool):
         else:
             session_data = json.loads(session_data)
             
-            current_user = session_data.get('current_user',{}).get('login')
+            current_user = session_data.get('user',{}).get('login')
             user_status = 'guest'
             if not current_user is None:
                 if not self.user_spec is None:
@@ -2128,8 +2128,8 @@ class FeatureAnnotation(Tool):
                 # This is a named member of the annotation session, they are able to download their annotations
                 # from this and/or previous sessions
                 user_session_list = self.check_database(
-                    table_name = 'visSession',
-                    user_id = session_data.get('current_user').get('_id')
+                    table_name = 'vis_session',
+                    user_id = session_data.get('user').get('_id')
                 )[0]
                 print(user_session_list)
 
@@ -2179,7 +2179,7 @@ class FeatureAnnotation(Tool):
             raise exceptions.PreventUpdate
 
         session_data = json.loads(session_data)
-        current_user = session_data.get('current_user',{}).get('login')
+        current_user = session_data.get('user',{}).get('login')
         user_status = 'guest'
         if not current_user is None:
             if not self.user_spec is None:
@@ -2189,10 +2189,10 @@ class FeatureAnnotation(Tool):
                     user_status = 'user'
         
         if user_status=='guest':
-            user_id_filter = session_data.get('current_user',{}).get('_id')
+            user_id_filter = session_data.get('user',{}).get('_id')
             session_id_filter = session_data.get('session',{}).get('id')
         elif user_status=='user':
-            user_id_filter = session_data.get('current_user',{}).get('_id')
+            user_id_filter = session_data.get('user',{}).get('_id')
             # This filter is based on session row selections made by the user
             session_id_filter = []
         elif user_status=='admin':

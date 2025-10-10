@@ -373,7 +373,7 @@ class DSAUploader(DSATool):
 
     def update_layout(self, session_data:dict, use_prefix:bool):
 
-        if not 'current_user' in session_data:
+        if not 'user' in session_data:
             uploader_children = html.Div(
                 dbc.Alert(
                     'Make sure to login first in order to upload!',
@@ -1092,7 +1092,7 @@ class DSAUploader(DSATool):
                 )
             ])
 
-            path_parts = ['/user/',f'{session_data["current_user"]["login"]}/']
+            path_parts = ['/user/',f'{session_data["user"]["login"]}/']
 
         elif 'dsa-uploader-folder-table' in ctx.triggered_id['type']:
             
@@ -1215,7 +1215,7 @@ class DSAUploader(DSATool):
                     path = ''.join(path_parts)[:-1]
                 )
 
-                if not path_parts==['/user/',session_data['current_user']['login']+'/']:
+                if not path_parts==['/user/',session_data['user']['login']+'/']:
                     # Don't need to know the slides in that folder
                     _, folder_folders = self.organize_folder_contents(
                         folder_info=folder_info
@@ -1293,7 +1293,7 @@ class DSAUploader(DSATool):
                         {
                             'Name': i['login']
                         }
-                        for i in self.handler.gc.get(f'/user?token={session_data["current_user"]["token"]}')
+                        for i in self.handler.gc.get(f'/user?token={session_data["user"]["token"]}')
                     ]
 
                 if len(folder_folders)>0:
@@ -1489,7 +1489,7 @@ class DSAUploader(DSATool):
                 new_folder_info = self.handler.create_user_folder(
                     parent_path = ''.join(folder_path)[:-1],
                     folder_name = folder_name,
-                    user_token=session_data['current_user']['token']
+                    user_token=session_data['user']['token']
                 )
             except Exception as e:
                 print('Some error encountered in creating the folder')
@@ -1712,7 +1712,7 @@ class DSAUploader(DSATool):
                     html.Div(
                         self.create_upload_component(
                             file_info = f | {'parentId': folder_info["_id"],'parentType': 'folder', 'fusion_upload_name': f['name'], 'fusion_upload_type': f['type']},
-                            user_info = session_data['current_user'],
+                            user_info = session_data['user'],
                             idx = f_idx
                         ) if f['type']=='item' else 
                         dbc.Alert(f'This upload will be created when: {f["parent"]} is uploaded',color='warning'),
@@ -1799,7 +1799,7 @@ class DSAUploader(DSATool):
         for c in child_files:
             file_info = {
                 'api_url': self.handler.girderApiUrl,
-                'token': session_data['current_user']['token'],
+                'token': session_data['user']['token'],
                 'fusion_upload_name': c[1]['name'],
                 'fusion_upload_type': c[1]['type'],
                 'parentType': 'item',
@@ -1808,7 +1808,7 @@ class DSAUploader(DSATool):
 
             upload_div_children[c[0]] = self.create_upload_component(
                 file_info = c[1] | file_info,
-                user_info = session_data['current_user'],
+                user_info = session_data['user'],
                 idx = c[0]
             )
 
@@ -1965,7 +1965,7 @@ class DSAUploader(DSATool):
             success = self.handler.add_metadata(
                 item = t,
                 metadata = target_dict[t],
-                user_token = session_data['current_user']['token']
+                user_token = session_data['user']['token']
             )
             
             if success:

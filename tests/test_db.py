@@ -40,7 +40,7 @@ class User(Base):
     id = mapped_column(String(24), primary_key = True)
 
 class VisSession(Base):
-    __tablename__='visSession'
+    __tablename__='vis_session'
     id = mapped_column(String(24),primary_key = True)
     user = mapped_column(ForeignKey("user.id"))
 

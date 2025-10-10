@@ -1,14 +1,28 @@
 """
 Defining models for fusionDB
 """
-
+from typing import List
 from sqlalchemy import (
-    Column, String, Boolean,ForeignKey, JSON, DateTime)
-from sqlalchemy.orm import declarative_base, mapped_column
+    Table, Column, String, Boolean, Integer, ForeignKey, JSON, DateTime)
+from sqlalchemy.orm import (
+    declarative_base, mapped_column, relationship,
+    Mapped    
+)
 
 from shapely.geometry import box
 
+#TODO: Current access control rules specify that if an item is not public then everything associated with that item is also not public
+# Likewise, if a user has access to an item, they will have access to everything on that item.
+
 Base = declarative_base()
+
+
+UserAccess = Table(
+    'user_access',
+    Base.metadata,
+    Column('user_id',String,ForeignKey('user.id',ondelete='CASCADE')),
+    Column('item_id',String,ForeignKey('item.id',ondelete='CASCADE'))
+)
 
 class User(Base):
     __tablename__ = 'user'
@@ -22,6 +36,13 @@ class User(Base):
     admin = Column(Boolean)
     updated = Column(DateTime)
 
+    token = Column(String)
+
+    item_access: Mapped[List["Item"]] = relationship(
+        secondary = UserAccess, back_populates="user_access"
+    )
+
+
     def to_dict(self):
         user_dict = {
             'id': self.id,
@@ -30,21 +51,48 @@ class User(Base):
             'lastName': self.lastName,
             'email': self.email,
             'admin': self.admin,
-            'updated': self.updated
+            'updated': self.updated,
+            'token': self.token
         }
 
         return user_dict
     
+
+
+"""
+class UserAccess(Base):
+    __tablename__ = 'user_access'
+
+    id = Column(String(24), primary_key = True)
+
+    user = mapped_column(ForeignKey("user.id"))
+    item = mapped_column(ForeignKey("item.id"))
+
+    #TODO: placeholder column, public items aren't added here.
+    permission = Column(Integer)
+
+    updated = Column(DateTime)
+
+    def to_dict(self):
+        user_access_dict = {
+            'id': self.id,
+            'user': self.user,
+            'item': self.item
+        }
+        return user_access_dict
+"""
+
 class VisSession(Base):
-    __tablename__='visSession'
+    __tablename__='vis_session'
     id = mapped_column(String(24),primary_key = True)
     # Can multiple users access the same vis session?
     user = mapped_column(ForeignKey("user.id"))
 
+    #TODO: Add "current" section for current items in vis_session
+
     # Visualization session data stored as JSON
     data = Column(JSON)
     updated = Column(DateTime)
-
 
     def to_dict(self):
         vis_dict = {
@@ -66,10 +114,14 @@ class Item(Base):
 
     filepath = Column(String)
 
-    session = mapped_column(ForeignKey("visSession.id"))
-    user = mapped_column(ForeignKey("user.id"))
+    session = mapped_column(ForeignKey("vis_session.id"))
     updated = Column(DateTime)
 
+    public = Column(Boolean)
+
+    user_access: Mapped[List["User"]] = relationship(
+        secondary = UserAccess, back_populates="item_access"
+    )
 
     def to_dict(self):
         item_dict = {
@@ -80,8 +132,8 @@ class Item(Base):
             'ann_meta': self.ann_meta,
             'filepath': self.filepath,
             'session': self.session,
-            'user': self.user,
-            'updated': self.updated
+            'updated': self.updated,
+            'public': self.public
         }
 
         return item_dict
@@ -93,7 +145,6 @@ class Layer(Base):
     item = mapped_column(ForeignKey("item.id"))
 
     updated = Column(DateTime)
-
 
     def to_dict(self):
         layer_dict = {
@@ -115,7 +166,6 @@ class Structure(Base):
     layer = mapped_column(ForeignKey('layer.id'))
     item = mapped_column(ForeignKey('item.id'))
     updated = Column(DateTime)
-
 
     def to_dict(self):
         structure_dict = {
@@ -146,8 +196,8 @@ class ImageOverlay(Base):
     image_src = Column(String)
 
     layer = mapped_column(ForeignKey('layer.id'))
+    item = mapped_column(ForeignKey('item.id'))
     updated = Column(DateTime)
-
 
     def to_dict(self):
         img_overlay_dict = {
@@ -175,7 +225,7 @@ class Annotation(Base):
     id = Column(String(24),primary_key = True)
 
     user = mapped_column(ForeignKey('user.id'))
-    session = mapped_column(ForeignKey('visSession.id'))
+    session = mapped_column(ForeignKey('vis_session.id'))
     item = mapped_column(ForeignKey('item.id'))
     layer = mapped_column(ForeignKey('layer.id'))
     structure = mapped_column(ForeignKey('structure.id'))
@@ -197,3 +247,13 @@ class Annotation(Base):
         }
 
         return ann_dict
+
+#TODO: Create table "Data" with accessibility of tabular, -Data (AnnData, MuData, SpatialData) objects, arrays, etc.
+
+
+
+
+
+
+
+

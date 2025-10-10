@@ -210,20 +210,21 @@ class MapComponent(MultiTool):
         :return: x and y (horizontal and vertical) scale factors applied to each coordinate in incoming annotations
         :rtype: float
         """
+        if not any([i is None for i in [image_metadata.get('sizeX'), image_metadata.get('sizeY'), image_metadata.get('levels')]]):
+            base_dims = [
+                image_metadata['sizeX']/(2**(image_metadata['levels']-1)),
+                image_metadata['sizeY']/(2**(image_metadata['levels']-1))
+            ]
 
-        base_dims = [
-            image_metadata['sizeX']/(2**(image_metadata['levels']-1)),
-            image_metadata['sizeY']/(2**(image_metadata['levels']-1))
-        ]
+            #x_scale = (base_dims[0]*(240/image_metadata['tileHeight'])) / image_metadata['sizeX']
+            #y_scale = -((base_dims[1]*(240/image_metadata['tileHeight'])) / image_metadata['sizeY'])
 
-        #x_scale = (base_dims[0]*(240/image_metadata['tileHeight'])) / image_metadata['sizeX']
-        #y_scale = -((base_dims[1]*(240/image_metadata['tileHeight'])) / image_metadata['sizeY'])
-
-        x_scale = base_dims[0] / image_metadata['sizeX']
-        y_scale = -(base_dims[1]) / image_metadata['sizeY']
+            x_scale = base_dims[0] / image_metadata['sizeX']
+            y_scale = -(base_dims[1]) / image_metadata['sizeY']
 
 
-        return x_scale, y_scale
+            return x_scale, y_scale
+        return 1.0, 1.0
 
 
 

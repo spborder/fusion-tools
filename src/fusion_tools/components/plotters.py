@@ -2033,8 +2033,8 @@ class GlobalPropertyPlotter(MultiTool):
             if 'api_url' in slide:
                 item_id = slide['metadata_url'].split('/')[-1]
                 # Setting request string
-                if 'current_user' in session_data:
-                    request_str = f'{slide["api_url"]}/annotation/item/{item_id}/plot/list?token={session_data["current_user"]["token"]}'
+                if 'user' in session_data:
+                    request_str = f'{slide["api_url"]}/annotation/item/{item_id}/plot/list?token={session_data["user"]["token"]}'
                 else:
                     request_str = f'{slide["api_url"]}/annotation/item/{item_id}/plot/list'
 
@@ -2121,13 +2121,13 @@ class GlobalPropertyPlotter(MultiTool):
             if 'api_url' in slide:
                 item_id = slide['metadata_url'].split('/')[-1]
                 if not structure_list is None and not structure_list==[]:
-                    if not 'current_user' in session_data:
+                    if not 'user' in session_data:
                         ann_meta = requests.get(
                             slide['annotations_metadata_url']
                         ).json()
                     else:
                         ann_meta = requests.get(
-                            slide['annotations_metadata_url']+f'?token={session_data["current_user"]["token"]}'
+                            slide['annotations_metadata_url']+f'?token={session_data["user"]["token"]}'
                         ).json()
 
                     structure_names = [a['annotation']['name'] for a in ann_meta]
@@ -2142,8 +2142,8 @@ class GlobalPropertyPlotter(MultiTool):
                     structure_ids = ["__all__"]
                 
                 # Setting request string
-                if 'current_user' in session_data:
-                    request_str = f'{slide["api_url"]}/annotation/item/{item_id}/plot/data?token={session_data["current_user"]["token"]}'
+                if 'user' in session_data:
+                    request_str = f'{slide["api_url"]}/annotation/item/{item_id}/plot/data?token={session_data["user"]["token"]}'
                 else:
                     request_str = f'{slide["api_url"]}/annotation/item/{item_id}/plot/data'
 
@@ -2560,8 +2560,8 @@ class GlobalPropertyPlotter(MultiTool):
             );
 
             const cloudPropUrls = cloudSlides.map((slide_info) =>
-                'current_user' in parsedSessionData
-                ? `${slide_info.annotations_url}/plot/list?token=${parsedSessionData.current_user.token}&adjacentItems=false&sources=item,annotation,annotationelement&annotations=["__all__"]`
+                'user' in parsedSessionData
+                ? `${slide_info.annotations_url}/plot/list?token=${parsedSessionData.user.token}&adjacentItems=false&sources=item,annotation,annotationelement&annotations=["__all__"]`
                 : `${slide_info.annotations_url}/plot/list?adjacentItems=false&sources=item,annotation,annotationelement&annotations=["__all__"]`
             );
 

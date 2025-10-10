@@ -82,7 +82,7 @@ class DSAPluginGroup(DSATool):
         
         exe_dict = None
         self.handler.gc.setToken(
-            session_data['current_user']['token']
+            session_data['user']['token']
         )
 
         try:
@@ -136,9 +136,9 @@ class DSAPluginGroup(DSATool):
                                 uploaded_item_names = [i['fusion_upload_name'] for i in uploaded_items]
                                 if in_arg['default']['name'] in uploaded_item_names:
                                     matching_item = uploaded_items[uploaded_item_names.index(in_arg['default']['name'])]
-                                    matching_item_info = self.handler.get_item_info(matching_item['itemId'],session_data['current_user']['token'])
+                                    matching_item_info = self.handler.get_item_info(matching_item['itemId'],session_data['user']['token'])
                                     if in_arg['default']['type']=='upload_folder':
-                                        folder_info = self.handler.get_folder_info(matching_item_info['folderId'],session_data['current_user']['token'])
+                                        folder_info = self.handler.get_folder_info(matching_item_info['folderId'],session_data['user']['token'])
                                         exe_input['default'] = {
                                             'name': folder_info['name'],
                                             '_id': folder_info['_id']
@@ -210,7 +210,7 @@ class DSAPluginGroup(DSATool):
                                     uploaded_parent_names = [i['parentName'] for i in uploaded_annotations]
                                     if in_arg['default']['fileName'] in uploaded_parent_names:
                                         matching_parent = uploaded_annotations[uploaded_parent_names.index(in_arg['default']['name'])]
-                                        annotation_info = self.handler.get_annotation_names(matching_parent['_id'], user_token = session_data['current_user']['token'])
+                                        annotation_info = self.handler.get_annotation_names(matching_parent['_id'], user_token = session_data['user']['token'])
 
                                         if 'annotationName' in in_arg['default']:
                                             annotation_names = [i['annotation']['name'] for i in annotation_info]
@@ -239,7 +239,7 @@ class DSAPluginGroup(DSATool):
                                     uploaded_parent_ids = [i['_id'] for i in uploaded_annotations]
                                     if in_arg['default']['fileId'] in uploaded_parent_ids:
                                         matching_parent = uploaded_annotations[uploaded_parent_ids.index(in_arg['default']['fileId'])]
-                                        annotation_info = self.handler.get_annotation_names(matching_parent['_id'], user_token = session_data['current_user']['token'])
+                                        annotation_info = self.handler.get_annotation_names(matching_parent['_id'], user_token = session_data['user']['token'])
 
                                         if 'annotationName' in in_arg['default']:
                                             annotation_names = [i['annotation']['name'] for i in annotation_info]
@@ -282,7 +282,7 @@ class DSAPluginGroup(DSATool):
                                     uploaded_item_names = [i['fusion_upload_name'] for i in uploaded_items]
                                     if reference in uploaded_item_names:
                                         matching_item = uploaded_items[uploaded_item_names.index(reference)]
-                                        matching_item_info = self.handler.get_item_info(matching_item['itemId'],session_data['current_user']['token'])
+                                        matching_item_info = self.handler.get_item_info(matching_item['itemId'],session_data['user']['token'])
 
                                         item_name = matching_item_info['name']
                                         # Could do something with this, add a _output.{ref_ext} or something if a new extension isn't provided
@@ -305,8 +305,8 @@ class DSAPluginGroup(DSATool):
                                     uploaded_item_names = [i['fusion_upload_name'] for i in uploaded_items]
                                     if reference in uploaded_item_names:
                                         matching_item = uploaded_items[uploaded_item_names.index(reference)]
-                                        matching_item_info = self.handler.get_item_info(matching_item['itemId'],session_data['current_user']['token'])
-                                        folder_info = self.handler.get_folder_info(matching_item_info['folderId'],session_data['current_user']['token'])
+                                        matching_item_info = self.handler.get_item_info(matching_item['itemId'],session_data['user']['token'])
+                                        folder_info = self.handler.get_folder_info(matching_item_info['folderId'],session_data['user']['token'])
 
                                         exe_input['default']['folderId'] = folder_info['_id']
                                     else:
@@ -1136,7 +1136,7 @@ class DSAPluginRunner(DSATool):
     
     def update_layout(self, session_data:dict, use_prefix: bool):
         
-        plugin_list = self.handler.list_plugins(user_token = session_data['current_user']['token'])
+        plugin_list = self.handler.list_plugins(user_token = session_data['user']['token'])
         docker_list = sorted(list(set([i['image'] for i in plugin_list])))
 
         if not use_prefix:
@@ -1235,7 +1235,7 @@ class DSAPluginRunner(DSATool):
         
         docker_select = get_pattern_matching_value(docker_select)
         session_data = json.loads(session_data)
-        plugin_list = self.handler.list_plugins(user_token=session_data['current_user']['token'])
+        plugin_list = self.handler.list_plugins(user_token=session_data['user']['token'])
         included_cli = sorted([i['name'] for i in plugin_list if i['image']==docker_select])
 
         return [included_cli]
@@ -1316,8 +1316,8 @@ class DSAPluginProgress(DSATool):
 
         # Getting all jobs for this user:
         user_jobs = self.handler.get_user_jobs(
-            user_id = session_data['current_user']['_id'],
-            user_token = session_data['current_user']['token'],
+            user_id = session_data['user']['_id'],
+            user_token = session_data['user']['token'],
             offset = offset,
             limit = limit
         )
@@ -1425,7 +1425,7 @@ class DSAPluginProgress(DSATool):
 
     def update_layout(self, session_data:dict, use_prefix:bool):
         
-        if 'current_user' in session_data:
+        if 'user' in session_data:
             running_plugins = self.generate_plugin_table(session_data, 0, 5, 0, 0, False)
             running_plugins = dmc.Table(
                 running_plugins,
@@ -1547,7 +1547,7 @@ class DSAPluginProgress(DSATool):
 
             job_logs = self.handler.get_specific_job(
                 job_id = job_id,
-                user_token = session_data['current_user']['token']
+                user_token = session_data['user']['token']
             )
 
             job_logs_div = html.Div(
@@ -1564,7 +1564,7 @@ class DSAPluginProgress(DSATool):
 
             cancel_response = self.handler.cancel_job(
                 job_id = job_id,
-                user_token = session_data['current_user']['token']
+                user_token = session_data['user']['token']
             )
 
             job_logs_div = html.Div(

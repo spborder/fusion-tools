@@ -10,9 +10,13 @@ import time
 from datetime import datetime
 
 from sqlalchemy import (
-    not_, func, select, create_engine, update,
-    Column, String, Boolean,ForeignKey, JSON)
-from sqlalchemy.orm import declarative_base, sessionmaker, mapped_column, Session, scoped_session
+    not_, or_, and_, func, select, insert, event, union_all, create_engine, update, exc,
+    Column, String, Boolean,ForeignKey, JSON, text)
+from sqlalchemy.orm import (
+    declarative_base, sessionmaker, 
+    mapped_column, Session, scoped_session,
+    with_loader_criteria
+)
 from sqlalchemy.pool import NullPool
 
 from typing import Generator
@@ -21,18 +25,29 @@ from shapely.geometry import box, shape
 
 from typing_extensions import Union
 
-from .models import Base, User, VisSession, Item, Layer, Structure, ImageOverlay, Annotation
+from .models import (
+    Base, User, UserAccess, 
+    VisSession, Item, Layer, 
+    Structure, ImageOverlay, Annotation
+)
 
 
 TABLE_NAMES = {
     'user': User,
-    'visSession': VisSession,
+    'user_access': UserAccess,
+    'vis_session': VisSession,
     'item': Item,
     'layer': Layer,
     'structure': Structure,
     'image_overlay': ImageOverlay,
     'annotation': Annotation
 }
+
+
+#TODO: add access check to UserAccess table for any query that mentions data from an item
+# This includes Item, Layer, Structure, ImageOverlay, and Annotation elements
+# either user_id or user_token can be used to identify a user, though user_id is a column in UserAccess
+
 
 
 class fusionDB:
@@ -52,6 +67,20 @@ class fusionDB:
 
         Base.metadata.create_all(bind = self.engine)
         self.SessionLocal = scoped_session(sessionmaker(bind=self.engine))
+
+        """
+        # Not sure how to add this as an automatic filterer, this will prevent non-public Items from being available on "select" statements
+        @event.listens_for(self.SessionLocal,"do_orm_execute")
+        def _do_orm_execute(orm_execute_state):
+            if (
+                orm_execute_state.is_select
+                and not orm_execute_state.is_column_load
+                and not orm_execute_state.is_relationship_load
+            ):
+                orm_execute_state.statement = orm_execute_state.statement.options(
+                    with_loader_criteria(entity_or_base = Item, where_criteria = Item.public == True)
+                )
+        """
 
     @contextmanager
     def get_db(self) -> Generator[Session, None, None]:
@@ -185,7 +214,7 @@ class fusionDB:
                             for r in get_remove_result.all():
                                 self.remove(r,session)
                         else:
-                            #print('Not found for this user/visSession')
+                            #print('Not found for this user/vis_session')
                             pass
                 else:
                     # Don't delete anything if no instance id is provided
@@ -200,7 +229,7 @@ class fusionDB:
     def count(self, table_name:str):
         """Get the count of unique instances within this specific table
 
-        :param table_name: Name of table to query (user, visSession, item, layer, structure, image_overlay, annotation)
+        :param table_name: Name of table to query (user, vis_session, item, layer, structure, image_overlay, annotation)
         :type table_name: str
         :return: Count of instances
         :rtype: int
@@ -306,6 +335,9 @@ class fusionDB:
         if not search_kwargs.get('type','') in TABLE_NAMES:
             return []
 
+        # By default, not validating user access and only searching public items
+        public_only_search = True
+
         #print(f'db search called: {json.dumps(search_kwargs,indent=4)}')
         with self.get_db() as session:
             search_query = session.query(
@@ -316,9 +348,26 @@ class fusionDB:
             search_filters = search_kwargs.get('filters')
             if not search_filters is None:
                 table_joins = list(set(list(search_filters.keys())))
+
+                # Determine ahead of time if will need to check user access
+                if search_kwargs.get('type')=='item' and 'user' in table_joins:
+                    public_only_search = False
+
+                for t in table_joins:
+                    if t in TABLE_NAMES:
+                        if hasattr(TABLE_NAMES.get(t),'item') and 'user' in table_joins:
+                            public_only_search = False
+
+                if search_kwargs.get('type')=='item' and public_only_search:
+                    # This covers the case of public-only-searches
+                    search_query = search_query.filter(Item.public == True)
+                    
                 for t in table_joins:
                     if t in TABLE_NAMES:
                         if not t == search_kwargs.get('type'):
+                            # Don't join on User, save that for checking public_only_search
+                            if t=='user':
+                                continue
                             search_query = search_query.join(TABLE_NAMES.get(t))
 
                         for k,v in search_filters.get(t).items():
@@ -328,6 +377,21 @@ class fusionDB:
                                 )
                             elif type(v)==dict:
                                 search_query = self.search_op(search_query,t,k,v)
+
+
+            if not public_only_search:
+                # Combining original query with all public items and all items the user has access to
+                user_args = search_filters.get('user')
+                query_user = self.get_user(
+                    user_id = user_args.get('id'),
+                    user_token = user_args.get('token')
+                )
+                if not query_user is None:
+                    # Filtering public or has access
+                    search_query = search_query.filter(or_(Item.public==True,Item.user_access.any(id = query_user.get('id'))))
+                else:
+                    # Filtering public
+                    search_query = search_query.filter(Item.public==True)
 
             return_list = []
             for idx,i in enumerate(search_query.all()):
@@ -348,9 +412,11 @@ class fusionDB:
         image_filepath:Union[str,None], 
         annotations_metadata:dict,
         annotations:Union[list,dict,None],
-        user_id:Union[str,None] = None,
-        vis_session_id: Union[str,None] = None):
+        vis_session_id: Union[str,None] = None,
+        user_id: Union[str,None] = None,
+        public: bool = False):
 
+        print(f'{slide_id=}, {public=}')
         new_item = self.get_create(
             table_name = 'item',
             inst_id = slide_id,
@@ -360,10 +426,13 @@ class fusionDB:
                 'image_meta': image_metadata,
                 'ann_meta': annotations_metadata,
                 'filepath': image_filepath,
-                'user': user_id,
-                'session': vis_session_id
+                'session': vis_session_id,
+                'public': public, 
             }
         )
+
+        if not public and user_id is not None:
+            self.add_access(slide_id,user_id)
 
         for ann_idx, ann in enumerate(annotations):
             # Adding layer
@@ -372,7 +441,7 @@ class fusionDB:
                 inst_id = ann['properties']['_id'],
                 kwargs = {
                     'name': ann['properties']['name'],
-                    'item': slide_id
+                    'item': slide_id,
                 }
             )
 
@@ -385,7 +454,8 @@ class fusionDB:
                         'bounds': ann['image_bounds'],
                         'properties': ann['image_properties'],
                         'image_src': ann['image_path'],
-                        'layer': ann['properties']['_id']
+                        'layer': ann['properties']['_id'],
+                        'item': slide_id
                     }
                 )
             else:
@@ -398,56 +468,96 @@ class fusionDB:
                             'geom': f['geometry'],
                             'properties': f['properties'],
                             'layer': ann['properties']['_id'],
-                            'item': slide_id
+                            'item': slide_id,
                         }
                     )
 
     def add_vis_session(self, vis_session: dict):
-        #TODO: Adding new visualization session to database (local should just be the same each time so don't have to back it up)
-        # Contains {"current": [], "local":[], "data": {}, "current_user": {}, "session": {}}
 
-        #TODO: Guest user sessions all start with "guestuser"
         vis_session_kwargs = {
-            'user': vis_session.get('current_user',{'_id': f'guestuser'+self.get_uuid()[:15]}).get('_id'),
+            'user': vis_session.get('user',{}).get('id'),
             'data': vis_session.get('data',{})
         }
 
         new_vis_session = self.get_create(
-            table_name = 'visSession',
+            table_name = 'vis_session',
             inst_id = vis_session.get('session',{}).get('id'),
             kwargs = vis_session_kwargs
         )
 
-        #TODO: Adding items in "current"
-        for c in vis_session.get('current',[]):
-            print(f'add_vis_session current slide: {json.dumps(c,indent=4)}')
-            item_kwargs = {
-                'name': c.get('name'),
-                'meta': c.get('meta'),
-                'image_meta': c.get('image_meta'),
-                'ann_meta': c.get('ann_meta'),
-                'filepath': c.get('filepath'),
-                'session': vis_session.get('session',{}).get('id')
+        new_user = self.get_create(
+            table_name = 'user',
+            inst_id = vis_session.get('user',{}).get('id'),
+            kwargs = {
+                k:v
+                for k,v in vis_session.get('user',{}).items() 
+                if not k=='id'
             }
-            new_item = self.get_create(
-                table_name = 'item',
-                inst_id = c.get('id'),
-                kwargs = c
+        )
+
+    def add_access(self, item_id, user_id):
+
+        with self.get_db() as session:
+            statement = session.execute(
+                insert(UserAccess).values(
+                    user_id = user_id,
+                    item_id = item_id
+                )
             )
+        
+    def get_user(self, user_token:Union[str,None] = None, user_id: Union[str,None] = None) -> User:
 
-            #TODO: Get Layers, Structures, ImageOverlays, and Annotations? Or wait to add those to the database?
-            # Should duplicates be added? It would be important to preserve different versions of each Layer/Structure/etc. if changes are made.
-            # The default/static version of annotations can just be the source (local file/DSA annotations/item/{id})
+        with self.get_db() as session:
+            if not user_token is None:
+                search_query = session.execute(
+                    select(User).where(User.token==user_token)
+                ).first()
+            elif not user_id is None:
+                search_query = session.execute(
+                    select(User).where(User.id==user_id)
+                ).first()
 
-    def get_names(self, table_name:str, size:Union[int,None]=None, offset = 0):
+            if not search_query is None:
+                if len(search_query)>0:
+                    return search_query[0].to_dict()
+                else:
+                    return None
+            else:
+                return None
+
+    def check_user_access(self, user_id:str, admin:bool = False) -> list:
+
+        user_access_rows = []
+        with self.get_db() as session:
+            user_access = session.query(UserAccess)
+
+            for i in user_access.all():
+                user_access_rows.append(i)
+
+        # Admins have access to everything
+        non_public_access_list = []
+        if admin:
+            non_public_access_list =  [i[1] for i in user_access_rows]
+        else:
+            for user,item in user_access_rows:
+                if user_id==user:
+                    non_public_access_list.append(item)
+
+        return non_public_access_list
+
+    def get_names(self, table_name:str, user_token: Union[str,None] = None, size:Union[int,None]=None, offset = 0):
 
         return_names = []
         with self.get_db() as session:
 
             if table_name in TABLE_NAMES:
+                #if not table_name=='item':
                 name_query = session.execute(
                     select(getattr(TABLE_NAMES.get(table_name),'name'))
                 )
+                #else:
+                #    name_query = session.query(Item.name)
+                #    name_query = name_query.join(UserAccess)
 
                 for a_idx,a in enumerate(name_query.all()):
                     if not size is None:
@@ -458,7 +568,7 @@ class fusionDB:
 
             return return_names
 
-    def get_ids(self, table_name: str, size:Union[int,None] = None, offset = 0):
+    def get_ids(self, table_name: str, user_token: Union[str,None] = None, size:Union[int,None] = None, offset = 0):
 
         return_ids = []
         with self.get_db() as session:

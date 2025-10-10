@@ -58,7 +58,7 @@ class DSAResourceSelector(DSATool):
     def get_collection_table(self, session_data:dict, return_data:bool):
         
         # Getting user folders if a user is present
-        if "current_user" in session_data:
+        if "user" in session_data:
             user_folders = [
                 "Private",
                 "Public"
@@ -67,14 +67,14 @@ class DSAResourceSelector(DSATool):
             user_folders = []
 
         # Getting collection names
-        if "current_user" in session_data:
-            self.handler.gc.setToken(session_data["current_user"]["token"])
+        if "user" in session_data:
+            self.handler.gc.setToken(session_data["user"]["token"])
             collection_list = self.handler.gc.get('/collection')
         else:
             collection_list = self.handler.gc.get('/collection')
 
         if len(user_folders)>0:
-            collection_list+=[{'name': 'User Folders','_modelType': 'user', '_id': session_data['current_user']['_id']}]
+            collection_list+=[{'name': 'User Folders','_modelType': 'user', '_id': session_data['user']['_id']}]
 
         if not return_data:
             collection_table = html.Div(
@@ -146,7 +146,7 @@ class DSAResourceSelector(DSATool):
             html.H4(
                 id = {'type': 'dsa-resource-selector-current-user','index': 0},
                 children = [
-                    f'Showing available resources for: {session_data["current_user"]["login"]}' if "current_user" in session_data else "Showing only publically available resources"
+                    f'Showing available resources for: {session_data["user"]["login"]}' if "user" in session_data else "Showing only publically available resources"
                 ]
             ),
             html.Hr(),
@@ -290,7 +290,7 @@ class DSAResourceSelector(DSATool):
                     folder_path = folder_info['_id'],
                     folder_type = folder_info['_modelType'],
                     ignore_histoqc=ignore_histoqc,
-                    user_token = session_data['current_user']['token']
+                    user_token = session_data['user']['token']
                 )
             else:
                 all_folder_slides = []
@@ -302,8 +302,8 @@ class DSAResourceSelector(DSATool):
                 if not u==folder_info['_id'] and not u in folders_in_folder:
                     # This is for all folders in this folder
                     # This grabs parent folders of this folder
-                    u_folder_info = self.handler.get_folder_info(folder_id=u, user_token = session_data['current_user']['token'])
-                    u_folder_rootpath = self.handler.get_folder_rootpath(u, user_token = session_data['current_user']['token'])
+                    u_folder_info = self.handler.get_folder_info(folder_id=u, user_token = session_data['user']['token'])
+                    u_folder_rootpath = self.handler.get_folder_rootpath(u, user_token = session_data['user']['token'])
                     # Folders in order from collection-->child folder-->etc.
                     folder_ids = [i['object']['_id'] for i in u_folder_rootpath]
 
@@ -322,7 +322,7 @@ class DSAResourceSelector(DSATool):
 
                     child_folder_path_info = self.handler.get_path_info(
                         path = child_folder_path,
-                        user_token = session_data['current_user']['token']
+                        user_token = session_data['user']['token']
                     )
                     if not child_folder_path_info['_id'] in folders_in_folder:
                         folders_in_folder.append(child_folder_path_info['_id'])
@@ -356,12 +356,12 @@ class DSAResourceSelector(DSATool):
                 empty_folders = self.handler.get_folder_folders(
                     folder_id = folder_info['_id'],
                     folder_type = folder_info['_modelType'],
-                    user_token = session_data['current_user']['token']
+                    user_token = session_data['user']['token']
                 )
                 
                 for f in empty_folders:
                     if not f['_id'] in folders_in_folder and not f['_id'] in unique_folders:
-                        folder_info = self.handler.gc.get(f'/folder/{f["_id"]}/details?token={session_data["current_user"]["token"]}')
+                        folder_info = self.handler.gc.get(f'/folder/{f["_id"]}/details?token={session_data["user"]["token"]}')
                         folder_folders.append(
                             {
                                 'Name': f['name'],
@@ -379,7 +379,7 @@ class DSAResourceSelector(DSATool):
             for u_f in user_folders:
                 user_folder_info = self.handler.get_path_info(
                     path = f'/user/{folder_info["login"]}/{u_f}',
-                    user_token = session_data['current_user']['token']
+                    user_token = session_data['user']['token']
                 )
 
                 folder_folders.append({
@@ -394,9 +394,9 @@ class DSAResourceSelector(DSATool):
         elif folder_info['_modelType']=='item':
             
             if self.selector_type=='file':
-                item_subs = self.handler.gc.get(f'/item/{folder_info["_id"]}/files?token={session_data["current_user"]["token"]}')
+                item_subs = self.handler.gc.get(f'/item/{folder_info["_id"]}/files?token={session_data["user"]["token"]}')
             elif self.selector_type=='annotation':
-                item_subs = self.handler.gc.get(f'/annotation?token={session_data["current_user"]["token"]}',parameters={'itemId': folder_info['_id']})
+                item_subs = self.handler.gc.get(f'/annotation?token={session_data["user"]["token"]}',parameters={'itemId': folder_info['_id']})
 
             folder_slides = [
                 {
@@ -470,8 +470,8 @@ class DSAResourceSelector(DSATool):
                         resource_slides, resource_folders = self.organize_folder_contents(
                             folder_info = {
                                 '_modelType': 'user',
-                                'login': session_data['current_user']['login'],
-                                'token': session_data['current_user']['token']
+                                'login': session_data['user']['login'],
+                                'token': session_data['user']['token']
                             },
                             show_empty=True,
                             ignore_histoqc=True,
@@ -508,7 +508,7 @@ class DSAResourceSelector(DSATool):
             if ctx.triggered_id['index']<len(current_path_parts)-1:
                 if ctx.triggered_id['index']>1:
                     new_path = '/'.join(current_path_parts[1:ctx.triggered_id['index']+1])
-                    path_info = self.handler.get_path_info(new_path,user_token = session_data['current_user']['token'])
+                    path_info = self.handler.get_path_info(new_path,user_token = session_data['user']['token'])
 
                     resource_slides, resource_folders = self.organize_folder_contents(
                         folder_info = path_info,
@@ -528,7 +528,7 @@ class DSAResourceSelector(DSATool):
                         resource_slides, resource_folders = self.organize_folder_contents(
                             folder_info = {
                                 '_modelType': 'user',
-                                'login': session_data['current_user']['login']
+                                'login': session_data['user']['login']
                             },
                             show_empty = True,
                             ignore_histoqc=True,
@@ -555,8 +555,8 @@ class DSAResourceSelector(DSATool):
             if not 'user' in current_path_parts:
                 new_path = '/'.join(current_path_parts[1:])
             else:
-                new_path = f'/user/{session_data["current_user"]["login"]}/'+'/'.join(current_path_parts[2:])
-            path_info = self.handler.get_path_info(new_path,user_token = session_data['current_user']['token'])
+                new_path = f'/user/{session_data["user"]["login"]}/'+'/'.join(current_path_parts[2:])
+            path_info = self.handler.get_path_info(new_path,user_token = session_data['user']['token'])
 
             if not output_file_name is None:
                 added_resources = [
@@ -597,7 +597,7 @@ class DSAResourceSelector(DSATool):
                     ]
                 else:
                     # Check that this isn't a user base folder
-                    if not current_path_parts==['Collections and User Folders','user',session_data['current_user']['login']]:
+                    if not current_path_parts==['Collections and User Folders','user',session_data['user']['login']]:
                         input_component = html.Div([
                             dbc.InputGroup([
                                 dbc.InputGroupText(

@@ -57,8 +57,8 @@ class DSALoginComponent(DSATool):
     def update_layout(self, session_data:dict, use_prefix:bool):
         
         current_user_children = ''
-        if 'current_user' in session_data:
-            current_user_children = f'Welcome, {session_data.get("current_user",{}).get("login","")}!'
+        if 'user' in session_data:
+            current_user_children = f'Welcome, {session_data.get("user",{}).get("login","")}!'
             logout_button_disable = False
 
         else:
@@ -431,7 +431,8 @@ class DSALoginComponent(DSATool):
                 password= password_input
             )
             if not type(new_login_output)==str:
-                session_data['current_user'] = new_login_output
+                session_data['user'] = new_login_output
+                session_data['user']['id'] = new_login_output.get('_id')
                 current_user = f"Welcome, {new_login_output['login']}"
                 session_data = json.dumps(session_data)
                 login_error_div = []
@@ -484,7 +485,8 @@ class DSALoginComponent(DSATool):
                 lastName= lastname_input
             )
             if create_user_output:
-                session_data['current_user'] = create_user_output
+                session_data['user'] = create_user_output
+                session_data['user']['id'] = create_user_output.get('_id')
                 current_user = f"Welcome, {create_user_output['login']}"
                 session_data = json.dumps(session_data)
                 create_account_error_div = []
