@@ -17,6 +17,8 @@ from dash_extensions.enrich import DashProxy, html, MultiplexerTransform, Prefix
 from typing_extensions import Union
 from fusion_tools.tileserver import Slide, TileServer, DSATileServer, LocalTileServer, CustomTileServer
 from fusion_tools.database.database import fusionDB
+from fusion_tools.database.api import fusionAPI
+
 import threading
 
 import uvicorn
@@ -1763,6 +1765,12 @@ class Visualization:
             license_info = {
                 'name': 'Apache 2.0'
             }
+        )
+
+        app.include_router(
+            fusionAPI(
+                database = self.database
+            ).router
         )
 
         allowed_origins = [
