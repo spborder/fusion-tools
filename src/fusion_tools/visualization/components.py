@@ -273,10 +273,6 @@ class Visualization:
             ]
         )(self.open_current_modal)
 
-        # Callback for updating user info
-
-        # Callback for logging out
-
         # Callback(s) for logging in
         self.viewer_app.callback(
             [
@@ -309,7 +305,9 @@ class Visualization:
         self.viewer_app.callback(
             [
                 Input({'type': 'user-login-new-submit','index': ALL},'n_clicks'),
-                Input({'type': 'user-login-submit','index': ALL},'n_clicks')
+                Input({'type': 'user-login-submit','index': ALL},'n_clicks'),
+                Input({'type': 'user-logout-submit','index': ALL},'n_clicks'),
+                Input({'type': 'user-info-save','index': ALL},'n_clicks')
             ],
             [
                 Output('anchor-vis-memory-store','data'),
@@ -321,16 +319,14 @@ class Visualization:
                 State('anchor-vis-store','data'),
                 State('anchor-vis-memory-store','data'),
                 State('anchor-page-url','pathname'),
-                State({'type': 'user-login-input','index': ALL},'value'),
-                State({'type': 'user-password-input','index': ALL},'value'),
-                State({'type': 'user-new-firstName','index': ALL},'value'),
-                State({'type': 'user-new-lastName','index': ALL},'value'),
-                State({'type': 'user-new-email','index': ALL},'value'),
-                State({'type': 'user-new-login-input','index': ALL},'value'),
-                State({'type': 'user-new-password-input','index': ALL},'value')
+                State({'type': 'user-prev-key','index': ALL},'children'),
+                State({'type': 'user-prev-val','index': ALL},'value'),
+                State({'type': 'user-new-key','index': ALL},'children'),
+                State({'type': 'user-new-val','index': ALL},'value'),
+                State({'type': 'user-current-key','index': ALL},'children'),
+                State({'type': 'user-current-val','index': ALL},'value')
             ]
         )(self.update_current_user)
-
 
     def open_navbar(self, clicked, is_open):
 
@@ -423,22 +419,34 @@ class Visualization:
             user_info_rows = []
             for idx, (key,value) in enumerate(user_info.items()):
                 if key in ['id','token']:
-                    input_row = html.P(value,id=f'user-info-row-{idx}')
+                    input_row = html.P(
+                        value,
+                        id= {'type': 'user-current-val','index': idx}
+                    )
                 elif key in ['login','firstName','lastName','email']:
-                    input_row = dbc.Input(value=value,type='text',id=f'user-info-row-{idx}')
+                    input_row = dbc.Input(
+                        value=value,
+                        type='text',
+                        id={'type': 'user-current-val','index': idx}
+                    )
                 else:
                     # Skipping password, admin, updated
                     continue
 
                 user_info_rows.append(
                     dbc.Row([
-                        dbc.Label(key,html_for=f'user-info-row-{idx}',width=2),
+                        dbc.Label(
+                            key,
+                            id = {'type': 'user-current-key','index': idx},
+                            html_for={'type': 'user-current-val','index': idx},
+                            width=2
+                        ),
                         dbc.Col([
                             input_row
                         ],md=9),
                         dbc.Col([
                             dcc.Clipboard(
-                                target_id = f'user-info-row-{idx}',
+                                target_id = {'type': 'user-current-val','index': idx},
                                 title = 'copy',
                                 style = {
                                     'fontSize':20,
@@ -453,7 +461,7 @@ class Visualization:
                 dbc.Col(
                     dbc.Button(
                         "Save Changes",
-                        id = 'user-info-save',
+                        id = {'type': 'user-info-save','index': 0},
                         n_clicks = 0,
                         color = 'secondary',
                         className = 'd-grid col-12 mx-auto'
@@ -463,11 +471,11 @@ class Visualization:
                 dbc.Col(
                     dbc.Button(
                         "Log Out",
-                        id = 'user-logout',
+                        id = {'type': 'user-logout-submit','index': 0},
                         n_clicks = 0,
                         color = 'danger',
                         className = 'd-grid col-12 mx-auto',
-                        disabled = True
+                        disabled = False
                     ),
                     md = 'auto'
                 ),
@@ -476,13 +484,21 @@ class Visualization:
         else:
             user_info_rows = [
                 dbc.Row([
-                    dbc.Label(key,html_for=f'user-info-row-{idx}',width=2),
+                    dbc.Label(
+                        key,
+                        id = {'type': 'user-current-key','index': idx},
+                        html_for={'type': 'user-current-val','index': idx},
+                        width=2
+                    ),
                     dbc.Col([
-                        html.P(value,id=f'user-info-row-{idx}')
+                        html.P(
+                            value,
+                            id={'type': 'user-current-val','index': idx}
+                        )
                     ],md=9),
                     dbc.Col([
                         dcc.Clipboard(
-                            target_id = f'user-info-row-{idx}',
+                            target_id = {'type': 'user-current-val','index': idx},
                             title = 'copy',
                             style = {
                                 'fontSize':20,
@@ -492,6 +508,7 @@ class Visualization:
                     ],md=1)
                 ],align = 'center')
                 for idx,(key,value) in enumerate(user_info.items())
+                if not value is None
             ]
 
             button_rows = dbc.Row([
@@ -509,9 +526,16 @@ class Visualization:
 
         #TODO: For User/Admin users, show a dropdown menu of session ids with name (id)
         session_info_rows = dbc.Row([
-            dbc.Label('session',html_for = 'user-session-row',width=2),
+            dbc.Label(
+                'session',
+                html_for = 'user-session-row',
+                width=2
+            ),
             dbc.Col([
-                html.P(session_info.get('id'),id = 'user-session-row')
+                html.P(
+                    session_info.get('id'),
+                    id = 'user-session-row'
+                )
             ])
         ])
 
@@ -563,13 +587,14 @@ class Visualization:
                 dbc.Row([
                     dbc.Label(
                         'login',
-                        html_for = 'user-login-input',
+                        id = {'type': 'user-prev-key','index': 0},
+                        html_for = {'type': 'user-prev-val','index': 0},
                         width = 2
                     ),
                     dbc.Col(
                         dbc.Input(
                             type = 'text', 
-                            id = {'type': 'user-login-input','index': 0}, 
+                            id = {'type': 'user-prev-val','index': 0}, 
                             placeholder = 'login'
                         ),
                         md = 10
@@ -578,13 +603,14 @@ class Visualization:
                 dbc.Row([
                     dbc.Label(
                         'password',
-                        html_for = 'user-password-input',
+                        id = {'type': 'user-prev-key','index': 1},
+                        html_for = {'type': 'user-prev-val','index': 1},
                         width = 2
                     ),
                     dbc.Col(
                         dbc.Input(
                             type = 'password', 
-                            id = {'type': 'user-password-input','index': 0}, 
+                            id = {'type': 'user-prev-val','index': 1}, 
                             placeholder = 'password'
                         )
                     )
@@ -647,56 +673,60 @@ class Visualization:
             dbc.ModalBody([
                 dbc.Row([
                     dbc.Label(
-                        'First Name',
-                        html_for = 'user-new-firstName',
+                        'firstName',
+                        id = {'type': 'user-new-key','index': 0},
+                        html_for = {'type': 'user-new-val','index': 0},
                         width=2
                     ),
                     dbc.Col([
                         dbc.Input(
                             type = 'text',
-                            id = {'type': 'user-new-firstName','index': 0},
+                            id = {'type': 'user-new-val','index': 0},
                             placeholder = 'First Name'
                         )
                     ],md=10)
                 ],align='center'),
                 dbc.Row([
                     dbc.Label(
-                        'Last Name',
-                        html_for = 'user-new-lastName',
+                        'lastName',
+                        id = {'type': 'user-new-key','index': 1},
+                        html_for = {'type': 'user-new-val','index': 1},
                         width=2
                     ),
                     dbc.Col([
                         dbc.Input(
                             type = 'text',
-                            id = {'type': 'user-new-lastName','index': 0},
+                            id = {'type': 'user-new-val','index': 1},
                             placeholder = 'Last Name'
                         )
                     ],md=10)
                 ],align='center'),
                 dbc.Row([
                     dbc.Label(
-                        'email (Optional)',
-                        html_for = 'user-new-email',
+                        'email',
+                        id = {'type': 'user-new-key','index': 2},
+                        html_for = {'type': 'user-new-val','index': 2},
                         width = 2
                     ),
                     dbc.Col([
                         dbc.Input(
                             type = 'email',
-                            id = {'type': 'user-new-email','index': 0},
-                            placeholder = 'example@email.com'
+                            id = {'type': 'user-new-val','index': 2},
+                            placeholder = 'example@email.com (OPTIONAL)'
                         )
                     ])
                 ]),
                 dbc.Row([
                     dbc.Label(
                         'login',
-                        html_for = 'user-new-login-input',
+                        id = {'type': 'user-new-key','index': 3},
+                        html_for = {'type': 'user-new-val','index': 3},
                         width = 2
                     ),
                     dbc.Col(
                         dbc.Input(
                             type = 'text', 
-                            id = {'type': 'user-new-login-input','index': 0}, 
+                            id = {'type': 'user-new-val','index': 3}, 
                             placeholder = 'login'
                         ),
                         md = 10
@@ -705,13 +735,14 @@ class Visualization:
                 dbc.Row([
                     dbc.Label(
                         'password',
-                        html_for = 'user-new-password-input',
+                        id = {'type': 'user-new-key','index': 4},
+                        html_for = {'type': 'user-new-val','index': 4},
                         width = 2
                     ),
                     dbc.Col(
                         dbc.Input(
                             type = 'password', 
-                            id = {'type': 'user-new-password-input','index': 0}, 
+                            id = {'type': 'user-new-val','index': 4}, 
                             placeholder = 'password'
                         )
                     )
@@ -753,7 +784,7 @@ class Visualization:
         else:
             raise exceptions.PreventUpdate
 
-    def update_current_user(self, new_clicked, login_clicked, session_data, in_memory_store, pathname,user_login, user_password, new_firstName, new_lastName, new_email, new_login, new_password):
+    def update_current_user(self, new_clicked, login_clicked, logout_clicked, update_info_clicked, session_data, in_memory_store, pathname, prev_keys, prev_vals, new_keys, new_vals, current_keys, current_vals):
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
@@ -764,11 +795,9 @@ class Visualization:
         if 'user-login-new-submit' in ctx.triggered_id['type']:
             # Check new user info is present
             new_user_info = {
-                'login': new_login[0],
-                'password': new_password[0],
-                'firstName': new_firstName[0],
-                'lastName': new_lastName[0],
-                'email': new_email[0],
+                k:v
+                for k,v in zip(new_keys,new_vals)
+            } | {
                 'admin': False,
                 'token': uuid.uuid4().hex[:24]
             }
@@ -790,12 +819,12 @@ class Visualization:
         elif 'user-login-submit' in ctx.triggered_id['type']:
             # Check returning user info
             returning_user_info = {
-                'login': user_login[0],
-                'password': user_password[0]
+                k:v
+                for k,v in zip(prev_keys,prev_vals)
             }
 
             previous_user = self.database.check_user_login_password(
-                user_login[0], user_password[0]
+                prev_vals[0],prev_vals[1]
             )
 
             if previous_user is None:
@@ -806,6 +835,30 @@ class Visualization:
                     'user': previous_user,
                     'session': in_memory_store.get('session')
                 }
+
+        elif 'user-logout-submit' in ctx.triggered_id['type']:
+            
+            new_in_memory = {
+                'user': None,
+                'session': None
+            }
+
+        elif 'user-info-save' in ctx.triggered_id['type']:
+            
+            current_keys.append('token')
+            current_vals.append(uuid.uuid4().hex[:24])
+            updated_user = self.database.get_create(
+                table_name = 'user',
+                inst_id = in_memory_store.get('user').get('id'),
+                kwargs = {k:v for k,v in zip(current_keys,current_vals) if not k=='id'}
+            )
+            if not updated_user is None:
+                new_in_memory = {
+                    'user': updated_user.to_dict(),
+                    'session': in_memory_store.get('session')
+                }
+            else:
+                raise exceptions.PreventUpdate
 
         new_session_data = session_data
         new_session_data['user'] = new_in_memory.get('user')
