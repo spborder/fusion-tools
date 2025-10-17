@@ -44,6 +44,7 @@ class fusionAPI:
         # User
         self.router.add_api_route('/user', lambda: self.get_from_table("user"), methods=["GET"],tags = ['user'])
         #self.router.add_api_route('/user/me', lambda: self.get_from_table("user"), methods=["GET"],tags = ['user'])
+        self.router.add_api_route('/user/authenticate',self.authenticate, methods = ["GET"],tags=['user'])
         self.router.add_api_route('/user/{id}', lambda id: self.get_from_table("user",id), methods=["GET"],tags = ['user'])
 
         # VisSession 
@@ -90,7 +91,7 @@ class fusionAPI:
 
         return search_output[0].copy()
 
-    def get_from_table(self, table_name: str, id: str | None = None, request: Request = None) -> list:
+    def get_from_table(self, table_name: str, id: str | None = None, request: Request | None = None) -> list:
         """Getting one or more elements from a specific table in the database
 
         :param table_name: Name of table to GET from
@@ -105,7 +106,6 @@ class fusionAPI:
         size = None
         offset = 0
         if not request is None:
-            print(request.url)
             if request.query_params.get('token'):
                 token = request.query_params.get('token')
             if request.query_params.get('size'):
@@ -142,6 +142,10 @@ class fusionAPI:
 
         return search_output
 
+    def authenticate(self, login:str, password:str) -> dict:
 
+        auth_check = self.database.check_user_login_password(login,password)
+
+        return auth_check
 
 
