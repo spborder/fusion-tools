@@ -984,7 +984,7 @@ class SlideMap(MapComponent):
 
         vis_data = json.loads(vis_data)
         new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
-        print(f"{new_slide.get('id')=}")
+        #print(f"{new_slide.get('id')=}")
         new_image_metadata = None
         new_metadata = None
         annotations_metadata = None
@@ -998,7 +998,7 @@ class SlideMap(MapComponent):
                 user_id = vis_data.get('user',{}).get('id'),
                 vis_session_id = vis_data.get('session',{}).get('id')
             )
-            print(f'in update_slide: {cached_item=}')
+            #print(f'in update_slide: {cached_item=}')
             if cached_item:
                 get_from_cache = True
 
@@ -1025,6 +1025,7 @@ class SlideMap(MapComponent):
                 annotations_metadata_url = new_slide['annotations_metadata_url']
 
             # Metadata dictionaries requested from either Local- or DSATileServer
+            
             new_image_metadata = requests.get(image_metadata_url).json()
             new_metadata = requests.get(metadata_url).json()
             annotations_metadata = requests.get(annotations_metadata_url).json()
@@ -1397,7 +1398,7 @@ class SlideMap(MapComponent):
                     s['properties'] = a['properties']
 
                 start = time.time()
-                print('Adding to database')
+                #print('Adding to database')
                 # Adding to database on another thread:
                 new_thread = threading.Thread(
                     target = self.database.add_slide,
@@ -2645,6 +2646,11 @@ class LargeSlideMap(SlideMap):
                 // Reading in map-slide-information
                 // scaled_map_bounds = [top,left,bottom,right]
                 var map_slide_information = JSON.parse(slide_information);
+
+                if (map_slide_information==undefined){
+                    throw window.dash_clientside.PreventUpdate;
+                }
+
                 var scaled_map_bounds = [
                     Math.floor(map_bounds[0][0][0] / map_slide_information.y_scale),
                     Math.floor(map_bounds[0][0][1] / map_slide_information.x_scale),
@@ -2653,6 +2659,9 @@ class LargeSlideMap(SlideMap):
                 ];
 
                 // Checking if the maps current zoom level is above the minimum zoom setting
+                console.log(current_zoom[0]);
+                console.log(map_slide_information.minZoom);
+
                 if (current_zoom[0] < map_slide_information.minZoom){
                     throw window.dash_clientside.PreventUpdate;
                 }
@@ -2661,19 +2670,26 @@ class LargeSlideMap(SlideMap):
                 // and then must be converted to GeoJSON.
                 var annotations_list = [];
                 var annotations_str = [];
+
+                console.log(map_slide_information);
+
                 if ("api_url" in map_slide_information.slide_info){
                     for (let ann = 0; ann<map_slide_information.annotations_metadata.length; ann++) {
                         var annotation = map_slide_information.annotations_metadata[ann];
 
-                        // TODO: This could need some additional headers for CORS
+                        console.log(map_slide_information.annotations_region_url);
+                        console.log(annotation._id);
+
                         try {
                             let ann_url = map_slide_information.annotations_region_url + annotation._id+"?top="+scaled_map_bounds[2]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[0]+"&right="+scaled_map_bounds[3]
+                            console.log(ann_url);
+                            
                             var ann_response = await fetch(
-                                ann_url,
-                                method: 'GET',
-                                mode: 'cors',
-                                headers: {
-                                    'Content-Type': 'application/json'    
+                                ann_url,{
+                                    mode: 'cors',
+                                    headers: {
+                                        'Content-Type': 'application/json'    
+                                    }
                                 }
                             );
 
@@ -2726,15 +2742,15 @@ class LargeSlideMap(SlideMap):
                     }
                 } else {
                     // General case.
-                    // TODO: Could need some additional headers for CORS
                     try {
                         let ann_url = map_slide_information.annotations_region_url+"?top="+scaled_map_bounds[0]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[2]+"&right="+scaled_map_bounds[3];
                         var ann_response = await fetch(
-                            ann_url,
-                            method: 'GET',
-                            mode: 'cors',
-                            headers: {
-                                'Content-Type': 'application/json'    
+                            ann_url,{
+                                method: 'GET',
+                                mode: 'cors',
+                                headers: {
+                                    'Content-Type': 'application/json'    
+                                }
                             }
                         );
 
@@ -2776,6 +2792,8 @@ class LargeSlideMap(SlideMap):
                         console.error(error.message);
                     }                
                 }
+
+                console.log(annotations_list);
 
                 return [annotations_list, [JSON.stringify(annotations_str)]];
             }
@@ -2820,13 +2838,15 @@ class LargeSlideMap(SlideMap):
         else:
             new_tile_url = new_slide['tiles_url']+f'?token={vis_data["user"]["token"]}'
             new_annotations_url = new_slide['annotations_url']+f'?token={vis_data["user"]["token"]}'
-            new_annotations_metadata_url = new_slide['annotations_metadata_url']+f'?token={vis_data["user"]["token"]}'
+            new_annotations_region_url = new_slide['annotations_region_url']+f'?token={vis_data["user"]["token"]}'
+            new_annotations_metadata_url = new_slide['annotations_metadata_url']+f'&token={vis_data["user"]["token"]}'
             new_metadata_url = new_slide['metadata_url']+f'?token={vis_data["user"]["token"]}'
             new_image_metadata_url = new_slide['image_metadata_url']+f'?token={vis_data["user"]["token"]}'
 
         new_image_metadata = requests.get(new_image_metadata_url).json()
         new_metadata = requests.get(new_metadata_url).json()
         new_annotations_metadata = requests.get(new_annotations_metadata_url).json()
+
         new_tile_size = new_image_metadata['tileHeight']
         x_scale, y_scale = self.get_scale_factors(new_image_metadata)
 
@@ -3285,12 +3305,12 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
                         try {
                             let ann_url = map_slide_information.annotations_region_url + annotation._id+"?top="+scaled_map_bounds[2]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[0]+"&right="+scaled_map_bounds[3]
                             var ann_response = await fetch(
-                                ann_url,
+                                ann_url,{
                                 method: 'GET',
                                 mode: 'cors',
                                 headers: {
                                     'Content-Type': 'application/json'    
-                                }
+                                }}
                             );
 
                             if (!ann_response.ok) {
@@ -3346,12 +3366,12 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
                     try {
                         let ann_url = map_slide_information.annotations_region_url+"?top="+scaled_map_bounds[0]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[2]+"&right="+scaled_map_bounds[3];
                         var ann_response = await fetch(
-                            ann_url,
+                            ann_url,{
                             method: 'GET',
                             mode: 'cors',
                             headers: {
                                 'Content-Type': 'application/json'    
-                            }
+                            }}
                         );
 
                         if (!ann_response.ok) {
@@ -3436,6 +3456,7 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
         else:
             new_tile_url = new_slide['tiles_url']+f'?token={vis_data["user"]["token"]}'
             new_annotations_url = new_slide['annotations_url']+f'?token={vis_data["user"]["token"]}'
+            new_annotations_region_url = new_slide['annotations_region_url']+f'&token={vis_data["user"]["token"]}'
             new_annotations_metadata_url = new_slide['annotations_metadata_url']+f'?token={vis_data["user"]["token"]}'
             new_metadata_url = new_slide['metadata_url']+f'?token={vis_data["user"]["token"]}'
             new_image_metadata_url = new_slide['image_metadata_url']+f'?token={vis_data["user"]["token"]}'
@@ -3667,7 +3688,6 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
 
         new_marker_div = html.Div()
 
-        #return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
         return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div
 
 class HybridSlideMap(MultiFrameSlideMap):
@@ -3971,7 +3991,6 @@ class HybridSlideMap(MultiFrameSlideMap):
 
         new_marker_div = html.Div()
 
-        #return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
         return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div
 
 

@@ -206,7 +206,20 @@ class LocalTileServer(TileServer):
         else:
             self.access_url = self.jupyter_server_url
 
-        self.app = FastAPI()
+        self.app = FastAPI(
+            title = 'TileServer',
+            description = 'Locally deployed tileserver for high-resolution microscopy images',
+            version = '3.6.35'
+        )
+
+        self.app.add_middleware(
+            CORSMiddleware,
+            allow_origins=self.cors_options.get('allow_origins',['*']),
+            allow_methods=self.cors_options.get('allow_methods',['GET','OPTIONS']),
+            allow_headers = self.cors_options.get('allow_headers',['*']),
+            expose_headers = self.cors_options.get('expose_headers',['*']),
+            allow_credentials = self.cors_options.get('allow_credentials',False)
+        )
 
         self.router = APIRouter()
         self.router.add_api_route('/',self.root,methods=["GET","OPTIONS"])
@@ -247,7 +260,6 @@ class LocalTileServer(TileServer):
         )
 
         self.add_new_slide(new_local_item,session_id,user_id)
-
 
     def add_new_slide(self, slide_id: str, slide_obj: Slide, session_id: Union[str,None] = None, user_id: Union[str,None] = None):
 
@@ -552,6 +564,11 @@ class LocalTileServer(TileServer):
         :return: Image tile containing bytes encoded pixel information
         :rtype: Response
         """
+
+        # large-image getTile doesn't do anything with negative zoom or tile coordinates
+        if any([i<0 for i in [z,x,y]]):
+            return Response(status_code=200)
+
         token = None
         if not request is None:
             if request.query_params.get('token'):

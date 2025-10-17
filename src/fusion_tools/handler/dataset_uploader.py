@@ -442,11 +442,9 @@ class DSAUploader(DSATool):
                 dbc.CardBody([
                     dbc.Row(
                         html.H3(self.title)
-                        html.H3(self.title)
                     ),
                     html.Hr(),
                     dbc.Row(
-                        self.description
                         self.description
                     ),
                     html.Hr(),

@@ -37,9 +37,9 @@ def main():
                 SlideMap(),
             ]
         ],
-        app_options = {
-            'host': '192.168.86.24'
-        }
+        #app_options = {
+        #    'host': '0.0.0.0'
+        #}
     )
 
     vis.start()

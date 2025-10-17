@@ -18,7 +18,8 @@ def main():
 
     # Grabbing first item from demo DSA instance
     base_url = 'http://ec2-3-230-122-132.compute-1.amazonaws.com:8080/api/v1'
-    item_id = '64f545302d82d04be3e39eec'
+    #item_id = '64f545302d82d04be3e39eec'
+    item_id = '66a161a33ea2cd3894c85de3'
 
     # Starting the DSAHandler to grab information:
     dsa_handler = DSAHandler(
@@ -38,13 +39,13 @@ def main():
     ]
 
     vis_session = Visualization(
-        local_slides = local_slide_list,
-        local_annotations = local_annotations_list,
+        #local_slides = local_slide_list,
+        #local_annotations = local_annotations_list,
         tileservers = dsa_tileserver,
         components = [
             [
                 LargeSlideMap(
-                    min_zoom = 2
+                    min_zoom = 3
                 ),
                 [
                     OverlayOptions()

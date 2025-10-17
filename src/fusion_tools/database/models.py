@@ -8,6 +8,7 @@ from sqlalchemy.orm import (
     declarative_base, mapped_column, relationship,
     Mapped    
 )
+import bcrypt
 
 from shapely.geometry import box
 
@@ -16,7 +17,7 @@ from shapely.geometry import box
 
 Base = declarative_base()
 
-
+# Which users can access which items
 UserAccess = Table(
     'user_access',
     Base.metadata,
@@ -27,7 +28,8 @@ UserAccess = Table(
 class User(Base):
     __tablename__ = 'user'
     id = mapped_column(String(24), primary_key = True)
-    login = Column(String)
+    login = Column(String,unique=True)
+    password = Column(String(60))
 
     firstName = Column(String)
     lastName = Column(String)
@@ -42,6 +44,12 @@ class User(Base):
         secondary = UserAccess, back_populates="user_access"
     )
 
+    meta = Column(JSON)
+
+    def verify_password(self, query_pword) -> bool:
+        return bcrypt.checkpw(
+            query_pword.encode(), self.password
+        )
 
     def to_dict(self):
         user_dict = {
@@ -58,41 +66,21 @@ class User(Base):
         return user_dict
     
 
-
-"""
-class UserAccess(Base):
-    __tablename__ = 'user_access'
-
-    id = Column(String(24), primary_key = True)
-
-    user = mapped_column(ForeignKey("user.id"))
-    item = mapped_column(ForeignKey("item.id"))
-
-    #TODO: placeholder column, public items aren't added here.
-    permission = Column(Integer)
-
-    updated = Column(DateTime)
-
-    def to_dict(self):
-        user_access_dict = {
-            'id': self.id,
-            'user': self.user,
-            'item': self.item
-        }
-        return user_access_dict
-"""
-
 class VisSession(Base):
     __tablename__='vis_session'
     id = mapped_column(String(24),primary_key = True)
     # Can multiple users access the same vis session?
     user = mapped_column(ForeignKey("user.id"))
 
+    name = Column(String)
+
     #TODO: Add "current" section for current items in vis_session
 
     # Visualization session data stored as JSON
     data = Column(JSON)
     updated = Column(DateTime)
+
+    meta = Column(JSON)
 
     def to_dict(self):
         vis_dict = {
@@ -146,6 +134,8 @@ class Layer(Base):
 
     updated = Column(DateTime)
 
+    meta = Column(JSON)
+
     def to_dict(self):
         layer_dict = {
             'id': self.id,
@@ -166,6 +156,8 @@ class Structure(Base):
     layer = mapped_column(ForeignKey('layer.id'))
     item = mapped_column(ForeignKey('item.id'))
     updated = Column(DateTime)
+
+    meta = Column(JSON)
 
     def to_dict(self):
         structure_dict = {
@@ -198,6 +190,8 @@ class ImageOverlay(Base):
     layer = mapped_column(ForeignKey('layer.id'))
     item = mapped_column(ForeignKey('item.id'))
     updated = Column(DateTime)
+
+    meta = Column(JSON)
 
     def to_dict(self):
         img_overlay_dict = {
@@ -234,6 +228,8 @@ class Annotation(Base):
     data = Column(JSON)
     updated = Column(DateTime)
 
+    meta = Column(JSON)
+
     def to_dict(self):
         ann_dict = {
             'id': self.id,
@@ -248,12 +244,35 @@ class Annotation(Base):
 
         return ann_dict
 
-#TODO: Create table "Data" with accessibility of tabular, -Data (AnnData, MuData, SpatialData) objects, arrays, etc.
+class Data(Base):
+    __tablename__ = 'data'
+    id = Column(String(24),primary_key = True)
 
+    user = mapped_column(ForeignKey('user.id'))
+    session = mapped_column(ForeignKey('vis_session.id'))
+    item = mapped_column(ForeignKey('item.id'))
+    layer = mapped_column(ForeignKey('layer.id'))
+    structure = mapped_column(ForeignKey('structure.id'))
 
+    # filepath to query-able filetype
+    filepath = Column(String)
+    updated = Column(DateTime)
 
+    meta = Column(JSON)
 
+    def to_dict(self):
+        data_dict = {
+            'id': self.id,
+            'user': self.user,
+            'session': self.session,
+            'item': self.item,
+            'layer': self.item,
+            'structure': self.structure,
+            'filepath': self.filepath,
+            'updated': self.updated
+        }
 
+        return data_dict
 
 
 

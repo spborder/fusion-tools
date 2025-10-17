@@ -6,6 +6,7 @@ Structure schemas for different items in SQLite database
 import json
 import uuid
 import time
+import bcrypt
 
 from datetime import datetime
 
@@ -28,7 +29,8 @@ from typing_extensions import Union
 from .models import (
     Base, User, UserAccess, 
     VisSession, Item, Layer, 
-    Structure, ImageOverlay, Annotation
+    Structure, ImageOverlay, Annotation,
+    Data
 )
 
 
@@ -40,14 +42,14 @@ TABLE_NAMES = {
     'layer': Layer,
     'structure': Structure,
     'image_overlay': ImageOverlay,
-    'annotation': Annotation
+    'annotation': Annotation,
+    'data': Data
 }
 
 
 #TODO: add access check to UserAccess table for any query that mentions data from an item
 # This includes Item, Layer, Structure, ImageOverlay, and Annotation elements
 # either user_id or user_token can be used to identify a user, though user_id is a column in UserAccess
-
 
 
 class fusionDB:
@@ -378,7 +380,6 @@ class fusionDB:
                             elif type(v)==dict:
                                 search_query = self.search_op(search_query,t,k,v)
 
-
             if not public_only_search:
                 # Combining original query with all public items and all items the user has access to
                 user_args = search_filters.get('user')
@@ -416,7 +417,7 @@ class fusionDB:
         user_id: Union[str,None] = None,
         public: bool = False):
 
-        print(f'{slide_id=}, {public=}')
+        #print(f'{slide_id=}, {public=}')
         new_item = self.get_create(
             table_name = 'item',
             inst_id = slide_id,
@@ -525,6 +526,53 @@ class fusionDB:
             else:
                 return None
 
+    def check_user_login_password(self, user_login: str, user_password: str):
+
+        with self.get_db() as session:
+            search_query = session.execute(
+                select(User).where(User.login==user_login)
+            ).first()
+
+            if not search_query is None:
+                if len(search_query)>0:
+                    if search_query[0].verify_password(user_password):
+                        return search_query[0].to_dict()
+                    else:
+                        return None
+                else:
+                    return None
+            else:
+                return None
+
+    def create_new_user(self, user_kwargs: dict):
+
+        # Required kwargs are login, password, firstname, lastname
+        if not all([user_kwargs.get(j) for j in ['login','password','firstName','lastName']]):
+            return None
+        else:
+            # Check uniqueness of login
+            with self.get_db() as session:
+                search_query = session.execute(
+                    select(User).where(User.login==user_kwargs.get('login'))
+                ).first()
+
+                if search_query is None:
+                    
+                    user_kwargs['password'] = bcrypt.hashpw(user_kwargs['password'].encode(),bcrypt.gensalt())
+                    user_kwargs['token'] = self.get_uuid()
+                    user_kwargs['updated'] = datetime.now()
+
+                    new_id = self.get_uuid()
+                    new_user = User(id = new_id, **user_kwargs)
+                    user_kwargs['id'] = new_id
+
+                    self.add(new_user, session)
+                    session.commit()
+
+                    return user_kwargs
+                else:
+                    return None
+
     def check_user_access(self, user_id:str, admin:bool = False) -> list:
 
         user_access_rows = []
@@ -546,7 +594,8 @@ class fusionDB:
         return non_public_access_list
 
     def get_names(self, table_name:str, user_token: Union[str,None] = None, size:Union[int,None]=None, offset = 0):
-
+        
+        #TODO: This should get access controlled
         return_names = []
         with self.get_db() as session:
 
@@ -570,6 +619,7 @@ class fusionDB:
 
     def get_ids(self, table_name: str, user_token: Union[str,None] = None, size:Union[int,None] = None, offset = 0):
 
+        #TODO: This should be access controlled
         return_ids = []
         with self.get_db() as session:
 

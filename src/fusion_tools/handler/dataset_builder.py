@@ -136,11 +136,9 @@ class DatasetBuilder(DSATool):
                 dbc.CardBody([
                     dbc.Row(
                         html.H3(self.title)
-                        html.H3(self.title)
                     ),
                     html.Hr(),
                     dbc.Row(
-                        self.description
                         self.description
                     ),
                     html.Hr(),
@@ -516,7 +514,7 @@ class DatasetBuilder(DSATool):
 
                 const thumbDataUrl = await Promise.all(
                     thumb_store.map(async (t_data) => {
-                        const t_json = JSON.parse(t_data.replace(/[\[\]']+/g,""));
+                        const t_json = JSON.parse(t_data.replace('/[\[\]']+/g,""));
                         
                         if (!t_json.done){
                             const res = await fetch(t_json.url,{
