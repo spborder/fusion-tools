@@ -42,37 +42,37 @@ class fusionAPI:
         self.router = APIRouter()
 
         # User
-        self.router.add_api_route('/user', lambda: self.get_from_table("user"), methods=["GET"])
-        #self.router.add_api_route('/user/me', lambda: self.get_from_table("user"), methods=["GET"])
-        self.router.add_api_route('/user/{id}', lambda id: self.get_from_table("user",id), methods=["GET"])
+        self.router.add_api_route('/user', lambda: self.get_from_table("user"), methods=["GET"],tags = ['user'])
+        #self.router.add_api_route('/user/me', lambda: self.get_from_table("user"), methods=["GET"],tags = ['user'])
+        self.router.add_api_route('/user/{id}', lambda id: self.get_from_table("user",id), methods=["GET"],tags = ['user'])
 
         # VisSession 
-        self.router.add_api_route('/vis_session', lambda: self.get_from_table("vis_session"), methods=["GET"])
-        self.router.add_api_route('/vis_session/{id}', lambda id: self.get_from_table("vis_session",id), methods=["GET"])
+        self.router.add_api_route('/vis_session', lambda: self.get_from_table("vis_session"), methods=["GET"], tags = ['vis_session'])
+        self.router.add_api_route('/vis_session/{id}', lambda id: self.get_from_table("vis_session",id), methods=["GET"], tags = ['vis_session'])
 
         # Item
-        self.router.add_api_route('/item', lambda: self.get_from_table("item"), methods=["GET"])
-        self.router.add_api_route('/item/{id}', lambda id: self.get_from_table("item",id), methods=["GET"])
+        self.router.add_api_route('/item', lambda: self.get_from_table("item"), methods=["GET"],tags=['item'])
+        self.router.add_api_route('/item/{id}', lambda id: self.get_from_table("item",id), methods=["GET"],tags=['item'])
 
         # Layer
-        self.router.add_api_route('/layer', lambda: self.get_from_table("layer"), methods=["GET"])
-        self.router.add_api_route('/layer/{id}', lambda id: self.get_from_table("layer",id), methods=["GET"])
+        self.router.add_api_route('/layer', lambda: self.get_from_table("layer"), methods=["GET"],tags = ['layer'])
+        self.router.add_api_route('/layer/{id}', lambda id: self.get_from_table("layer",id), methods=["GET"],tags = ['layer'])
 
         # Structure
-        self.router.add_api_route('/structure', lambda: self.get_from_table("structure"), methods=["GET"])
-        self.router.add_api_route('/structure/{id}', lambda id: self.get_from_table("structure",id), methods=["GET"])
+        self.router.add_api_route('/structure', lambda: self.get_from_table("structure"), methods=["GET"],tags = ['structure'])
+        self.router.add_api_route('/structure/{id}', lambda id: self.get_from_table("structure",id), methods=["GET"],tags = ['structure'])
 
         # ImageOverlay
-        self.router.add_api_route('/image_overlay', lambda: self.get_from_table("image_overlay"), methods=["GET"])
-        self.router.add_api_route('/image_overlay/{id}', lambda id: self.get_from_table("image_overlay",id), methods=["GET"])
+        self.router.add_api_route('/image_overlay', lambda: self.get_from_table("image_overlay"), methods=["GET"], tags = ['image_overlay'])
+        self.router.add_api_route('/image_overlay/{id}', lambda id: self.get_from_table("image_overlay",id), methods=["GET"], tags = ['image_overlay'])
 
         # Annotation
-        self.router.add_api_route('/annotation', lambda: self.get_from_table("annotation"), methods=["GET"])
-        self.router.add_api_route('/annotation/{id}', lambda id: self.get_from_table("annotation",id), methods=["GET"])
+        self.router.add_api_route('/annotation', lambda: self.get_from_table("annotation"), methods=["GET"], tags = ['annotation'])
+        self.router.add_api_route('/annotation/{id}', lambda id: self.get_from_table("annotation",id), methods=["GET"], tags = ['annotation'])
 
         # Data
-        self.router.add_api_route('/data', lambda: self.get_from_table("data"), methods=["GET"])
-        self.router.add_api_route('/data/{id}', lambda id: self.get_from_table("data",id), methods=["GET"])
+        self.router.add_api_route('/data', lambda: self.get_from_table("data"), methods=["GET"], tags = ['data'])
+        self.router.add_api_route('/data/{id}', lambda id: self.get_from_table("data",id), methods=["GET"], tags = ['data'])
 
     @asyncio_db_loop
     def search_db(self, search_kwargs, size, offset):
