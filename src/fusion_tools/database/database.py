@@ -464,7 +464,7 @@ class fusionDB:
                 for f_idx, f in enumerate(ann['features']):
                     new_structure = self.get_create(
                         table_name = 'structure',
-                        inst_id = f['properties']['_id'],
+                        inst_id = f['properties'].get('_id',uuid.uuid4().hex[:24]),
                         kwargs = {
                             'geom': f['geometry'],
                             'properties': f['properties'],

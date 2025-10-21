@@ -38,9 +38,6 @@ class DSALoginComponent(DSATool):
 
         self.modal_size = 'lg'
 
-    def __str__(self):
-        return self.title
-
     def load(self,component_prefix:int):
 
         self.component_prefix = component_prefix
@@ -56,6 +53,7 @@ class DSALoginComponent(DSATool):
     
     def update_layout(self, session_data:dict, use_prefix:bool):
         
+        #TODO: This will have to be updated for external DSA access
         current_user_children = ''
         if 'user' in session_data:
             current_user_children = f'Welcome, {session_data.get("user",{}).get("login","")}!'

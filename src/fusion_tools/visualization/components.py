@@ -1236,7 +1236,8 @@ class Visualization:
                         'annotations_url': t.annotations_url,
                         'annotations_metadata_url':t.annotations_metadata_url,
                         'annotations_region_url': t.annotations_region_url,
-                        'annotations_geojson_url': t.annotations_geojson_url
+                        'annotations_geojson_url': t.annotations_geojson_url,
+                        'public': True
                     })
                 elif type(t)==CustomTileServer:
                     slide_store['current'].append({
