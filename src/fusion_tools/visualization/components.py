@@ -1225,6 +1225,8 @@ class Visualization:
                     ])
 
                 elif type(t)==DSATileServer:
+
+                    #TODO: Update "public" as needed, it's possible this will have some other access control.
                     slide_store['current'].append({
                         'name': t.name,
                         'id': t.item_id,
