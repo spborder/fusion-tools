@@ -21,7 +21,7 @@ from skimage import draw
 from scipy import ndimage
 
 import pandas as pd
-import anndata as ad
+#import anndata as ad
 import large_image
 
 from tqdm import tqdm
@@ -364,6 +364,7 @@ def load_visium(visium_path:str, include_var_names:list = [], include_obs: list 
     anndata_object = None
     if 'h5ad' in visium_path:
         # This is for AnnData formatted Visium data
+        import anndata as ad
         anndata_object = ad.read_h5ad(visium_path)
 
         if 'spatial' in anndata_object.obsm_keys():

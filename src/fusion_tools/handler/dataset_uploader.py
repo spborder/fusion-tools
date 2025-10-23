@@ -369,11 +369,10 @@ class DSAUploader(DSATool):
             handler = self.handler
         )
         self.plugin_inputs_handler.load(self.component_prefix)
-        self.plugin_inputs_handler.gen_layout({})
-
+        
     def update_layout(self, session_data:dict, use_prefix:bool):
 
-        if not 'current_user' in session_data:
+        if self.get_user_external_token(session_data) is None:
             uploader_children = html.Div(
                 dbc.Alert(
                     'Make sure to login first in order to upload!',
@@ -676,13 +675,15 @@ class DSAUploader(DSATool):
 
         return selectable_table
 
-    def organize_folder_contents(self, folder_info:dict, show_empty:bool=True, ignore_histoqc:bool=True)->list:
+    def organize_folder_contents(self, folder_info:dict, show_empty:bool=True, ignore_histoqc:bool=True, user_token: Union[str,None] = None)->list:
         """For a given folder selection, return a list of slides(0th) and folders (1th)
 
         :param folder_info: Folder info dict returned by self.handler.get_path_info(path)
         :type folder_info: dict
         :param show_empty: Whether or not to display folders which contain 0 slides, defaults to False
         :type show_empty: bool, optional
+        :param user_token: User token to authenticate external queries
+        :type user_token: Union[str,None], optional
         :return: List of slides within the current folder as well as folders within that folder
         :rtype: list
         """
@@ -695,7 +696,8 @@ class DSAUploader(DSATool):
             all_folder_slides = self.handler.get_folder_slides(
                 folder_path = folder_info['_id'],
                 folder_type = folder_info['_modelType'],
-                ignore_histoqc=ignore_histoqc
+                ignore_histoqc=ignore_histoqc,
+                user_token = user_token
             )
 
             folder_slides_folders = [i['folderId'] for i in all_folder_slides]
@@ -705,8 +707,8 @@ class DSAUploader(DSATool):
                 if not u==folder_info['_id'] and not u in folders_in_folder:
                     # This is for all folders in this folder
                     # This grabs parent folders of this folder
-                    u_folder_info = self.handler.get_folder_info(folder_id=u)
-                    u_folder_rootpath = self.handler.get_folder_rootpath(u)
+                    u_folder_info = self.handler.get_folder_info(folder_id=u,user_token = user_token)
+                    u_folder_rootpath = self.handler.get_folder_rootpath(u, user_token = user_token)
                     # Folders in order from collection-->child folder-->etc.
                     folder_ids = [i['object']['_id'] for i in u_folder_rootpath]
 
@@ -724,7 +726,8 @@ class DSAUploader(DSATool):
 
 
                     child_folder_path_info = self.handler.get_path_info(
-                        path = child_folder_path
+                        path = child_folder_path,
+                        user_token = user_token
                     )
                     if not child_folder_path_info['_id'] in folders_in_folder:
                         folders_in_folder.append(child_folder_path_info['_id'])
@@ -756,7 +759,8 @@ class DSAUploader(DSATool):
             user_folders = ['Private','Public']
             for u_f in user_folders:
                 user_folder_info = self.handler.get_path_info(
-                    path = f'/user/{folder_info["login"]}/{u_f}'
+                    path = f'/user/{folder_info["login"]}/{u_f}',
+                    user_token = user_token
                 )
 
                 folder_folders.append({
@@ -771,12 +775,13 @@ class DSAUploader(DSATool):
             # This is how you get all the empty folders within a folder (does not get child empty folders)
             empty_folders = self.handler.get_folder_folders(
                 folder_id = folder_info['_id'],
-                folder_type = folder_info['_modelType']
+                folder_type = folder_info['_modelType'],
+                user_token = user_token
             )
             
             for f in empty_folders:
                 if not f['_id'] in folders_in_folder and not f['_id'] in unique_folders:
-                    folder_info = self.handler.gc.get(f'/folder/{f["_id"]}/details')
+                    folder_info = self.handler.get_folder_info(f["_id"],user_token = user_token)
                     folder_folders.append(
                         {
                             'Name': f['name'],
@@ -790,16 +795,16 @@ class DSAUploader(DSATool):
 
         return folder_slides, folder_folders
 
-    def gen_collections_dataframe(self):
+    def gen_collections_dataframe(self, user_token:Union[str,None] = None):
         """Generating dataframe containing current collections
 
         :return: Dataframe with each Collection
         :rtype: pd.DataFrame
         """
         collections_info = []
-        collections = self.handler.get_collections()
+        collections = self.handler.get_collections(user_token = user_token)
         for c in collections:
-            folder_count = self.handler.get_path_info(path = f'/collection/{c["name"]}')
+            folder_count = self.handler.get_path_info(path = f'/collection/{c["name"]}',user_token = user_token)
             collections_info.append({
                 'Name': c['name'],
                 'ID': c['_id'],
@@ -996,13 +1001,6 @@ class DSAUploader(DSATool):
                 row_deletable = True,
                 page_current = 0,
                 page_size = 10,
-                #tooltip_data = [
-                #    {
-                #        column:{'value':str(value), 'type':'markdown'}
-                #        for column,value in row.items()
-                #    } for row in m_df.to_dict('records')
-                #],
-                #tooltip_duration = None,
                 css=[{"selector": ".Select-menu-outer", "rule": "display: block !important"}]
             ),
             dbc.Button(
@@ -1045,6 +1043,9 @@ class DSAUploader(DSATool):
         folder_table_rows = get_pattern_matching_value(folder_table_rows)
         folder_table_data = get_pattern_matching_value(folder_table_data)
 
+        user_external_token = self.get_user_external_token(session_data)
+        user_external_login = self.get_user_external_login(session_data)
+
         if not ctx.triggered_id:
             raise exceptions.PreventUpdate
 
@@ -1053,7 +1054,7 @@ class DSAUploader(DSATool):
             if not any([i['value'] for i in ctx.triggered]):
                 raise exceptions.PreventUpdate
 
-            collection_df = self.gen_collections_dataframe()
+            collection_df = self.gen_collections_dataframe(user_token = user_external_token)
             folder_table_div = html.Div([
                 html.Div(
                     children = self.make_selectable_dash_table(
@@ -1090,7 +1091,7 @@ class DSAUploader(DSATool):
                 )
             ])
 
-            path_parts = ['/user/',f'{session_data["current_user"]["login"]}/']
+            path_parts = ['/user/',f'{user_external_login}/']
 
         elif 'dsa-uploader-folder-table' in ctx.triggered_id['type']:
             
@@ -1100,12 +1101,14 @@ class DSAUploader(DSATool):
             path_parts = path_parts+[folder_table_data[folder_table_rows[0]]['Name']+'/']
 
             folder_info = self.handler.get_path_info(
-                    path = ''.join(path_parts)[:-1]
-                )
+                path = ''.join(path_parts)[:-1],
+                user_token = user_external_token
+            )
 
             # Don't need to know the slides in that folder
             _, folder_folders = self.organize_folder_contents(
-                folder_info=folder_info
+                folder_info=folder_info,
+                user_token = user_external_token
             )
 
             if len(folder_folders)>0:
@@ -1210,13 +1213,15 @@ class DSAUploader(DSATool):
 
                 path_parts = path_parts[:n_click_idx+1]
                 folder_info = self.handler.get_path_info(
-                    path = ''.join(path_parts)[:-1]
+                    path = ''.join(path_parts)[:-1],
+                    user_token = user_external_token
                 )
 
-                if not path_parts==['/user/',session_data['current_user']['login']+'/']:
+                if not path_parts==['/user/',user_external_login+'/']:
                     # Don't need to know the slides in that folder
                     _, folder_folders = self.organize_folder_contents(
-                        folder_info=folder_info
+                        folder_info=folder_info,
+                        user_token = user_external_token
                     )
                 else:
                     folder_folders = [
@@ -1285,13 +1290,13 @@ class DSAUploader(DSATool):
                 path_parts = path_parts[0]
 
                 if path_parts == '/collection/':
-                    folder_folders = self.gen_collections_dataframe().to_dict('records')
+                    folder_folders = self.gen_collections_dataframe(user_token = user_external_token).to_dict('records')
                 elif path_parts =='/user/':
                     folder_folders = [
                         {
                             'Name': i['login']
                         }
-                        for i in self.handler.gc.get(f'/user?token={session_data["current_user"]["token"]}')
+                        for i in self.handler.gc.get(f'/user?token={user_external_token}')
                     ]
 
                 if len(folder_folders)>0:
@@ -1442,6 +1447,8 @@ class DSAUploader(DSATool):
 
         session_data = json.loads(session_data)
 
+        user_external_token = self.get_user_external_token(session_data)
+
         if 'dsa-uploader-new-folder-button' in ctx.triggered_id['type']:
 
             folder_table_div = no_update
@@ -1487,7 +1494,7 @@ class DSAUploader(DSATool):
                 new_folder_info = self.handler.create_user_folder(
                     parent_path = ''.join(folder_path)[:-1],
                     folder_name = folder_name,
-                    user_token=session_data['current_user']['token']
+                    user_token=user_external_token
                 )
             except Exception as e:
                 print('Some error encountered in creating the folder')
@@ -1577,8 +1584,6 @@ class DSAUploader(DSATool):
                         dbc.CardHeader('Available Upload Types'),
                         dbc.CardBody([
                             html.Div([
-                                #html.P('Different data types require different sets and types of files in order to have sufficient information for visualization and analysis'),
-                                #html.B(),
                                 html.H5('Select the type of data you would like to upload from the menu below'),
                                 html.Hr(),
                                 dcc.Dropdown(
@@ -1696,9 +1701,12 @@ class DSAUploader(DSATool):
         session_data = json.loads(session_data)
         upload_type_value = get_pattern_matching_value(upload_type_value)
 
+        user_external_token = self.get_user_external_token(session_data)
+
         upload_path_parts = self.extract_path_parts(get_pattern_matching_value(upload_folder_path))
         folder_info = self.handler.get_path_info(
-            path = ''.join(upload_path_parts)[:-1]
+            path = ''.join(upload_path_parts)[:-1],
+            user_token = user_external_token
         )
 
         selected_upload_type = self.dsa_upload_types[[i.name for i in self.dsa_upload_types].index(upload_type_value)]
@@ -1710,7 +1718,7 @@ class DSAUploader(DSATool):
                     html.Div(
                         self.create_upload_component(
                             file_info = f | {'parentId': folder_info["_id"],'parentType': 'folder', 'fusion_upload_name': f['name'], 'fusion_upload_type': f['type']},
-                            user_info = session_data['current_user'],
+                            user_info = session_data['user']['external'],
                             idx = f_idx
                         ) if f['type']=='item' else 
                         dbc.Alert(f'This upload will be created when: {f["parent"]} is uploaded',color='warning'),
@@ -1766,6 +1774,8 @@ class DSAUploader(DSATool):
         upload_type = get_pattern_matching_value(upload_type)
         selected_upload_type = self.dsa_upload_types[[i.name for i in self.dsa_upload_types].index(upload_type)]
 
+        user_external_token = self.get_user_external_token(session_data)
+
         # Getting the filenames (json.dumps(post_response))
         current_filenames = [i for i in current_filenames if not i is None]
         if len(current_filenames)>0:
@@ -1797,7 +1807,7 @@ class DSAUploader(DSATool):
         for c in child_files:
             file_info = {
                 'api_url': self.handler.girderApiUrl,
-                'token': session_data['current_user']['token'],
+                'token': user_external_token,
                 'fusion_upload_name': c[1]['name'],
                 'fusion_upload_type': c[1]['type'],
                 'parentType': 'item',
@@ -1806,7 +1816,7 @@ class DSAUploader(DSATool):
 
             upload_div_children[c[0]] = self.create_upload_component(
                 file_info = c[1] | file_info,
-                user_info = session_data['current_user'],
+                user_info = session_data['user']['external'],
                 idx = c[0]
             )
 
@@ -1947,6 +1957,8 @@ class DSAUploader(DSATool):
         upload_files_data = json.loads(get_pattern_matching_value(upload_files_data))['uploaded_files']
         upload_names = [i['fusion_upload_name'] for i in upload_files_data]
 
+        user_external_token = self.get_user_external_token(session_data)
+
         target_dict = {}
         for t in tables_data:
             for row in t:
@@ -1963,7 +1975,7 @@ class DSAUploader(DSATool):
             success = self.handler.add_metadata(
                 item = t,
                 metadata = target_dict[t],
-                user_token = session_data['current_user']['token']
+                user_token = user_external_token
             )
             
             if success:

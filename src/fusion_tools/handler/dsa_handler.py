@@ -209,11 +209,6 @@ class DSAHandler(Handler):
     @tokenator
     def get_annotation_names(self, item:str, user_token: Union[str,None]=None, return_info:bool=False):
 
-        """
-        if not user_token is None:
-            self.gc.setToken(user_token)
-        """
-
         annotation_info = self.gc.get('/annotation',parameters={'itemId': item})
 
         if not return_info:
@@ -234,11 +229,6 @@ class DSAHandler(Handler):
 
         if type(item)==str:
             item = [item]
-
-        """
-        if not user_token is None:
-            self.gc.setToken(user_token)
-        """
 
         ann_counts = []
         for it in item:
@@ -277,9 +267,6 @@ class DSAHandler(Handler):
         # First searching for the "resource"
         assert any([i in path for i in ['collection','user']])
 
-        #if not user_token is None:
-        #    self.gc.setToken(user_token)
-
         try:
             resource_find = self.gc.get('/resource/lookup',parameters={'path': path})
             if resource_find['_modelType']=='collection':
@@ -307,18 +294,12 @@ class DSAHandler(Handler):
         :rtype: dict
         """
 
-        #if not user_token is None:
-        #    self.gc.setToken(user_token)
-
         file_info = self.gc.get(f'file/{fileId}')
 
         return file_info
     
     @tokenator
     def get_item_info(self, itemId:str, user_token: Union[str,None]=None):
-
-        #if not user_token is None:
-        #    self.gc.setToken(user_token)
         
         item_info = self.gc.get(f'item/{itemId}')
 
@@ -333,9 +314,6 @@ class DSAHandler(Handler):
         :return: Dictionary with details like name, parentType, meta, updated, size, etc.
         :rtype: dict
         """
-
-        #if not user_token is None:
-        #    self.gc.setToken(user_token)
 
         try:
             folder_info = self.gc.get(f'/folder/{folder_id}') | self.gc.get(f'/folder/{folder_id}/details')
@@ -354,9 +332,6 @@ class DSAHandler(Handler):
         :return: List of objects in that folder's path that are parents
         :rtype: list
         """
-
-        #if not user_token is None:
-        #    self.gc.setToken(user_token)
 
         try:
             folder_rootpath = self.gc.get(f'/folder/{folder_id}/rootpath')
@@ -393,9 +368,6 @@ class DSAHandler(Handler):
         :type folder_type: str, optional
         """
 
-        #if not user_token is None:
-        #    self.gc.setToken(user_token)
-
         try:
             folder_folders = self.gc.get(
                 f'/folder',
@@ -425,9 +397,6 @@ class DSAHandler(Handler):
         """
 
         assert folder_type in ['folder','collection']
-
-        #if not user_token is None:
-        #    self.gc.setToken(user_token)
 
         if '/' in folder_path:
             folder_info = self.get_path_info(folder_path,user_token)
@@ -492,9 +461,6 @@ class DSAHandler(Handler):
         :rtype: list
         """
         assert format in [None, 'geojson','histomics']
-
-        #if not user_token is None:
-        #    self.gc.setToken(user_token)
 
         if annotation_id is None:
             # Grab all annotations for that item
@@ -639,9 +605,6 @@ class DSAHandler(Handler):
     @tokenator
     def create_collection(self, collection_name:str, collection_description:Union[str,None]=None,public:bool=True,user_token:Union[str,None]=None):
 
-        #if not user_token is None:
-        #    self.gc.setToken(user_token)
-
         collection_post = self.gc.post(
             'collection',
             parameters={
@@ -655,9 +618,6 @@ class DSAHandler(Handler):
 
     @tokenator
     def create_folder(self, parentId:str, parentType:str, folder_name:str, folder_description:Union[str,None]=None,public:bool=True,user_token:Union[str,None]=None):
-
-        #if not user_token is None:
-        #    self.gc.setToken(user_token)
 
         folder_post_response = self.gc.post(
             'folder',
@@ -682,9 +642,6 @@ class DSAHandler(Handler):
         :param user_token: user token, defaults to None
         :type user_token: Union[str,None], optional
         """
-
-        #if not user_token is None:
-        #    self.gc.setToken(user_token)
 
         collections = self.get_collections(user_token)
         collection_names = [i['name'] for i in collections]
@@ -747,9 +704,6 @@ class DSAHandler(Handler):
 
     @tokenator
     def get_session_data(self, session_id:str, user_token:Union[str,None]=None):
-
-        #if not user_token is None:
-        #    self.gc.setToken(user_token)
 
         # downloading session file specified by id
         try:
@@ -825,8 +779,6 @@ class DSAHandler(Handler):
         :param annotations: Formatted dictionary, path, or list of dictionaries/paths with the annotations., defaults to None
         :type annotations: Union[str,list,dict,None], optional
         """
-        #if not user_token is None:
-        #    self.gc.setToken(user_token)
 
         if type(annotations)==str:
             annotations = load_annotations(annotations)
@@ -865,9 +817,6 @@ class DSAHandler(Handler):
         :type metadata: dict
         """
 
-        #if not user_token is None:
-        #    self.gc.setToken(user_token)
-
         try:
             # Adding item-level metadata
             self.gc.put(f'/item/{item}/metadata',parameters={'metadata':json.dumps(metadata)})
@@ -880,8 +829,6 @@ class DSAHandler(Handler):
     def list_plugins(self, user_token:str):
         """List all of the plugins/CLIs available for the current DSA instance
         """
-        #self.gc.setToken(user_token)
-
         return self.gc.get(f'/slicer_cli_web/cli')
 
     @tokenator
@@ -893,11 +840,6 @@ class DSAHandler(Handler):
         """
         if type(image_name)==str:
             image_name = [image_name]
-
-        #if not user_token is None:
-        #    self.gc.setToken(user_token)
-        #else:
-        #    user_token = self.user_token
         
         current_cli = self.list_plugins(user_token)
         cli_names = [i['image'] for i in current_cli]
@@ -974,8 +916,6 @@ class DSAHandler(Handler):
     @tokenator
     def get_user_jobs(self, user_id:str, user_token: str, offset: int = 0, limit: int = 0):
 
-
-        #self.gc.setToken(user_token)
         request_response = self.gc.get(
             f'/job',
             parameters={
@@ -990,7 +930,6 @@ class DSAHandler(Handler):
     @tokenator
     def get_specific_job(self, job_id:str, user_token:str):
 
-        #self.gc.setToken(user_token)
         request_response = self.gc.get(
             f'/job/{job_id}'
         )
@@ -1000,7 +939,6 @@ class DSAHandler(Handler):
     @tokenator
     def cancel_job(self, job_id:str, user_token:str):
 
-        #self.gc.setToken(user_token)
         request_response = self.gc.put(
             f'/job/{job_id}/cancel'
         )
@@ -1016,9 +954,6 @@ class DSAHandler(Handler):
         :param arguments: Dictionary containing keys/values for each input argument to a plugin
         :type arguments: dict
         """
-
-        #if user_token is None:
-        #    user_token = self.user_token
         
         # Make sure that the arguments are formatted correctly
         request_output = requests.post(

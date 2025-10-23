@@ -275,17 +275,15 @@ class WelcomePage(Tool):
 
         sidebar = html.Div(
             [
-                #html.H4("Categories", className="display-4"),
-                #html.Hr(),
                 html.P("Select a topic to view more information", className="lead"),
                 html.Hr(),
                 dbc.Nav(
                     [
-                        dbc.NavLink(
+                        dbc.NavItem(dbc.NavLink(
                             n,
                             id = {'type': 'welcome-nav','index': n_idx},
                             active='exact'
-                        )
+                        ))
                         for n_idx,n in enumerate(self.content_dict)
                     ],
                     vertical=True,

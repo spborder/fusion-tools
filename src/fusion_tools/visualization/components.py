@@ -15,8 +15,10 @@ import dash_mantine_components as dmc
 from dash_extensions.enrich import DashProxy, html, MultiplexerTransform, PrefixIdTransform, Input, State, Output
 
 from typing_extensions import Union
-from fusion_tools.tileserver import TileServer, DSATileServer, LocalTileServer, CustomTileServer
+from fusion_tools.tileserver import Slide, TileServer, DSATileServer, LocalTileServer, CustomTileServer
 from fusion_tools.database.database import fusionDB
+from fusion_tools.database.api import fusionAPI
+
 import threading
 
 import uvicorn
@@ -59,7 +61,7 @@ class Visualization:
     """
     
     def __init__(self,
-                 local_slides: Union[list,str,None] = None,
+                 local_slides: Union[Slide,list,str,None] = None,
                  local_annotations: Union[list,dict,None] = None,
                  slide_metadata: Union[list,dict,None] = None,
                  tileservers: Union[list,TileServer,None] = None,
@@ -98,6 +100,8 @@ class Visualization:
         self.header = header
         self.app_options = app_options
         self.linkage = linkage
+
+        self.access_count = 0
 
         # New parameter defining how unique components can be linked
         # page = components in the same page can communicate
@@ -206,13 +210,11 @@ class Visualization:
             ],
             [
                 State('anchor-vis-store','data'),
-                State('anchor-vis-store','modified_timestamp'),
                 State('anchor-vis-memory-store','data')
             ],
             [
                 Output('vis-container','children'),
-                Output('anchor-page-url','pathname'),
-                Output('anchor-page-url','search'),
+                Output('user-current','children'),
                 Output('anchor-vis-store','data'),
                 Output('anchor-vis-memory-store','data')
             ],
@@ -259,6 +261,75 @@ class Visualization:
             ]
         )(self.open_header_component)
 
+        self.viewer_app.callback(
+            [
+                Input('user-current','n_clicks')
+            ],
+            [
+                Output('login-modal','is_open'),
+                Output('login-modal','children')
+            ],
+            [
+                State('anchor-vis-store','data'),
+                State('anchor-vis-memory-store','data')
+            ]
+        )(self.open_current_modal)
+
+        # Callback(s) for logging in
+        self.viewer_app.callback(
+            [
+                Input('user-login','n_clicks')
+            ],
+            [
+                Output('login-modal','children')
+            ],
+            [
+                State('anchor-vis-store','data'),
+                State('anchor-vis-memory-store','data')
+            ]
+        )(self.open_login_modal)
+
+        # Callback for creating a new user
+        self.viewer_app.callback(
+            [
+                Input({'type': 'user-login-new', 'index': ALL},'n_clicks')
+            ],
+            [
+                Output('login-modal','children')
+            ],
+            [
+                State('anchor-vis-store','data'),
+                State('anchor-vis-memory-store','data')
+            ]
+        )(self.open_new_user_modal)
+
+        # Callback for submitting login/ submitting create new user
+        self.viewer_app.callback(
+            [
+                Input({'type': 'user-login-new-submit','index': ALL},'n_clicks'),
+                Input({'type': 'user-login-submit','index': ALL},'n_clicks'),
+                Input({'type': 'user-logout-submit','index': ALL},'n_clicks'),
+                Input({'type': 'user-info-save','index': ALL},'n_clicks')
+            ],
+            [
+                Output('anchor-vis-memory-store','data'),
+                Output('anchor-vis-store','data'),
+                Output('anchor-page-url','pathname'),
+                Output('login-modal','is_open')
+            ],
+            [
+                State('anchor-vis-store','data'),
+                State('anchor-vis-memory-store','data'),
+                State('anchor-page-url','pathname'),
+                State({'type': 'user-prev-key','index': ALL},'children'),
+                State({'type': 'user-prev-val','index': ALL},'value'),
+                State({'type': 'user-new-key','index': ALL},'children'),
+                State({'type': 'user-new-val','index': ALL},'value'),
+                State({'type': 'user-current-key','index': ALL},'children'),
+                State({'type': 'user-current-val','index': ALL},'value')
+            ]
+        )(self.update_current_user)
+
     def open_navbar(self, clicked, is_open):
 
         if clicked:
@@ -297,37 +368,704 @@ class Visualization:
         else:
             raise exceptions.PreventUpdate
 
-    def update_page(self, pathname, path_search, path_button, session_data, session_modified_time,in_memory_store):
+    def open_current_modal(self, clicked, session_data, in_memory_store):
+        
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        session_data = json.loads(session_data)
+        in_memory_store = json.loads(in_memory_store)
+        user_info = in_memory_store.get('user')
+        session_info = session_data.get('session')
+        user_FirstLast = f'{user_info.get("firstName")} {user_info.get("lastName")}'
+
+        if 'guest' in user_info.get('id'):
+            user_type = 'guest'
+            user_badge = dmc.Badge(
+                "guest", variant='filled'
+            )
+        elif user_info.get('admin'):
+            user_type = 'admin'
+            user_badge = dmc.Badge(
+                'admin',variant='filled',color='red'
+            )
+        else:
+            user_type = 'user'
+            user_badge = dmc.Badge(
+                'user', variant='filled',color='green'
+            )
+
+        user_avatar = dbc.Row([
+                dbc.Col(
+                    [
+                        dmc.Avatar(id='user-avatar',name=user_FirstLast,color='initial',size='lg',radius='xl'),
+                        dbc.Tooltip(user_info.get('login'),target='user-avatar',placement='top')
+                    ],
+                    md = 'auto'
+                ),
+                dbc.Col(
+                    html.H5(f'{user_FirstLast}'),
+                    md = 'auto'
+                ),
+                dbc.Col(
+                    user_badge,
+                    md = 'auto'
+                )
+            ],align='center'
+        )
+
+        # Note- Clipboard components don't show up in Chrome
+        # Guest users can't change info, User/Admin users can
+        if user_type in ['user','admin']:
+            user_info_rows = []
+            for idx, (key,value) in enumerate(user_info.items()):
+                if key in ['id','token']:
+                    input_row = html.P(
+                        value,
+                        id= {'type': 'user-current-val','index': idx}
+                    )
+                elif key in ['login','firstName','lastName','email']:
+                    input_row = dbc.Input(
+                        value=value,
+                        type='text',
+                        id={'type': 'user-current-val','index': idx}
+                    )
+
+                elif key=='external':
+                    input_row = dmc.Badge(
+                        children = [user_info.get('external',{}).get('login')],
+                        color = 'teal',
+                        variant = 'dot',
+                        size = 'xl',
+                        id = {'type': 'user-current-val','index': idx}
+                    )
+
+                else:
+                    # Skipping password, admin, updated
+                    continue
+
+                user_info_rows.append(
+                    dbc.Row([
+                        dbc.Label(
+                            key,
+                            id = {'type': 'user-current-key','index': idx},
+                            html_for={'type': 'user-current-val','index': idx},
+                            width=2
+                        ),
+                        dbc.Col([
+                            input_row
+                        ],md=9),
+                        dbc.Col([
+                            dcc.Clipboard(
+                                target_id = {'type': 'user-current-val','index': idx},
+                                title = 'copy',
+                                style = {
+                                    'fontSize':20,
+                                    'color': 'rgb(200,200,200)'
+                                }
+                            )
+                        ],md=1)
+                    ],align = 'center')
+                )
+
+            button_rows = dbc.Row([
+                dbc.Col(
+                    dbc.Button(
+                        "Save Changes",
+                        id = {'type': 'user-info-save','index': 0},
+                        n_clicks = 0,
+                        color = 'secondary',
+                        className = 'd-grid col-12 mx-auto'
+                    ),
+                    md = 'auto'
+                ),
+                dbc.Col(
+                    dbc.Button(
+                        "Log Out",
+                        id = {'type': 'user-logout-submit','index': 0},
+                        n_clicks = 0,
+                        color = 'danger',
+                        className = 'd-grid col-12 mx-auto',
+                        disabled = False
+                    ),
+                    md = 'auto'
+                ),
+            ])
+
+        else:
+            user_info_rows = []
+            for idx, (key,value) in enumerate(user_info.items()):
+                if not value is None:
+                    if not key=='external':
+                        user_info_rows.append(
+                            dbc.Row([
+                                dbc.Label(
+                                    key,
+                                    id = {'type': 'user-current-key','index': idx},
+                                    html_for={'type': 'user-current-val','index': idx},
+                                    width=2
+                                ),
+                                dbc.Col([
+                                    html.P(
+                                        value,
+                                        id={'type': 'user-current-val','index': idx}
+                                    )
+                                ],md=9),
+                                dbc.Col([
+                                    dcc.Clipboard(
+                                        target_id = {'type': 'user-current-val','index': idx},
+                                        title = 'copy',
+                                        style = {
+                                            'fontSize':20,
+                                            'color': 'rgb(200,200,200)'
+                                        }
+                                    )
+                                ],md=1)
+                            ],align = 'center')
+                       )
+                    elif key=='external':
+                        user_info_rows.append(
+                            dbc.Row([
+                                dbc.Label(
+                                    key,
+                                    width = 2
+                                ),
+                                dbc.Col([
+                                    dmc.Badge(
+                                        children = [user_info.get('external',{}).get('login')],
+                                        color = 'teal',
+                                        variant = 'dot',
+                                        size = 'xl',
+                                        id = 'user-external'
+                                    ),
+                                ],md = 10)
+                            ])
+                        )
+            
+
+            button_rows = dbc.Row([
+                dbc.Col(
+                    dbc.Button(
+                        "Login",
+                        id = 'user-login',
+                        n_clicks = 0,
+                        color = 'success',
+                        className = 'd-grid col-12 mx-auto'
+                    ),
+                    md = 12
+                )
+            ])
+
+        #TODO: For User/Admin users, show a dropdown menu of session ids with name (id)
+        session_info_rows = dbc.Row([
+            dbc.Label(
+                'session',
+                html_for = 'user-session-row',
+                width=2
+            ),
+            dbc.Col([
+                html.P(
+                    session_info.get('id'),
+                    id = 'user-session-row'
+                )
+            ])
+        ])
+
+        modal_children = [
+            dbc.ModalHeader([
+                dbc.ModalTitle("Current User Actions")
+            ]),
+            dbc.ModalBody([
+                user_avatar,   
+                html.Hr(),
+            ] + user_info_rows + [html.Hr(),session_info_rows]+[
+                html.Hr(),
+                button_rows
+            ]),
+            dbc.ModalFooter([
+                dbc.Row([
+                    dbc.Col([
+                        html.P(
+                            'fusion-tools v.3.6.35',
+                            style={'font-style':'italics'}
+                        )
+                    ],md='auto'),
+                    dbc.Col([
+                        html.A(
+                            'API',
+                            href='/docs',
+                            target='_blank'
+                        )
+                    ],md='auto')
+                ]), 
+            ])
+        ]
+
+        if clicked:
+            return True, modal_children
+        else:
+            raise exceptions.PreventUpdate
+
+    def open_login_modal(self, clicked, session_data, in_memory_store):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        modal_children = [
+            dbc.ModalHeader([
+                dbc.ModalTitle("Log in")
+            ]),
+            dbc.ModalBody([
+                dbc.Row([
+                    dbc.Label(
+                        'login',
+                        id = {'type': 'user-prev-key','index': 0},
+                        html_for = {'type': 'user-prev-val','index': 0},
+                        width = 2
+                    ),
+                    dbc.Col(
+                        dbc.Input(
+                            type = 'text', 
+                            id = {'type': 'user-prev-val','index': 0}, 
+                            placeholder = 'login'
+                        ),
+                        md = 10
+                    )
+                ],align='center'),
+                dbc.Row([
+                    dbc.Label(
+                        'password',
+                        id = {'type': 'user-prev-key','index': 1},
+                        html_for = {'type': 'user-prev-val','index': 1},
+                        width = 2
+                    ),
+                    dbc.Col(
+                        dbc.Input(
+                            type = 'password', 
+                            id = {'type': 'user-prev-val','index': 1}, 
+                            placeholder = 'password'
+                        )
+                    )
+                ],align='center'),
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col([
+                            dbc.Button(
+                            'Submit',
+                            color = 'success',
+                            id = {'type':'user-login-submit','index': 0},
+                            n_clicks = 0,
+                            className = 'd-grid col-12 mx-auto'
+                        )
+                    ],md=6),
+                    dbc.Col([
+                        dbc.Button(
+                            'Create New User',
+                            color = 'primary',
+                            id = {'type': 'user-login-new','index': 0},
+                            n_clicks = 0,
+                            className = 'd-grid col-12 mx-auto'
+                        )
+                    ],md=6)
+                ])
+            ]),
+            dbc.ModalFooter([
+                dbc.Row([
+                    dbc.Col([
+                        html.P(
+                            'fusion-tools v.3.6.35',
+                            style={'font-style':'italics'}
+                        )
+                    ],md='auto'),
+                    dbc.Col([
+                        html.A(
+                            'API',
+                            href='/docs',
+                            target='_blank'
+                        )
+                    ],md='auto')
+                ]), 
+            ])
+        ]
+        
+        if clicked:
+            return modal_children
+        else:
+            raise exceptions.PreventUpdate
+
+    def open_new_user_modal(self, clicked, session_data, in_memory_store):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+        
+        modal_children = [
+            dbc.ModalHeader([
+                dbc.ModalTitle("Create New User")
+            ]),
+            dbc.ModalBody([
+                dbc.Row([
+                    dbc.Label(
+                        'firstName',
+                        id = {'type': 'user-new-key','index': 0},
+                        html_for = {'type': 'user-new-val','index': 0},
+                        width=2
+                    ),
+                    dbc.Col([
+                        dbc.Input(
+                            type = 'text',
+                            id = {'type': 'user-new-val','index': 0},
+                            placeholder = 'First Name'
+                        )
+                    ],md=10)
+                ],align='center'),
+                dbc.Row([
+                    dbc.Label(
+                        'lastName',
+                        id = {'type': 'user-new-key','index': 1},
+                        html_for = {'type': 'user-new-val','index': 1},
+                        width=2
+                    ),
+                    dbc.Col([
+                        dbc.Input(
+                            type = 'text',
+                            id = {'type': 'user-new-val','index': 1},
+                            placeholder = 'Last Name'
+                        )
+                    ],md=10)
+                ],align='center'),
+                dbc.Row([
+                    dbc.Label(
+                        'email',
+                        id = {'type': 'user-new-key','index': 2},
+                        html_for = {'type': 'user-new-val','index': 2},
+                        width = 2
+                    ),
+                    dbc.Col([
+                        dbc.Input(
+                            type = 'email',
+                            id = {'type': 'user-new-val','index': 2},
+                            placeholder = 'example@email.com (OPTIONAL)'
+                        )
+                    ])
+                ]),
+                dbc.Row([
+                    dbc.Label(
+                        'login',
+                        id = {'type': 'user-new-key','index': 3},
+                        html_for = {'type': 'user-new-val','index': 3},
+                        width = 2
+                    ),
+                    dbc.Col(
+                        dbc.Input(
+                            type = 'text', 
+                            id = {'type': 'user-new-val','index': 3}, 
+                            placeholder = 'login'
+                        ),
+                        md = 10
+                    )
+                ],align='center'),
+                dbc.Row([
+                    dbc.Label(
+                        'password',
+                        id = {'type': 'user-new-key','index': 4},
+                        html_for = {'type': 'user-new-val','index': 4},
+                        width = 2
+                    ),
+                    dbc.Col(
+                        dbc.Input(
+                            type = 'password', 
+                            id = {'type': 'user-new-val','index': 4}, 
+                            placeholder = 'password'
+                        )
+                    )
+                ],align='center'),
+                html.Hr(),
+                dbc.Row([
+                    dbc.Col([
+                        dbc.Button(
+                            'Create New User',
+                            color = 'primary',
+                            id = {'type': 'user-login-new-submit','index': 0},
+                            n_clicks = 0,
+                            className = 'd-grid col-12 mx-auto'
+                        )
+                    ],md=12)
+                ])
+            ]),
+            dbc.ModalFooter([
+                dbc.Row([
+                    dbc.Col([
+                        html.P(
+                            'fusion-tools v.3.6.35',
+                            style={'font-style':'italics'}
+                        )
+                    ],md='auto'),
+                    dbc.Col([
+                        html.A(
+                            'API',
+                            href='/docs',
+                            target='_blank'
+                        )
+                    ],md='auto')
+                ]), 
+            ])
+        ]
+        
+        if clicked:
+            return modal_children
+        else:
+            raise exceptions.PreventUpdate
+
+    def update_current_user(self, new_clicked, login_clicked, logout_clicked, update_info_clicked, session_data, in_memory_store, pathname, prev_keys, prev_vals, new_keys, new_vals, current_keys, current_vals):
+
+        if not any([i['value'] for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        session_data = json.loads(session_data)
+        in_memory_store = json.loads(in_memory_store)
+
+        if 'user-login-new-submit' in ctx.triggered_id['type']:
+            # Check new user info is present
+            new_user_info = {
+                k:v
+                for k,v in zip(new_keys,new_vals)
+                if not k=='external'
+            } | {
+                'admin': False,
+                'token': uuid.uuid4().hex[:24],
+                'external': in_memory_store.get('external')
+            }
+
+            new_user = self.database.create_new_user(
+                user_kwargs = new_user_info
+            )
+
+            if new_user is None:
+                # Some failure creating new user
+                raise exceptions.PreventUpdate
+            
+            else:
+                new_in_memory = {
+                    'user': new_user,
+                    'session': in_memory_store.get('session')
+                }
+
+        elif 'user-login-submit' in ctx.triggered_id['type']:
+            # Check returning user info
+            returning_user_info = {
+                k:v
+                for k,v in zip(prev_keys,prev_vals)
+                if not k=='external'
+            } | {'external': in_memory_store.get('external')}
+
+            previous_user = self.database.check_user_login_password(
+                prev_vals[0],prev_vals[1]
+            )
+
+            if previous_user is None:
+                # Password failed/login not present
+                raise exceptions.PreventUpdate
+            else:
+                new_in_memory = {
+                    'user': previous_user,
+                    'session': in_memory_store.get('session')
+                }
+
+        elif 'user-logout-submit' in ctx.triggered_id['type']:
+            
+            new_in_memory = {
+                'user': None,
+                'session': None
+            }
+
+        elif 'user-info-save' in ctx.triggered_id['type']:
+            
+            current_keys.append('token')
+            current_vals.append(uuid.uuid4().hex[:24])
+
+            updated_user = self.database.get_create(
+                table_name = 'user',
+                inst_id = in_memory_store.get('user').get('id'),
+                kwargs = {k:v for k,v in zip(current_keys,current_vals) if not k in ['id','external']} | {'external': in_memory_store.get('user').get('external')}
+            )
+            if not updated_user is None:
+                new_in_memory = {
+                    'user': updated_user.to_dict(),
+                    'session': in_memory_store.get('session')
+                }
+            else:
+                raise exceptions.PreventUpdate
+
+        new_session_data = session_data
+        new_session_data['user'] = new_in_memory.get('user')
+        new_session_data['session'] = new_in_memory.get('session')
+
+        return json.dumps(new_in_memory,default=str), json.dumps(new_session_data,default=str), pathname+'#', False
+
+    def update_page(self, pathname, path_search, path_button, session_data, in_memory_store):
         """Updating page in multi-page application
 
         :param pathname: Pathname or suffix of current url which is a key to the page name
         :type pathname: str
         """
-
-        #TODO: Check if the user specified in session_data['current_user'] is in the database yet
         session_data = json.loads(session_data)
         in_memory_store = json.loads(in_memory_store)
-        if in_memory_store.get('id') is None:
-            if session_data.get('current_user',{}).get('_id') is None:
-                in_memory_store['id'] = f'guestsession{uuid.uuid4().hex[:12]}'
-            else:
-                in_memory_store['id'] = uuid.uuid4().hex[:24]
-        else:
-            pass
 
+        pathname = pathname.replace('#','')
 
-        # Resetting session data if going from the same tab/notebook after restarting the application
-        if not session_modified_time is None:
-            if datetime.fromtimestamp(session_modified_time/1e3) < self.app_start_time:
-                session_data = self.vis_store_content
-                session_data['session']['id'] = in_memory_store.get('id')
-            else:
-                pass
-        else:
-            session_data = self.vis_store_content
-            session_data['session']['id'] = in_memory_store.get('id')
-        
-        
+        self.access_count +=1
+        # session_data is preserved in the tab (not cleared on refresh)
+        # in_memory_store is preserved in that instance of that tab (cleared on refreshing)
+        current_user_ids = self.database.get_ids('user')
+        current_vis_session_ids = self.database.get_ids('vis_session')
+
+        if self.access_count == 1:
+            print('-----------------First Access-------------')
+            # This is the first time the app has been accessed, set to the created guest User and VisSession
+            in_memory_store['user'] = self.database.get_user(
+                user_id = self.database.get_ids('user')[0]
+            )
+            del in_memory_store['user']['updated']
+
+            in_memory_store['session'] = {
+                'id': self.database.get_ids('vis_session')[0]
+            }
+
+            session_data['user'] = in_memory_store['user']
+            session_data['session'] = in_memory_store['session']
+
+            session_data['current'] = self.vis_store_content.get('current')
+            session_data['local'] = self.vis_store_content.get('local')
+
+        elif self.access_count > 1:
+            
+            current_user_ids = self.database.get_ids('user')
+            current_vis_session_ids = self.database.get_ids('vis_session')
+
+            if in_memory_store.get('user') is None:
+                if session_data.get('user') is None:
+                    print(f'---------New Window/New User/New Session-------------')
+                    # This is a new user, hasn't entered the application from this tab
+                    new_user = self.new_user(guest = True)
+                    new_session = self.new_session(guest = True)
+
+                    session_data['current'] = [i for i in self.vis_store_content.get('current') if i.get('public')]
+                    session_data['local'] = self.vis_store_content.get('local')
+
+                    in_memory_store['user'] = new_user
+                    in_memory_store['session'] = new_session
+                    session_data['user'] = new_user
+                    session_data['session'] = new_session
+
+                    # Adding vis_session
+                    self.database.add_vis_session(
+                        session_data
+                    )
+
+                elif session_data.get('user') is not None:
+                    if session_data.get('user').get('id') in current_user_ids:
+                        if session_data.get('session').get('id') in current_vis_session_ids:
+                            print(f'---------New Window/Previous User/Previous Session-------------')
+                            in_memory_store['user'] = session_data.get('user')
+                            in_memory_store['session'] = session_data.get('session')
+
+                            # Checking which items this user has specific access to
+                            prev_user_access = self.database.check_user_access(user_id = in_memory_store.get('user').get('id'), admin = in_memory_store.get('user').get('admin',False))
+                            # Adding public items and items this user has access to
+                            session_data['current'] = [i for i in self.vis_store_content.get('current') if i.get('public') or i.get('id') in prev_user_access]
+                            session_data['local'] = self.vis_store_content.get('local')
+
+                        else:
+                            print(f'---------New Window/Previous User/New Session-------------')
+                            # Creating a new session id
+                            new_session = self.new_session(guest = not 'guest' in session_data.get('user').get('id'))
+                            # Checking which items this user has specific access to
+                            prev_user_access = self.database.check_user_access(user_id = session_data.get('user').get('id'), admin = session_data.get('user').get('admin',False))
+                            # Adding public items and items this user has access to
+                            session_data['current'] = [i for i in self.vis_store_content.get('current') if i.get('public') or i.get('id') in prev_user_access]
+                            session_data['local'] = self.vis_store_content.get('local')
+
+                            in_memory_store['session'] = new_session
+                            session_data['session'] = new_session
+                            in_memory_store['user'] = session_data.get('user')
+                            in_memory_store['session'] = session_data.get('session')
+
+                            # Adding vis_session
+                            self.database.add_vis_session(
+                                session_data
+                            )
+                    else:
+                        print(f'---------New Window/New User/New Session-------------')
+                        # This is a new user, hasn't entered the application from this tab
+                        new_user = self.new_user(guest = True)
+                        new_session = self.new_session(guest = True)
+
+                        session_data['current'] = [i for i in self.vis_store_content.get('current') if i.get('public')]
+                        session_data['local'] = self.vis_store_content.get('local')
+
+                        in_memory_store['user'] = new_user
+                        in_memory_store['session'] = new_session
+                        session_data['user'] = new_user
+                        session_data['session'] = new_session
+
+                        # Adding vis_session
+                        self.database.add_vis_session(
+                            session_data
+                        )
+
+            elif in_memory_store.get('user').get('id') not in current_user_ids:
+                print('--------Previous Window/New User/New Session---------------')
+                # Not None user, not in current_user_ids
+                new_user = self.new_user(guest = False, id = in_memory_store.get('user').get('id'))
+                new_session = self.new_session(guest = not 'guest' in in_memory_store.get('user').get('id'))
+
+                # Since this user is not registered in User, they only have access to 'public' Items
+                session_data['current'] = [i for i in self.vis_store_content.get('current') if i.get('public')]
+                session_data['local'] = self.vis_store_content.get('local')
+
+                in_memory_store['user'] = new_user
+                in_memory_store['session'] = new_session
+                session_data['user'] = new_user
+                session_data['session'] = new_session
+            
+            elif in_memory_store.get('user').get('id') in current_user_ids:
+                if in_memory_store.get('session').get('id') in current_vis_session_ids:
+                    print('------------Previous Window/Previous User/Previous Session---------------')
+                    # Don't modify data stores
+
+                    # Checking which items this user has specific access to
+                    prev_user_access = self.database.check_user_access(user_id = in_memory_store.get('user').get('id'), admin = in_memory_store.get('user').get('admin',False))
+                    # Adding public items and items this user has access to
+                    session_data['current'] = [i for i in session_data.get('current') if i.get('public') or i.get('id') in prev_user_access]
+                    session_data['local'] = session_data.get('local')
+
+                else:
+                    print('------------Previous Window/Previous User/New Session---------------')
+                    # Not None user, in current_user_ids
+                    # Creating a new session id
+                    new_session = self.new_session(guest = not 'guest' in in_memory_store.get('user'))
+                    # Checking which items this user has specific access to
+                    prev_user_access = self.database.check_user_access(user_id = in_memory_store.get('user').get('id'), admin = in_memory_store.get('user').get('admin',False))
+                    # Adding public items and items this user has access to
+                    session_data['current'] = [i for i in self.vis_store_content.get('current') if i.get('public') or i.get('id') in prev_user_access]
+                    session_data['local'] = self.vis_store_content.get('local')
+
+                    in_memory_store['session'] = new_session
+                    session_data['user'] = in_memory_store.get('user')
+                    session_data['session'] = new_session
+
+                    # Adding vis_session
+                    self.database.add_vis_session(
+                        session_data
+                    )
+
+        user_name = f'{in_memory_store.get("user").get("firstName")} {in_memory_store.get("user").get("lastName","")}'
+        signed_in_user = f'Signed in as: {user_name}'
+
+        page_content = no_update
+        page_pathname = no_update
+        page_search = no_update
+
         if ctx.triggered_id=='anchor-page-url':
             if pathname in self.layout_dict:
                 # If that path is in the layout dict, return that page content
@@ -338,8 +1076,6 @@ class Visualization:
                     use_prefix = True,
                     session_data=session_data
                 )
-
-                return page_content, no_update, no_update, json.dumps(session_data), json.dumps(in_memory_store)
             
             elif 'session' in pathname:
                 from fusion_tools.handler.dsa_handler import DSAHandler
@@ -353,8 +1089,8 @@ class Visualization:
                     'data': session_content['data'],
                 }
 
-                if 'current_user' in session_data:
-                    new_session_data['current_user'] = session_data['current_user']
+                if 'user' in session_data:
+                    new_session_data['user'] = session_data['user']
                 
                 page_pathname = session_content['page'].replace(self.app_options.get('requests_pathname_prefix','/'),'').replace('-',' ')
 
@@ -364,9 +1100,9 @@ class Visualization:
                     session_data=new_session_data
                 )
 
-                in_memory_store['id'] = path_search.replace('?id=','')
-
-                return page_content, page_pathname, '', json.dumps(new_session_data), json.dumps(in_memory_store)
+                in_memory_store['session'] = {
+                    'id': path_search.replace('?id=','')
+                }
             
             elif 'item' in pathname:
                 #TODO: Loading an individual item from id
@@ -376,7 +1112,7 @@ class Visualization:
             else:
                 if self.default_page is None:
                     # Otherwise, return a list of clickable links for valid pages
-                    not_found_page = html.Div([
+                    page_content = html.Div([
                         html.H1('Uh oh!'),
                         html.H2(f'The page: {pathname}, is not in the current layout!'),
                         html.Hr()
@@ -384,15 +1120,13 @@ class Visualization:
                         html.P(html.A(page,href=page))
                         for page in self.layout_dict
                     ])
-                    return not_found_page, pathname, '', json.dumps(session_data), json.dumps(in_memory_store)
+
                 else:
                     page_content = self.update_page_layout(
                         page_components_list = self.components[self.default_page.replace(self.app_options.get('requests_pathname_prefix','/'),'').replace('-',' ')],
                         use_prefix = True,
                         session_data=session_data
                     )
-
-                    return page_content, no_update, no_update, json.dumps(session_data), json.dumps(in_memory_store)
 
         elif ctx.triggered_id['type']=='page-button':
             new_pathname = list(self.layout_dict.keys())[ctx.triggered_id['index']]
@@ -402,21 +1136,43 @@ class Visualization:
                 use_prefix = True,
                 session_data=session_data
             )
-
-            return page_content, new_pathname, '', json.dumps(session_data), json.dumps(in_memory_store)
     
+        return page_content, signed_in_user, json.dumps(session_data), json.dumps(in_memory_store)
+
+    def new_user(self, guest: bool = True, id: Union[str,None] = None):
+
+        user_dict = {
+            'id': f'guestuser{uuid.uuid4().hex[:15]}' if guest and id is None else id,
+            'login': f'{uuid.uuid4().hex[:24]}',
+            'firstName': 'Guest',
+            'lastName': 'User',
+            'token': uuid.uuid4().hex[:24]
+        }
+
+        return user_dict
+
+    def new_session(self, guest: bool = True):
+
+        session_dict = {
+            'id': f'guestsession{uuid.uuid4().hex[:12]}' if guest else uuid.uuid4().hex[:24],
+            'data': {}
+        }
+
+        return session_dict
+
     def initialize_stores(self):
 
         # This should be all the information necessary to reproduce the tileservers and annotations for each image
-        #TODO: Add session "id" here and add to database
         slide_store = {
             "current": [],
             "local": [],
             "data": {},
-            'session': {
-                'id': f'guestsession{uuid.uuid4().hex[:12]}'
-            }
+            'session': self.new_session(guest = True),
+            'user': self.new_user(guest = True),
         }
+
+        self.database.add_vis_session(slide_store)
+
         s_idx = 0
         t_idx = 0
 
@@ -442,25 +1198,42 @@ class Visualization:
                 if not s is None:
                     # Adding this slide to list of local slides
                     local_slide_id = uuid.uuid4().hex[:24]
-                    self.local_tile_server.add_new_image(
-                        new_image_id = local_slide_id,
-                        new_image_path = s,
-                        new_annotations = anns,
-                        new_metadata = meta
-                    )
+                    if not isinstance(s,Slide):
+                        self.local_tile_server.add_new_image(
+                            new_image_id = local_slide_id,
+                            new_image_path = s,
+                            new_annotations = anns,
+                            new_metadata = meta,
+                            session_id = slide_store.get('session').get('id'),
+                            user_id = slide_store.get('user').get('id')
+                        )
 
-                    slide_dict = {
-                        'name': s.split(os.sep)[-1],
-                        'id': local_slide_id,
-                        'cached': True
-                    } | self.local_tile_server.get_slide_urls(local_slide_id)
+                        slide_dict = {
+                            'name': s.split(os.sep)[-1],
+                            'id': local_slide_id,
+                            'cached': True,
+                            'public': False
+                        } | self.local_tile_server.get_slide_urls(local_slide_id)
+                    else:
+                        self.local_tile_server.add_new_slide(
+                            slide_id = local_slide_id,
+                            slide_obj = s,
+                            session_id = slide_store.get('session').get('id'),
+                            user_id = slide_store.get('user').get('id') if not s.public else None
+                        )
+
+                        slide_dict = {
+                            'name': s.image_filepath.split(os.sep)[-1],
+                            'id': local_slide_id,
+                            'cached': True,
+                            'public': s.public
+                        } | self.local_tile_server.get_slide_urls(local_slide_id)
 
                 slide_store['current'].append(slide_dict)
                 slide_store['local'].append(slide_dict)
 
         else:
             self.local_tile_server = None
-
 
         if not self.tileservers is None:
             if isinstance(self.tileservers,TileServer):
@@ -486,10 +1259,13 @@ class Visualization:
                     ])
 
                 elif type(t)==DSATileServer:
+
+                    #TODO: Update "public" as needed, it's possible this will have some other access control.
                     slide_store['current'].append({
                         'name': t.name,
                         'id': t.item_id,
-                        'api_url': t.base_url,
+                        'remote_id': t.item_id,
+                        'url': t.base_url,
                         'tiles_url': t.tiles_url,
                         'regions_url': t.regions_url,
                         'image_metadata_url': t.image_metadata_url,
@@ -497,7 +1273,8 @@ class Visualization:
                         'annotations_url': t.annotations_url,
                         'annotations_metadata_url':t.annotations_metadata_url,
                         'annotations_region_url': t.annotations_region_url,
-                        'annotations_geojson_url': t.annotations_geojson_url
+                        'annotations_geojson_url': t.annotations_geojson_url,
+                        'public': True
                     })
                 elif type(t)==CustomTileServer:
                     slide_store['current'].append({
@@ -512,9 +1289,6 @@ class Visualization:
                         'annotations_region_url': t.annotations_regions_url if hasattr(t,'annotations_regions_url') else None,
                         'annotations_geojson_url': t.annotations_geojson_url if hasattr(t,'annotations_geojson_url') else None
                     })
-
-        #TODO: Add initial session to database and set as default session?
-
 
         return slide_store
 
@@ -548,12 +1322,37 @@ class Visualization:
                                                 dbc.Button(
                                                     page,
                                                     id = {'type': 'page-button','index':page_idx},
-                                                    n_clicks = 0
+                                                    n_clicks = 0,
+                                                    className = 'd-grid col-12 mx-auto',
+                                                    style = {'textTransform': 'none'}
                                                 )
                                             )
                                             for page_idx,page in enumerate(self.layout_dict)
+                                        ] + [
+                                            dbc.DropdownMenuItem(divider=True),
+                                            dbc.DropdownMenuItem([
+                                                dbc.Button(
+                                                    'Signed in as: Guest User',
+                                                    id = 'user-current',
+                                                    color = 'secondary',
+                                                    outline = True,
+                                                    n_clicks = 0,
+                                                    style = {
+                                                        'font-style': 'italic',
+                                                        'textTransform': 'none'
+                                                    }
+                                                ),
+                                                dbc.Modal(
+                                                    id = 'login-modal',
+                                                    centered = True,
+                                                    is_open = False,
+                                                    size = 'xl',
+                                                    className = None,
+                                                    children = []
+                                                )
+                                            ])
                                         ],
-                                        label = 'Pages Menu',
+                                        label = 'Menu',
                                         nav = True,
                                         style = {
                                             'border-radius':'5px'
@@ -562,11 +1361,22 @@ class Visualization:
                                 ),
                                 dbc.NavItem(
                                     dbc.Button(
-                                        'CMIL Website',
-                                        id = 'lab-web-button',
+                                        'Examples',
+                                        id = 'examples-button',
                                         outline=True,
                                         color='primary',
-                                        href='https://cmilab.nephrology.medicine.ufl.edu',
+                                        href='https://spborder.github.io/fusion-welcome-page/',
+                                        target='_blank',
+                                        style={'textTransform':'none'}
+                                    )
+                                ),
+                                dbc.NavItem(
+                                    dbc.Button(
+                                        'Docs',
+                                        id = 'docs-button',
+                                        outline=True,
+                                        color='primary',
+                                        href='https://fusion-tools.readthedocs.io/en/latest/',
                                         target='_blank',
                                         style={'textTransform':'none'}
                                     )
@@ -598,15 +1408,15 @@ class Visualization:
         vis_data = html.Div([
             dcc.Store(
                 id = 'anchor-vis-store',
-                data = json.dumps(self.vis_store_content),
-                storage_type = 'session'
+                data = json.dumps({}),
+                storage_type = 'session',
+                modified_timestamp = -1
             ),
             dcc.Store(
                 id = 'anchor-vis-memory-store',
-                data = json.dumps({
-                    'id': None
-                }),
-                storage_type='memory'
+                data = json.dumps({}),
+                storage_type='memory',
+                modified_timestamp = -1
             )
         ])
 
@@ -631,7 +1441,6 @@ class Visualization:
                 )
             ]
         )
-
 
         return layout
 
@@ -941,6 +1750,7 @@ class Visualization:
         
         for h_idx, h in enumerate(self.header):
             h.load(h_idx)
+            h.gen_layout({})
             h.add_database(database = self.database)
 
         header_components = html.Div([
@@ -985,14 +1795,29 @@ class Visualization:
 
     def create_app(self):
 
-        app = FastAPI()
+        app = FastAPI(
+            title = 'FUSION',
+            description = 'Modular visualization and analysis dashboard creation for high-resolution microscopy images.',
+            version='3.6.35',
+            docs_url='/docs',
+            redoc_url = '/redoc',
+            license_info = {
+                'name': 'Apache 2.0'
+            }
+        )
+
+        app.include_router(
+            fusionAPI(
+                database = self.database
+            ).router
+        )
 
         allowed_origins = [
             'http://localhost',
-            'http://localhost:8080',
-            'http://0.0.0.0:8080',
+            f'http://localhost:{self.app_options.get("port")}',
+            f'http://0.0.0.0:{self.app_options.get("port")}',
             'http://0.0.0.0',
-            'http://127.0.0.1:8080',
+            f'http://127.0.0.1:{self.app_options.get("port")}',
             'http://127.0.0.1',
             'http://'+self.app_options.get('host'),
             'http://'+self.app_options.get('host')+':'+str(self.app_options.get('port'))
@@ -1052,7 +1877,6 @@ class Visualization:
             expose_headers = cors_options.get('expose_headers',['*']),
             max_age = cors_options.get('max_age','36000000')
         )
-
 
     def start(self):
         """Starting visualization session based on provided app_options

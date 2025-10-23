@@ -63,11 +63,15 @@ class DatasetBuilder(DSATool):
     def gen_collections_dataframe(self,session_data:dict):
 
         collections_info = []
+
+        user_token = self.get_user_external_token(session_data)
+        user_login = self.get_user_external_token(session_data)
+        user_id = self.get_user_external_id(session_data)
         
-        collections = self.handler.get_collections(session_data.get('current_user',{}).get('token'))
+        collections = self.handler.get_collections(session_data.get('user',{}).get('token'))
         for c in collections:
             #slide_count = self.handler.get_collection_slide_count(collection_name = c['name'])
-            folder_count = self.handler.get_path_info(path = f'/collection/{c["name"]}', user_token = session_data.get('current_user',{}).get('token'))
+            folder_count = self.handler.get_path_info(path = f'/collection/{c["name"]}', user_token = user_token)
             #if slide_count>0:
             collections_info.append({
                 'Collection Name': c['name'],
@@ -77,13 +81,13 @@ class DatasetBuilder(DSATool):
                 'Last Updated': folder_count['updated']
             } | c['meta'])
 
-        if 'current_user' in session_data:
+        if 'user' in session_data:
             collections_info.append({
-                'Collection Name': f'User: {session_data["current_user"]["login"]}',
-                'Collection ID': session_data["current_user"]['_id'],
+                'Collection Name': f'User: {user_login}',
+                'Collection ID': user_id,
                 'Number of Folder': 2,
                 'Last Updated': '-',
-                'token': session_data['current_user']['token']
+                'token': user_token
             })
             
         collections_df = pd.DataFrame.from_records(collections_info)
@@ -98,36 +102,32 @@ class DatasetBuilder(DSATool):
         """
 
         # Adding current session data here
+        user_external_token = self.get_user_external_token(session_data)
+        user_internal_token = session_data.get('user').get('token')
         starting_slides = []
         starting_slides_components = []
         starting_slide_idx = 0
         for s in session_data['current']:
-            if 'api_url' in s:
-                if s['api_url']==self.handler.girderApiUrl:
-                    # Getting the id of the DSA slide from this same instance
-                    slide_id = s['tiles_url'].split('/item/')[1].split('/')[0]
-                    starting_slides.append(slide_id)
-                    starting_slides_components.append(
-                        self.make_selected_slide(
-                            slide_id = slide_id,
-                            idx = starting_slide_idx,
-                            use_prefix= not use_prefix
-                        )
-                    )
-                    starting_slide_idx += 1
+            if 'url' in s:
+                local = False
+                user_token = user_external_token
+                if not s['url']==self.handler.girderApiUrl:
+                    continue
             else:
-                thumbnail_address = s['regions_url'].replace('region','thumbnail')
-                slide_index = thumbnail_address.split('/')[-3]
-                starting_slides.append(f'local{slide_index}')
-                starting_slides_components.append(
-                    self.make_selected_slide(
-                        slide_id = thumbnail_address,
-                        idx = starting_slide_idx,
-                        local_slide=True,
-                        use_prefix = not use_prefix
-                    )
+                local = True
+                user_token = user_internal_token
+
+            starting_slides.append(s)
+            starting_slides_components.append(
+                self.make_selected_slide(
+                    slide_info = s,
+                    idx = starting_slide_idx,
+                    use_prefix = not use_prefix,
+                    local_slide = local,
+                    user_token = user_token
                 )
-                starting_slide_idx+=1
+            )
+            starting_slide_idx += 1
 
         collections_df = self.gen_collections_dataframe(session_data)
 
@@ -272,7 +272,8 @@ class DatasetBuilder(DSATool):
             [
                 State({'type':'dataset-builder-collection-folder-table','index': MATCH},'data'),
                 State({'type': 'dataset-builder-collection-folder-nav-parent','index': MATCH},'children'),
-                State({'type':'dataset-builder-data-store','index': ALL},'data')
+                State({'type':'dataset-builder-data-store','index': ALL},'data'),
+                State('anchor-vis-store','data')
             ],
             [
                 Output({'type':'dataset-builder-collection-folder-div','index': MATCH},'style'),
@@ -319,8 +320,6 @@ class DatasetBuilder(DSATool):
                 Output('anchor-vis-store','data')
             ]
         )(self.update_vis_store)
-
-        # Callback for plotting slide-level metadata if there is any
 
     def make_selectable_dash_table(self, dataframe:pd.DataFrame, id:dict, multi_row:bool = True, selected_rows: list = []):
         """Generate a selectable DataTable to add to the layout
@@ -385,13 +384,15 @@ class DatasetBuilder(DSATool):
         folder_folders = []
         folder_slides = []
 
+        user_token = self.get_user_external_token(session_data)
+
         # Starting with slides (which will report parent folderId but not that parent's folderId (if applicable))
         if folder_info['_modelType'] in ['folder','collection']:
             all_folder_slides = self.handler.get_folder_slides(
                 folder_path = folder_info['_id'],
                 folder_type = folder_info['_modelType'],
                 ignore_histoqc=ignore_histoqc,
-                user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
+                user_token = user_token
             )
 
             folder_slides_folders = [i['folderId'] for i in all_folder_slides]
@@ -403,11 +404,11 @@ class DatasetBuilder(DSATool):
                     # This grabs parent folders of this folder
                     u_folder_info = self.handler.get_folder_info(
                         folder_id=u,
-                        user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
+                        user_token = user_token
                     )
                     u_folder_rootpath = self.handler.get_folder_rootpath(
                         u,
-                        user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
+                        user_token = user_token
                     )
                     # Folders in order from collection-->child folder-->etc.
                     folder_ids = [i['object']['_id'] for i in u_folder_rootpath]
@@ -427,7 +428,7 @@ class DatasetBuilder(DSATool):
 
                     child_folder_path_info = self.handler.get_path_info(
                         path = child_folder_path,
-                        user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
+                        user_token = user_token
                     )
                     if not child_folder_path_info['_id'] in folders_in_folder:
                         folders_in_folder.append(child_folder_path_info['_id'])
@@ -459,10 +460,11 @@ class DatasetBuilder(DSATool):
             folders_in_folder = []
             unique_folders = []
             user_folders = ['Private','Public']
+            user_login = self.get_user_external_login(session_data)
             for u_f in user_folders:
                 user_folder_info = self.handler.get_path_info(
                     path = f'/user/{folder_info["login"]}/{u_f}',
-                    user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
+                    user_token = user_token
                 )
 
                 folder_folders.append({
@@ -481,15 +483,15 @@ class DatasetBuilder(DSATool):
             empty_folders = self.handler.get_folder_folders(
                 folder_id = folder_info['_id'],
                 folder_type = folder_info['_modelType'],
-                user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
+                user_token = user_token
             )
             
             for f in empty_folders:
                 if not f['_id'] in folders_in_folder and not f['_id'] in unique_folders:
-                    if not 'current_user' in session_data:
+                    if not user_token is None:
                         folder_info = self.handler.gc.get(f'/folder/{f["_id"]}/details')
                     else:
-                        folder_info = self.handler.gc.get(f'/folder/{f["_id"]}/details?token={session_data["current_user"]["token"]}')
+                        folder_info = self.handler.gc.get(f'/folder/{f["_id"]}/details?token={user_token}')
                     folder_folders.append(
                         {
                             'Folder Name': f['name'],
@@ -514,7 +516,7 @@ class DatasetBuilder(DSATool):
 
                 const thumbDataUrl = await Promise.all(
                     thumb_store.map(async (t_data) => {
-                        const t_json = JSON.parse(t_data.replace(/[\[\]']+/g,""));
+                        const t_json = JSON.parse(t_data.replace('/[\[\]]+/g',""));
                         
                         if (!t_json.done){
                             const res = await fetch(t_json.url,{
@@ -559,23 +561,25 @@ class DatasetBuilder(DSATool):
             prevent_initial_call = False
         )
 
-    def make_selected_slide(self, slide_id:str,idx:int,local_slide:bool = False, use_prefix:bool = True):
+    def make_selected_slide(self, slide_info:dict,idx:int,local_slide:bool = False, use_prefix:bool = True, user_token: Union[str,None] = None):
         """Creating a visualization session component for a selected slide
 
-        :param slide_id: Girder Id for the slide to be added
-        :type slide_id: str
+        :param slide_info: Information on the Local or Remote Item
+        :type slide_info: dict
         :param local_slide: Whether or not the slide is from the LocalTileServer or if it's in the cloud
         :type local_slide: bool
         :param use_prefix: Whether or not to add the component prefix (initially don't add, when updating the layout do add)
-        :param use_prefix: bool
+        :type use_prefix: bool
+        :param user_token: Token to use in requests
+        :type user_token: Union[str,None], optional
         """
         
         if not local_slide:
-            try:
-                item_info = self.handler.gc.get(f'/item/{slide_id}')
-                thumb_url = self.handler.get_image_thumbnail(slide_id, return_url = True)
+            try:               
+                item_info = self.handler.get_item_info(slide_info.get('remote_id'),user_token)
+                thumb_url = self.handler.get_image_thumbnail(slide_info.get('remote_id'), user_token = user_token, return_url = True)
 
-                folder_info = self.handler.get_folder_info(item_info['folderId'])
+                folder_info = self.handler.get_folder_info(item_info['folderId'], user_token = user_token)
                 slide_info = {
                     k:v for k,v in item_info.items() if type(v) in [int,float,str]
                 }
@@ -583,19 +587,11 @@ class DatasetBuilder(DSATool):
                 print(f'Item not found! {slide_id}')
                 return html.Div()
         else:
-            # For local slides, "slide_id" is the request for getting the slide thumbnail
-            item_idx = int(slide_id.split('/')[-3])
+            
+            #TODO: Deriving thumbnail url from local slide info
+            thumb_url = slide_info.get('')
 
-            try:
-                thumb_url = slide_id
-
-                local_names = requests.get(slide_id.replace(f'{item_idx}/tiles/thumbnail','names')).json()['message']
-            except (requests.exceptions.ConnectionError, requests.exceptions.RetryError):
-                # Triggered on initialization of application because the LocalTileServer instance is not running yet
-                local_names = ['LOADING LOCALTILESERVER']*(item_idx+1)
-
-            folder_info = {'name': 'Local Slides'}
-            slide_info = {'name': local_names[item_idx]}               
+            folder_info = {'name': slide_info.get('filepath').replace(slide_info.get('name'),'')}               
 
         slide_card = html.Div([
             dbc.Card([
@@ -655,6 +651,8 @@ class DatasetBuilder(DSATool):
 
         collection_card_indices = self.get_component_indices(collection_div_children)
 
+        user_external_token = self.get_user_external_token(session_data)
+
         if selected_collections is None and len(builder_data['selected_collections'])==0:
             return ['Select a Collection to get started'], no_update
         elif selected_collections is None and len(builder_data['selected_collections'])>0:
@@ -668,29 +666,26 @@ class DatasetBuilder(DSATool):
         def add_collection_card(collection_info,idx):
             # For each collection, grab all items and unique folders (as well as those that are not nested in a folder)
             if not 'User: ' in collection_info["Collection Name"]:
-                folder_slides, folder_folders = self.organize_folder_contents(
-                    folder_info = self.handler.get_path_info(
-                        f'/collection/{collection_info["Collection Name"]}',
-                        user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
-                    ),
-                    session_data = session_data
-                )
+                folder_path = f'/collection/{collection_info["Collection Name"]}'
             else:
-                folder_slides, folder_folders = self.organize_folder_contents(
-                    folder_info=self.handler.get_path_info(
-                        f'/user/{collection_info["Collection Name"].replace("User: ","")}',
-                        user_token = session_data['current_user']['token'] if 'current_user' in session_data else None
-                    ),
-                    session_data = session_data
-                )
+                folder_path = f'/user/{collection_info["Collection Name"].replace("User: ","")}'
+            
+            folder_slides, folder_folders = self.organize_folder_contents(
+                folder_info = self.handler.get_path_info(
+                    folder_path,
+                    user_token = user_external_token
+                ),
+                session_data = session_data
+            )
 
             if len(folder_slides)>0:
 
                 # Checking if any of the slides are already present in the "selected_slides"
                 current_selected_slides = builder_data['selected_slides']
+                current_selected_slide_ids = [i.get('id') for i in current_selected_slides]
                 selected_rows = [
                     idx for idx,i in enumerate(folder_slides)
-                    if i['Slide ID'] in current_selected_slides
+                    if i['Slide ID'] in current_selected_slide_ids
                 ]
 
                 non_nested_df = pd.DataFrame.from_records(folder_slides)
@@ -885,7 +880,7 @@ class DatasetBuilder(DSATool):
 
         return index_list
 
-    def update_folder_div(self,folder_row,crumb_click,collection_folders,current_crumbs,builder_data):
+    def update_folder_div(self,folder_row,crumb_click,collection_folders,current_crumbs,builder_data,session_data):
         """Selecting a folder from the collection's folder table
 
         :param folder_row: Selected folder (list of 1 index)
@@ -898,6 +893,8 @@ class DatasetBuilder(DSATool):
         :type current_crumbs: list
         :param builder_data: Current contents of data store for dataset-builder, used for determining if a slide is already selected
         :type builder_data: list
+        :param session_data: Current session information
+        :type session_data: str
         :return: Sub-folder and slide selection tables for further selection
         :rtype: tuple
         """
@@ -918,8 +915,10 @@ class DatasetBuilder(DSATool):
                     html.A(i)
                 )
 
+        session_data = json.loads(session_data)
         builder_data = json.loads(get_pattern_matching_value(builder_data))
-        
+        user_external_token = self.get_user_external_token(session_data)
+
         if 'dataset-builder-collection-folder-table' in ctx.triggered_id['type']:
             
             # Triggers callback when creating new folder table
@@ -939,7 +938,8 @@ class DatasetBuilder(DSATool):
             
             folder_path = ''.join(list(path_parts+(new_folder_name,)))
             folder_info = self.handler.get_path_info(
-                path = folder_path
+                path = folder_path,
+                user_token = user_external_token
             )
             
             folder_slides, folder_folders = self.organize_folder_contents(
@@ -959,9 +959,10 @@ class DatasetBuilder(DSATool):
                 
             if len(folder_slides)>0:
                 current_selected_slides = builder_data['selected_slides']
+                current_selected_slide_ids = [i.get('id') for i in current_selected_slides]
                 selected_rows = [
                     idx for idx,i in enumerate(folder_slides)
-                    if i['Slide ID'] in current_selected_slides
+                    if i['Slide ID'] in current_selected_slide_ids
                 ]
 
                 slides_table = html.Div([
@@ -1025,9 +1026,10 @@ class DatasetBuilder(DSATool):
                 if len(folder_slides)>0:
 
                     current_selected_slides = builder_data['selected_slides']
+                    current_selected_slide_ids = [i.get('id') for i in current_selected_slides]
                     selected_rows = [
                         idx for idx,i in enumerate(folder_slides)
-                        if i['Slide ID'] in current_selected_slides
+                        if i['Slide ID'] in current_selected_slide_ids
                     ]
 
                     slides_table = html.Div([
@@ -1061,10 +1063,12 @@ class DatasetBuilder(DSATool):
 
         return folder_table_style, folder_table, slides_table, new_crumbs
 
-    def slide_selection(self, slide_rows, slide_all, slide_rem_all, slide_rem, upload_session, current_crumbs, slide_table_data, builder_data, current_slide_components, current_collection_components, vis_session_data):
+    def slide_selection(self, slide_rows, slide_all, slide_rem_all, slide_rem, upload_session, current_crumbs, slide_table_data, builder_data, current_slide_components, current_collection_components, session_data):
 
         builder_data = json.loads(get_pattern_matching_value(builder_data))
-        vis_session_data = json.loads(vis_session_data)
+        session_data = json.loads(session_data)
+
+        user_external_token = self.get_user_external_token(session_data)
 
         current_slide_indices = list(set(self.get_component_indices(current_slide_components)))
         current_collection_indices = list(set(self.get_component_indices(current_collection_components)))
@@ -1081,7 +1085,8 @@ class DatasetBuilder(DSATool):
             active_folders.append(path)
 
         current_selected_slides = builder_data['selected_slides']
-
+        current_selected_slide_ids = [i.get('id') for i in current_selected_slides]
+        current_local_slide_ids = [i.get('id') for i in session_data.get('local')]
         selected_slides = Patch()
         
         if 'dataset-builder-slide-table' in ctx.triggered_id['type']:
@@ -1093,45 +1098,64 @@ class DatasetBuilder(DSATool):
                     table_selected_slides.extend([slide_table[i] for i in s_r])
                     not_selected_slides.extend([slide_table[i] for i in range(len(slide_table)) if not i in s_r])
 
-            new_slides = list(set([i['Slide ID'] for i in table_selected_slides]).difference(current_selected_slides))
+            new_slides = list(set([i['Slide ID'] for i in table_selected_slides]).difference(current_selected_slide_ids))
+            new_slide_info = []
             for s_idx,s in enumerate(new_slides):
-                if not 'local' in s:
-                    new_slide_component = self.make_selected_slide(
-                        slide_id = s,
-                        idx = max(current_slide_indices)+s_idx+1 if len(current_slide_indices)>0 else s_idx
-                    )
+                
+                if s in current_local_slide_ids:
+                    local = True
+                    user_token = session_data.get('user').get('token')
+                    slide_info = session_data.get('local')[current_local_slide_ids.index(s)]
                 else:
-                    local_idx = int(s.split('local')[-1])
-                    new_slide_component = self.make_selected_slide(
-                        slide_id = vis_session_data['local'][local_idx]['regions_url'].replace('region','thumbnail'),
-                        idx = max(current_slide_indices)+s_idx+1 if len(current_slide_indices)>0 else s_idx,
-                        local_slide=True
-                    )
+                    local = False
+                    user_token = user_external_token
+                    slide_info = self.handler.get_item_info(s,user_external_token)
+
+                new_slide_component = self.make_selected_slide(
+                    slide_info = slide_info,
+                    idx = max(current_slide_indices)+s_idx+1 if len(current_slide_indices)>0 else s_idx,
+                    user_token = user_token,
+                    local_slide=local
+                )
 
                 selected_slides.append(new_slide_component)
+                new_slide_info.append(slide_info)
 
-            current_selected_slides.extend(new_slides)
-            new_rem_slides = list(set(current_selected_slides) & set([i['Slide ID'] for i in not_selected_slides]))
+            current_selected_slides.extend(new_slide_info)
+            new_rem_slides = list(set(current_selected_slide_ids) & set([i['Slide ID'] for i in not_selected_slides]))
 
             for d_idx,d in enumerate(new_rem_slides):
-                del selected_slides[current_selected_slides.index(d)]
-                del current_selected_slides[current_selected_slides.index(d)]           
+                del selected_slides[current_selected_slide_ids.index(d)]
+                del current_selected_slides[current_selected_slide_ids.index(d)]           
 
         elif 'dataset-builder-slide-select-all' in ctx.triggered_id['type']:
             # This part only gets triggered when n_clicks is greater than 0 (ignore trigger on creation)
             if any([i['value'] for i in ctx.triggered]):
                 select_all_idx = ctx.triggered_id['index']
                 select_all_slides = slide_table_data[current_collection_indices.index(select_all_idx)]
-                new_slides = list(set([i['Slide ID'] for i in select_all_slides]).difference(current_selected_slides))
+                new_slides = list(set([i['Slide ID'] for i in select_all_slides]).difference(current_selected_slide_ids))
                 
-                selected_slides.extend([
-                    self.make_selected_slide(
-                        slide_id = s,
-                        idx = max(current_slide_indices)+s_idx+1 if len(current_slide_indices)>0 else s_idx
+                new_slide_info = []
+                for s_idx, new_slide_id in enumerate(new_slides):
+                    if new_slide_id in current_local_slide_ids:
+                        local = True
+                        user_token = session_data.get('user').get('token')
+                        slide_info = session_data.get('local')[current_local_slide_ids.index(new_slide_id)]
+                    else:
+                        local = False
+                        user_token = user_external_token
+                        slide_info = self.handler.get_item_info(new_slide_id,user_external_token)
+
+                    selected_slides.append(
+                        self.make_selected_slide(
+                            slide_id = slide_info,
+                            local_slide = local,
+                            idx = max(current_slide_indices)+s_idx+1 if len(current_slide_indices)>0 else s_idx
+                        )
                     )
-                    for s_idx,s in enumerate(new_slides)
-                ])
-                current_selected_slides.extend(new_slides)
+                    new_slide_info.append(slide_info)
+
+                current_selected_slides.extend(new_slide_info)
 
             else:
                 raise exceptions.PreventUpdate
@@ -1142,10 +1166,10 @@ class DatasetBuilder(DSATool):
                 remove_all_idx = ctx.triggered_id['index']
                 remove_all_slides = slide_table_data[current_collection_indices.index(remove_all_idx)]
 
-                new_rem_slides = list(set(current_selected_slides) & set([i['Slide ID'] for i in remove_all_slides]))
+                new_rem_slides = list(set(current_selected_slide_ids) & set([i['Slide ID'] for i in remove_all_slides]))
                 for d_idx,d in enumerate(new_rem_slides):
-                    del selected_slides[current_selected_slides.index(d)]
-                    del current_selected_slides[current_selected_slides.index(d)]
+                    del selected_slides[current_selected_slide_ids.index(d)]
+                    del current_selected_slides[current_selected_slide_ids.index(d)]
 
             else:
                 raise exceptions.PreventUpdate      
@@ -1170,50 +1194,55 @@ class DatasetBuilder(DSATool):
             new_local_slides = []
             keep_slides = []
             for s_idx,s in enumerate(decoded['current']):
-                if 'api_url' in s:
-                    if s['api_url']==self.handler.girderApiUrl:
+                if 'url' in s:
+                    if s['url']==self.handler.girderApiUrl:
                         # Getting the id of the DSA slide from this same instance
-                        slide_id = s['tiles_url'].split('/item/')[1].split('/')[0]
+                        slide_id = s['id']
 
-                        if not slide_id in current_selected_slides:
-                            new_cloud_slides.append(slide_id)
+                        if not slide_id in current_selected_slide_ids:
+                            new_cloud_slides.append(s)
                         else:
-                            keep_slides.append(slide_id)
+                            keep_slides.append(s)
+                    else:
+                        continue
                 else:
-                    if s['regions_url'] in [i['regions_url'] for i in vis_session_data['local']]:
-                        thumbnail_address = s['regions_url'].replace('region','thumbnail')
-                        slide_index = thumbnail_address.split('/')[-3]
-                        local_slide_id = f'local{slide_index}'
-                        if not local_slide_id in current_selected_slides:
-                            new_local_slides.append(local_slide_id)
-                        else:
-                            keep_slides.append(local_slide_id)
+
+                    if s['id'] in current_local_slide_ids:
+                        keep_slides.append(s)
+                    else:
+                        new_local_slides.append(s)
             
             # Now removing unneeded slides
-            remove_slides = [i for i in current_selected_slides if not i in new_local_slides+new_cloud_slides+keep_slides]
-            for d_idx, d in enumerate(remove_slides):
-                del selected_slides[current_selected_slides.index(d)]
-                del current_selected_slides[current_selected_slides.index(d)]
+            new_local_slide_ids = [i.get('id') for i in new_local_slides]
+            new_cloud_slide_ids = [i.get('id') for i in new_cloud_slides]
+            keep_slide_ids = [i.get('id') for i in keep_slides]
 
-            for new_idx, new_slide in enumerate(new_local_slides+new_cloud_slides):
+            remove_slide_ids = [i for i in current_selected_slide_ids if not i in new_local_slide_ids+new_cloud_slide_ids+keep_slide_ids]
+
+            for d_idx, d in enumerate(remove_slide_ids):
+                del selected_slides[current_selected_slide_ids.index(d)]
+                del current_selected_slides[current_selected_slide_ids.index(d)]
+
+            new_slide_info = new_local_slides + new_cloud_slides
+            for new_idx, new_slide in enumerate(new_slide_info):
+
                 current_selected_slides.append(new_slide)
-                if new_slide in new_local_slides:
-                    thumbnail_address = vis_session_data['local'][int(new_slide.replace('local',''))]['regions_url'].replace('region','thumbnail')
-                    selected_slides.append(
-                        self.make_selected_slide(
-                            slide_id = thumbnail_address,
-                            idx = new_idx,
-                            local_slide = True
-                        )
-                    )
+                if new_slide.get('id') in new_local_slide_ids:
+                    local = True
+                    user_token = session_data.get('user').get('token')
                 else:
-                    selected_slides.append(
-                        self.make_selected_slide(
-                            slide_id = new_slide,
-                            idx = new_idx
-                        )
+                    local = False
+                    user_token = user_external_token
+
+                selected_slides.append(
+                    self.make_selected_slide(
+                        slide_info = new_slide,
+                        user_token = user_token,
+                        idx = new_idx,
+                        local_slide = local
                     )
-            
+                )
+
         else:
             raise exceptions.PreventUpdate
         
@@ -1226,13 +1255,13 @@ class DatasetBuilder(DSATool):
 
         return [selected_slides], [included_slide_count], [builder_data]
 
-    def update_vis_store(self, new_slide_data, current_vis_data):
+    def update_vis_store(self, new_slide_data, session_data):
         """Updating current visualization session based on selected slide(s)
 
         :param new_slide_data: New slides to be added to the Visualization Session
         :type new_slide_data: list
-        :param current_vis_data: Current Visualization Session data
-        :type current_vis_data: list
+        :param session_data: Current Visualization Session data
+        :type session_data: str
         :return: Updated Visualization Session 
         :rtype: str
         """
@@ -1242,24 +1271,31 @@ class DatasetBuilder(DSATool):
             raise exceptions.PreventUpdate
         
         new_slide_data = json.loads(get_pattern_matching_value(new_slide_data))
-        current_vis_data = json.loads(current_vis_data)
+        session_data = json.loads(session_data)
+
+        user_external_token = self.get_user_external_token(session_data)
+
         prev_vis_data_in_handler = []
-        for i in current_vis_data['current']:
-            if 'api_url' in i:
-                if i['api_url']==self.handler.girderApiUrl:
+        for i in session_data['current']:
+            if 'url' in i:
+                if i['url']==self.handler.girderApiUrl:
                     prev_vis_data_in_handler.append(i)
+                else:
+                    continue
             else:
                 prev_vis_data_in_handler.append(i)
 
-        # Adding new slides to current_vis_data
+        # Adding new slides to session_data
         new_slide_info = []
+        local_slide_ids = [i.get('id') for i in session_data.get('local')]
         for s in new_slide_data['selected_slides']:
-            if not 'local' in s:
+
+            if not s.get('id') in local_slide_ids:
                 info_url = f'/item/{s}'
                 annotations_metadata_url = f'{self.handler.girderApiUrl}/annotation/?itemId={s}'
-                if 'current_user' in current_vis_data:
-                    annotations_metadata_url += f'&token={current_vis_data["current_user"]["token"]}'
-                    info_url += f'?token={current_vis_data["current_user"]["token"]}'
+                if not user_external_token is None:
+                    annotations_metadata_url += f'&token={user_external_token}'
+                    info_url += f'?token={user_external_token}'
                 
                 slide_info = self.handler.gc.get(info_url)
                 annotations_metadata = requests.get(annotations_metadata_url).json()
@@ -1268,11 +1304,14 @@ class DatasetBuilder(DSATool):
                     
                 annotations_geojson_url = [f'{self.handler.girderApiUrl}/annotation/{a["_id"]}/geojson' for a in annotations_metadata]
 
+                #TODO: Should this be reworked so not all of these urls are needed?
+                # It seems redundant since it follows a pretty clear pattern
                 new_slide_info.append(
                     {
                         'name': slide_info.get('name',''),
                         'id': slide_info.get('_id',''),
-                        'api_url': self.handler.girderApiUrl,
+                        'remote_id': slide_info.get('_id'),
+                        'url': self.handler.girderApiUrl,
                         'tiles_url': f'{self.handler.girderApiUrl}/item/{s}/tiles/zxy'+'/{z}/{x}/{y}',
                         'regions_url': f'{self.handler.girderApiUrl}/item/{s}/tiles/region',
                         'image_metadata_url': f'{self.handler.girderApiUrl}/item/{s}/tiles',
@@ -1284,13 +1323,12 @@ class DatasetBuilder(DSATool):
                     }
                 )
             else:
-                local_idx = int(s.split('local')[-1])
                 new_slide_info.append(
-                    current_vis_data['local'][local_idx]
+                    session_data['local'][local_slide_ids.index(s.get('id'))]
                 )
         
-        prev_slides_in_handler = [i['tiles_url'] for i in prev_vis_data_in_handler]
-        new_slides_in_handler = [i['tiles_url'] for i in new_slide_info]
+        prev_slides_in_handler = [i['id'] for i in prev_vis_data_in_handler]
+        new_slides_in_handler = [i['id'] for i in new_slide_info]
 
         if sorted(prev_slides_in_handler)==sorted(new_slides_in_handler):
             return no_update
@@ -1298,13 +1336,13 @@ class DatasetBuilder(DSATool):
             new_slides = [new_slide_info[idx] for idx,i in enumerate(new_slides_in_handler) if not i in prev_slides_in_handler]
             rem_slides = [prev_slides_in_handler[idx] for idx,i in enumerate(prev_slides_in_handler) if not i in new_slides_in_handler]
 
-            for s_idx,s in enumerate(current_vis_data['current']):
-                if s['tiles_url'] in rem_slides:
-                    del current_vis_data['current'][s_idx]
+            for s_idx,s in enumerate(session_data['current']):
+                if s['id'] in rem_slides:
+                    del session_data['current'][s_idx]
             
-            current_vis_data['current'].extend(new_slides)
+            session_data['current'].extend(new_slides)
 
-            return json.dumps(current_vis_data)
+            return json.dumps(session_data)
 
 
 

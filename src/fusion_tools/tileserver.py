@@ -4,11 +4,12 @@ Tile server components
 
 """
 import os
-from fastapi import FastAPI, APIRouter, Response, Request
+from fastapi import FastAPI, APIRouter, Response, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import large_image
 import requests
 import json
+from typing import Annotated
 from typing_extensions import Union
 
 from copy import deepcopy
@@ -37,12 +38,14 @@ class Slide:
                  image_filepath: Union[str,None] = None,
                  annotations: Union[str,list,dict,None] = None,
                  metadata: Union[dict,None] = None,
-                 image_style: Union[dict,None] = None):
+                 image_style: Union[dict,None] = None,
+                 public: bool = False):
         
         self.image_filepath = image_filepath
         self.annotations = annotations
         self.metadata = metadata
         self.image_style = image_style
+        self.public = public
 
         # Checking path exists
         assert(os.path.exists(self.image_filepath))
@@ -176,6 +179,7 @@ class TileServer:
     """
     pass
 
+
 class LocalTileServer(TileServer):
     """Tile server from image saved locally. Uses large-image to read and parse image formats (default: [common])
     """
@@ -184,15 +188,10 @@ class LocalTileServer(TileServer):
                  tile_server_port:int = 8050,
                  host: str = 'localhost',
                  protocol: str = 'http',
-                 cors_options: dict = {},
-                 jupyter_server_url: Union[str,None] = None
+                 jupyter_server_url: Union[str,None] = None,
+                 cors_options: dict = {}
                  ):
         """Constructor method
-
-        :param local_image_path: File path for image saved locally
-        :type local_image_path: str
-        :param tile_server_port: Tile server path where tiles are accessible from, defaults to '8050'
-        :type tile_server_port: str, optional
         """
 
         self.database = database
@@ -207,7 +206,20 @@ class LocalTileServer(TileServer):
         else:
             self.access_url = self.jupyter_server_url
 
-        self.app = FastAPI()
+        self.app = FastAPI(
+            title = 'TileServer',
+            description = 'Locally deployed tileserver for high-resolution microscopy images',
+            version = '3.6.35'
+        )
+
+        self.app.add_middleware(
+            CORSMiddleware,
+            allow_origins=self.cors_options.get('allow_origins',['*']),
+            allow_methods=self.cors_options.get('allow_methods',['GET','OPTIONS']),
+            allow_headers = self.cors_options.get('allow_headers',['*']),
+            expose_headers = self.cors_options.get('expose_headers',['*']),
+            allow_credentials = self.cors_options.get('allow_credentials',False)
+        )
 
         self.router = APIRouter()
         self.router.add_api_route('/',self.root,methods=["GET","OPTIONS"])
@@ -220,55 +232,64 @@ class LocalTileServer(TileServer):
         self.router.add_api_route('/{id}/tiles/region',self.get_region,methods=["GET","OPTIONS"])
         self.router.add_api_route('/{id}/tiles/thumbnail',self.get_thumbnail,methods=["GET","OPTIONS"])
         self.router.add_api_route('/{id}/annotations',self.get_annotations,methods=["GET","OPTIONS"])
-
         self.router.add_api_route('/{id}/annotations/metadata',self.get_annotations_metadata,methods=["GET", "OPTIONS"])
-
         self.router.add_api_route('/{id}/annotations/data/list',self.get_annotations_property_keys,methods=["GET","OPTIONS"])
         self.router.add_api_route('/{id}/annotations/data',self.get_annotations_property_data,methods=["GET","OPTIONS"])
 
     def __str__(self):
         return f'TileServer class to {self.host}:{self.tile_server_port}'
-
-    def __len__(self):
-        """Return number of items 
-
-        :return: Count of items in local database
-        :rtype: int
-        """
-        count = self.database.count(
-            table_name = 'item'
-        )
-
-        return count
     
-    def add_new_image(self,new_image_id:str, new_image_path:str, new_annotations:Union[str,list,dict,None] = None, new_metadata:Union[dict,None] = None, new_image_style:Union[dict,None] = None):
+    def add_new_image(self,
+        new_image_id:str, 
+        new_image_path:str, 
+        new_annotations:Union[str,list,dict,None] = None, 
+        new_metadata:Union[dict,None] = None, 
+        new_image_style:Union[dict,None] = None,
+        new_image_public: bool = False,
+        session_id: Union[str,None] = None,
+        user_id: Union[str,None] = None
+        ):
 
         # Verifying filepaths and loading annotations
         new_local_item = Slide(
             image_filepath=new_image_path,
             annotations = new_annotations,
             metadata = new_metadata,
-            image_style=new_image_style
+            image_style=new_image_style,
+            public = new_image_public
         )
 
-        slide_name = new_image_path.split(os.sep)[-1]
+        self.add_new_slide(new_local_item,session_id,user_id)
+
+    def add_new_slide(self, slide_id: str, slide_obj: Slide, session_id: Union[str,None] = None, user_id: Union[str,None] = None):
+
+        slide_name = slide_obj.image_filepath.split(os.sep)[-1]
         # Adding information to database
         self.database.add_slide(
-            new_image_id,
-            slide_name,
-            new_local_item.metadata,
-            new_local_item.image_metadata,
-            new_local_item.image_filepath,
-            new_local_item.annotations_metadata,
-            new_local_item.processed_annotations
+            slide_id = slide_id,
+            slide_name = slide_name,
+            metadata = slide_obj.metadata,
+            image_metadata = slide_obj.image_metadata,
+            image_filepath = slide_obj.image_filepath,
+            annotations_metadata = slide_obj.annotations_metadata,
+            annotations = slide_obj.processed_annotations,
+            vis_session_id = session_id,
+            user_id = user_id,
+            public = slide_obj.public
         )
 
-        #print(f"Item names in database: {self.database.get_names('item')}")
+        # If this is not a public slide, add to UserAccess table
+        #if not slide_obj.public:
+
+        #    self.database.add_access(
+        #        item_id = slide_id,
+        #        user_id = user_id
+        #    )
 
     def root(self):
         return {'message': "Oh yeah, now we're cooking"}
 
-    async def get_item(self,item_id:str):
+    async def get_item(self,item_id:str, token:Union[str,None] = None):
         """Grabbing item from database
 
         :param item_id: String uuid for local item
@@ -276,20 +297,30 @@ class LocalTileServer(TileServer):
         :return: Item instance
         :rtype: None
         """
+
+        if not token is None:
+            user_filter = {
+                'user': {
+                    'token': token
+                }
+            }
+        else:
+            user_filter = {}
+
         image_item = await self.database.search(
             search_kwargs = {
                 'type': 'item',
                 'filters': {
                     'item': {
                         'id': item_id
-                    }
-                }
+                    } 
+                }| user_filter
             }
         )
 
         return image_item
     
-    async def get_tile_source(self,item_id:str,style:Union[str,None]=None):
+    async def get_tile_source(self,item_id:str,style:Union[str,None]=None, token: Union[str,None] = None):
         """Getting large-image tile source for a given id+style combo. 
 
         :param item_id: String uuid for local image
@@ -299,7 +330,8 @@ class LocalTileServer(TileServer):
         :return: Tile source
         :rtype: None
         """
-        image_item = await asyncio.gather(self.get_item(item_id))
+
+        image_item = await asyncio.gather(self.get_item(item_id,token))
         if len(image_item[0])==0:
             return None
         else:
@@ -313,12 +345,20 @@ class LocalTileServer(TileServer):
 
             return tile_source
         
-    async def get_item_annotations(self, item_id:str):
+    async def get_item_annotations(self, item_id:str, request: Request = None):
         """Loading annotations from item database
 
         :param item_id: String uuid for local image
         :type item_id: str
         """
+        user_filter = {}
+        if not request is None:
+            if request.query_params.get('token'):
+                user_filter = {
+                    'user': {
+                        'token': request.query_params.get('token')
+                    }
+                }
 
         item_annotations = []
 
@@ -329,7 +369,7 @@ class LocalTileServer(TileServer):
                     'item': {
                         'id': item_id
                     }
-                }
+                } | user_filter
             }
         )
 
@@ -337,14 +377,15 @@ class LocalTileServer(TileServer):
             layer_name = l.get('name')
             layer_id = l.get('id')
 
+            #TODO: Check if this also needs the user token
             layer_structures = await self.database.search(
                 search_kwargs={
                     'type': 'structure',
                     'filters': {
                         'layer': {
                             'id': layer_id
-                        }
-                    }
+                        } 
+                    }| user_filter
                 }
             )
 
@@ -367,6 +408,7 @@ class LocalTileServer(TileServer):
                     }
                 )
             else:
+                #TODO: Check if this needs a user_token argument
                 # This could be an ImageOverlay layer
                 image_overlays = await self.database.search(
                     search_kwargs = {
@@ -375,7 +417,7 @@ class LocalTileServer(TileServer):
                             'layer': {
                                 'id': layer_id
                             }
-                        }
+                        } | user_filter
                     }
                 )
 
@@ -388,14 +430,15 @@ class LocalTileServer(TileServer):
 
         return item_annotations
 
-    def get_names(self):
+    def get_names(self, request: Request):
         """Get names of items in fusionDB
 
         :return: Message dictionary containing list of all item names
         :rtype: dict
         """
+
         item_names = self.database.get_names(
-            table_name = 'item'
+            table_name = 'item',
         )
 
         return {'message': item_names}
@@ -521,7 +564,17 @@ class LocalTileServer(TileServer):
         :return: Image tile containing bytes encoded pixel information
         :rtype: Response
         """
-        tile_source = await asyncio.gather(self.get_tile_source(id,style))
+
+        # large-image getTile doesn't do anything with negative zoom or tile coordinates
+        if any([i<0 for i in [z,x,y]]):
+            return Response(status_code=200)
+
+        token = None
+        if not request is None:
+            if request.query_params.get('token'):
+                token = request.query_params.get('token')
+
+        tile_source = await asyncio.gather(self.get_tile_source(id,style, token))
         tile_source = tile_source[0]
         if tile_source is None:
             return Response(
@@ -554,14 +607,20 @@ class LocalTileServer(TileServer):
             media_type='image/png',
         )
     
-    async def get_image_metadata(self,id:str):
+    async def get_image_metadata(self,id:str, request:Request = None):
         """Getting large-image metadata for image
 
         :return: Dictionary containing metadata for local image
         :rtype: Response
         """
 
-        image_item = await asyncio.gather(self.get_item(id))
+        token = None
+        if not request is None:
+            if request.query_params.get('token'):
+                token = request.query_params.get('token')
+
+
+        image_item = await asyncio.gather(self.get_item(id,token))
         if len(image_item[0])>0:
             image_meta = image_item[0][0].get('image_meta',{})
             if not image_meta is None:
@@ -581,13 +640,19 @@ class LocalTileServer(TileServer):
                 status_code=400,
             )
         
-    async def get_metadata(self, id:str):
+    async def get_metadata(self, id:str, request: Request = None):
         """Getting metadata associated with slide/case/patient
 
         :param image: Index of local image
         :type image: int
         """
-        image_item = await asyncio.gather(self.get_item(id))
+
+        token = None
+        if not request is None:
+            if request.query_params.get('token'):
+                token = request.query_params.get('token')
+
+        image_item = await asyncio.gather(self.get_item(id, token))
 
         if len(image_item[0])>0:
             item_meta = image_item[0][0].get('meta',{})
@@ -617,7 +682,12 @@ class LocalTileServer(TileServer):
         :return: Image region (bytes encoded)
         :rtype: Response
         """
-        tile_source = await asyncio.gather(self.get_tile_source(id,style))
+        token = None
+        if not request is None:
+            if request.query_params.get('token'):
+                token = request.query_params.get('token')
+
+        tile_source = await asyncio.gather(self.get_tile_source(id,style, token))
         tile_source = tile_source[0]
         
         if tile_source is None:
@@ -641,19 +711,23 @@ class LocalTileServer(TileServer):
             media_type = 'image/png',
         )
 
-    async def get_thumbnail(self, id:str, style:Union[None,str] = None):
+    async def get_thumbnail(self, id:str, style:Union[None,str] = None, request: Request = None):
         """Grabbing an image thumbnail
 
-        :param image: _description_
-        :type image: int
+        :param id: Unique id for locally stored item
+        :type id: str
         """
+        token = None
+        if not request is None:
+            if request.query_params.get('token'):
+                token = request.query_params.get('token')
 
-        tile_source = await asyncio.gather(self.get_tile_source(id,style))
+        tile_source = await asyncio.gather(self.get_tile_source(id,style, token))
         tile_source = tile_source[0]
 
         if tile_source is None:
             return Response(
-                content = 'invalid image index', 
+                content = 'invalid image id', 
                 media_type = 'application/json', 
                 status_code=400,
             )
@@ -665,7 +739,7 @@ class LocalTileServer(TileServer):
             media_type = 'image/png',
         )
 
-    async def get_annotations(self,id:str, top:Union[int,None]=None, left:Union[int,None]=None, bottom: Union[int,None]=None, right: Union[int,None]=None):
+    async def get_annotations(self,id:str, top:Union[int,None]=None, left:Union[int,None]=None, bottom: Union[int,None]=None, right: Union[int,None]=None, request: Request = None):
         """Getting annotations for a given item id, optionally specifying a region within which to grab annotations.
 
         :param id: String uuid for local image
@@ -681,7 +755,7 @@ class LocalTileServer(TileServer):
         :return: Annotations for item (optionally within a specified region)
         """
 
-        image_annotations = await asyncio.gather(self.get_item_annotations(id))
+        image_annotations = await asyncio.gather(self.get_item_annotations(id, request))
         
         if len(image_annotations)>0:
             if all([i is None for i in [top,left,bottom,right]]):
@@ -760,7 +834,13 @@ class LocalTileServer(TileServer):
         :return: Metadata associated with annotations for that image
         """
 
-        image_item = await asyncio.gather(self.get_item(id))
+        token = None
+        if not request is None:
+            if request.query_params.get('token'):
+                token = request.query_params.get('token')
+
+
+        image_item = await asyncio.gather(self.get_item(id, token))
         if len(image_item[0])==0:
             return Response(
                 content = 'invalid image id',
@@ -777,14 +857,14 @@ class LocalTileServer(TileServer):
             media_type = 'application/json'
         )
 
-    async def get_annotations_property_keys(self,id:str):
+    async def get_annotations_property_keys(self,id:str, request: Request):
         """Getting the names of properties stored in an image's annotations
 
         :param id: String uuid for locally stored image
         :type id: int
         """
         #print(f'id from get_annotations_property_keys: {id}')
-        image_anns = await self.get_item_annotations(id)
+        image_anns = await self.get_item_annotations(id, request)
         property_list = []
         property_names = []
         for a in image_anns:
@@ -893,7 +973,7 @@ class LocalTileServer(TileServer):
             status_code=200,
         )
 
-    async def get_annotations_property_data(self,id:str,include_keys:Union[str,None] = None,include_anns:Union[str,None] = None):
+    async def get_annotations_property_data(self,id:str,include_keys:Union[str,None] = None,include_anns:Union[str,None] = None, request: Request = None):
         """Getting data from annotations of specified image, attempting to mirror output of https://github.com/girder/large_image/blob/master/girder_annotation/girder_large_image_annotation/utils/__init__.py
 
         :param id: String uuid for locally stored image.
@@ -903,9 +983,15 @@ class LocalTileServer(TileServer):
         :param include_anns: Which annotations to include (name/id or __all__ or list)
         :type include_anns: Union[str,list,None]
         """
+
+        token = None
+        if not request is None:
+            if request.query_params.get('token'):
+                token = request.query_params.get('token')
+
                 
-        image_item = await self.get_item(id)[0]
-        image_anns = await self.get_item_annotations(id)
+        image_item = await self.get_item(id, token)[0]
+        image_anns = await self.get_item_annotations(id,request)
 
         include_keys = include_keys.split(',')
 

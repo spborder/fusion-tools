@@ -13,7 +13,7 @@ import dash
 dash._dash_renderer._set_react_version('18.2.0')
 from dash import callback, ctx, ALL, MATCH, exceptions, no_update, dcc
 import dash_bootstrap_components as dbc
-from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform
+from dash_extensions.enrich import html, Input, Output, State, PrefixIdTransform
 
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 from fusion_tools.components.base import DSATool
@@ -33,21 +33,6 @@ class DSASession(DSATool):
                  handler):
         
         self.handler = handler
-
-    def __str__(self):
-        return self.title
-
-    def load(self, component_prefix:int):
-        self.component_prefix = component_prefix
-
-        self.blueprint = DashBlueprint(
-            transforms=[
-                PrefixIdTransform(prefix=f'{component_prefix}'),
-                MultiplexerTransform()
-            ]
-        )
-
-        self.get_callbacks()
 
     def update_layout(self, session_data:dict, use_prefix:bool):
         
@@ -82,15 +67,6 @@ class DSASession(DSATool):
 
         return layout
 
-    def gen_layout(self, session_data:dict):
-        """Creating the layout for this component.
-
-        :param session_data: Dictionary containing current session info
-        :type session_data: dict
-        """
-
-        self.blueprint.layout = self.update_layout(session_data,use_prefix = False)
-
     def get_callbacks(self):
         
         self.blueprint.callback(
@@ -115,7 +91,10 @@ class DSASession(DSATool):
         
         session_data = json.loads(session_data)
 
-        if not 'current_user' in session_data:
+        user_external_login = self.get_user_external_login(session_data)
+        user_external_token = self.get_user_external_token(session_data)
+
+        if not user_external_login is None:
             session_status_div = html.Div(
                 dbc.Alert(
                     'Sign in first to save a session',
@@ -130,10 +109,10 @@ class DSASession(DSATool):
             'page': pathname,
             'current': session_data['current'],
             'data': session_data['data'],
-            'user_session': session_data['current_user']['login']
+            'user_session': user_external_login
         }
 
-        uploaded_file_details = self.handler.upload_session(saved_session_data,user_token = session_data['current_user']['token'])
+        uploaded_file_details = self.handler.upload_session(saved_session_data,user_token = user_external_token)
         
         # Find a way to extract the window url or something
         page_name = '/'+pathname.split('/')[-1]

@@ -38,27 +38,11 @@ class DSALoginComponent(DSATool):
 
         self.modal_size = 'lg'
 
-    def __str__(self):
-        return self.title
-
-    def load(self,component_prefix:int):
-
-        self.component_prefix = component_prefix
-
-        self.blueprint = DashBlueprint(
-            transforms=[
-                PrefixIdTransform(prefix=f'{component_prefix}'),
-                MultiplexerTransform()
-            ]
-        )
-
-        self.get_callbacks()
-    
     def update_layout(self, session_data:dict, use_prefix:bool):
         
         current_user_children = ''
-        if 'current_user' in session_data:
-            current_user_children = f'Welcome, {session_data.get("current_user",{}).get("login","")}!'
+        if 'user' in session_data:
+            current_user_children = f'Welcome, {session_data.get("user",{}).get("firstName")} ({session_data.get("user",{}).get("login","")})!'
             logout_button_disable = False
 
         else:
@@ -85,7 +69,7 @@ class DSALoginComponent(DSATool):
                             id = {'type': 'dsa-login-button','index': 0}
                         ),
                         dbc.Tooltip(
-                            'For registered users, login to view your previous uploads or shared collections!',
+                            'Login to view data stored in the cloud!',
                             target = {'type': 'dsa-login-button','index': 0},
                             placement='top'
                         ),
@@ -110,15 +94,6 @@ class DSALoginComponent(DSATool):
 
         return layout
 
-    def gen_layout(self,session_data:dict):
-        """Creating the layout for this component, assigning it to the DashBlueprint object
-
-        :param session_data: Dictionary containing relevant information for the current session
-        :type session_data: dict
-        """
-
-        self.blueprint.layout = self.update_layout(session_data,use_prefix=False)
-
     def get_callbacks(self):
 
         # Callback for selecting Login vs. Create Account
@@ -141,14 +116,15 @@ class DSALoginComponent(DSATool):
             [
                 State({'type': 'dsa-login-username-input','index': ALL},'value'),
                 State({'type': 'dsa-login-password-input','index': ALL},'value'),
-                State('anchor-vis-store','data')
+                State('anchor-vis-store','data'),
+                State('anchor-vis-memory-store','data')
             ],
             [
                 Output({'type': 'dsa-login-username-error-div','index': ALL},'children'),
                 Output({'type': 'dsa-login-password-error-div','index': ALL},'children'),
                 Output({'type': 'dsa-login-login-error-div','index':ALL},'children'),
-                Output({'type': 'dsa-login-current-user','index': ALL},'children'),
-                Output('anchor-vis-store','data')
+                Output('anchor-vis-store','data'),
+                Output('anchor-vis-memory-store','data')
             ]
         )(self.submit_login)
 
@@ -163,15 +139,16 @@ class DSALoginComponent(DSATool):
                 State({'type': 'dsa-login-email-input','index': ALL},'value'),
                 State({'type': 'dsa-login-username-input','index': ALL},'value'),
                 State({'type': 'dsa-login-password-input','index': ALL},'value'),
-                State('anchor-vis-store','data')
+                State('anchor-vis-store','data'),
+                State('anchor-vis-memory-store','data')
             ],
             [
                 Output({'type': 'dsa-login-email-error-div','index': ALL},'children'),
                 Output({'type': 'dsa-login-username-error-div','index': ALL},'children'),
                 Output({'type': 'dsa-login-password-error-div','index': ALL},'children'),
                 Output({'type': 'dsa-login-create-account-error-div','index': ALL},'children'),
-                Output({'type': 'dsa-login-current-user','index': ALL},'children'),
-                Output('anchor-vis-store','data')
+                Output('anchor-vis-store','data'),
+                Output('anchor-vis-memory-store','data')
             ]
         )(self.submit_create_account)
         
@@ -386,7 +363,7 @@ class DSALoginComponent(DSATool):
                     id = {'type': f'{self.component_prefix}-dsa-login-button','index': 0}
                 ),
                 dbc.Tooltip(
-                    'For registered users, login to view your previous uploads or shared collections!',
+                    'Login to view data stored in the cloud!',
                     target = {'type': f'{self.component_prefix}-dsa-login-button','index': 0},
                     placement='top'
                 ),
@@ -405,12 +382,13 @@ class DSALoginComponent(DSATool):
 
         return [new_children]
     
-    def submit_login(self, login_clicked,username_input, password_input, session_data):
+    def submit_login(self, login_clicked,username_input, password_input, session_data, in_memory_store):
         
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
         session_data = json.loads(session_data)
+        in_memory_store = json.loads(in_memory_store)
         
         username_input = get_pattern_matching_value(username_input)
         password_input = get_pattern_matching_value(password_input)
@@ -431,28 +409,46 @@ class DSALoginComponent(DSATool):
                 password= password_input
             )
             if not type(new_login_output)==str:
-                session_data['current_user'] = new_login_output
-                current_user = f"Welcome, {new_login_output['login']}"
+                session_data['user']['external'] = new_login_output
+                in_memory_store['user']['external'] = new_login_output
+                login_error_div = dbc.Alert(
+                    f'External Login: {new_login_output.get("login")} has been added to your account!',
+                    color = 'success'
+                )
+
+                # Updating user in database
+                updated_user = self.database.get_create(
+                    table_name = 'user',
+                    inst_id = session_data.get('user').get('id'),
+                    kwargs = {
+                        k:v
+                        for k,v in session_data.get('user').items()
+                        if not k=='id'
+                    }
+                )
+
                 session_data = json.dumps(session_data)
-                login_error_div = []
+                in_memory_store = json.dumps(in_memory_store)
+
+
             else:
                 session_data = no_update
-                current_user = no_update
+                in_memory_store = no_update
                 login_error_div = dbc.Alert(f'Error logging in with username: {username_input}',color = 'danger')
         else:
             session_data = no_update
-            current_user = no_update
+            in_memory_store = no_update
             login_error_div = []
         
-        return [username_error_div], [password_error_div], [login_error_div], [current_user], session_data
+        return [username_error_div], [password_error_div], [login_error_div], session_data, in_memory_store
 
-    def submit_create_account(self, clicked,firstname_input, lastname_input, email_input, username_input, password_input,session_data):
-        
+    def submit_create_account(self, clicked,firstname_input, lastname_input, email_input, username_input, password_input,session_data,in_memory_store):
         
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
         session_data = json.loads(session_data)
+        in_memory_store = json.loads(in_memory_store)
         
         firstname_input = get_pattern_matching_value(firstname_input)
         lastname_input = get_pattern_matching_value(lastname_input)
@@ -484,38 +480,20 @@ class DSALoginComponent(DSATool):
                 lastName= lastname_input
             )
             if create_user_output:
-                session_data['current_user'] = create_user_output
-                current_user = f"Welcome, {create_user_output['login']}"
+                session_data['user']['external'] = create_user_output
                 session_data = json.dumps(session_data)
+                in_memory_store['user']['external'] = create_user_output
+                in_memory_store = json.dumps(in_memory_store)
                 create_account_error_div = []
             else:
                 session_data = no_update
-                current_user = no_update
+                in_memory_store = no_update
                 create_account_error_div = dbc.Alert(f'Error creating account with username: {username_input}',color = 'danger')
         else:
             session_data = no_update
-            current_user = no_update
+            in_memory_store = no_update
             create_account_error_div = []
         
-        return [username_error_div],[password_error_div],[email_error_div], [create_account_error_div], [current_user],session_data
+        return [username_error_div],[password_error_div],[email_error_div], [create_account_error_div], session_data, in_memory_store
         
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 

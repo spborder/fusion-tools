@@ -63,7 +63,7 @@ class SlideMap(MapComponent):
     description = ''
 
     def __init__(self,
-                 cache: bool = False):
+                 cache: bool = True):
         """Constructor method
         """
         super().__init__()
@@ -100,7 +100,6 @@ class SlideMap(MapComponent):
         :rtype: list
         """
 
-
         filter_dict = {}
         if not image_id is None:
             filter_dict = filter_dict | {
@@ -111,14 +110,20 @@ class SlideMap(MapComponent):
 
         if not user_id is None:
             filter_dict = filter_dict | {
-                'user': user_id
+                'user': {
+                    'id': user_id
+                }
             }
         
         if not vis_session_id is None:
             filter_dict = filter_dict | {
-                'session': vis_session_id
+                'session': {
+                    'id': vis_session_id
+                }
             }
 
+        #TODO: Add check for whether an item is in the database but this user just doesn't
+        # have access to it
         loop = asyncio.get_event_loop()
         db_item = loop.run_until_complete(
             asyncio.gather(
@@ -130,15 +135,15 @@ class SlideMap(MapComponent):
                 )
             )
         )
-        return_val = db_item[0].copy()
 
+        return_val = db_item[0].copy()
         if image_id is not None:
             if len(return_val)==0:
                 return False
             else:
-                return True
+                return db_item[0][0]
         else:
-            return return_val
+            return db_item[0]
 
     def get_image_overlay_popup(self, st, st_idx):
         """Getting popup components for image overlay annotations
@@ -844,7 +849,6 @@ class SlideMap(MapComponent):
                 // Getting the names of each annotation
                 let ann_meta_url = map_slide_information.annotations_metadata_url;
 
-                // TODO: This could need some additional headers for CORS
                 try {
                     var ann_meta_response = await fetch(
                         ann_meta_url, {
@@ -899,7 +903,6 @@ class SlideMap(MapComponent):
                                     }
                                 })
                                 .then((response) => response.json())
-                                //.then((json_data) => json_data.flat())
                                 .then(function(json_data){return process_json(json_data,idx,ann_meta)})
                                 .then((geojson_anns) => annotations_list.splice(idx,1,geojson_anns))
                             );
@@ -979,32 +982,64 @@ class SlideMap(MapComponent):
 
         vis_data = json.loads(vis_data)
         new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
+
+        new_image_metadata = None
+        new_metadata = None
+        annotations_metadata = None
         
         # Check if slide is cached if using cache
         get_from_cache = False
+        cached_item = False
         if self.cache:
             cached_item = self.check_slide_in_cache(
-                image_id = new_slide.get('id')
+                image_id = new_slide.get('id'),
+                user_id = vis_data.get('user',{}).get('id'),
+                vis_session_id = vis_data.get('session',{}).get('id')
             )
+            #print(f'in update_slide: {cached_item=}')
             if cached_item:
                 get_from_cache = True
+
+                new_image_metadata = cached_item.get('image_meta')
+                new_metadata = cached_item.get('meta')
+                annotations_metadata = cached_item.get('ann_meta')
+        
+        new_url = new_slide['tiles_url']
+        if 'user' in vis_data and not 'url' in new_slide:
+            new_url += f'?token={vis_data["user"]["token"]}'
+        elif 'url' in new_slide:
+            if not vis_data['user'].get('external') is None:
+                new_url += f'?token={vis_data["user"]["external"]["token"]}'
             
-        # Getting data from the tileservers:
-        if not 'current_user' in vis_data:
+
+        if not cached_item:
+            # Getting data from the tileservers:
             new_url = new_slide['tiles_url']
             image_metadata_url = new_slide['image_metadata_url']
             metadata_url = new_slide['metadata_url']
             annotations_metadata_url = new_slide['annotations_metadata_url']
+            if not 'url' in new_slide:
+                if 'user' in vis_data:
+                    new_url = new_slide['tiles_url']+f'?token={vis_data["user"]["token"]}'
+                    image_metadata_url = new_slide['image_metadata_url']+f'?token={vis_data["user"]["token"]}'
+                    metadata_url = new_slide['metadata_url']+f'?token={vis_data["user"]["token"]}'
+                    annotations_metadata_url = new_slide['annotations_metadata_url']
+            else:
+                if not vis_data['user'].get('external') is None:
+                    external_token = vis_data['user']['external']['token']
+                    new_url = new_slide['tiles_url']+f'?token={external_token}'
+                    image_metadata_url = new_slide['image_metadata_url']+f'?token={external_token}'
+                    metadata_url = new_slide['metadata_url']+f'?token={external_token}'
+                    annotations_metadata_url = new_slide['annotations_metadata_url']
 
-        else:
-            new_url = new_slide['tiles_url']+f'?token={vis_data["current_user"]["token"]}'
-            image_metadata_url = new_slide['image_metadata_url']+f'?token={vis_data["current_user"]["token"]}'
-            metadata_url = new_slide['metadata_url']+f'?token={vis_data["current_user"]["token"]}'
-            annotations_metadata_url = new_slide['annotations_metadata_url']
+            # Metadata dictionaries requested from either Local- or DSATileServer
+            
+            new_image_metadata = requests.get(image_metadata_url).json()
+            new_metadata = requests.get(metadata_url).json()
+            annotations_metadata = requests.get(annotations_metadata_url).json()
 
-        new_image_metadata = requests.get(image_metadata_url).json()
-        new_metadata = requests.get(metadata_url).json()
-        annotations_metadata = requests.get(annotations_metadata_url).json()
+        if new_image_metadata is None:
+            raise exceptions.PreventUpdate
 
         # Detecting DSA-formatted annotations
         if any(['annotation' in i for i in annotations_metadata]):
@@ -1018,7 +1053,7 @@ class SlideMap(MapComponent):
 
         annotation_names = [i['name'] for i in annotations_metadata]
 
-        new_tile_size = new_image_metadata['tileHeight']
+        new_tile_size = new_image_metadata.get('tileHeight')
 
         image_overlay_annotations = [i for i in annotations_metadata if 'image_path' in i]
         non_image_overlay_metadata = [i for i in annotations_metadata if not 'image_path' in i]
@@ -1120,6 +1155,7 @@ class SlideMap(MapComponent):
             id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
             url = new_url,
             tileSize = new_tile_size,
+            crossOrigin = 'true',
             maxNativeZoom=new_image_metadata['levels']-2 if new_image_metadata['levels']>=2 else 0,
             minZoom = 0
         )
@@ -1232,7 +1268,6 @@ class SlideMap(MapComponent):
         # Clearing markers from previous slide
         new_marker_div = html.Div()
 
-        #return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
         return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div
 
     @asyncio_db_loop
@@ -1248,7 +1283,8 @@ class SlideMap(MapComponent):
             raise exceptions.PreventUpdate
         
         ann_error_store = json.loads(get_pattern_matching_value(ann_error_store))
-        
+        user_external_token = vis_data.get('user').get('external',{}).get('token')
+
         if type(ann_error_store)==list:
             if len(ann_error_store)>0:
                 ann_error_store = ann_error_store[0]
@@ -1260,7 +1296,9 @@ class SlideMap(MapComponent):
         else:
             vis_data = json.loads(vis_data)
             db_item = self.check_slide_in_cache(
-                image_id = ann_error_store.get('id')
+                image_id = ann_error_store.get('id'),
+                user_id = vis_data.get('user').get('id'),
+                vis_session_id = vis_data.get('session').get('id')
             )
             if ann_error_store.get('cached') and db_item:
                 # Grabbing annotation data from the database:
@@ -1268,7 +1306,9 @@ class SlideMap(MapComponent):
                 raw_geojson = loop.run_until_complete(
                     asyncio.gather(
                         self.database.get_item_annotations(
-                            item_id = ann_error_store.get('id')
+                            item_id = ann_error_store.get('id'),
+                            user_id = vis_data.get('user').get('id'),
+                            vis_session_id = vis_data.get('session').get('id')
                         )
                     )
                 )
@@ -1279,9 +1319,8 @@ class SlideMap(MapComponent):
                 if 'annotations_geojson_url' in ann_error_store:
                     raw_geojson = []
                     for req_url in ann_error_store['annotations_geojson_url']:
-                        if 'current_user' in vis_data:
-                            req_url += f'?token={vis_data["current_user"]["token"]}'
-
+                        if not user_external_token is None:
+                            req_url += f'?token={user_external_token}'
                         new_geojson = requests.get(req_url).json()
                         raw_geojson.append(new_geojson)
                 else:
@@ -1290,10 +1329,10 @@ class SlideMap(MapComponent):
                     raw_geojson.extend(new_geojson)
 
             metadata_url = ann_error_store['annotations_metadata_url']
-            if 'current_user' in vis_data:
-                metadata_url += f'?token={vis_data["current_user"]["token"]}'
+            if not user_external_token is None:
+                metadata_url += f'?token={user_external_token}'
 
-            ann_metadata = requests.get(metadata_url,headers={'origin':'http://localhost:8080'}).json()
+            ann_metadata = requests.get(metadata_url).json()
             # Filtering out overlaid images
             ann_metadata = [a for a in ann_metadata if not 'image_path' in a]
 
@@ -1354,7 +1393,7 @@ class SlideMap(MapComponent):
         #TODO: This checks if the current anntotations are at least the same length as the expected number of annotations
         if self.cache and not slide_information.get('id') is None and len(annotations_geojson)>=len(slide_information.get('annotations_metadata')):
             db_item = self.check_slide_in_cache(
-                user_id = session_data.get('current_user',{}).get('id'),
+                user_id = session_data.get('user',{}).get('id'),
                 vis_session_id = session_data.get('session',{}).get('id'),
                 image_id = slide_information.get('id')
             )
@@ -1378,8 +1417,9 @@ class SlideMap(MapComponent):
                         'image_filepath': None,
                         'annotations_metadata': {},
                         'annotations': slide_crs_geojson,
-                        'user_id': session_data.get('current_user',{}).get('id'),
-                        'vis_session_id': session_data.get('session',{}).get('id')
+                        'user_id': session_data.get('user',{}).get('id'),
+                        'vis_session_id': session_data.get('session',{}).get('id'),
+                        'public': slide_information.get('public')
                     },
                     daemon = True
                 )
@@ -1393,7 +1433,7 @@ class SlideMap(MapComponent):
         elif not self.cache and not slide_information.get('id') is None:
             # If not using caching, only the current slide's annotations are added to the database and previous annotations for that session/user are removed
             user_session_slides = self.check_slide_in_cache(
-                user_id = session_data.get('current_user',{}).get('id'),
+                user_id = session_data.get('user',{}).get('id'),
                 vis_session_id = session_data.get('session',{}).get('id'),
                 image_id = None 
             )
@@ -1403,7 +1443,7 @@ class SlideMap(MapComponent):
                 self.database.get_remove(
                     table_name = 'item',
                     inst_id = i.get('id'),
-                    user_id = session_data.get('current_user',{}).get('id'),
+                    user_id = session_data.get('user',{}).get('id'),
                     vis_session_id = session_data.get('session',{}).get('id')
                 )
 
@@ -1411,7 +1451,7 @@ class SlideMap(MapComponent):
                 #print(f'This slide has annotations and an id: {slide_information.get("name")}')
                 # Checking if current slide is in the cache
                 db_item = self.check_slide_in_cache(
-                    user_id = session_data.get('current_user',{}).get('id'),
+                    user_id = session_data.get('user',{}).get('id'),
                     vis_session_id = session_data.get('session',{}).get('id'),
                     image_id = slide_information.get('id')
                 )
@@ -1436,8 +1476,9 @@ class SlideMap(MapComponent):
                             'image_filepath': None,
                             'annotations_metadata': {},
                             'annotations': slide_crs_geojson,
-                            'user_id': session_data.get('current_user',{}).get('id'),
-                            'vis_session_id': session_data.get('session',{}).get('id')
+                            'user_id': session_data.get('user',{}).get('id'),
+                            'vis_session_id': session_data.get('session',{}).get('id'),
+                            'public': slide_information.get('public')
                         },
                         daemon = True
                     )
@@ -2012,7 +2053,7 @@ class MultiFrameSlideMap(SlideMap):
     description = ''
 
     def __init__(self,
-                 cache:bool = False):
+                 cache:bool = True):
         """Constructor method
 
         :param tile_server: TileServer object in use. For remote DSA tile sources this would be DSATileServer while for local images this would be LocalTileServer
@@ -2037,10 +2078,7 @@ class MultiFrameSlideMap(SlideMap):
         super().get_namespace()
         super().get_callbacks()
         super().get_annotations_callbacks()
-    
-    def __str__(self):
-        return self.title
-    
+
     def update_slide(self, slide_selected, vis_data):
         
         if not any([i['value'] or i['value']==0 for i in ctx.triggered]):
@@ -2048,6 +2086,8 @@ class MultiFrameSlideMap(SlideMap):
 
         vis_data = json.loads(vis_data)
         new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
+
+        user_external_token = vis_data.get('user').get('external',{}).get('token')
 
         # Checking if the slide is cached (if self.cache=True)
         get_from_cache = False
@@ -2060,17 +2100,22 @@ class MultiFrameSlideMap(SlideMap):
 
 
         # Getting data from the tileservers:
-        if not 'current_user' in vis_data:
-            new_url = new_slide['tiles_url']
-            image_metadata_url = new_slide['image_metadata_url']
-            metadata_url = new_slide['metadata_url']
+        new_url = new_slide['tiles_url']
+        image_metadata_url = new_slide['image_metadata_url']
+        metadata_url = new_slide['metadata_url']
+        annotations_metadata_url = new_slide['annotations_metadata_url']
+
+        if 'user' in vis_data and not 'url' in new_slide:
+            new_url = new_slide['tiles_url']+f'?token={vis_data["user"]["token"]}'
+            image_metadata_url = new_slide['image_metadata_url']+f'?token={vis_data["user"]["token"]}'
+            metadata_url = new_slide['metadata_url']+f'?token={vis_data["user"]["token"]}'
+            annotations_metadata_url = new_slide['annotations_metadata_url']
+        elif 'url' in new_slide and not user_external_token is None:
+            new_url = new_slide['tiles_url']+f'?token={user_external_token}'
+            image_metadata_url = new_slide['image_metadata_url']+f'?token={user_external_token}'
+            metadata_url = new_slide['metadata_url']+f'?token={user_external_token}'
             annotations_metadata_url = new_slide['annotations_metadata_url']
 
-        else:
-            new_url = new_slide['tiles_url']+f'?token={vis_data["current_user"]["token"]}'
-            image_metadata_url = new_slide['image_metadata_url']+f'?token={vis_data["current_user"]["token"]}'
-            metadata_url = new_slide['metadata_url']+f'?token={vis_data["current_user"]["token"]}'
-            annotations_metadata_url = new_slide['annotations_metadata_url']
 
         new_image_metadata = requests.get(image_metadata_url).json()
         new_metadata = requests.get(metadata_url).json()
@@ -2423,7 +2468,7 @@ class LargeSlideMap(SlideMap):
 
     def __init__(self,
                  min_zoom:int,
-                 cache:bool = False):
+                 cache:bool = True):
         super().__init__(cache)
 
         self.min_zoom = min_zoom
@@ -2440,12 +2485,9 @@ class LargeSlideMap(SlideMap):
         )
 
         self.get_callbacks()
-
+        self.get_namespace()
         self.large_map_callbacks()
 
-    def __str__(self):
-        return self.title
-    
     def get_namespace(self):
 
         self.js_namespace = Namespace(
@@ -2619,6 +2661,11 @@ class LargeSlideMap(SlideMap):
                 // Reading in map-slide-information
                 // scaled_map_bounds = [top,left,bottom,right]
                 var map_slide_information = JSON.parse(slide_information);
+
+                if (map_slide_information==undefined){
+                    throw window.dash_clientside.PreventUpdate;
+                }
+
                 var scaled_map_bounds = [
                     Math.floor(map_bounds[0][0][0] / map_slide_information.y_scale),
                     Math.floor(map_bounds[0][0][1] / map_slide_information.x_scale),
@@ -2639,15 +2686,15 @@ class LargeSlideMap(SlideMap):
                     for (let ann = 0; ann<map_slide_information.annotations_metadata.length; ann++) {
                         var annotation = map_slide_information.annotations_metadata[ann];
 
-                        // TODO: This could need some additional headers for CORS
                         try {
                             let ann_url = map_slide_information.annotations_region_url + annotation._id+"?top="+scaled_map_bounds[2]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[0]+"&right="+scaled_map_bounds[3]
+                            
                             var ann_response = await fetch(
-                                ann_url,
-                                method: 'GET',
-                                mode: 'cors',
-                                headers: {
-                                    'Content-Type': 'application/json'    
+                                ann_url,{
+                                    mode: 'cors',
+                                    headers: {
+                                        'Content-Type': 'application/json'    
+                                    }
                                 }
                             );
 
@@ -2700,15 +2747,15 @@ class LargeSlideMap(SlideMap):
                     }
                 } else {
                     // General case.
-                    // TODO: Could need some additional headers for CORS
                     try {
                         let ann_url = map_slide_information.annotations_region_url+"?top="+scaled_map_bounds[0]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[2]+"&right="+scaled_map_bounds[3];
                         var ann_response = await fetch(
-                            ann_url,
-                            method: 'GET',
-                            mode: 'cors',
-                            headers: {
-                                'Content-Type': 'application/json'    
+                            ann_url,{
+                                method: 'GET',
+                                mode: 'cors',
+                                headers: {
+                                    'Content-Type': 'application/json'    
+                                }
                             }
                         );
 
@@ -2774,6 +2821,8 @@ class LargeSlideMap(SlideMap):
         vis_data = json.loads(vis_data)
         new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
 
+        user_external_token = vis_data.get('user').get('external',{}).get('token')
+
         # Check if slide is cached if using cache
         get_from_cache = False
         if self.cache:
@@ -2784,23 +2833,32 @@ class LargeSlideMap(SlideMap):
                 get_from_cache = True
             
         # Getting data from the tileservers:
-        if not 'current_user' in vis_data or not 'api_url' in new_slide:
-            new_tile_url = new_slide['tiles_url']
-            new_annotations_url = new_slide['annotations_url']
-            new_annotations_region_url = new_slide['annotations_region_url']
-            new_annotations_metadata_url = new_slide['annotations_metadata_url']
-            new_metadata_url = new_slide['metadata_url']
-            new_image_metadata_url = new_slide['image_metadata_url']
-        else:
-            new_tile_url = new_slide['tiles_url']+f'?token={vis_data["current_user"]["token"]}'
-            new_annotations_url = new_slide['annotations_url']+f'?token={vis_data["current_user"]["token"]}'
-            new_annotations_metadata_url = new_slide['annotations_metadata_url']+f'?token={vis_data["current_user"]["token"]}'
-            new_metadata_url = new_slide['metadata_url']+f'?token={vis_data["current_user"]["token"]}'
-            new_image_metadata_url = new_slide['image_metadata_url']+f'?token={vis_data["current_user"]["token"]}'
+        new_tile_url = new_slide['tiles_url']
+        new_annotations_url = new_slide['annotations_url']
+        new_annotations_region_url = new_slide['annotations_region_url']
+        new_annotations_metadata_url = new_slide['annotations_metadata_url']
+        new_metadata_url = new_slide['metadata_url']
+        new_image_metadata_url = new_slide['image_metadata_url']
+        if 'user' in vis_data and not 'url' in new_slide:
+            new_tile_url = new_slide['tiles_url']+f'?token={vis_data["user"]["token"]}'
+            new_annotations_url = new_slide['annotations_url']+f'?token={vis_data["user"]["token"]}'
+            new_annotations_region_url = new_slide['annotations_region_url']+f'?token={vis_data["user"]["token"]}'
+            new_annotations_metadata_url = new_slide['annotations_metadata_url']+f'&token={vis_data["user"]["token"]}'
+            new_metadata_url = new_slide['metadata_url']+f'?token={vis_data["user"]["token"]}'
+            new_image_metadata_url = new_slide['image_metadata_url']+f'?token={vis_data["user"]["token"]}'
+        elif 'url' in new_slide and user_external_token is not None:
+            new_tile_url = new_slide['tiles_url']+f'?token={user_external_token}'
+            new_annotations_url = new_slide['annotations_url']+f'?token={user_external_token}'
+            new_annotations_region_url = new_slide['annotations_region_url']+f'?token={user_external_token}'
+            new_annotations_metadata_url = new_slide['annotations_metadata_url']+f'&token={user_external_token}'
+            new_metadata_url = new_slide['metadata_url']+f'?token={user_external_token}'
+            new_image_metadata_url = new_slide['image_metadata_url']+f'?token={user_external_token}'
+
 
         new_image_metadata = requests.get(new_image_metadata_url).json()
         new_metadata = requests.get(new_metadata_url).json()
         new_annotations_metadata = requests.get(new_annotations_metadata_url).json()
+
         new_tile_size = new_image_metadata['tileHeight']
         x_scale, y_scale = self.get_scale_factors(new_image_metadata)
 
@@ -3042,14 +3100,11 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
 
     def __init__(self,
                  min_zoom:int,
-                 cache: bool = False):
+                 cache: bool = True):
         
         super().__init__(cache)
         
         self.min_zoom = min_zoom
-
-    def __str__(self):
-        return self.title
 
     def get_namespace(self):
         
@@ -3262,12 +3317,12 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
                         try {
                             let ann_url = map_slide_information.annotations_region_url + annotation._id+"?top="+scaled_map_bounds[2]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[0]+"&right="+scaled_map_bounds[3]
                             var ann_response = await fetch(
-                                ann_url,
+                                ann_url,{
                                 method: 'GET',
                                 mode: 'cors',
                                 headers: {
                                     'Content-Type': 'application/json'    
-                                }
+                                }}
                             );
 
                             if (!ann_response.ok) {
@@ -3323,12 +3378,12 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
                     try {
                         let ann_url = map_slide_information.annotations_region_url+"?top="+scaled_map_bounds[0]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[2]+"&right="+scaled_map_bounds[3];
                         var ann_response = await fetch(
-                            ann_url,
+                            ann_url,{
                             method: 'GET',
                             mode: 'cors',
                             headers: {
                                 'Content-Type': 'application/json'    
-                            }
+                            }}
                         );
 
                         if (!ann_response.ok) {
@@ -3393,6 +3448,7 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
         vis_data = json.loads(vis_data)
         new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
 
+        user_external_token = vis_data.get('user').get('external',{}).get('token')
         # Check if slide is cached if using cache
         get_from_cache = False
         if self.cache:
@@ -3403,19 +3459,26 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
                 get_from_cache = True
             
 
-        if not 'current_user' in vis_data or not 'api_url' in new_slide:
-            new_tile_url = new_slide['tiles_url']
-            new_annotations_url = new_slide['annotations_url']
-            new_annotations_region_url = new_slide['annotations_region_url']
-            new_annotations_metadata_url = new_slide['annotations_metadata_url']
-            new_metadata_url = new_slide['metadata_url']
-            new_image_metadata_url = new_slide['image_metadata_url']
-        else:
-            new_tile_url = new_slide['tiles_url']+f'?token={vis_data["current_user"]["token"]}'
-            new_annotations_url = new_slide['annotations_url']+f'?token={vis_data["current_user"]["token"]}'
-            new_annotations_metadata_url = new_slide['annotations_metadata_url']+f'?token={vis_data["current_user"]["token"]}'
-            new_metadata_url = new_slide['metadata_url']+f'?token={vis_data["current_user"]["token"]}'
-            new_image_metadata_url = new_slide['image_metadata_url']+f'?token={vis_data["current_user"]["token"]}'
+        new_tile_url = new_slide['tiles_url']
+        new_annotations_url = new_slide['annotations_url']
+        new_annotations_region_url = new_slide['annotations_region_url']
+        new_annotations_metadata_url = new_slide['annotations_metadata_url']
+        new_metadata_url = new_slide['metadata_url']
+        new_image_metadata_url = new_slide['image_metadata_url']
+        if 'user' in vis_data and not 'url' in new_slide:
+            new_tile_url = new_slide['tiles_url']+f'?token={vis_data["user"]["token"]}'
+            new_annotations_url = new_slide['annotations_url']+f'?token={vis_data["user"]["token"]}'
+            new_annotations_region_url = new_slide['annotations_region_url']+f'&token={vis_data["user"]["token"]}'
+            new_annotations_metadata_url = new_slide['annotations_metadata_url']+f'?token={vis_data["user"]["token"]}'
+            new_metadata_url = new_slide['metadata_url']+f'?token={vis_data["user"]["token"]}'
+            new_image_metadata_url = new_slide['image_metadata_url']+f'?token={vis_data["user"]["token"]}'
+        elif 'url' in new_slide and not user_external_token is None:
+            new_tile_url = new_slide['tiles_url']+f'?token={user_external_token}'
+            new_annotations_url = new_slide['annotations_url']+f'?token={user_external_token}'
+            new_annotations_region_url = new_slide['annotations_region_url']+f'&token={user_external_token}'
+            new_annotations_metadata_url = new_slide['annotations_metadata_url']+f'?token={user_external_token}'
+            new_metadata_url = new_slide['metadata_url']+f'?token={user_external_token}'
+            new_image_metadata_url = new_slide['image_metadata_url']+f'?token={user_external_token}'
 
         new_image_metadata = requests.get(new_image_metadata_url).json()
         new_metadata = requests.get(new_metadata_url).json()
@@ -3644,7 +3707,6 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
 
         new_marker_div = html.Div()
 
-        #return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
         return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div
 
 class HybridSlideMap(MultiFrameSlideMap):
@@ -3657,13 +3719,10 @@ class HybridSlideMap(MultiFrameSlideMap):
     description = ''
 
     def __init__(self,
-                 cache:bool = False):
+                 cache:bool = True):
         """Constructor method
         """
         super().__init__(cache)
-
-    def __str__(self):
-        return self.title
 
     def load(self, component_prefix:int):
 
@@ -3690,6 +3749,8 @@ class HybridSlideMap(MultiFrameSlideMap):
         vis_data = json.loads(vis_data)
         new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
 
+        user_external_token = vis_data.get('user').get('external',{}).get('token')
+
         # Check if slide is cached if using cache
         get_from_cache = False
         if self.cache:
@@ -3700,18 +3761,22 @@ class HybridSlideMap(MultiFrameSlideMap):
                 get_from_cache = True
             
         # Getting data from the tileservers:
-        if not 'current_user' in vis_data:
-            new_url = new_slide['tiles_url']
-            image_metadata_url = new_slide['image_metadata_url']
-            metadata_url = new_slide['metadata_url']
-            annotations_metadata_url = new_slide['annotations_metadata_url']
+        new_url = new_slide['tiles_url']
+        image_metadata_url = new_slide['image_metadata_url']
+        metadata_url = new_slide['metadata_url']
+        annotations_metadata_url = new_slide['annotations_metadata_url']
 
-        else:
-            new_url = new_slide['tiles_url']+f'?token={vis_data["current_user"]["token"]}'
-            image_metadata_url = new_slide['image_metadata_url']+f'?token={vis_data["current_user"]["token"]}'
-            metadata_url = new_slide['metadata_url']+f'?token={vis_data["current_user"]["token"]}'
+        if 'user' in vis_data and not 'url' in new_slide:
+            new_url = new_slide['tiles_url']+f'?token={vis_data["user"]["token"]}'
+            image_metadata_url = new_slide['image_metadata_url']+f'?token={vis_data["user"]["token"]}'
+            metadata_url = new_slide['metadata_url']+f'?token={vis_data["user"]["token"]}'
             annotations_metadata_url = new_slide['annotations_metadata_url']
-
+        elif 'url' in new_slide and not user_external_token is None:
+            new_url = new_slide['tiles_url']+f'?token={user_external_token}'
+            image_metadata_url = new_slide['image_metadata_url']+f'?token={user_external_token}'
+            metadata_url = new_slide['metadata_url']+f'?token={user_external_token}'
+            annotations_metadata_url = new_slide['annotations_metadata_url']
+        
         new_image_metadata = requests.get(image_metadata_url).json()
         new_metadata = requests.get(metadata_url).json()
         annotations_metadata = requests.get(annotations_metadata_url).json()
@@ -3951,11 +4016,12 @@ class HybridSlideMap(MultiFrameSlideMap):
 
         new_marker_div = html.Div()
 
-        #return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
         return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div
 
 
 #TODO: This can be rewritten as its own embeddable blueprint
+# However, if it is only initially embedded, new image overlays can't be added as the application is 
+# already launched
 class SlideImageOverlay(MapComponent):
     """Image overlay on specific coordinates within a SlideMap
 
@@ -4179,10 +4245,13 @@ class ChannelMixer(MapComponent):
         vis_data = json.loads(vis_data)
         new_slide = vis_data['current'][get_pattern_matching_value(selected_slide)]
 
-        if not 'current_user' in vis_data:
+        user_external_token = vis_data.get('user').get('external',{}).get('token')
+        if not 'user' in vis_data:
             new_metadata = requests.get(new_slide['image_metadata_url']).json()
-        else:
-            new_metadata = requests.get(new_slide['image_metadata_url']+f'?token={vis_data["current_user"]["token"]}').json()
+        elif 'user' in vis_data and not 'url' in new_slide:
+            new_metadata = requests.get(new_slide['image_metadata_url']+f'?token={vis_data["user"]["token"]}').json()
+        elif 'url' in new_slide and not user_external_token is None:
+            new_metadata = requests.get(new_slide['image_metadata_url']+f'?token={user_external_token}').json()
 
         new_frame_list = self.process_frames(new_metadata)
         new_color_selector_children = []
