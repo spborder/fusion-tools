@@ -1,6 +1,12 @@
 # Changelog
 
 <!--next-version-placeholder-->
+## v3.6.40 (10/23/2025)
+
+- Expanding `User` specification in `fusionDB`
+    - Adding external DSA access and linking to a local user. (one sign-in)
+- Updating DSA components so that they work nicely with local user tokens
+
 ## v3.6.35 (09/24/2025)
 
 - Implementing CORS options for `Visualization` and `LocalTileServer` FastAPI apps
