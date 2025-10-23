@@ -66,6 +66,7 @@ class DSAPluginGroup(DSATool):
             handler = self.handler
         )
         self.resource_selector.load(self.component_prefix)
+        self.resource_selector.gen_layout({})
 
         #TODO: Either add a region selector to DSAResourceSelector or create a separate region selector component
     

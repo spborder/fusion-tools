@@ -35,9 +35,6 @@ class DSAResourceSelector(DSATool):
         self.selector_type = selector_type
         self.select_count = select_count
 
-        self.embedded_ids = []
-
-        self.base_id = 'dsa-resource-selector'
 
     def get_collection_table(self, session_data:dict, return_data:bool):
         

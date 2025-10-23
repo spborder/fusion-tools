@@ -65,7 +65,7 @@ def get_layout(args):
                         ChannelMixer(),
                         PropertyViewer(ignore_list=['_id','_index']),
                         GlobalPropertyPlotter(ignore_list = ['_id','_index']),
-                        HRAViewer(),
+                        #HRAViewer(),
                         BulkLabels(),
                         DataExtractor()
                     ]

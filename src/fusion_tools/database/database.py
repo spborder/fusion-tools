@@ -422,7 +422,7 @@ class fusionDB:
 
         #print(f'{slide_id=}, {public=}')
         new_item = self.get_create(
-            table_name = 'item',
+            table_name = 'local_item',
             inst_id = slide_id,
             kwargs = {
                 'name': slide_name,

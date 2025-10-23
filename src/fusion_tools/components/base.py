@@ -1,6 +1,8 @@
 """
 Base component for FUSION layouts
 """
+from typing_extensions import Union
+import pandas as pd
 
 # Dash imports
 import dash
@@ -170,23 +172,27 @@ class DSATool(MultiTool):
     """
 
     def get_user_external_token(self, session_data):
-
-        user_token = session_data.get('user',{}).get('external',{}).get('token')
-        
+        try:
+            user_token = session_data.get('user',{}).get('external',{}).get('token')
+        except:
+            user_token = None
         return user_token
 
     def get_user_external_login(self, session_data):
-
-        user_login = session_data.get('user',{}).get('external',{}).get('login','Guest')
-
+        try:
+            user_login = session_data.get('user',{}).get('external',{}).get('login','Guest')
+        except:
+            user_login = None
         return user_login
 
     def get_user_external_id(self, session_data):
 
-        user_id = session_data.get('user',{}).get('external',{}).get('_id')
-        if user_id is None:
-            user_id = session_data.get('user',{}).get('external',{}).get('id')
-
+        try:
+            user_id = session_data.get('user',{}).get('external',{}).get('_id')
+            if user_id is None:
+                user_id = session_data.get('user',{}).get('external',{}).get('id')
+        except:
+            user_id = None
         return user_id
 
 

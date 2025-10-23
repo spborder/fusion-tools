@@ -417,7 +417,6 @@ class Visualization:
         # Note- Clipboard components don't show up in Chrome
         # Guest users can't change info, User/Admin users can
         if user_type in ['user','admin']:
-
             user_info_rows = []
             for idx, (key,value) in enumerate(user_info.items()):
                 if key in ['id','token']:
@@ -431,6 +430,16 @@ class Visualization:
                         type='text',
                         id={'type': 'user-current-val','index': idx}
                     )
+
+                elif key=='external':
+                    input_row = dmc.Badge(
+                        children = [user_info.get('external',{}).get('login')],
+                        color = 'teal',
+                        variant = 'dot',
+                        size = 'xl',
+                        id = {'type': 'user-current-val','index': idx}
+                    )
+
                 else:
                     # Skipping password, admin, updated
                     continue
@@ -484,34 +493,55 @@ class Visualization:
             ])
 
         else:
-            user_info_rows = [
-                dbc.Row([
-                    dbc.Label(
-                        key,
-                        id = {'type': 'user-current-key','index': idx},
-                        html_for={'type': 'user-current-val','index': idx},
-                        width=2
-                    ),
-                    dbc.Col([
-                        html.P(
-                            value,
-                            id={'type': 'user-current-val','index': idx}
+            user_info_rows = []
+            for idx, (key,value) in enumerate(user_info.items()):
+                if not value is None:
+                    if not key=='external':
+                        user_info_rows.append(
+                            dbc.Row([
+                                dbc.Label(
+                                    key,
+                                    id = {'type': 'user-current-key','index': idx},
+                                    html_for={'type': 'user-current-val','index': idx},
+                                    width=2
+                                ),
+                                dbc.Col([
+                                    html.P(
+                                        value,
+                                        id={'type': 'user-current-val','index': idx}
+                                    )
+                                ],md=9),
+                                dbc.Col([
+                                    dcc.Clipboard(
+                                        target_id = {'type': 'user-current-val','index': idx},
+                                        title = 'copy',
+                                        style = {
+                                            'fontSize':20,
+                                            'color': 'rgb(200,200,200)'
+                                        }
+                                    )
+                                ],md=1)
+                            ],align = 'center')
+                       )
+                    elif key=='external':
+                        user_info_rows.append(
+                            dbc.Row([
+                                dbc.Label(
+                                    key,
+                                    width = 2
+                                ),
+                                dbc.Col([
+                                    dmc.Badge(
+                                        children = [user_info.get('external',{}).get('login')],
+                                        color = 'teal',
+                                        variant = 'dot',
+                                        size = 'xl',
+                                        id = 'user-external'
+                                    ),
+                                ],md = 10)
+                            ])
                         )
-                    ],md=9),
-                    dbc.Col([
-                        dcc.Clipboard(
-                            target_id = {'type': 'user-current-val','index': idx},
-                            title = 'copy',
-                            style = {
-                                'fontSize':20,
-                                'color': 'rgb(200,200,200)'
-                            }
-                        )
-                    ],md=1)
-                ],align = 'center')
-                for idx,(key,value) in enumerate(user_info.items())
-                if not value is None
-            ]
+            
 
             button_rows = dbc.Row([
                 dbc.Col(
@@ -799,9 +829,11 @@ class Visualization:
             new_user_info = {
                 k:v
                 for k,v in zip(new_keys,new_vals)
+                if not k=='external'
             } | {
                 'admin': False,
-                'token': uuid.uuid4().hex[:24]
+                'token': uuid.uuid4().hex[:24],
+                'external': in_memory_store.get('external')
             }
 
             new_user = self.database.create_new_user(
@@ -823,7 +855,8 @@ class Visualization:
             returning_user_info = {
                 k:v
                 for k,v in zip(prev_keys,prev_vals)
-            }
+                if not k=='external'
+            } | {'external': in_memory_store.get('external')}
 
             previous_user = self.database.check_user_login_password(
                 prev_vals[0],prev_vals[1]
@@ -849,10 +882,11 @@ class Visualization:
             
             current_keys.append('token')
             current_vals.append(uuid.uuid4().hex[:24])
+
             updated_user = self.database.get_create(
                 table_name = 'user',
                 inst_id = in_memory_store.get('user').get('id'),
-                kwargs = {k:v for k,v in zip(current_keys,current_vals) if not k=='id'}
+                kwargs = {k:v for k,v in zip(current_keys,current_vals) if not k in ['id','external']} | {'external': in_memory_store.get('user').get('external')}
             )
             if not updated_user is None:
                 new_in_memory = {
@@ -1230,7 +1264,8 @@ class Visualization:
                     slide_store['current'].append({
                         'name': t.name,
                         'id': t.item_id,
-                        'api_url': t.base_url,
+                        'remote_id': t.item_id,
+                        'url': t.base_url,
                         'tiles_url': t.tiles_url,
                         'regions_url': t.regions_url,
                         'image_metadata_url': t.image_metadata_url,
@@ -1715,6 +1750,7 @@ class Visualization:
         
         for h_idx, h in enumerate(self.header):
             h.load(h_idx)
+            h.gen_layout({})
             h.add_database(database = self.database)
 
         header_components = html.Div([

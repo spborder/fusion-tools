@@ -516,7 +516,7 @@ class DatasetBuilder(DSATool):
 
                 const thumbDataUrl = await Promise.all(
                     thumb_store.map(async (t_data) => {
-                        const t_json = JSON.parse(t_data.replace('/[\[\]']+/g,""));
+                        const t_json = JSON.parse(t_data.replace('/[\[\]]+/g',""));
                         
                         if (!t_json.done){
                             const res = await fetch(t_json.url,{

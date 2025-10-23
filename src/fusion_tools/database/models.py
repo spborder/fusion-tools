@@ -1,9 +1,13 @@
 """
 Defining models for fusionDB
 """
+import enum
 from typing import List
 from sqlalchemy import (
-    Table, Column, String, Boolean, Integer, ForeignKey, JSON, DateTime)
+    Table, Column, String, 
+    Boolean, Integer, ForeignKey, 
+    JSON, DateTime, Enum
+)
 from sqlalchemy.orm import (
     declarative_base, mapped_column, relationship,
     Mapped    
@@ -98,6 +102,11 @@ class VisSession(Base):
 
         return vis_dict
 
+class ItemType(enum.Enum):
+    local = 1
+    remote = 2
+
+
 class Item(Base):
     __tablename__='item'
     id = mapped_column(String(24),primary_key = True)
@@ -114,6 +123,12 @@ class Item(Base):
     user_access: Mapped[List["User"]] = relationship(
         secondary = UserAccess, back_populates="item_access"
     )
+    type = Column(Enum(ItemType))
+
+    __mapper_args__ = {
+        'polymorphic_identity': 'item',
+        'polymorphic_on': 'type'
+    }
 
     def to_dict(self):
         item_dict = {
@@ -131,8 +146,13 @@ class Item(Base):
 
 class LocalItem(Item):
     __tablename__ = 'local_item'
+    id = mapped_column(ForeignKey('item.id'),primary_key = True)
 
     filepath = Column(String)
+
+    __mapper_args__ = {
+        'polymorphic_identity': 'local_item'
+    }
 
     def to_dict(self):
 
@@ -142,9 +162,14 @@ class LocalItem(Item):
 
 class RemoteItem(Item):
     __tablename__ = 'remote_item'
+    id = mapped_column(ForeignKey('item.id'),primary_key = True)
 
     url = Column(String)
     remote_id = Column(String(24))
+
+    __mapper_args__ = {
+        'polymorphic_identity': 'remote_item'
+    }
 
     def to_dict(self):
 

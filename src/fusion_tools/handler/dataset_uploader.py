@@ -369,11 +369,10 @@ class DSAUploader(DSATool):
             handler = self.handler
         )
         self.plugin_inputs_handler.load(self.component_prefix)
-        self.plugin_inputs_handler.gen_layout({})
-
+        
     def update_layout(self, session_data:dict, use_prefix:bool):
 
-        if not self.get_user_external_token(session_data) is None:
+        if self.get_user_external_token(session_data) is None:
             uploader_children = html.Div(
                 dbc.Alert(
                     'Make sure to login first in order to upload!',
@@ -1045,6 +1044,7 @@ class DSAUploader(DSATool):
         folder_table_data = get_pattern_matching_value(folder_table_data)
 
         user_external_token = self.get_user_external_token(session_data)
+        user_external_login = self.get_user_external_login(session_data)
 
         if not ctx.triggered_id:
             raise exceptions.PreventUpdate
@@ -1091,7 +1091,7 @@ class DSAUploader(DSATool):
                 )
             ])
 
-            path_parts = ['/user/',f'{session_data["user"]["login"]}/']
+            path_parts = ['/user/',f'{user_external_login}/']
 
         elif 'dsa-uploader-folder-table' in ctx.triggered_id['type']:
             
@@ -1217,7 +1217,7 @@ class DSAUploader(DSATool):
                     user_token = user_external_token
                 )
 
-                if not path_parts==['/user/',session_data['user']['login']+'/']:
+                if not path_parts==['/user/',user_external_login+'/']:
                     # Don't need to know the slides in that folder
                     _, folder_folders = self.organize_folder_contents(
                         folder_info=folder_info,

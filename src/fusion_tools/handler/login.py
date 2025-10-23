@@ -40,10 +40,9 @@ class DSALoginComponent(DSATool):
 
     def update_layout(self, session_data:dict, use_prefix:bool):
         
-        #TODO: This will have to be updated for external DSA access
         current_user_children = ''
         if 'user' in session_data:
-            current_user_children = f'Welcome, {session_data.get("user",{}).get("login","")}!'
+            current_user_children = f'Welcome, {session_data.get("user",{}).get("firstName")} ({session_data.get("user",{}).get("login","")})!'
             logout_button_disable = False
 
         else:
@@ -411,10 +410,27 @@ class DSALoginComponent(DSATool):
             )
             if not type(new_login_output)==str:
                 session_data['user']['external'] = new_login_output
-                session_data = json.dumps(session_data)
                 in_memory_store['user']['external'] = new_login_output
+                login_error_div = dbc.Alert(
+                    f'External Login: {new_login_output.get("login")} has been added to your account!',
+                    color = 'success'
+                )
+
+                # Updating user in database
+                updated_user = self.database.get_create(
+                    table_name = 'user',
+                    inst_id = session_data.get('user').get('id'),
+                    kwargs = {
+                        k:v
+                        for k,v in session_data.get('user').items()
+                        if not k=='id'
+                    }
+                )
+
+                session_data = json.dumps(session_data)
                 in_memory_store = json.dumps(in_memory_store)
-                login_error_div = []
+
+
             else:
                 session_data = no_update
                 in_memory_store = no_update
@@ -480,23 +496,4 @@ class DSALoginComponent(DSATool):
         
         return [username_error_div],[password_error_div],[email_error_div], [create_account_error_div], session_data, in_memory_store
         
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
