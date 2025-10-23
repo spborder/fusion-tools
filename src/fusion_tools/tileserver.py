@@ -188,6 +188,7 @@ class LocalTileServer(TileServer):
                  tile_server_port:int = 8050,
                  host: str = 'localhost',
                  protocol: str = 'http',
+                 jupyter_server_url: Union[str,None] = None,
                  cors_options: dict = {}
                  ):
         """Constructor method
@@ -672,7 +673,6 @@ class LocalTileServer(TileServer):
                 status_code=400,
             )
     
-    async def get_region(self, id:str, top: int, left: int, bottom:int, right:int,style:Union[None,str] = None):
     async def get_region(self, id:str, top: int, left: int, bottom:int, right:int,style:Union[None,str] = None):
         """
         Grabbing a specific region in the image based on bounding box coordinates
