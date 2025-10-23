@@ -29,6 +29,7 @@ from typing_extensions import Union
 from .models import (
     Base, User, UserAccess, 
     VisSession, Item, Layer, 
+    LocalItem, RemoteItem,
     Structure, ImageOverlay, Annotation,
     Data
 )
@@ -39,6 +40,8 @@ TABLE_NAMES = {
     'user_access': UserAccess,
     'vis_session': VisSession,
     'item': Item,
+    'local_item': LocalItem,
+    'remote_item': RemoteItem,
     'layer': Layer,
     'structure': Structure,
     'image_overlay': ImageOverlay,

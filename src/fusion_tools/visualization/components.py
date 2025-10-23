@@ -1134,7 +1134,7 @@ class Visualization:
             "local": [],
             "data": {},
             'session': self.new_session(guest = True),
-            'user': self.new_user(guest = True)
+            'user': self.new_user(guest = True),
         }
 
         self.database.add_vis_session(slide_store)

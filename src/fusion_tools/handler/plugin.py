@@ -48,15 +48,6 @@ class DSAPluginGroup(DSATool):
         super().__init__()
         self.handler = handler
 
-        self.embedded_ids = [
-            'dsa-resource-selector'
-        ]
-
-        self.base_id = 'dsa-plugin'
-
-    def __str__(self):
-        return self.title
-
     def load(self, component_prefix: int):
         
         self.component_prefix = component_prefix
@@ -80,9 +71,11 @@ class DSAPluginGroup(DSATool):
     
     def load_plugin(self, plugin_dict:dict, session_data:dict, component_index:int, sequence=False):
         
+
+        user_external_token = self.get_user_external_token(session_data)
         exe_dict = None
         self.handler.gc.setToken(
-            session_data['user']['token']
+            user_external_token
         )
 
         try:
@@ -136,9 +129,9 @@ class DSAPluginGroup(DSATool):
                                 uploaded_item_names = [i['fusion_upload_name'] for i in uploaded_items]
                                 if in_arg['default']['name'] in uploaded_item_names:
                                     matching_item = uploaded_items[uploaded_item_names.index(in_arg['default']['name'])]
-                                    matching_item_info = self.handler.get_item_info(matching_item['itemId'],session_data['user']['token'])
+                                    matching_item_info = self.handler.get_item_info(matching_item['itemId'],user_external_token)
                                     if in_arg['default']['type']=='upload_folder':
-                                        folder_info = self.handler.get_folder_info(matching_item_info['folderId'],session_data['user']['token'])
+                                        folder_info = self.handler.get_folder_info(matching_item_info['folderId'],user_external_token)
                                         exe_input['default'] = {
                                             'name': folder_info['name'],
                                             '_id': folder_info['_id']
@@ -210,7 +203,7 @@ class DSAPluginGroup(DSATool):
                                     uploaded_parent_names = [i['parentName'] for i in uploaded_annotations]
                                     if in_arg['default']['fileName'] in uploaded_parent_names:
                                         matching_parent = uploaded_annotations[uploaded_parent_names.index(in_arg['default']['name'])]
-                                        annotation_info = self.handler.get_annotation_names(matching_parent['_id'], user_token = session_data['user']['token'])
+                                        annotation_info = self.handler.get_annotation_names(matching_parent['_id'], user_token = user_external_token)
 
                                         if 'annotationName' in in_arg['default']:
                                             annotation_names = [i['annotation']['name'] for i in annotation_info]
@@ -239,7 +232,7 @@ class DSAPluginGroup(DSATool):
                                     uploaded_parent_ids = [i['_id'] for i in uploaded_annotations]
                                     if in_arg['default']['fileId'] in uploaded_parent_ids:
                                         matching_parent = uploaded_annotations[uploaded_parent_ids.index(in_arg['default']['fileId'])]
-                                        annotation_info = self.handler.get_annotation_names(matching_parent['_id'], user_token = session_data['user']['token'])
+                                        annotation_info = self.handler.get_annotation_names(matching_parent['_id'], user_token = user_external_token)
 
                                         if 'annotationName' in in_arg['default']:
                                             annotation_names = [i['annotation']['name'] for i in annotation_info]
@@ -282,7 +275,7 @@ class DSAPluginGroup(DSATool):
                                     uploaded_item_names = [i['fusion_upload_name'] for i in uploaded_items]
                                     if reference in uploaded_item_names:
                                         matching_item = uploaded_items[uploaded_item_names.index(reference)]
-                                        matching_item_info = self.handler.get_item_info(matching_item['itemId'],session_data['user']['token'])
+                                        matching_item_info = self.handler.get_item_info(matching_item['itemId'],user_external_token)
 
                                         item_name = matching_item_info['name']
                                         # Could do something with this, add a _output.{ref_ext} or something if a new extension isn't provided
@@ -305,8 +298,8 @@ class DSAPluginGroup(DSATool):
                                     uploaded_item_names = [i['fusion_upload_name'] for i in uploaded_items]
                                     if reference in uploaded_item_names:
                                         matching_item = uploaded_items[uploaded_item_names.index(reference)]
-                                        matching_item_info = self.handler.get_item_info(matching_item['itemId'],session_data['user']['token'])
-                                        folder_info = self.handler.get_folder_info(matching_item_info['folderId'],session_data['user']['token'])
+                                        matching_item_info = self.handler.get_item_info(matching_item['itemId'],user_external_token)
+                                        folder_info = self.handler.get_folder_info(matching_item_info['folderId'],user_external_token)
 
                                         exe_input['default']['folderId'] = folder_info['_id']
                                     else:
@@ -599,6 +592,10 @@ class DSAPluginGroup(DSATool):
         :type plugin_groups: Union[list,dict,None], optional
         """
 
+        if type(session_data)==str:
+            session_data = json.loads(session_data)
+        user_external_token = self.get_user_external_token(session_data)
+
         plugin_components = []
         if not plugin_groups is None:
             if type(plugin_groups)==dict:
@@ -742,15 +739,6 @@ class DSAPluginGroup(DSATool):
             PrefixIdTransform(prefix=f'{self.component_prefix}', escape = lambda input_id: self.prefix_escape(input_id)).transform_layout(layout)
 
         return layout
-
-    def gen_layout(self, session_data:dict):
-        """Initializing layout of blueprint.
-
-        :param session_data: Dictionary containing information from current session
-        :type session_data: dict
-        """
-
-        self.blueprint.layout = self.update_layout(session_data, use_prefix=False)
 
     def get_callbacks(self):
         """Registering callbacks with blueprint object.
@@ -939,6 +927,9 @@ class DSAPluginGroup(DSATool):
             raise exceptions.PreventUpdate
         
         session_data = json.loads(session_data)
+
+        user_external_token = self.get_user_external_token(session_data)
+
         plugin_info = [json.loads(p_info) for p_info in plugin_info]
         all_plugin_input_info = [json.loads(i_info) for i_info in plugin_input_info]
 
@@ -989,6 +980,8 @@ class DSAPluginGroup(DSATool):
             raise exceptions.PreventUpdate
 
         session_data = json.loads(session_data)
+
+        user_external_token = self.get_user_external_token(session_data)
         # Getting information on this sequence
         sequence_info = json.loads(sequence_info)
         # Getting information on plugins in this sequence
@@ -1105,16 +1098,6 @@ class DSAPluginRunner(DSATool):
         super().__init__()
         self.handler = handler
 
-        self.embedded_ids = [
-            'dsa-resource-selector',
-            'dsa-plugin'
-        ]
-
-        self.base_id = 'dsa-plugin-runner'
-
-    def __str__(self):
-        return self.title
-
     def load(self, component_prefix: int):
         
         self.component_prefix = component_prefix
@@ -1136,7 +1119,11 @@ class DSAPluginRunner(DSATool):
     
     def update_layout(self, session_data:dict, use_prefix: bool):
         
-        plugin_list = self.handler.list_plugins(user_token = session_data['user']['token'])
+        if type(session_data)==str:
+            session_data = json.loads(session_data)
+
+        user_external_token = self.get_user_external_token(session_data)
+        plugin_list = self.handler.list_plugins(user_token = user_external_token)
         docker_list = sorted(list(set([i['image'] for i in plugin_list])))
 
         if not use_prefix:
@@ -1193,10 +1180,6 @@ class DSAPluginRunner(DSATool):
 
         return layout
 
-    def gen_layout(self, session_data:dict):
-        
-        self.blueprint.layout = self.update_layout(session_data, use_prefix=False)
-
     def get_callbacks(self):
 
         # Callback to get all the CLIs for a selected Docker image
@@ -1235,7 +1218,10 @@ class DSAPluginRunner(DSATool):
         
         docker_select = get_pattern_matching_value(docker_select)
         session_data = json.loads(session_data)
-        plugin_list = self.handler.list_plugins(user_token=session_data['user']['token'])
+
+        user_external_token = self.get_user_external_token(session_data)
+
+        plugin_list = self.handler.list_plugins(user_token=user_external_token)
         included_cli = sorted([i['name'] for i in plugin_list if i['image']==docker_select])
 
         return [included_cli]
@@ -1296,28 +1282,15 @@ class DSAPluginProgress(DSATool):
     
         self.modal_className = 'mw-100 p-5'
 
-    def __str__(self):
-        return self.title
-
-    def load(self,component_prefix:int):
-        
-        self.component_prefix = component_prefix
-
-        self.blueprint = DashBlueprint(
-            transforms=[
-                PrefixIdTransform(prefix=f'{component_prefix}'),
-                MultiplexerTransform()
-            ]
-        )
-
-        self.get_callbacks()
-
     def generate_plugin_table(self, session_data:dict, offset:int, limit: int, next_clicks:int, prev_clicks:int, use_prefix:bool):
+        
+        user_external_token = self.get_user_external_token(session_data)
+        user_external_id = self.get_user_external_id(session_data)
 
         # Getting all jobs for this user:
         user_jobs = self.handler.get_user_jobs(
-            user_id = session_data['user']['_id'],
-            user_token = session_data['user']['token'],
+            user_id = user_external_id,
+            user_token = user_external_token,
             offset = offset,
             limit = limit
         )
@@ -1469,10 +1442,6 @@ class DSAPluginProgress(DSATool):
 
         return layout
 
-    def gen_layout(self,session_data:Union[dict,None]):
-        
-        self.blueprint.layout = self.update_layout(session_data=session_data,use_prefix=False)
-
     def get_callbacks(self):
 
         # Callback for loading next/prev jobs
@@ -1523,13 +1492,13 @@ class DSAPluginProgress(DSATool):
        
         session_data = json.loads(session_data)
         new_table_content = self.generate_plugin_table(
-                                session_data = session_data,
-                                offset = offset,
-                                limit = 5,
-                                next_clicks = next_clicked,
-                                prev_clicks = prev_clicked,
-                                use_prefix = True
-                            )
+            session_data = session_data,
+            offset = offset,
+            limit = 5,
+            next_clicks = next_clicked,
+            prev_clicks = prev_clicked,
+            use_prefix = True
+        )
 
 
         return [new_table_content]
@@ -1541,13 +1510,15 @@ class DSAPluginProgress(DSATool):
         
         session_data = json.loads(session_data)
 
+        user_external_token = self.get_user_external_token(session_data)
+
         if 'dsa-plugin-progress-get-logs' in ctx.triggered_id['type']:
             row_clicked = ctx.triggered_id['index']
             job_id = table_rows[row_clicked][5]['props']['children']
 
             job_logs = self.handler.get_specific_job(
                 job_id = job_id,
-                user_token = session_data['user']['token']
+                user_token = user_external_token
             )
 
             job_logs_div = html.Div(
@@ -1564,7 +1535,7 @@ class DSAPluginProgress(DSATool):
 
             cancel_response = self.handler.cancel_job(
                 job_id = job_id,
-                user_token = session_data['user']['token']
+                user_token = user_external_token
             )
 
             job_logs_div = html.Div(

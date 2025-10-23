@@ -44,6 +44,8 @@ class User(Base):
         secondary = UserAccess, back_populates="user_access"
     )
 
+    external = Column(JSON)
+
     meta = Column(JSON)
 
     def verify_password(self, query_pword) -> bool:
@@ -58,6 +60,8 @@ class User(Base):
             'firstName': self.firstName,
             'lastName': self.lastName,
             'email': self.email,
+            'meta': self.meta,
+            'external': self.external,
             'admin': self.admin,
             'updated': self.updated,
             'token': self.token
@@ -65,6 +69,7 @@ class User(Base):
 
         return user_dict
     
+
 
 class VisSession(Base):
     __tablename__='vis_session'
@@ -87,6 +92,7 @@ class VisSession(Base):
             'id': self.id,
             'user': self.user,
             'data': self.data,
+            'meta': self.meta,
             'updated': self.updated
         }
 
@@ -99,8 +105,6 @@ class Item(Base):
     meta = Column(JSON)
     image_meta = Column(JSON)
     ann_meta = Column(JSON)
-
-    filepath = Column(String)
 
     session = mapped_column(ForeignKey("vis_session.id"))
     updated = Column(DateTime)
@@ -118,11 +122,33 @@ class Item(Base):
             'meta': self.meta,
             'image_meta': self.image_meta,
             'ann_meta': self.ann_meta,
-            'filepath': self.filepath,
             'session': self.session,
             'updated': self.updated,
             'public': self.public
         }
+
+        return item_dict
+
+class LocalItem(Item):
+    __tablename__ = 'local_item'
+
+    filepath = Column(String)
+
+    def to_dict(self):
+
+        item_dict = super().to_dict() | {'filepath': self.filepath}
+
+        return item_dict
+
+class RemoteItem(Item):
+    __tablename__ = 'remote_item'
+
+    url = Column(String)
+    remote_id = Column(String(24))
+
+    def to_dict(self):
+
+        item_dict = super().to_dict() | {'url': self.url, 'remote_id': self.remote_id}
 
         return item_dict
 
@@ -141,6 +167,7 @@ class Layer(Base):
             'id': self.id,
             'name': self.name,
             'item': self.item,
+            'meta': self.meta,
             'updated': self.updated
         }
 
@@ -165,6 +192,7 @@ class Structure(Base):
             'geom': self.geom,
             'properties': self.properties,
             'layer': self.layer,
+            'meta': self.meta,
             'updated': self.updated
         }
 
@@ -200,6 +228,7 @@ class ImageOverlay(Base):
             'properties': self.properties,
             'image_src': self.image_src,
             'layer': self.layer,
+            'meta': self.meta,
             'updated': self.updated
         }
 
@@ -239,6 +268,7 @@ class Annotation(Base):
             'layer': self.layer,
             'structure': self.structure,
             'data': self.data,
+            'meta': self.meta,
             'updated': self.updated
         }
 
@@ -269,10 +299,12 @@ class Data(Base):
             'layer': self.item,
             'structure': self.structure,
             'filepath': self.filepath,
+            'meta': self.meta,
             'updated': self.updated
         }
 
         return data_dict
 
-
+# LocalData & RemoteData?
+# Same deal as with LocalItem & RemoteItem
 

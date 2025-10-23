@@ -714,8 +714,8 @@ class LocalTileServer(TileServer):
     async def get_thumbnail(self, id:str, style:Union[None,str] = None, request: Request = None):
         """Grabbing an image thumbnail
 
-        :param image: _description_
-        :type image: int
+        :param id: Unique id for locally stored item
+        :type id: str
         """
         token = None
         if not request is None:
@@ -727,7 +727,7 @@ class LocalTileServer(TileServer):
 
         if tile_source is None:
             return Response(
-                content = 'invalid image index', 
+                content = 'invalid image id', 
                 media_type = 'application/json', 
                 status_code=400,
             )

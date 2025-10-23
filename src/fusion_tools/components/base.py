@@ -2,42 +2,15 @@
 Base component for FUSION layouts
 """
 
-
-import os
-import sys
-import pandas as pd
-import numpy as np
-import uuid
-from typing_extensions import Union
-import geojson
-import json
-import base64
-import requests
-from PIL import Image
-import lxml.etree as ET
-from copy import deepcopy
-
-import threading
-import asyncio
-
 # Dash imports
 import dash
 dash._dash_renderer._set_react_version('18.2.0')
-import dash_leaflet as dl
-import dash_leaflet.express as dlx
-from dash import dcc, callback, ctx, ALL, MATCH, exceptions, dash_table, Patch, no_update
-import dash_bootstrap_components as dbc
-import dash_mantine_components as dmc
+from dash import dash_table
 from dash_extensions.enrich import (
     DashBlueprint, html, 
-    Input, Output, State, 
     MultiplexerTransform, PrefixIdTransform, BlockingCallbackTransform
 )
-from dash_extensions.javascript import assign, arrow_function, Namespace
-
-import time
-
-
+from dash_extensions.javascript import Namespace
 
 class BaseComponent:
     """
@@ -195,7 +168,26 @@ class DSATool(MultiTool):
     :param Tool: General class for components that perform visualization and analysis of data.
     :type Tool: None
     """
-    pass
+
+    def get_user_external_token(self, session_data):
+
+        user_token = session_data.get('user',{}).get('external',{}).get('token')
+        
+        return user_token
+
+    def get_user_external_login(self, session_data):
+
+        user_login = session_data.get('user',{}).get('external',{}).get('login','Guest')
+
+        return user_login
+
+    def get_user_external_id(self, session_data):
+
+        user_id = session_data.get('user',{}).get('external',{}).get('_id')
+        if user_id is None:
+            user_id = session_data.get('user',{}).get('external',{}).get('id')
+
+        return user_id
 
 
 class MapComponent(MultiTool):
@@ -215,9 +207,6 @@ class MapComponent(MultiTool):
                 image_metadata['sizeX']/(2**(image_metadata['levels']-1)),
                 image_metadata['sizeY']/(2**(image_metadata['levels']-1))
             ]
-
-            #x_scale = (base_dims[0]*(240/image_metadata['tileHeight'])) / image_metadata['sizeX']
-            #y_scale = -((base_dims[1]*(240/image_metadata['tileHeight'])) / image_metadata['sizeY'])
 
             x_scale = base_dims[0] / image_metadata['sizeX']
             y_scale = -(base_dims[1]) / image_metadata['sizeY']
