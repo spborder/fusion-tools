@@ -2030,13 +2030,14 @@ class GlobalPropertyPlotter(MultiTool):
             #TODO: Check if slide is in cache
 
             # Determine whether this is a DSA slide or local
-            if 'api_url' in slide:
+            if 'url' in slide:
                 item_id = slide['metadata_url'].split('/')[-1]
                 # Setting request string
-                if 'user' in session_data:
-                    request_str = f'{slide["api_url"]}/annotation/item/{item_id}/plot/list?token={session_data["user"]["token"]}'
+                external_token = session_data.get('user').get('external',{}).get('token')
+                if not external_token is None:
+                    request_str = f'{slide["url"]}/annotation/item/{item_id}/plot/list?token={external_token}'
                 else:
-                    request_str = f'{slide["api_url"]}/annotation/item/{item_id}/plot/list'
+                    request_str = f'{slide["url"]}/annotation/item/{item_id}/plot/list'
 
                 sep_str = '&' if '?' in request_str else '?'
                 request_str+=f'{sep_str}adjacentItems=false&sources=item,annotation,annotationelement&annotations=["__all__"]'
@@ -2118,16 +2119,17 @@ class GlobalPropertyPlotter(MultiTool):
                 pass
 
             # Determine whether this is a DSA slide or local
-            if 'api_url' in slide:
+            if 'url' in slide:
                 item_id = slide['metadata_url'].split('/')[-1]
                 if not structure_list is None and not structure_list==[]:
-                    if not 'user' in session_data:
+                    external_token = session_data.get('user').get('external',{}).get('token')
+                    if external_token is None:
                         ann_meta = requests.get(
                             slide['annotations_metadata_url']
                         ).json()
                     else:
                         ann_meta = requests.get(
-                            slide['annotations_metadata_url']+f'?token={session_data["user"]["token"]}'
+                            slide['annotations_metadata_url']+f'?token={external_token}'
                         ).json()
 
                     structure_names = [a['annotation']['name'] for a in ann_meta]
@@ -2142,10 +2144,10 @@ class GlobalPropertyPlotter(MultiTool):
                     structure_ids = ["__all__"]
                 
                 # Setting request string
-                if 'user' in session_data:
-                    request_str = f'{slide["api_url"]}/annotation/item/{item_id}/plot/data?token={session_data["user"]["token"]}'
+                if not external_token is None:
+                    request_str = f'{slide["url"]}/annotation/item/{item_id}/plot/data?token={external_token}'
                 else:
-                    request_str = f'{slide["api_url"]}/annotation/item/{item_id}/plot/data'
+                    request_str = f'{slide["url"]}/annotation/item/{item_id}/plot/data'
 
                 sep_str = '&' if '?' in request_str else '?'
                 request_str+=f'{sep_str}keys={",".join(keys_list)}&sources=annotationelement,item,annotation&annotations={json.dumps(structure_ids).strip()}'
@@ -2561,7 +2563,7 @@ class GlobalPropertyPlotter(MultiTool):
 
             const cloudPropUrls = cloudSlides.map((slide_info) =>
                 'user' in parsedSessionData
-                ? `${slide_info.annotations_url}/plot/list?token=${parsedSessionData.user.token}&adjacentItems=false&sources=item,annotation,annotationelement&annotations=["__all__"]`
+                ? `${slide_info.annotations_url}/plot/list?token=${parsedSessionData.user.external.token}&adjacentItems=false&sources=item,annotation,annotationelement&annotations=["__all__"]`
                 : `${slide_info.annotations_url}/plot/list?adjacentItems=false&sources=item,annotation,annotationelement&annotations=["__all__"]`
             );
 
@@ -2660,6 +2662,40 @@ class GlobalPropertyPlotter(MultiTool):
             ],
             prevent_initial_call = True,
         )
+
+    def update_drop_type(self, switch_switched, keys_info):
+        """Update the property selection mode (either dropdown menu or tree view)
+
+        :param switch_switched: Switch selected
+        :type switch_switched: list
+        :return: New property selector component
+        :rtype: list
+        """
+
+        switch_switched = get_pattern_matching_value(switch_switched)
+        keys_info = json.loads(get_pattern_matching_value(keys_info))
+
+        if switch_switched:
+            # This is using the Tree View
+            property_drop = dta.TreeView(
+                id = {'type': f'{self.component_prefix}-global-property-plotter-drop','index': 0},
+                multiple = True,
+                checkable = True,
+                checked = [],
+                selected = [],
+                expanded = [],
+                data = keys_info['tree']['full']
+            )
+        else:
+            property_drop = dcc.Dropdown(
+                options = [] if keys_info['dropdown'] is None else keys_info['dropdown'],
+                value = [],
+                id = {'type': f'{self.component_prefix}-global-property-plotter-drop','index': 0},
+                multi = True,
+                placeholder = 'Properties'
+            )
+
+        return [property_drop]
 
     def update_properties_and_filters(self, property_selection, property_checked, structure_selection, label_selection, filter_prop_mod, filter_prop_remove, filter_prop_selector, property_divs,current_data, keys_info, property_info):
         """Updating the properties, structures, and filters incorporated into the main plot
