@@ -211,7 +211,7 @@ class LocalTileServer(TileServer):
         self.app = FastAPI(
             title = 'TileServer',
             description = 'Locally deployed tileserver for high-resolution microscopy images',
-            version = '3.6.35'
+            version = '3.6.42'
         )
 
         self.app.add_middleware(

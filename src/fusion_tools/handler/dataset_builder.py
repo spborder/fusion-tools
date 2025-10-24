@@ -108,7 +108,7 @@ class DatasetBuilder(DSATool):
         starting_slides_components = []
         starting_slide_idx = 0
         for s in session_data['current']:
-            if 'url' in s:
+            if s.get('type')=='remote_item':
                 local = False
                 user_token = user_external_token
                 if not s['url']==self.handler.girderApiUrl:
@@ -1194,7 +1194,7 @@ class DatasetBuilder(DSATool):
             new_local_slides = []
             keep_slides = []
             for s_idx,s in enumerate(decoded['current']):
-                if 'url' in s:
+                if s.get('type')=='remote_item':
                     if s['url']==self.handler.girderApiUrl:
                         # Getting the id of the DSA slide from this same instance
                         slide_id = s['id']
@@ -1277,7 +1277,7 @@ class DatasetBuilder(DSATool):
 
         prev_vis_data_in_handler = []
         for i in session_data['current']:
-            if 'url' in i:
+            if i.get('type')=='remote_item':
                 if i['url']==self.handler.girderApiUrl:
                     prev_vis_data_in_handler.append(i)
                 else:
@@ -1291,35 +1291,12 @@ class DatasetBuilder(DSATool):
         for s in new_slide_data['selected_slides']:
 
             if not s.get('id') in local_slide_ids:
-                info_url = f'/item/{s}'
-                annotations_metadata_url = f'{self.handler.girderApiUrl}/annotation/?itemId={s}'
-                if not user_external_token is None:
-                    annotations_metadata_url += f'&token={user_external_token}'
-                    info_url += f'?token={user_external_token}'
-                
-                slide_info = self.handler.gc.get(info_url)
-                annotations_metadata = requests.get(annotations_metadata_url).json()
-                if not type(annotations_metadata)==list:
-                    annotations_metadata = [annotations_metadata]
-                    
-                annotations_geojson_url = [f'{self.handler.girderApiUrl}/annotation/{a["_id"]}/geojson' for a in annotations_metadata]
-
-                #TODO: Should this be reworked so not all of these urls are needed?
-                # It seems redundant since it follows a pretty clear pattern
                 new_slide_info.append(
                     {
                         'name': slide_info.get('name',''),
                         'id': slide_info.get('_id',''),
                         'remote_id': slide_info.get('_id'),
                         'url': self.handler.girderApiUrl,
-                        'tiles_url': f'{self.handler.girderApiUrl}/item/{s}/tiles/zxy'+'/{z}/{x}/{y}',
-                        'regions_url': f'{self.handler.girderApiUrl}/item/{s}/tiles/region',
-                        'image_metadata_url': f'{self.handler.girderApiUrl}/item/{s}/tiles',
-                        'metadata_url': f'{self.handler.girderApiUrl}/item/{s}',
-                        'annotations_url': f'{self.handler.girderApiUrl}/annotation/item/{s}',
-                        'annotations_metadata_url': annotations_metadata_url,
-                        'annotations_geojson_url': annotations_geojson_url,
-                        'annotations_region_url': f'{self.handler.girderApiUrl}/annotation/'
                     }
                 )
             else:

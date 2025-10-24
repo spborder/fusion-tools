@@ -1789,7 +1789,7 @@ class Visualization:
         app = FastAPI(
             title = 'FUSION',
             description = 'Modular visualization and analysis dashboard creation for high-resolution microscopy images.',
-            version='3.6.35',
+            version='3.6.42',
             docs_url='/docs',
             redoc_url = '/redoc',
             license_info = {
