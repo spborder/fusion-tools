@@ -89,8 +89,12 @@ class BaseComponent:
 
         self.get_callbacks()
         self.get_namespace()
+        self.get_clientside_callbacks()
 
     def get_callbacks(self):
+        pass
+
+    def get_clientside_callbacks(self):
         pass
 
     def get_namespace(self):
@@ -136,6 +140,81 @@ class BaseComponent:
 
         return return_table
 
+    def get_user_external_token(self, session_data):
+        try:
+            user_token = session_data.get('user',{}).get('external',{}).get('token')
+        except:
+            user_token = None
+        return user_token
+
+    def get_user_external_login(self, session_data):
+        try:
+            user_login = session_data.get('user',{}).get('external',{}).get('login','Guest')
+        except:
+            user_login = None
+        return user_login
+
+    def get_user_external_id(self, session_data):
+
+        try:
+            user_id = session_data.get('user',{}).get('external',{}).get('_id')
+            if user_id is None:
+                user_id = session_data.get('user',{}).get('external',{}).get('id')
+        except:
+            user_id = None
+        return user_id
+
+    def get_user_internal_token(self, session_data):
+
+        try:
+            user_token = session_data.get('user',{}).get('token')
+        except:
+            user_token = None
+
+        return user_token
+
+    def get_user_internal_login(self, session_data):
+        
+        try:
+            user_login = session_data.get('user',{}).get('login')
+        except:
+            user_login = None
+
+        return user_login
+
+    def get_user_internal_id(self,session_data):
+        
+        try:
+            user_id = session_data.get('user',{}).get('id')
+        except:
+            user_id = None
+
+        return user_id
+
+    def get_session_id(self, session_data):
+
+        try:
+            session_id = session_data.get('session',{}).get('id')
+        except:
+            session_id = None
+
+        return session_id
+
+    def update_request_str(self, req_str: str, **query_params):
+
+        print(f'{req_str=}')
+        for k,v in query_params.items():
+            if v is None:
+                continue
+
+            if '?' in req_str:
+                sep = '&'
+            else:
+                sep = '?'
+            
+            req_str += f'{sep}{k}={v}'
+        
+        return req_str
 
 
 class BaseSchema:
@@ -171,29 +250,7 @@ class DSATool(MultiTool):
     :type Tool: None
     """
 
-    def get_user_external_token(self, session_data):
-        try:
-            user_token = session_data.get('user',{}).get('external',{}).get('token')
-        except:
-            user_token = None
-        return user_token
-
-    def get_user_external_login(self, session_data):
-        try:
-            user_login = session_data.get('user',{}).get('external',{}).get('login','Guest')
-        except:
-            user_login = None
-        return user_login
-
-    def get_user_external_id(self, session_data):
-
-        try:
-            user_id = session_data.get('user',{}).get('external',{}).get('_id')
-            if user_id is None:
-                user_id = session_data.get('user',{}).get('external',{}).get('id')
-        except:
-            user_id = None
-        return user_id
+    pass
 
 
 class MapComponent(MultiTool):

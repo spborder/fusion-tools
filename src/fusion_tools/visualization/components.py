@@ -1184,9 +1184,7 @@ class Visualization:
                 self.slide_metadata = [None]*len(self.local_slides)
 
             # Initializing a LocalTileServer instance.
-            #TODO: Check if it's still necessary to serve from a different port in Jupyter deployments. New mounting procedure ({host}:{port}/tileserver/...)
             self.local_tile_server = LocalTileServer(
-                #tile_server_port=self.app_options['port'] if not self.app_options['jupyter'] else self.app_options['port']+10,
                 tile_server_port = self.app_options['port'],
                 host = self.app_options['host'],
                 database = self.database,
@@ -1212,7 +1210,8 @@ class Visualization:
                             'name': s.split(os.sep)[-1],
                             'id': local_slide_id,
                             'cached': True,
-                            'public': False
+                            'public': False,
+                            'type': 'local_item',
                         } | self.local_tile_server.get_slide_urls(local_slide_id)
                     else:
                         self.local_tile_server.add_new_slide(
@@ -1226,7 +1225,8 @@ class Visualization:
                             'name': s.image_filepath.split(os.sep)[-1],
                             'id': local_slide_id,
                             'cached': True,
-                            'public': s.public
+                            'public': s.public,
+                            'type': 'local_item',
                         } | self.local_tile_server.get_slide_urls(local_slide_id)
 
                 slide_store['current'].append(slide_dict)
@@ -1241,11 +1241,15 @@ class Visualization:
             
             for t_idx,t in enumerate(self.tileservers):
                 if type(t)==LocalTileServer:
+                    local_tile_server_url = f'{t.protocol}://{t.host}:{t.port}/tileserver'
+
                     slide_store['current'].extend([
                         {
                             'name': j.name,
                             'id': j.id,
-                            'cached': True
+                            'url': local_tile_server_url,
+                            'cached': True,
+                            'type': 'local_item',
                         } | t.get_slide_urls(j.id, standalone = True)
                         for j_idx,j in enumerate(t.get_item_names_ids())
                     ])
@@ -1253,7 +1257,9 @@ class Visualization:
                         {
                             'name': j.name,
                             'id': j.id,
+                            'url': local_tile_server_url,
                             'cached': True,
+                            'type': 'local_item',
                         } | j.get_slide_urls(j.id,standalone=True)
                         for j_idx,j in enumerate(t.get_item_names_ids())
                     ])
@@ -1266,28 +1272,13 @@ class Visualization:
                         'id': t.item_id,
                         'remote_id': t.item_id,
                         'url': t.base_url,
-                        'tiles_url': t.tiles_url,
-                        'regions_url': t.regions_url,
-                        'image_metadata_url': t.image_metadata_url,
-                        'metadata_url': t.metadata_url,
-                        'annotations_url': t.annotations_url,
-                        'annotations_metadata_url':t.annotations_metadata_url,
-                        'annotations_region_url': t.annotations_region_url,
-                        'annotations_geojson_url': t.annotations_geojson_url,
-                        'public': True
+                        'public': True,
+                        'type': 'remote_item',
                     })
                 elif type(t)==CustomTileServer:
                     slide_store['current'].append({
                         'name': t.name,
                         'id': t.id,
-                        'tiles_url': t.tiles_url,
-                        'regions_url': t.regions_url if hasattr(t,'regions_url') else None,
-                        'image_metadata_url': t.image_metadata_url if hasattr(t,'image_metadata_url') else None,
-                        'metadata_url': t.metadata_url if hasattr(t,'metadata_url') else None,
-                        'annotations_url': t.annotations_url if hasattr(t,'annotations_url') else None,
-                        'annotations_metadata_url': t.annotations_metadata_url if hasattr(t,'annotations_metadata_url') else None,
-                        'annotations_region_url': t.annotations_regions_url if hasattr(t,'annotations_regions_url') else None,
-                        'annotations_geojson_url': t.annotations_geojson_url if hasattr(t,'annotations_geojson_url') else None
                     })
 
         return slide_store
