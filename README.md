@@ -249,3 +249,20 @@ Open to contributions. Feel free to submit a PR or post feature requests in [Iss
 ## License
 `fusion-tools` was created by Samuel Border. It is licensed under the terms of the Apache 2.0 License
 
+## Citation
+If you find this work useful in your own research, please consider citing:
+
+```
+@article{border2025fusion,
+  title={FUSION: A web-based application for in-depth exploration of multi-omics data with brightfield histology},
+  author={Border, Samuel P and Ferreira, Ricardo Melo and Lucarelli, Nicholas and Kumar, Suhas Katari Chaluva and Paul, Anindya S and Manthey, David and Barisoni, Laura and Levites Strekalova, Yulia A and Ray, Jessica and Cheng, Ying-Hua and others},
+  journal={Nature Communications},
+  volume={16},
+  number={1},
+  pages={8388},
+  year={2025},
+  publisher={Nature Publishing Group UK London}
+}
+```
+
+

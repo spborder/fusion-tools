@@ -148,6 +148,7 @@ class LocalItem(Item):
     __tablename__ = 'local_item'
     id = mapped_column(ForeignKey('item.id'),primary_key = True)
 
+    url = Column(String)
     filepath = Column(String)
 
     __mapper_args__ = {
@@ -156,7 +157,7 @@ class LocalItem(Item):
 
     def to_dict(self):
 
-        item_dict = super().to_dict() | {'filepath': self.filepath}
+        item_dict = super().to_dict() | {'filepath': self.filepath, 'url': self.url, 'type': self.type}
 
         return item_dict
 
@@ -173,7 +174,7 @@ class RemoteItem(Item):
 
     def to_dict(self):
 
-        item_dict = super().to_dict() | {'url': self.url, 'remote_id': self.remote_id}
+        item_dict = super().to_dict() | {'url': self.url, 'remote_id': self.remote_id, 'type': self.type}
 
         return item_dict
 

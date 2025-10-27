@@ -177,7 +177,9 @@ class Slide:
 class TileServer:
     """Components which pull information from a slide(s)
     """
-    pass
+    
+    def get_slide_urls(slide_dict,**kwargs):
+        raise NotImplementedError
 
 
 class LocalTileServer(TileServer):
@@ -209,7 +211,7 @@ class LocalTileServer(TileServer):
         self.app = FastAPI(
             title = 'TileServer',
             description = 'Locally deployed tileserver for high-resolution microscopy images',
-            version = '3.6.35'
+            version = '3.6.42'
         )
 
         self.app.add_middleware(
@@ -493,28 +495,36 @@ class LocalTileServer(TileServer):
 
         return item_names_ids
 
-    def get_slide_urls(self,slide_id,standalone = False):
+    @staticmethod
+    def get_slide_urls(slide_dict,user_token,standalone = False):
+        
+        slide_id = slide_dict.get('id')
+        url = slide_dict.get('url')
 
         if not standalone:
             slide_url_dict = {
-                'tiles_url': f'{self.protocol}://{self.host}:{self.tile_server_port}/tileserver/{slide_id}/tiles/'+'{z}/{x}/{y}',
-                'regions_url': f'{self.protocol}://{self.host}:{self.tile_server_port}/tileserver/{slide_id}/tiles/region',
-                'image_metadata_url': f'{self.protocol}://{self.host}:{self.tile_server_port}/tileserver/{slide_id}/image_metadata',
-                'metadata_url': f'{self.protocol}://{self.host}:{self.tile_server_port}/tileserver/{slide_id}/metadata',
-                'annotations_url': f'{self.protocol}://{self.host}:{self.tile_server_port}/tileserver/{slide_id}/annotations',
-                'annotations_metadata_url':f'{self.protocol}://{self.host}:{self.tile_server_port}/tileserver/{slide_id}/annotations/metadata',
-                'annotations_region_url':f'{self.protocol}://{self.host}:{self.tile_server_port}/tileserver/{slide_id}/annotations'
+                'tiles': f'{url}/tileserver/{slide_id}/tiles/'+'{z}/{x}/{y}',
+                'regions': f'{url}/tileserver/{slide_id}/tiles/region',
+                'image_metadata': f'{url}/tileserver/{slide_id}/image_metadata',
+                'metadata': f'{url}/tileserver/{slide_id}/metadata',
+                'annotations': f'{url}/tileserver/{slide_id}/annotations',
+                'annotations_metadata':f'{url}/tileserver/{slide_id}/annotations/metadata',
+                'annotations_region':f'{url}/tileserver/{slide_id}/annotations'
             }
         else:
             slide_url_dict = {
-                'tiles_url': f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/tiles/'+'{z}/{x}/{y}',
-                'regions_url': f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/tiles/region',
-                'image_metadata_url': f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/image_metadata',
-                'metadata_url': f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/metadata',
-                'annotations_url': f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/annotations',
-                'annotations_metadata_url':f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/annotations/metadata',
-                'annotations_region_url':f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/annotations'
+                'tiles': f'{url}/{slide_id}/tiles/'+'{z}/{x}/{y}',
+                'regions': f'{url}/{slide_id}/tiles/region',
+                'image_metadata': f'{url}/{slide_id}/image_metadata',
+                'metadata': f'{url}/{slide_id}/metadata',
+                'annotations': f'{url}/{slide_id}/annotations',
+                'annotations_metadata':f'{url}/{slide_id}/annotations/metadata',
+                'annotations_region':f'{url}/{slide_id}/annotations'
             }
+
+        if not user_token is None:
+            for k,v in slide_url_dict.items():
+                v += f'?token={user_token}'
 
         return slide_url_dict
 
@@ -1145,9 +1155,48 @@ class DSATileServer(TileServer):
 
         self.annotations_region_url = f'{api_url}/annotation/'
 
-
     def __str__(self):
         return f'DSATileServer for {self.base_url}'
+
+    @staticmethod
+    def get_slide_urls(slide_dict,user_token):
+        
+        item_id = slide_dict.get('remote_id')
+        item_url = slide_dict.get('url')
+
+        slide_url_dict = {
+            'tiles': f'{item_url}/item/{item_id}/tiles/zxy/'+'{z}/{x}/{y}',
+            'regions': f'{item_url}/item/{item_id}/tiles/region',
+            'image_metadata': f'{item_url}/item/{item_id}/tiles',
+            'metadata': f'{item_url}/item/{item_id}',
+            'annotations': f'{item_url}/annotation/item/{item_id}',
+            'annotations_metadata':f'{item_url}/annotation?itemId={item_id}',
+            'annotations_region':f'{item_url}/annotation'
+        }
+
+        if not user_token is None:
+            for k,v in slide_url_dict.items():
+                if not '?' in v:
+                    v += f'?token={user_token}'
+                else:
+                    v += f'&token={user_token}'
+
+        # Adding annotations_geojson_url?
+        annotations_metadata = requests.get(slide_url_dict.get('annotations_metadata')).json()
+
+        annotations_geojson_urls = []
+        for a in annotations_metadata:
+            req_str = f'{item_url}/annotation/{a.get("_id")}/geojson'
+            if not user_token is None:
+                req_str += f'?token={user_token}'
+
+            annotations_geojson_urls.append(
+                req_str
+            )
+
+        slide_url_dict['annotations_geojson_url'] = annotations_geojson_urls
+
+        return slide_url_dict
 
 class CustomTileServer(TileServer):
     """CustomTileServer component if using some other tiles endpoint (must pass tileSize and levels in dictionary)
@@ -1180,4 +1229,5 @@ class CustomTileServer(TileServer):
     def __str__(self):
         return f'CustomTileServer for {self.tiles_url}'
 
-
+    def get_slide_urls(self, slide_dict):
+        pass

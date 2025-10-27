@@ -45,27 +45,13 @@ class DatasetBuilder(DSATool):
         super().__init__()
         self.include_only = include_only
         self.handler = handler
-
-    def load(self, component_prefix:int):
-
-        self.component_prefix = component_prefix
-
-        self.blueprint = DashBlueprint(
-            transforms=[
-                PrefixIdTransform(prefix=f'{component_prefix}',escape = lambda input_id: self.prefix_escape(input_id)),
-                MultiplexerTransform()
-            ]
-        )
-
-        self.get_callbacks()
-        self.dataset_builder_callbacks()
        
     def gen_collections_dataframe(self,session_data:dict):
 
         collections_info = []
 
         user_token = self.get_user_external_token(session_data)
-        user_login = self.get_user_external_token(session_data)
+        user_login = self.get_user_external_login(session_data)
         user_id = self.get_user_external_id(session_data)
         
         collections = self.handler.get_collections(session_data.get('user',{}).get('token'))
@@ -81,7 +67,7 @@ class DatasetBuilder(DSATool):
                 'Last Updated': folder_count['updated']
             } | c['meta'])
 
-        if 'user' in session_data:
+        if not user_login is None:
             collections_info.append({
                 'Collection Name': f'User: {user_login}',
                 'Collection ID': user_id,
@@ -108,7 +94,7 @@ class DatasetBuilder(DSATool):
         starting_slides_components = []
         starting_slide_idx = 0
         for s in session_data['current']:
-            if 'url' in s:
+            if s.get('type')=='remote_item':
                 local = False
                 user_token = user_external_token
                 if not s['url']==self.handler.girderApiUrl:
@@ -505,7 +491,7 @@ class DatasetBuilder(DSATool):
 
         return folder_slides, folder_folders
 
-    def dataset_builder_callbacks(self):
+    def get_clientside_callbacks(self):
 
         self.blueprint.clientside_callback(
             """
@@ -1194,7 +1180,7 @@ class DatasetBuilder(DSATool):
             new_local_slides = []
             keep_slides = []
             for s_idx,s in enumerate(decoded['current']):
-                if 'url' in s:
+                if s.get('type')=='remote_item':
                     if s['url']==self.handler.girderApiUrl:
                         # Getting the id of the DSA slide from this same instance
                         slide_id = s['id']
@@ -1277,7 +1263,7 @@ class DatasetBuilder(DSATool):
 
         prev_vis_data_in_handler = []
         for i in session_data['current']:
-            if 'url' in i:
+            if i.get('type')=='remote_item':
                 if i['url']==self.handler.girderApiUrl:
                     prev_vis_data_in_handler.append(i)
                 else:
@@ -1291,35 +1277,12 @@ class DatasetBuilder(DSATool):
         for s in new_slide_data['selected_slides']:
 
             if not s.get('id') in local_slide_ids:
-                info_url = f'/item/{s}'
-                annotations_metadata_url = f'{self.handler.girderApiUrl}/annotation/?itemId={s}'
-                if not user_external_token is None:
-                    annotations_metadata_url += f'&token={user_external_token}'
-                    info_url += f'?token={user_external_token}'
-                
-                slide_info = self.handler.gc.get(info_url)
-                annotations_metadata = requests.get(annotations_metadata_url).json()
-                if not type(annotations_metadata)==list:
-                    annotations_metadata = [annotations_metadata]
-                    
-                annotations_geojson_url = [f'{self.handler.girderApiUrl}/annotation/{a["_id"]}/geojson' for a in annotations_metadata]
-
-                #TODO: Should this be reworked so not all of these urls are needed?
-                # It seems redundant since it follows a pretty clear pattern
                 new_slide_info.append(
                     {
-                        'name': slide_info.get('name',''),
-                        'id': slide_info.get('_id',''),
-                        'remote_id': slide_info.get('_id'),
+                        'name': s.get('name',''),
+                        'id': s.get('_id',''),
+                        'remote_id': s.get('_id'),
                         'url': self.handler.girderApiUrl,
-                        'tiles_url': f'{self.handler.girderApiUrl}/item/{s}/tiles/zxy'+'/{z}/{x}/{y}',
-                        'regions_url': f'{self.handler.girderApiUrl}/item/{s}/tiles/region',
-                        'image_metadata_url': f'{self.handler.girderApiUrl}/item/{s}/tiles',
-                        'metadata_url': f'{self.handler.girderApiUrl}/item/{s}',
-                        'annotations_url': f'{self.handler.girderApiUrl}/annotation/item/{s}',
-                        'annotations_metadata_url': annotations_metadata_url,
-                        'annotations_geojson_url': annotations_geojson_url,
-                        'annotations_region_url': f'{self.handler.girderApiUrl}/annotation/'
                     }
                 )
             else:

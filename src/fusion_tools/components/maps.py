@@ -37,6 +37,7 @@ from dash_extensions.javascript import assign, arrow_function, Namespace
 
 # fusion-tools imports
 from fusion_tools import asyncio_db_loop
+from fusion_tools.tileserver import LocalTileServer,DSATileServer,CustomTileServer
 from fusion_tools.components.base import MapComponent
 from fusion_tools.utils.shapes import (
     find_intersecting,
@@ -69,22 +70,6 @@ class SlideMap(MapComponent):
         super().__init__()
 
         self.cache = cache
-
-    def load(self, component_prefix:int):
-
-        self.component_prefix = component_prefix
-
-        self.blueprint = DashBlueprint(
-            transforms = [
-                PrefixIdTransform(prefix=f'{self.component_prefix}'),
-                MultiplexerTransform()
-            ]
-        )        
-
-        # Add callback functions here
-        self.get_namespace()
-        self.get_callbacks()
-        self.get_annotations_callbacks()
 
     @asyncio_db_loop
     def check_slide_in_cache(self, image_id:Union[str,None]=None, user_id: str = None, vis_session_id: str = None):
@@ -389,10 +374,6 @@ class SlideMap(MapComponent):
             PrefixIdTransform(prefix = self.component_prefix).transform_layout(layout)
 
         return layout
-    
-    def gen_layout(self, session_data:dict):
-
-        self.blueprint.layout = self.update_layout(session_data,use_prefix=False)
 
     def get_namespace(self):
         """Adding JavaScript functions to the SlideMap Namespace
@@ -742,7 +723,7 @@ class SlideMap(MapComponent):
             ]
         )(self.upload_shape)
 
-    def get_annotations_callbacks(self):
+    def get_clientside_callbacks(self):
 
         self.blueprint.clientside_callback(
             """
@@ -847,8 +828,7 @@ class SlideMap(MapComponent):
                 }
 
                 // Getting the names of each annotation
-                let ann_meta_url = map_slide_information.annotations_metadata_url;
-
+                let ann_meta_url = map_slide_information.annotations_metadata;
                 try {
                     var ann_meta_response = await fetch(
                         ann_meta_url, {
@@ -910,7 +890,7 @@ class SlideMap(MapComponent):
                             const promise_await = await Promise.all(promises);
 
                         } else {
-                            const promises = [map_slide_information.annotations_url].map((url,idx) =>
+                            const promises = [map_slide_information.annotations].map((url,idx) =>
                                 fetch(url, {
                                     method: 'GET',
                                     mode: 'cors',
@@ -955,111 +935,157 @@ class SlideMap(MapComponent):
             ]
         )
 
-    def update_vis_session(self, new_vis_data):
-        """Updating slide dropdown options based on current visualization session
+    def extract_slide_data(self, new_slide, session_data):
 
-        :param new_vis_data: Visualization session data containing information on selectable slides
-        :type new_vis_data: str
-        :return: New options for slide dropdown
-        :rtype: list
-        """
-        new_vis_data = json.loads(new_vis_data)
-
-        new_slide_options = [
-            {
-                'label': i['name'],
-                'value': idx
-            }
-            for idx, i in enumerate(new_vis_data['current'])
-        ]
-
-        return [new_slide_options]
-
-    def update_slide(self, slide_selected, vis_data):
+        if type(session_data)==str:
+            session_data = json.loads(session_data)
         
-        if not any([i['value'] or i['value']==0 for i in ctx.triggered]):
-            raise exceptions.PreventUpdate
+        user_external_token = self.get_user_external_token(session_data)
+        user_internal_token = self.get_user_internal_token(session_data)
 
-        vis_data = json.loads(vis_data)
-        new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
+        if new_slide.get('type')=='local_item':
+            # Getting urls from LocalTileServer method
+            new_slide_urls = LocalTileServer.get_slide_urls(new_slide, user_internal_token)
+        elif new_slide.get('type')=='remote_item':
+            # Getting urls from DSATileServer method
+            new_slide_urls = DSATileServer.get_slide_urls(new_slide, user_external_token)
+        else:
+            # Getting urls from CustomTileServer method?
+            new_slide_urls = CustomTileServer.get_slide_urls(new_slide, user_external_token)
+
+        new_slide = new_slide | new_slide_urls
 
         new_image_metadata = None
         new_metadata = None
-        annotations_metadata = None
-        
-        # Check if slide is cached if using cache
+        new_annotations_metadata = None
+
+        # Checking whether to get this item from the local cache
         get_from_cache = False
         cached_item = False
+
         if self.cache:
             cached_item = self.check_slide_in_cache(
                 image_id = new_slide.get('id'),
-                user_id = vis_data.get('user',{}).get('id'),
-                vis_session_id = vis_data.get('session',{}).get('id')
+                user_id = self.get_user_internal_id(session_data),
+                vis_session_id = self.get_session_id(session_data)
             )
-            #print(f'in update_slide: {cached_item=}')
-            if cached_item:
-                get_from_cache = True
 
+            if cached_item:
+                # This item is present in the local cache for this user & vis session
+                get_from_cache = True
+                # Retrieving slide data from cached item
                 new_image_metadata = cached_item.get('image_meta')
                 new_metadata = cached_item.get('meta')
-                annotations_metadata = cached_item.get('ann_meta')
+                new_annotations_metadata = cached_item.get('ann_meta')
         
-        new_url = new_slide['tiles_url']
-        if 'user' in vis_data and not 'url' in new_slide:
-            new_url += f'?token={vis_data["user"]["token"]}'
-        elif 'url' in new_slide:
-            if not vis_data['user'].get('external') is None:
-                new_url += f'?token={vis_data["user"]["external"]["token"]}'
-            
 
         if not cached_item:
-            # Getting data from the tileservers:
-            new_url = new_slide['tiles_url']
-            image_metadata_url = new_slide['image_metadata_url']
-            metadata_url = new_slide['metadata_url']
-            annotations_metadata_url = new_slide['annotations_metadata_url']
-            if not 'url' in new_slide:
-                if 'user' in vis_data:
-                    new_url = new_slide['tiles_url']+f'?token={vis_data["user"]["token"]}'
-                    image_metadata_url = new_slide['image_metadata_url']+f'?token={vis_data["user"]["token"]}'
-                    metadata_url = new_slide['metadata_url']+f'?token={vis_data["user"]["token"]}'
-                    annotations_metadata_url = new_slide['annotations_metadata_url']
+            # Either caching is set to False or this item is not present in the local cache
+            new_image_metadata = requests.get(new_slide.get('image_metadata')).json()
+            new_metadata = requests.get(new_slide.get('metadata')).json()
+            new_annotations_metadata = requests.get(new_slide.get('annotations_metadata')).json()
+
+        new_slide['cached'] = get_from_cache
+
+        return new_image_metadata, new_metadata, new_annotations_metadata, new_slide
+
+    def generate_metadata_components(self, new_image_metadata, new_metadata, annotations_metadata):
+        
+        non_nested_display_metadata = {}
+        nested_display_metadata = []
+        non_nested_image_metadata = {}
+        nested_image_metadata = []
+
+        if not new_metadata is None:
+            if 'meta' in new_metadata:
+                for k,v in new_metadata['meta'].items():
+                    if not type(v) in [list,dict]:
+                        non_nested_display_metadata[k] = v
+                    else:
+                        nested_display_metadata.append({
+                            k: v
+                        })
+
+            for k,v in new_metadata.items():
+                if not k=='meta':
+                    if not type(v) in [list,dict]:
+                        non_nested_display_metadata[k] = v
+                    else:
+                        nested_display_metadata.append({
+                            k:v
+                        })
+
+
+        if not new_image_metadata is None:
+            for k,v in new_image_metadata.items():
+                if not type(v) in [list,dict]:
+                    non_nested_image_metadata[k] = v
+                else:
+                    nested_image_metadata.append({
+                        k:v
+                    })
+
+        image_nested_accordions = self.make_sub_accordion(nested_image_metadata)
+        case_nested_accordions = self.make_sub_accordion(nested_display_metadata)
+
+        non_nested_image_metadata_table = [
+            self.make_dash_table(
+                pd.DataFrame.from_records([
+                    {
+                        'Key': k,
+                        'Value': v
+                    }
+                    for k,v in non_nested_image_metadata.items()
+                ]),
+                id = {'type': f'{self.component_prefix}-non-nested-image-metadata', 'index': 0}
+            )
+        ]
+
+        non_nested_case_metadata_table = [
+            self.make_dash_table(
+                pd.DataFrame.from_records([
+                    {
+                        'Key': k,
+                        'Value': v
+                    }
+                    for k,v in non_nested_display_metadata.items()
+                ]),
+                id = {'type': f'{self.component_prefix}-non-nested-case-metadata-table','index': 0}
+            )
+        ]
+
+        slide_metadata_div = html.Div(
+            dbc.Accordion(
+                children = [
+                    dbc.AccordionItem(
+                        title = 'Image Metadata',
+                        children = non_nested_image_metadata_table + image_nested_accordions
+                    ),
+                    dbc.AccordionItem(
+                        title = 'Case Metadata',
+                        children = non_nested_case_metadata_table + case_nested_accordions
+                    )
+                ],
+                start_collapsed=True
+            )
+        )
+
+        return slide_metadata_div
+
+    def generate_annotation_layers(self, annotation_metadata, image_metadata, new_slide):
+        
+        image_overlay_annotations = [i for i in annotation_metadata if 'image_path' in i]
+        non_image_overlay_metadata = [i for i in annotation_metadata if not 'image_path' in i]
+        x_scale, y_scale = new_slide.get('x_scale'), new_slide.get('y_scale')
+
+        annotation_names = []
+        for a in non_image_overlay_metadata:
+            if 'annotation' in a:
+                annotation_names.append(a['annotation'].get('name'))
             else:
-                if not vis_data['user'].get('external') is None:
-                    external_token = vis_data['user']['external']['token']
-                    new_url = new_slide['tiles_url']+f'?token={external_token}'
-                    image_metadata_url = new_slide['image_metadata_url']+f'?token={external_token}'
-                    metadata_url = new_slide['metadata_url']+f'?token={external_token}'
-                    annotations_metadata_url = new_slide['annotations_metadata_url']
+                annotation_names.append(a.get('name'))
 
-            # Metadata dictionaries requested from either Local- or DSATileServer
-            
-            new_image_metadata = requests.get(image_metadata_url).json()
-            new_metadata = requests.get(metadata_url).json()
-            annotations_metadata = requests.get(annotations_metadata_url).json()
-
-        if new_image_metadata is None:
-            raise exceptions.PreventUpdate
-
-        # Detecting DSA-formatted annotations
-        if any(['annotation' in i for i in annotations_metadata]):
-            annotations_metadata = [
-                {
-                    'name': a['annotation']['name'],
-                    '_id': a['_id']
-                }
-                for a in annotations_metadata
-            ]
-
-        annotation_names = [i['name'] for i in annotations_metadata]
-
-        new_tile_size = new_image_metadata.get('tileHeight')
-
-        image_overlay_annotations = [i for i in annotations_metadata if 'image_path' in i]
-        non_image_overlay_metadata = [i for i in annotations_metadata if not 'image_path' in i]
-        x_scale, y_scale = self.get_scale_factors(new_image_metadata)
         new_layer_children = []
-
         if 'manual_rois' in new_slide:
             non_image_overlay_metadata += [
                 i['properties']
@@ -1110,7 +1136,7 @@ class SlideMap(MapComponent):
                             ]
                         )
                     ),
-                    name = st_info['name'],
+                    name = st_info['annotation']['name'] if 'annotation' in st_info else st_info['name'],
                     checked = True,
                     id = {'type': f'{self.component_prefix}-feature-overlay','index': np.random.randint(0,1000)}
                 )
@@ -1150,28 +1176,63 @@ class SlideMap(MapComponent):
                 )
             ])
 
+
+        return new_layer_children, image_overlay_annotations
+
+    def generate_tile_layers(self, tile_url, image_metadata):
+        
         # Loading new tile layer for map-tile-layer-holder
         new_tile_layer = dl.TileLayer(
             id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
-            url = new_url,
-            tileSize = new_tile_size,
+            url = tile_url,
+            tileSize = image_metadata.get('tileHeight',240),
             crossOrigin = 'true',
-            maxNativeZoom=new_image_metadata['levels']-2 if new_image_metadata['levels']>=2 else 0,
+            maxNativeZoom=image_metadata['levels']-2 if image_metadata['levels']>=2 else 0,
             minZoom = 0
         )
 
-        new_slide_info = {}
-        new_slide_info['x_scale'] = x_scale
-        new_slide_info['y_scale'] = y_scale
-        new_slide_info['image_overlays'] = image_overlay_annotations
-        new_slide_info['annotations_metadata'] = annotations_metadata
-        new_slide_info['metadata'] = new_metadata
-        new_slide_info['tiles_metadata'] = new_image_metadata
-        new_slide_info = new_slide_info | new_slide
+        return new_tile_layer
 
-        new_slide_info['cached'] = get_from_cache
+    def update_vis_session(self, new_session_data):
+        """Updating slide dropdown options based on current visualization session
 
-        new_slide_info = json.dumps(new_slide_info)
+        :param new_session_data: Visualization session data containing information on selectable slides
+        :type new_session_data: str
+        :return: New options for slide dropdown
+        :rtype: list
+        """
+        new_session_data = json.loads(new_session_data)
+
+        new_slide_options = [
+            {
+                'label': i['name'],
+                'value': idx
+            }
+            for idx, i in enumerate(new_session_data['current'])
+        ]
+
+        return [new_slide_options]
+
+    def update_slide(self, slide_selected, session_data):
+        
+        if not any([i['value'] or i['value']==0 for i in ctx.triggered]):
+            raise exceptions.PreventUpdate
+
+        session_data = json.loads(session_data)
+        new_slide = session_data['current'][get_pattern_matching_value(slide_selected)]
+
+        new_image_metadata, new_metadata, new_annotations_metadata, new_slide = self.extract_slide_data(new_slide,session_data)
+        
+        x_scale,y_scale = self.get_scale_factors(new_image_metadata)
+        new_slide['x_scale'] = x_scale
+        new_slide['y_scale'] = y_scale
+
+        new_layer_children, image_overlay_annotations = self.generate_annotation_layers(new_annotations_metadata,new_image_metadata,new_slide)
+        slide_metadata_div = self.generate_metadata_components(new_image_metadata, new_metadata, new_annotations_metadata)
+
+        new_tile_layer = self.generate_tile_layers(new_slide.get('tiles'),new_image_metadata)
+
+        new_slide_info = json.dumps(new_slide)
 
         # Updating manual and generated ROIs divs
         manual_rois = []
@@ -1184,86 +1245,6 @@ class SlideMap(MapComponent):
         }
 
         #TODO: Add something else to make sure that "Filtered" annotations are removed after loading a new slide
-        non_nested_display_metadata = {}
-        nested_display_metadata = []
-        non_nested_image_metadata = {}
-        nested_image_metadata = []
-
-        if not new_metadata is None:
-            if 'meta' in new_metadata:
-                for k,v in new_metadata['meta'].items():
-                    if not type(v) in [list,dict]:
-                        non_nested_display_metadata[k] = v
-                    else:
-                        nested_display_metadata.append({
-                            k: v
-                        })
-
-            for k,v in new_metadata.items():
-                if not k=='meta':
-                    if not type(v) in [list,dict]:
-                        non_nested_display_metadata[k] = v
-                    else:
-                        nested_display_metadata.append({
-                            k:v
-                        })
-
-
-        for k,v in new_image_metadata.items():
-            if not type(v) in [list,dict]:
-                non_nested_image_metadata[k] = v
-            else:
-                nested_image_metadata.append({
-                    k:v
-                })
-
-        image_nested_accordions = self.make_sub_accordion(nested_image_metadata)
-        case_nested_accordions = self.make_sub_accordion(nested_display_metadata)
-
-        non_nested_image_metadata_table = [
-            self.make_dash_table(
-                pd.DataFrame.from_records([
-                    {
-                        'Key': k,
-                        'Value': v
-                    }
-                    for k,v in non_nested_image_metadata.items()
-                ]),
-                id = {'type': f'{self.component_prefix}-non-nested-image-metadata', 'index': 0}
-            )
-        ]
-
-        non_nested_case_metadata_table = [
-            self.make_dash_table(
-                pd.DataFrame.from_records([
-                    {
-                        'Key': k,
-                        'Value': v
-                    }
-                    for k,v in non_nested_display_metadata.items()
-                ]),
-                id = {'type': f'{self.component_prefix}-non-nested-case-metadata-table','index': 0}
-            )
-        ]
-
-        slide_metadata_div = html.Div(
-            dbc.Accordion(
-                children = [
-                    dbc.AccordionItem(
-                        title = 'Image Metadata',
-                        children = non_nested_image_metadata_table + image_nested_accordions
-                    ),
-                    dbc.AccordionItem(
-                        title = 'Case Metadata',
-                        children = non_nested_case_metadata_table + case_nested_accordions
-                    )
-                ],
-                start_collapsed=True
-            )
-        )
-
-        # Updating fetch error store to be empty again
-        fetch_data_store = json.dumps({})
 
         # Clearing markers from previous slide
         new_marker_div = html.Div()
@@ -1271,19 +1252,22 @@ class SlideMap(MapComponent):
         return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div
 
     @asyncio_db_loop
-    def get_annotations_backup(self, ann_error_store, vis_data):
+    def get_annotations_backup(self, ann_error_store, session_data):
         """Getting annotations which are cached/if there is an error using JavaScript "fetch" API
 
         :param ann_error_store: Slide information containing annotations_metadata/urls
         :type ann_error_store: list
-        :param vis_data: Current session information
-        :type vis_data: list
+        :param session_data: Current session information
+        :type session_data: list
         """
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
+
+        if type(session_data)==str:
+            session_data = json.loads(session_data)
         
         ann_error_store = json.loads(get_pattern_matching_value(ann_error_store))
-        user_external_token = vis_data.get('user').get('external',{}).get('token')
+        user_external_token = self.get_user_external_token(session_data)
 
         if type(ann_error_store)==list:
             if len(ann_error_store)>0:
@@ -1294,11 +1278,10 @@ class SlideMap(MapComponent):
         if len(list(ann_error_store.keys()))==0:
             raise exceptions.PreventUpdate
         else:
-            vis_data = json.loads(vis_data)
             db_item = self.check_slide_in_cache(
                 image_id = ann_error_store.get('id'),
-                user_id = vis_data.get('user').get('id'),
-                vis_session_id = vis_data.get('session').get('id')
+                user_id = session_data.get('user').get('id'),
+                vis_session_id = session_data.get('session').get('id')
             )
             if ann_error_store.get('cached') and db_item:
                 # Grabbing annotation data from the database:
@@ -1307,8 +1290,8 @@ class SlideMap(MapComponent):
                     asyncio.gather(
                         self.database.get_item_annotations(
                             item_id = ann_error_store.get('id'),
-                            user_id = vis_data.get('user').get('id'),
-                            vis_session_id = vis_data.get('session').get('id')
+                            user_id = session_data.get('user').get('id'),
+                            vis_session_id = session_data.get('session').get('id')
                         )
                     )
                 )
@@ -1325,10 +1308,10 @@ class SlideMap(MapComponent):
                         raw_geojson.append(new_geojson)
                 else:
                     raw_geojson = []
-                    new_geojson = requests.get(ann_error_store['annotations_url']).json()
+                    new_geojson = requests.get(ann_error_store['annotations']).json()
                     raw_geojson.extend(new_geojson)
 
-            metadata_url = ann_error_store['annotations_metadata_url']
+            metadata_url = ann_error_store['annotations_metadata']
             if not user_external_token is None:
                 metadata_url += f'?token={user_external_token}'
 
@@ -1876,9 +1859,9 @@ class SlideMap(MapComponent):
         new_session_data = deepcopy(session_data)
 
         # Finding the current slide index:
-        if 'tiles_url' in map_slide_information:
-            current_slide_tile_urls = [i['tiles_url'] for i in new_session_data['current']]
-            slide_idx = current_slide_tile_urls.index(map_slide_information['tiles_url'])
+        if 'tiles' in map_slide_information:
+            current_slide_tile_urls = [i['tiles'] for i in new_session_data['current']]
+            slide_idx = current_slide_tile_urls.index(map_slide_information['tiles'])
 
             if not 'manual_rois' in new_session_data['current'][slide_idx]:
                 scaled_rois = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/map_slide_information['x_scale'],c[1]/map_slide_information['y_scale']),g),a) for a in deepcopy(added_rois)]
@@ -2064,290 +2047,6 @@ class MultiFrameSlideMap(SlideMap):
 
         super().__init__(cache)
 
-    def load(self, component_prefix:int):
-
-        self.component_prefix = component_prefix
-
-        self.blueprint = DashBlueprint(
-            transforms = [
-                PrefixIdTransform(prefix = f'{self.component_prefix}'),
-                MultiplexerTransform()
-            ]
-        )
-
-        super().get_namespace()
-        super().get_callbacks()
-        super().get_annotations_callbacks()
-
-    def update_slide(self, slide_selected, vis_data):
-        
-        if not any([i['value'] or i['value']==0 for i in ctx.triggered]):
-            raise exceptions.PreventUpdate
-
-        vis_data = json.loads(vis_data)
-        new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
-
-        user_external_token = vis_data.get('user').get('external',{}).get('token')
-
-        # Checking if the slide is cached (if self.cache=True)
-        get_from_cache = False
-        if self.cache:
-            cached_item = self.check_slide_in_cache(
-                image_id = new_slide.get('id')
-            )
-            if cached_item:
-                get_from_cache = True
-
-
-        # Getting data from the tileservers:
-        new_url = new_slide['tiles_url']
-        image_metadata_url = new_slide['image_metadata_url']
-        metadata_url = new_slide['metadata_url']
-        annotations_metadata_url = new_slide['annotations_metadata_url']
-
-        if 'user' in vis_data and not 'url' in new_slide:
-            new_url = new_slide['tiles_url']+f'?token={vis_data["user"]["token"]}'
-            image_metadata_url = new_slide['image_metadata_url']+f'?token={vis_data["user"]["token"]}'
-            metadata_url = new_slide['metadata_url']+f'?token={vis_data["user"]["token"]}'
-            annotations_metadata_url = new_slide['annotations_metadata_url']
-        elif 'url' in new_slide and not user_external_token is None:
-            new_url = new_slide['tiles_url']+f'?token={user_external_token}'
-            image_metadata_url = new_slide['image_metadata_url']+f'?token={user_external_token}'
-            metadata_url = new_slide['metadata_url']+f'?token={user_external_token}'
-            annotations_metadata_url = new_slide['annotations_metadata_url']
-
-
-        new_image_metadata = requests.get(image_metadata_url).json()
-        new_metadata = requests.get(metadata_url).json()
-        annotations_metadata = requests.get(annotations_metadata_url).json()
-
-        # Detecting DSA-formatted annotations
-        if any(['annotation' in i for i in annotations_metadata]):
-            annotations_metadata = [
-                {
-                    'name': a['annotation']['name'],
-                    '_id': a['_id']
-                }
-                for a in annotations_metadata
-            ]
-
-        annotation_names = [i['name'] for i in annotations_metadata]
-
-        new_tile_size = new_image_metadata['tileHeight']
-
-        image_overlay_annotations = [i for i in annotations_metadata if 'image_path' in i]
-        non_image_overlay_metadata = [i for i in annotations_metadata if not 'image_path' in i]
-        x_scale, y_scale = self.get_scale_factors(new_image_metadata)
-        new_layer_children = []
-
-        if 'manual_rois' in new_slide:
-            non_image_overlay_metadata += [
-                i['properties']
-                for i in new_slide['manual_rois']
-            ]
-            annotation_names += [i['properties']['name'] for i in new_slide['manual_rois']]
-
-        # Adding overlaid annotation layers:
-        for st_idx, st_info in enumerate(non_image_overlay_metadata):
-            new_layer_children.append(
-                dl.Overlay(
-                    dl.LayerGroup(
-                        dl.GeoJSON(
-                            data = {
-                                'type': 'FeatureCollection',
-                                'features': []
-                            },
-                            #format = 'geojson',
-                            id = {'type': f'{self.component_prefix}-feature-bounds','index': st_idx},
-                            options = {
-                                'style': self.js_namespace('featureStyle')
-                            },
-                            filter = self.js_namespace("featureFilter"),
-                            hideout = {
-                                'overlayBounds': {},
-                                'overlayProp': {},
-                                'fillOpacity': 0.5,
-                                'lineColor': {
-                                    k: '#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255))
-                                    for k in annotation_names
-                                },
-                                'filterVals': [],
-                                'colorMap': 'blue->red'
-                            },
-                            hoverStyle = arrow_function(
-                                {
-                                    'weight': 5,
-                                    'color': '#9caf00',
-                                    'dashArray': ''
-                                }
-                            ),
-                            zoomToBounds = False,
-                            children = [
-                                dl.Popup(
-                                    id = {'type': f'{self.component_prefix}-feature-popup','index': st_idx},
-                                    autoPan = False
-                                )
-                            ]
-                        )
-                    ),
-                    name = st_info['name'],
-                    checked = True,
-                    id = {'type': f'{self.component_prefix}-feature-overlay','index': np.random.randint(0,1000)}
-                )
-            )
-
-
-        for img_idx, img in enumerate(image_overlay_annotations):
-
-            # miny, minx, maxy, maxx (a.k.a. minlat, minlng, maxlat, maxlng)
-            scaled_image_bounds = [
-                [img['image_bounds'][1]*y_scale,
-                 img['image_bounds'][0]*x_scale],
-                [img['image_bounds'][3]*y_scale,
-                 img['image_bounds'][2]*x_scale]
-            ]
-            # Creating data: path for image
-            with open(img['image_path'],'rb') as f:
-                new_image_path = f'data:image/{img["image_path"].split(".")[-1]};base64,{base64.b64encode(f.read()).decode("ascii")}'
-                f.close()
-
-            image_overlay_popup = self.get_image_overlay_popup(img, img_idx)
-
-            new_layer_children.extend([
-                dl.ImageOverlay(
-                    url = new_image_path,
-                    opacity = 0.5,
-                    interactive = True,
-                    bounds = scaled_image_bounds,
-                    id = {'type': f'{self.component_prefix}-image-overlay','index': img_idx},
-                    children = [
-                        image_overlay_popup
-                    ]
-                ),
-                dl.LayerGroup(
-                    id = {'type': f'{self.component_prefix}-image-overlay-mover-layergroup','index': img_idx},
-                    children = []
-                )
-            ])
-
-        # For MultiFrameSlideMap, add frame BaseLayers and RGB layer (if present)
-        new_layer_children.extend(self.process_frames(new_image_metadata, new_url))
-        new_tile_layer = dl.TileLayer(
-            id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
-            url = '',                
-            tileSize=new_tile_size,
-            maxNativeZoom=new_image_metadata['levels']-2 if new_image_metadata['levels']>=2 else 0,
-            minZoom = 0
-        )
-
-        new_slide_info = {}
-        new_slide_info['x_scale'] = x_scale
-        new_slide_info['y_scale'] = y_scale
-        new_slide_info['image_overlays'] = image_overlay_annotations
-        new_slide_info['annotations_metadata'] = annotations_metadata
-        new_slide_info['metadata'] = new_metadata
-        new_slide_info['tiles_metadata'] = new_image_metadata
-        new_slide_info = new_slide_info | new_slide
-
-        new_slide_info['cached'] = get_from_cache
-
-        new_slide_info = json.dumps(new_slide_info)
-
-        # Updating manual and generated ROIs divs
-        manual_rois = []
-        gen_rois = []
-
-        remove_old_edits = {
-            'mode':'remove',
-            'n_clicks':0,
-            'action':'clear all'
-        }
-
-        #TODO: Add something else to make sure that "Filtered" annotations are removed after loading a new slide
-        non_nested_display_metadata = {}
-        nested_display_metadata = []
-        non_nested_image_metadata = {}
-        nested_image_metadata = []
-
-        if not new_metadata is None:
-            if 'meta' in new_metadata:
-                for k,v in new_metadata['meta'].items():
-                    if not type(v) in [list,dict]:
-                        non_nested_display_metadata[k] = v
-                    else:
-                        nested_display_metadata.append({
-                            k: v
-                        })
-
-            for k,v in new_metadata.items():
-                if not k=='meta':
-                    if not type(v) in [list,dict]:
-                        non_nested_display_metadata[k] = v
-                    else:
-                        nested_display_metadata.append({
-                            k:v
-                        })
-
-
-        for k,v in new_image_metadata.items():
-            if not type(v) in [list,dict]:
-                non_nested_image_metadata[k] = v
-            else:
-                nested_image_metadata.append({
-                    k:v
-                })
-
-        image_nested_accordions = self.make_sub_accordion(nested_image_metadata)
-        case_nested_accordions = self.make_sub_accordion(nested_display_metadata)
-
-        non_nested_image_metadata_table = [
-            self.make_dash_table(
-                pd.DataFrame.from_records([
-                    {
-                        'Key': k,
-                        'Value': v
-                    }
-                    for k,v in non_nested_image_metadata.items()
-                ])
-            )
-        ]
-
-        non_nested_case_metadata_table = [
-            self.make_dash_table(
-                pd.DataFrame.from_records([
-                    {
-                        'Key': k,
-                        'Value': v
-                    }
-                    for k,v in non_nested_display_metadata.items()
-                ])
-            )
-        ]
-
-        slide_metadata_div = html.Div(
-            dbc.Accordion(
-                children = [
-                    dbc.AccordionItem(
-                        title = 'Image Metadata',
-                        children = non_nested_image_metadata_table + image_nested_accordions
-                    ),
-                    dbc.AccordionItem(
-                        title = 'Case Metadata',
-                        children = non_nested_case_metadata_table + case_nested_accordions
-                    )
-                ],
-                start_collapsed=True
-            )
-        )
-
-        # Updating fetch error store to be empty again
-        fetch_data_store = json.dumps({})
-
-        # Clearing marker div
-        new_marker_div = html.Div()
-
-        return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
-
     def process_frames(self,image_metadata,tiles_url):
         """Create BaseLayer and TileLayer components for each of the different frames present in a multi-frame image
         Also initializes base tile url and styled tile url
@@ -2456,6 +2155,27 @@ class MultiFrameSlideMap(SlideMap):
                 
         return frame_layers
 
+    def generate_annotation_layers(self, annotation_metadata, image_metadata, slide_info):
+
+        new_layer_children = super().generate_annotation_layers(annotation_metadata, slide_info)
+        new_layer_children.extend(
+            self.process_frames(image_metadata)
+        )
+
+        return new_layer_children
+
+    def generate_tile_layers(self, tile_url, image_metadata):
+        
+        new_tile_layer = dl.TileLayer(
+            id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
+            url = '',                
+            tileSize=image_metadata.get('tileHeight'),
+            maxNativeZoom=image_metadata['levels']-2 if image_metadata['levels']>=2 else 0,
+            minZoom = 0
+        )
+
+        return new_tile_layer
+
 
 class LargeSlideMap(SlideMap):
     """This is a subclass of SlideMap used for LARGE amounts of annotations (>50k)
@@ -2472,21 +2192,6 @@ class LargeSlideMap(SlideMap):
         super().__init__(cache)
 
         self.min_zoom = min_zoom
-
-    def load(self,component_prefix:int):
-
-        self.component_prefix = component_prefix
-
-        self.blueprint = DashBlueprint(
-            transforms = [
-                PrefixIdTransform(prefix = f'{self.component_prefix}'),
-                MultiplexerTransform()
-            ]
-        )
-
-        self.get_callbacks()
-        self.get_namespace()
-        self.large_map_callbacks()
 
     def get_namespace(self):
 
@@ -2645,7 +2350,7 @@ class LargeSlideMap(SlideMap):
             assets_folder = self.assets_folder
         )
 
-    def large_map_callbacks(self):
+    def get_clientside_callbacks(self):
 
         self.blueprint.clientside_callback(
             """
@@ -2813,54 +2518,17 @@ class LargeSlideMap(SlideMap):
             prevent_initial_call = True
         )
 
-    def update_slide(self, slide_selected, vis_data):
+    def extract_slide_data(self, new_slide, session_data):
+
+        new_image_metadata, new_metadata, new_annotations_metadata, new_slide = super().extract_slide_data(new_slide,session_data)
+        new_slide['minZoom'] = self.min_zoom
+
+        return new_image_metadata, new_metadata, new_annotations_metadata, new_slide
+
+    def generate_annotation_layers(self, annotation_metadata, image_metadata, slide_info):
         
-        if not any([i['value'] or i['value']==0 for i in ctx.triggered]):
-            raise exceptions.PreventUpdate
-
-        vis_data = json.loads(vis_data)
-        new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
-
-        user_external_token = vis_data.get('user').get('external',{}).get('token')
-
-        # Check if slide is cached if using cache
-        get_from_cache = False
-        if self.cache:
-            cached_item = self.check_slide_in_cache(
-                image_id = new_slide.get('id')
-            )
-            if cached_item:
-                get_from_cache = True
-            
-        # Getting data from the tileservers:
-        new_tile_url = new_slide['tiles_url']
-        new_annotations_url = new_slide['annotations_url']
-        new_annotations_region_url = new_slide['annotations_region_url']
-        new_annotations_metadata_url = new_slide['annotations_metadata_url']
-        new_metadata_url = new_slide['metadata_url']
-        new_image_metadata_url = new_slide['image_metadata_url']
-        if 'user' in vis_data and not 'url' in new_slide:
-            new_tile_url = new_slide['tiles_url']+f'?token={vis_data["user"]["token"]}'
-            new_annotations_url = new_slide['annotations_url']+f'?token={vis_data["user"]["token"]}'
-            new_annotations_region_url = new_slide['annotations_region_url']+f'?token={vis_data["user"]["token"]}'
-            new_annotations_metadata_url = new_slide['annotations_metadata_url']+f'&token={vis_data["user"]["token"]}'
-            new_metadata_url = new_slide['metadata_url']+f'?token={vis_data["user"]["token"]}'
-            new_image_metadata_url = new_slide['image_metadata_url']+f'?token={vis_data["user"]["token"]}'
-        elif 'url' in new_slide and user_external_token is not None:
-            new_tile_url = new_slide['tiles_url']+f'?token={user_external_token}'
-            new_annotations_url = new_slide['annotations_url']+f'?token={user_external_token}'
-            new_annotations_region_url = new_slide['annotations_region_url']+f'?token={user_external_token}'
-            new_annotations_metadata_url = new_slide['annotations_metadata_url']+f'&token={user_external_token}'
-            new_metadata_url = new_slide['metadata_url']+f'?token={user_external_token}'
-            new_image_metadata_url = new_slide['image_metadata_url']+f'?token={user_external_token}'
-
-
-        new_image_metadata = requests.get(new_image_metadata_url).json()
-        new_metadata = requests.get(new_metadata_url).json()
-        new_annotations_metadata = requests.get(new_annotations_metadata_url).json()
-
-        new_tile_size = new_image_metadata['tileHeight']
-        x_scale, y_scale = self.get_scale_factors(new_image_metadata)
+        x_scale = slide_info.get('x_scale')
+        y_scale = slide_info.get('y_scale')
 
         annotation_names = []
         image_overlays = []
@@ -2966,130 +2634,10 @@ class LargeSlideMap(SlideMap):
                 )
             ])
 
-        # For MultiFrameSlideMap, add frame BaseLayers and RGB layer (if present)
-        new_tile_layer = dl.TileLayer(
-            id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
-            url = new_tile_url,
-            tileSize = new_tile_size,
-            maxNativeZoom=new_image_metadata['levels']-2 if new_image_metadata['levels']>=2 else 0,
-            minZoom = 0
-        )
-
-        new_slide_info = {}
-        new_slide_info['x_scale'] = x_scale
-        new_slide_info['y_scale'] = y_scale
-        new_slide_info['image_overlays'] = image_overlays
-        new_slide_info['slide_info'] = new_slide
-        new_slide_info['tiles_url'] = new_tile_url
-        new_slide_info['tiles_metadata'] = new_image_metadata
-        new_slide_info['metadata'] = new_metadata
-        new_slide_info['annotations_url'] = new_annotations_url
-        new_slide_info['annotations_region_url'] = new_annotations_region_url
-        new_slide_info['annotations_metadata'] = new_annotations_metadata
-        new_slide_info['minZoom'] = self.min_zoom
-
-        new_slide_info['cached'] = get_from_cache
-
-        new_slide_info = new_slide_info | new_slide
-
-        geo_annotations = json.dumps(initial_anns)
-        new_slide_info = json.dumps(new_slide_info)
-
-        # Updating manual and generated ROIs divs
-        manual_rois = []
-        gen_rois = []
-
-        remove_old_edits = {
-            'mode': 'remove',
-            'n_clicks': 0,
-            'action': 'clear all'
-        }
-
-        non_nested_display_metadata = {}
-        nested_display_metadata = []
-        non_nested_image_metadata = {}
-        nested_image_metadata = []
-
-        if not new_metadata is None:
-            if 'meta' in new_metadata:
-                for k,v in new_metadata['meta'].items():
-                    if not type(v) in [list,dict]:
-                        non_nested_display_metadata[k] = v
-                    else:
-                        nested_display_metadata.append({
-                            k: v
-                        })
-
-            for k,v in new_metadata.items():
-                if not k=='meta':
-                    if not type(v) in [list,dict]:
-                        non_nested_display_metadata[k] = v
-                    else:
-                        nested_display_metadata.append({
-                            k:v
-                        })
+        return new_layer_children, image_overlays
 
 
-        for k,v in new_image_metadata.items():
-            if not type(v) in [list,dict]:
-                non_nested_image_metadata[k] = v
-            else:
-                nested_image_metadata.append({
-                    k:v
-                })
-
-        image_nested_accordions = self.make_sub_accordion(nested_image_metadata)
-        case_nested_accordions = self.make_sub_accordion(nested_display_metadata)
-
-        non_nested_image_metadata_table = [
-            self.make_dash_table(
-                pd.DataFrame.from_records([
-                    {
-                        'Key': k,
-                        'Value': v
-                    }
-                    for k,v in non_nested_image_metadata.items()
-                ])
-            )
-        ]
-
-        non_nested_case_metadata_table = [
-            self.make_dash_table(
-                pd.DataFrame.from_records([
-                    {
-                        'Key': k,
-                        'Value': v
-                    }
-                    for k,v in non_nested_display_metadata.items()
-                ])
-            )
-        ]
-
-        slide_metadata_div = html.Div(
-            dbc.Accordion(
-                children = [
-                    dbc.AccordionItem(
-                        title = 'Image Metadata',
-                        children = non_nested_image_metadata_table + image_nested_accordions
-                    ),
-                    dbc.AccordionItem(
-                        title = 'Case Metadata',
-                        children = non_nested_case_metadata_table + case_nested_accordions
-                    )
-                ],
-                start_collapsed=True
-            )
-        )
-
-        fetch_data_store = json.dumps({})
-
-        new_marker_div = html.Div()
-
-        #return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div, fetch_data_store
-        return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div
-
-
-class LargeMultiFrameSlideMap(MultiFrameSlideMap):
+class LargeMultiFrameSlideMap(MultiFrameSlideMap, LargeSlideMap):
     """This is a sub-class of MultiFrameSlideMap used for LARGE amounts of annotations (>50k)
 
     :param MultiFrameSlideMap: A SlideMap component specialized for multi-frame slides
@@ -3102,612 +2650,8 @@ class LargeMultiFrameSlideMap(MultiFrameSlideMap):
                  min_zoom:int,
                  cache: bool = True):
         
-        super().__init__(cache)
+        super().__init__(min_zoom,cache)
         
-        self.min_zoom = min_zoom
-
-    def get_namespace(self):
-        
-        self.js_namespace = Namespace(
-            "fusionTools","largeSlideMap"
-        )
-
-        self.js_namespace.add(
-            src = 'function(e,ctx){ctx.map.flyTo([-120,120],1);}',
-            name = "centerMap"
-        )
-
-        self.js_namespace.add(
-            src = """
-                function(feature,context){
-                var {overlayBounds, overlayProp, fillOpacity, lineColor, filterVals, lineWidth, colorMap} = context.hideout;
-                var style = {};
-                if (Object.keys(chroma.brewer).includes(colorMap)){
-                    colorMap = colorMap;
-                } else {
-                    colorMap = colorMap.split("->");
-                }
-
-                if ("min" in overlayBounds) {
-                    var csc = chroma.scale(colorMap).domain([overlayBounds.min,overlayBounds.max]);
-                } else if ("unique" in overlayBounds) {
-                    var class_indices = overlayBounds.unique.map(str => overlayBounds.unique.indexOf(str));
-                    var csc = chroma.scale(colorMap).colors(class_indices.length);
-                } else {
-                    style.fillColor = 'white';
-                    style.fillOpacity = fillOpacity;
-                    if ('name' in feature.properties) {
-                        style.color = lineColor[feature.properties.name];
-                    } else {
-                        style.color = 'white';
-                    }
-
-                    return style;
-                }
-
-                var overlayVal = Number.Nan;
-                if (overlayProp) {
-                    if (overlayProp.name) {
-                        //TODO: Update this for different types of nested props (--+ = list, --# = external reference object)
-                        var overlaySubProps = overlayProp.name.split(" --> ");
-                        var prop_dict = feature.properties;
-                        for (let i = 0; i < overlaySubProps.length; i++) {
-                            if (prop_dict==prop_dict && prop_dict!=null && typeof prop_dict === 'object') {
-                                if (overlaySubProps[i] in prop_dict) {
-                                    var prop_dict = prop_dict[overlaySubProps[i]];
-                                    var overlayVal = prop_dict;
-                                } else {
-                                    prop_dict = Number.Nan;
-                                    var overlayVal = Number.Nan;
-                                }
-                            }
-                        }
-                    } else {
-                        var overlayVal = Number.Nan;
-                    }
-                } else {
-                    var overlayVal = Number.Nan;
-                }
-
-                if (overlayVal==overlayVal && overlayVal!=null) {
-                    if (typeof overlayVal==='number') {
-                        style.fillColor = csc(overlayVal);
-                    } else if ('unique' in overlayBounds) {
-                        overlayVal = overlayBounds.unique.indexOf(overlayVal);
-                        style.fillColor = csc[overlayVal];
-                    } else {
-                        style.fillColor = "f00";
-                    }
-                } else {
-                    style.fillColor = "f00";
-                }
-
-                style.fillOpacity = fillOpacity;
-                if (feature.properties.name in lineColor) {
-                    style.color = lineColor[feature.properties.name];
-                } else {
-                    style.color = 'white';
-                }
-
-                return style;
-                }
-                """,
-            name = 'featureStyle'
-        )
-
-        self.js_namespace.add(
-            src = """
-                function(feature,context){
-                const {overlayBounds, overlayProp, fillOpacity, lineColor, filterVals, lineWidth, colorMap} = context.hideout;
-
-                var returnFeature = true;
-                if (filterVals) {
-                    for (let i = 0; i < filterVals.length; i++) {
-                        // Iterating through filterVals list
-                        var filter = filterVals[i];
-                        if (filter.name) {
-                            //TODO: Update this for different types of nested props (--+ = list, --# = external reference object)
-                            var filterSubProps = filter.name.split(" --> ");
-                            var prop_dict = feature.properties;
-                            for (let j = 0; j < filterSubProps.length; j++) {
-                                if (prop_dict==prop_dict && prop_dict!=null && typeof prop_dict==='object') {
-                                    if (filterSubProps[j] in prop_dict) {
-                                        var prop_dict = prop_dict[filterSubProps[j]];
-                                        var testVal = prop_dict;
-                                    } else {
-                                        prop_dict = Number.Nan;
-                                        returnFeature = returnFeature & false;
-                                    }
-                                }
-                            }
-                        }
-                            
-                        if (filter.range && returnFeature) {
-                            if (typeof filter.range[0]==='number') {
-                                if (testVal < filter.range[0]) {
-                                    returnFeature = returnFeature & false;
-                                }
-                                if (testVal > filter.range[1]) {
-                                    returnFeature = returnFeature & false;
-                                }
-                            } else {
-                                if (filter.range.includes(testVal)) {
-                                    returnFeature = returnFeature & true;
-                                } else {
-                                    returnFeature = returnFeature & false;
-                                }
-                            }
-                        }
-                    }
-                }  else {
-                    return returnFeature;
-                }              
-                return returnFeature;
-                }
-                """,
-            name = 'featureFilter'
-        )
-
-        self.js_namespace.add(
-            src = """
-            function(e,ctx){
-                ctx.setProps({
-                    data: e.latlng
-                });
-            }
-            """,
-            name = 'sendPosition'
-        )
-
-        self.js_namespace.dump(
-            assets_folder = self.assets_folder
-        )
-
-    def load(self,component_prefix:int):
-
-        self.component_prefix = component_prefix
-
-        self.blueprint = DashBlueprint(
-            transforms = [
-                PrefixIdTransform(prefix = f'{self.component_prefix}'),
-                MultiplexerTransform()
-            ]
-        )
-
-        self.get_callbacks()
-        self.large_map_callbacks()
-    
-    def large_map_callbacks(self):
-
-        self.blueprint.clientside_callback(
-            """
-            async function(map_bounds,slide_information,current_zoom){
-                // Prevent Update at initialization
-                if (slide_information[0]==undefined){
-                    throw window.dash_clientside.PreventUpdate;
-                } else if (current_zoom[0]==undefined){
-                    throw window.dash_clientside.PreventUpdate;
-                }
-
-                // Run annotation region request, return annotations within that region
-                // Reading in map-slide-information
-                // scaled_map_bounds = [top,left,bottom,right]
-                var map_slide_information = JSON.parse(slide_information);
-                var scaled_map_bounds = [
-                    Math.floor(map_bounds[0][0][0] / map_slide_information.y_scale),
-                    Math.floor(map_bounds[0][0][1] / map_slide_information.x_scale),
-                    Math.floor(map_bounds[0][1][0] / map_slide_information.y_scale),
-                    Math.floor(map_bounds[0][1][1] / map_slide_information.x_scale)
-                ];
-
-                // Checking if the maps current zoom level is above the minimum zoom setting
-                if (current_zoom[0] < map_slide_information.minZoom){
-                    throw window.dash_clientside.PreventUpdate;
-                }
-                
-                // This is for DSA slides, annotations are only accessible for regions on an individual basis
-                // and then must be converted to GeoJSON.
-                var annotations_list = [];
-                var annotations_str = [];
-                if ("api_url" in map_slide_information.slide_info){
-                    for (let ann = 0; ann<map_slide_information.annotations_metadata.length; ann++) {
-                        var annotation = map_slide_information.annotations_metadata[ann];
-
-                        // TODO: Could need some additional headers for CORS
-                        try {
-                            let ann_url = map_slide_information.annotations_region_url + annotation._id+"?top="+scaled_map_bounds[2]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[0]+"&right="+scaled_map_bounds[3]
-                            var ann_response = await fetch(
-                                ann_url,{
-                                method: 'GET',
-                                mode: 'cors',
-                                headers: {
-                                    'Content-Type': 'application/json'    
-                                }}
-                            );
-
-                            if (!ann_response.ok) {
-                                throw new Error(`Oh no! Error encountered: ${ann_response.status}`)
-                            }
-
-                            // Scaling coordinates of returned annotations
-                            var new_annotations = await ann_response.json();
-                            let new_geojson = {
-                                "type": "FeatureCollection",
-                                "features": [],
-                                "properties": {
-                                    "name": annotation.annotation.name,
-                                    "_id": annotation._id
-                                }
-                            };
-                            for (let i = 0; i<new_annotations.annotation.elements.length; i++){
-
-                                if ("user" in new_annotations.annotation.elements[i]) {
-                                    var user_properties = new_annotations.annotation.elements[i].user;
-                                } else {
-                                    var user_properties = new Object;
-                                }
-                                user_properties["id"] = i;
-                                user_properties["cluster"] = false;
-                                user_properties["name"] = annotation.annotation.name;
-
-                                let new_feature = {
-                                    "type": "Feature",
-                                    "properties": user_properties,
-                                    "geometry": {
-                                        "type": "Polygon",
-                                        "coordinates": [[]]
-                                    }
-                                };
-
-                                for (let j = 0; j<new_annotations.annotation.elements[i].points.length;j++){
-                                    let these_coords = new_annotations.annotation.elements[i].points[j];
-                                    new_feature.geometry.coordinates[0].push([these_coords[0] * map_slide_information.x_scale, these_coords[1] * map_slide_information.y_scale]);
-                                }
-                                new_geojson.features.push(new_feature);
-                            }
-
-                            annotations_str.push(new_geojson);
-                            annotations_list.push(new_geojson);
-                        } catch (error) {
-                            console.error(error.message);
-                        }
-                    }
-                } else {
-                    // General case.
-                    // TODO: Could need some additional headers for CORS
-                    try {
-                        let ann_url = map_slide_information.annotations_region_url+"?top="+scaled_map_bounds[0]+"&left="+scaled_map_bounds[1]+"&bottom="+scaled_map_bounds[2]+"&right="+scaled_map_bounds[3];
-                        var ann_response = await fetch(
-                            ann_url,{
-                            method: 'GET',
-                            mode: 'cors',
-                            headers: {
-                                'Content-Type': 'application/json'    
-                            }}
-                        );
-
-                        if (!ann_response.ok) {
-                            throw new Error(`Oh no! Error encountered: ${ann_response.status}`)
-                        }
-
-                        // Scaling coordinates of returned annotations
-                        var new_annotations = await ann_response.json();
-                        // Thanks Suhas
-                        const scale_geoJSON = (data, name, id, x_scale, y_scale) => {
-                            return {
-                                ...data,
-                                properties: {
-                                    name: name,
-                                    _id: id
-                                },
-                                features: data.features.map(feature => ({
-                                    ...feature,
-                                    geometry: {
-                                        ...feature.geometry,
-                                        coordinates: feature.geometry.coordinates.map(axes => 
-                                            axes.map(([x, y]) => [x * x_scale, y * y_scale])
-                                        )
-                                    }
-                                }))
-                            }
-                        }
-
-                        for (let ann=0; ann<new_annotations.length; ann++){
-                            let annotation = map_slide_information.annotations_metadata[ann];
-                            let new_geojson = scale_geoJSON(new_annotations[ann], annotation.name, annotation._id, map_slide_information.x_scale, map_slide_information.y_scale);
-                            
-                            annotations_str.push(new_geojson);
-                            annotations_list.push(new_geojson);
-                        }
-
-                    } catch (error) {
-                        console.error(error.message);
-                    }                
-                }
-
-                return [annotations_list, [JSON.stringify(annotations_str)]];
-            }
-            """,
-            [
-                Output({'type': 'feature-bounds','index': ALL},'data'),
-                Output({'type': 'map-annotations-store','index':ALL},'data')
-            ],
-            Input({'type': 'slide-map','index': ALL},'bounds'),
-            [
-                State({'type':'map-slide-information','index': ALL},'data'),
-                State({'type': 'slide-map','index': ALL},'zoom')
-            ],
-            prevent_initial_call = True
-        )
-
-    def update_slide(self, slide_selected, vis_data):
-        
-        if not any([i['value'] or i['value']==0 for i in ctx.triggered]):
-            raise exceptions.PreventUpdate
-
-        vis_data = json.loads(vis_data)
-        new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
-
-        user_external_token = vis_data.get('user').get('external',{}).get('token')
-        # Check if slide is cached if using cache
-        get_from_cache = False
-        if self.cache:
-            cached_item = self.check_slide_in_cache(
-                image_id = new_slide.get('id')
-            )
-            if cached_item:
-                get_from_cache = True
-            
-
-        new_tile_url = new_slide['tiles_url']
-        new_annotations_url = new_slide['annotations_url']
-        new_annotations_region_url = new_slide['annotations_region_url']
-        new_annotations_metadata_url = new_slide['annotations_metadata_url']
-        new_metadata_url = new_slide['metadata_url']
-        new_image_metadata_url = new_slide['image_metadata_url']
-        if 'user' in vis_data and not 'url' in new_slide:
-            new_tile_url = new_slide['tiles_url']+f'?token={vis_data["user"]["token"]}'
-            new_annotations_url = new_slide['annotations_url']+f'?token={vis_data["user"]["token"]}'
-            new_annotations_region_url = new_slide['annotations_region_url']+f'&token={vis_data["user"]["token"]}'
-            new_annotations_metadata_url = new_slide['annotations_metadata_url']+f'?token={vis_data["user"]["token"]}'
-            new_metadata_url = new_slide['metadata_url']+f'?token={vis_data["user"]["token"]}'
-            new_image_metadata_url = new_slide['image_metadata_url']+f'?token={vis_data["user"]["token"]}'
-        elif 'url' in new_slide and not user_external_token is None:
-            new_tile_url = new_slide['tiles_url']+f'?token={user_external_token}'
-            new_annotations_url = new_slide['annotations_url']+f'?token={user_external_token}'
-            new_annotations_region_url = new_slide['annotations_region_url']+f'&token={user_external_token}'
-            new_annotations_metadata_url = new_slide['annotations_metadata_url']+f'?token={user_external_token}'
-            new_metadata_url = new_slide['metadata_url']+f'?token={user_external_token}'
-            new_image_metadata_url = new_slide['image_metadata_url']+f'?token={user_external_token}'
-
-        new_image_metadata = requests.get(new_image_metadata_url).json()
-        new_metadata = requests.get(new_metadata_url).json()
-        new_annotations_metadata = requests.get(new_annotations_metadata_url).json()
-        new_tile_size = new_image_metadata['tileHeight']
-        x_scale, y_scale = self.get_scale_factors(new_image_metadata)
-
-        annotation_names = []
-        image_overlays = []
-        initial_anns = []
-        for a in new_annotations_metadata:
-            if 'annotation' in a:
-                annotation_names.append(a['annotation']['name'])
-                initial_anns.append({
-                    'type': 'FeatureCollection', 
-                    'properties': {'name': a['annotation']['name'], '_id': a['_id']},
-                    'features': []
-                    })
-            elif 'name' in a:
-                annotation_names.append(a['name'])
-                initial_anns.append({
-                    'type': 'FeatureCollection',
-                    'properties': {'name': a['name'],'_id': a['_id']},
-                    'features': []
-                })
-            elif 'image_path' in a:
-                image_overlays.append(a)
-
-        # Creating annotation layers
-        new_layer_children = []
-        for ann_idx, ann in enumerate(annotation_names):
-            new_layer_children.append(
-                dl.Overlay(
-                    dl.LayerGroup(
-                        dl.GeoJSON(
-                            data = {
-                                "type": "FeatureCollection",
-                                "features": []
-                            },
-                            format = 'geojson',
-                            id = {'type': f'{self.component_prefix}-feature-bounds','index': ann_idx},
-                            options = {
-                                'style': self.js_namespace("featureStyle")
-                            },
-                            filter = self.js_namespace("featureFilter"),
-                            hideout = {
-                                'overlayBounds': {},
-                                'overlayProp': {},
-                                'fillOpacity': 0.5,
-                                'lineColor': {
-                                    k: '#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255))
-                                    for k in annotation_names
-                                },
-                                'filterVals': [],
-                                'colorMap': 'blue->red'
-                            },
-                            hoverStyle = arrow_function(
-                                {
-                                    'weight': 5,
-                                    'color': '#9caf00',
-                                    'dashArray':''
-                                }
-                            ),
-                            zoomToBounds = False,
-                            children = [
-                                dl.Popup(
-                                    id = {'type': f'{self.component_prefix}-feature-popup','index': ann_idx},
-                                    autoPan = False,
-                                )
-                            ]
-                        )
-                    ),
-                    name = ann, checked = True, id = {'type':f'{self.component_prefix}-feature-overlay','index':np.random.randint(0,1000)}
-                )
-            )
-
-        # Adding image annotations
-        #TODO: Make these region specific
-        for img_idx, img in enumerate(image_overlays):
-
-            # miny, minx, maxy, maxx (a.k.a. minlat, minlng, maxlat, maxlng)
-            scaled_image_bounds = [
-                [img['image_bounds'][1]*y_scale,
-                 img['image_bounds'][0]*x_scale],
-                [img['image_bounds'][3]*y_scale,
-                 img['image_bounds'][2]*x_scale]
-            ]
-            # Creating data: path for image
-            with open(img['image_path'],'rb') as f:
-                new_image_path = f'data:image/{img["image_path"].split(".")[-1]};base64,{base64.b64encode(f.read()).decode("ascii")}'
-                f.close()
-
-            image_overlay_popup = self.get_image_overlay_popup(img, img_idx)
-
-            new_layer_children.extend([
-                dl.ImageOverlay(
-                    url = new_image_path,
-                    opacity = 0.5,
-                    interactive = True,
-                    bounds = scaled_image_bounds,
-                    id = {'type': f'{self.component_prefix}-image-overlay','index': img_idx},
-                    children = [
-                        image_overlay_popup
-                    ]
-                ),
-                dl.LayerGroup(
-                    id = {'type': f'{self.component_prefix}-image-overlay-mover-layergroup','index': img_idx},
-                    children = []
-                )
-            ])
-
-        # For MultiFrameSlideMap, add frame BaseLayers and RGB layer (if present)
-        new_layer_children.extend(self.process_frames(new_image_metadata, new_tile_url))
-        new_tile_layer = dl.TileLayer(
-            id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
-            url = '',                
-            tileSize=new_tile_size,
-            maxNativeZoom=new_image_metadata['levels']-2 if new_image_metadata['levels']>=2 else 0,
-            minZoom = 0
-        )
-
-        new_slide_info = {}
-        new_slide_info['x_scale'] = x_scale
-        new_slide_info['y_scale'] = y_scale
-        new_slide_info['image_overlays'] = image_overlays
-        new_slide_info['slide_info'] = new_slide
-        new_slide_info['tiles_url'] = new_tile_url
-        new_slide_info['tiles_metadata'] = new_image_metadata
-        new_slide_info['metadata'] = new_metadata
-        new_slide_info['annotations_url'] = new_annotations_url
-        new_slide_info['annotations_region_url'] = new_annotations_region_url
-        new_slide_info['annotations_metadata'] = new_annotations_metadata
-        new_slide_info['minZoom'] = self.min_zoom
-
-        new_slide_info['cached'] = get_from_cache
-
-        geo_annotations = json.dumps(initial_anns)
-        new_slide_info = json.dumps(new_slide_info)
-
-        # Updating manual and generated ROIs divs
-        manual_rois = []
-        gen_rois = []
-        remove_old_edits = {
-            'mode': 'remove',
-            'n_clicks': 0,
-            'action': 'clear all'
-        }
-
-        non_nested_display_metadata = {}
-        nested_display_metadata = []
-        non_nested_image_metadata = {}
-        nested_image_metadata = []
-
-        if not new_metadata is None:
-            if 'meta' in new_metadata:
-                for k,v in new_metadata['meta'].items():
-                    if not type(v) in [list,dict]:
-                        non_nested_display_metadata[k] = v
-                    else:
-                        nested_display_metadata.append({
-                            k: v
-                        })
-
-            for k,v in new_metadata.items():
-                if not k=='meta':
-                    if not type(v) in [list,dict]:
-                        non_nested_display_metadata[k] = v
-                    else:
-                        nested_display_metadata.append({
-                            k:v
-                        })
-
-
-        for k,v in new_image_metadata.items():
-            if not type(v) in [list,dict]:
-                non_nested_image_metadata[k] = v
-            else:
-                nested_image_metadata.append({
-                    k:v
-                })
-
-        image_nested_accordions = self.make_sub_accordion(nested_image_metadata)
-        case_nested_accordions = self.make_sub_accordion(nested_display_metadata)
-
-        non_nested_image_metadata_table = [
-            self.make_dash_table(
-                pd.DataFrame.from_records([
-                    {
-                        'Key': k,
-                        'Value': v
-                    }
-                    for k,v in non_nested_image_metadata.items()
-                ])
-            )
-        ]
-
-        non_nested_case_metadata_table = [
-            self.make_dash_table(
-                pd.DataFrame.from_records([
-                    {
-                        'Key': k,
-                        'Value': v
-                    }
-                    for k,v in non_nested_display_metadata.items()
-                ])
-            )
-        ]
-
-        slide_metadata_div = html.Div(
-            dbc.Accordion(
-                children = [
-                    dbc.AccordionItem(
-                        title = 'Image Metadata',
-                        children = non_nested_image_metadata_table + image_nested_accordions
-                    ),
-                    dbc.AccordionItem(
-                        title = 'Case Metadata',
-                        children = non_nested_case_metadata_table + case_nested_accordions
-                    )
-                ],
-                start_collapsed=True
-            )
-        )
-
-        fetch_data_store = json.dumps({})
-
-        new_marker_div = html.Div()
-
-        return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div
 
 class HybridSlideMap(MultiFrameSlideMap):
     """This is a version of SlideMap that combines SlideMap and MultiFrameSlideMap so you only need to initialize one
@@ -3724,200 +2668,30 @@ class HybridSlideMap(MultiFrameSlideMap):
         """
         super().__init__(cache)
 
-    def load(self, component_prefix:int):
-
-        self.component_prefix = component_prefix
-
-        self.blueprint = DashBlueprint(
-            transforms = [
-                PrefixIdTransform(prefix=f'{self.component_prefix}'),
-                MultiplexerTransform()
-            ]
-        )        
-
-        # Add callback functions here
-        self.get_namespace()
-
-        self.get_callbacks()
-        self.get_annotations_callbacks()
-
-    def update_slide(self, slide_selected, vis_data):
+    def update_slide(self, slide_selected, session_data):
         
         if not any([i['value'] or i['value']==0 for i in ctx.triggered]):
             raise exceptions.PreventUpdate
 
-        vis_data = json.loads(vis_data)
-        new_slide = vis_data['current'][get_pattern_matching_value(slide_selected)]
+        session_data = json.loads(session_data)
+        new_slide = session_data['current'][get_pattern_matching_value(slide_selected)]
 
-        user_external_token = vis_data.get('user').get('external',{}).get('token')
-
-        # Check if slide is cached if using cache
-        get_from_cache = False
-        if self.cache:
-            cached_item = self.check_slide_in_cache(
-                image_id = new_slide.get('id')
-            )
-            if cached_item:
-                get_from_cache = True
-            
-        # Getting data from the tileservers:
-        new_url = new_slide['tiles_url']
-        image_metadata_url = new_slide['image_metadata_url']
-        metadata_url = new_slide['metadata_url']
-        annotations_metadata_url = new_slide['annotations_metadata_url']
-
-        if 'user' in vis_data and not 'url' in new_slide:
-            new_url = new_slide['tiles_url']+f'?token={vis_data["user"]["token"]}'
-            image_metadata_url = new_slide['image_metadata_url']+f'?token={vis_data["user"]["token"]}'
-            metadata_url = new_slide['metadata_url']+f'?token={vis_data["user"]["token"]}'
-            annotations_metadata_url = new_slide['annotations_metadata_url']
-        elif 'url' in new_slide and not user_external_token is None:
-            new_url = new_slide['tiles_url']+f'?token={user_external_token}'
-            image_metadata_url = new_slide['image_metadata_url']+f'?token={user_external_token}'
-            metadata_url = new_slide['metadata_url']+f'?token={user_external_token}'
-            annotations_metadata_url = new_slide['annotations_metadata_url']
+        new_image_metadata, new_metadata, new_annotations_metadata, new_slide = self.extract_slide_data(new_slide,session_data)
         
-        new_image_metadata = requests.get(image_metadata_url).json()
-        new_metadata = requests.get(metadata_url).json()
-        annotations_metadata = requests.get(annotations_metadata_url).json()
+        x_scale,y_scale = self.get_scale_factors(new_image_metadata)
+        new_slide['x_scale'] = x_scale
+        new_slide['y_scale'] = y_scale
 
-        # Detecting DSA-formatted annotations
-        if any(['annotation' in i for i in annotations_metadata]):
-            annotations_metadata = [
-                {
-                    'name': a['annotation']['name'],
-                    '_id': a['_id']
-                }
-                for a in annotations_metadata
-            ]
+        new_layer_children = self.generate_annotation_layers(new_annotations_metadata,new_image_metadata,new_slide)
+        slide_metadata_div = self.generate_metadata_components(new_image_metadata, new_metadata, new_annotations_metadata)
 
-        annotation_names = [i['name'] for i in annotations_metadata]
-
-        new_tile_size = new_image_metadata['tileHeight']
-
-        image_overlay_annotations = [i for i in annotations_metadata if 'image_path' in i]
-        non_image_overlay_metadata = [i for i in annotations_metadata if not 'image_path' in i]
-        x_scale, y_scale = self.get_scale_factors(new_image_metadata)
-        new_layer_children = []
-
-        if 'manual_rois' in new_slide:
-            non_image_overlay_metadata += [
-                i['properties']
-                for i in new_slide['manual_rois']
-            ]
-            annotation_names += [i['properties']['name'] for i in new_slide['manual_rois']]
-
-        # Adding overlaid annotation layers:
-        for st_idx, st_info in enumerate(non_image_overlay_metadata):
-            new_layer_children.append(
-                dl.Overlay(
-                    dl.LayerGroup(
-                        dl.GeoJSON(
-                            data = {
-                                'type': 'FeatureCollection',
-                                'features': []
-                            },
-                            #format = 'geojson',
-                            id = {'type': f'{self.component_prefix}-feature-bounds','index': st_idx},
-                            options = {
-                                'style': self.js_namespace('featureStyle')
-                            },
-                            filter = self.js_namespace("featureFilter"),
-                            hideout = {
-                                'overlayBounds': {},
-                                'overlayProp': {},
-                                'fillOpacity': 0.5,
-                                'lineColor': {
-                                    k: '#%02x%02x%02x' % (np.random.randint(0,255),np.random.randint(0,255),np.random.randint(0,255))
-                                    for k in annotation_names
-                                },
-                                'filterVals': [],
-                                'colorMap': 'blue->red'
-                            },
-                            hoverStyle = arrow_function(
-                                {
-                                    'weight': 5,
-                                    'color': '#9caf00',
-                                    'dashArray': ''
-                                }
-                            ),
-                            zoomToBounds = False,
-                            children = [
-                                dl.Popup(
-                                    id = {'type': f'{self.component_prefix}-feature-popup','index': st_idx},
-                                    autoPan = False
-                                )
-                            ]
-                        )
-                    ),
-                    name = st_info['name'],
-                    checked = True,
-                    id = {'type': f'{self.component_prefix}-feature-overlay','index': np.random.randint(0,1000)}
-                )
-            )
-
-
-        for img_idx, img in enumerate(image_overlay_annotations):
-
-            # miny, minx, maxy, maxx (a.k.a. minlat, minlng, maxlat, maxlng)
-            scaled_image_bounds = [
-                [img['image_bounds'][1]*y_scale,
-                 img['image_bounds'][0]*x_scale],
-                [img['image_bounds'][3]*y_scale,
-                 img['image_bounds'][2]*x_scale]
-            ]
-            # Creating data: path for image
-            with open(img['image_path'],'rb') as f:
-                new_image_path = f'data:image/{img["image_path"].split(".")[-1]};base64,{base64.b64encode(f.read()).decode("ascii")}'
-                f.close()
-
-            image_overlay_popup = self.get_image_overlay_popup(img, img_idx)
-
-            new_layer_children.extend([
-                dl.ImageOverlay(
-                    url = new_image_path,
-                    opacity = 0.5,
-                    interactive = True,
-                    bounds = scaled_image_bounds,
-                    id = {'type': f'{self.component_prefix}-image-overlay','index': img_idx},
-                    children = [
-                        image_overlay_popup
-                    ]
-                ),
-                dl.LayerGroup(
-                    id = {'type': f'{self.component_prefix}-image-overlay-mover-layergroup','index': img_idx},
-                    children = []
-                )
-            ])
-
-        # Loading new tile layer for map-tile-layer-holder
-        if not 'frames' in new_image_metadata:
-            new_tile_layer = dl.TileLayer(
-                id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
-                url = new_url,
-                tileSize = new_tile_size,
-                maxNativeZoom=new_image_metadata['levels']-2 if new_image_metadata['levels']>=2 else 0,
-                minZoom = 0
-            )
-
+        if 'frames' in new_image_metadata:
+            new_tile_layer = self.generate_tile_layers(new_slide.get('tiles'),new_image_metadata)
         else:
-            new_layer_children.extend(self.process_frames(new_image_metadata, new_url))
-            new_tile_layer = dl.TileLayer(
-                id = {'type': f'{self.component_prefix}-map-tile-layer','index': np.random.randint(0,1000)},
-                url = '',                
-                tileSize=new_tile_size,
-                maxNativeZoom=new_image_metadata['levels']-2 if new_image_metadata['levels']>=2 else 0,
-                minZoom = 0
-            )
-
+            new_tile_layer = SlideMap.generate_tile_layers(new_slide.get('tiles'),new_image_metadata)
 
         new_slide_info = {}
-        new_slide_info['x_scale'] = x_scale
-        new_slide_info['y_scale'] = y_scale
-        new_slide_info['image_overlays'] = image_overlay_annotations
-        new_slide_info['annotations_metadata'] = annotations_metadata
-        new_slide_info['metadata'] = new_metadata
-        new_slide_info['tiles_metadata'] = new_image_metadata
+        #new_slide_info['image_overlays'] = image_overlay_annotations
         new_slide_info = new_slide_info | new_slide
 
         new_slide_info['cached'] = get_from_cache
@@ -3935,89 +2709,11 @@ class HybridSlideMap(MultiFrameSlideMap):
         }
 
         #TODO: Add something else to make sure that "Filtered" annotations are removed after loading a new slide
-        non_nested_display_metadata = {}
-        nested_display_metadata = []
-        non_nested_image_metadata = {}
-        nested_image_metadata = []
-        
-        if not new_metadata is None:
-            if 'meta' in new_metadata:
-                for k,v in new_metadata['meta'].items():
-                    if not type(v) in [list,dict]:
-                        non_nested_display_metadata[k] = v
-                    else:
-                        nested_display_metadata.append({
-                            k: v
-                        })
 
-            for k,v in new_metadata.items():
-                if not k=='meta':
-                    if not type(v) in [list,dict]:
-                        non_nested_display_metadata[k] = v
-                    else:
-                        nested_display_metadata.append({
-                            k:v
-                        })
-
-
-        for k,v in new_image_metadata.items():
-            if not type(v) in [list,dict]:
-                non_nested_image_metadata[k] = v
-            else:
-                nested_image_metadata.append({
-                    k:v
-                })
-
-        image_nested_accordions = self.make_sub_accordion(nested_image_metadata)
-        case_nested_accordions = self.make_sub_accordion(nested_display_metadata)
-
-        non_nested_image_metadata_table = [
-            self.make_dash_table(
-                pd.DataFrame.from_records([
-                    {
-                        'Key': k,
-                        'Value': v
-                    }
-                    for k,v in non_nested_image_metadata.items()
-                ])
-            )
-        ]
-
-        non_nested_case_metadata_table = [
-            self.make_dash_table(
-                pd.DataFrame.from_records([
-                    {
-                        'Key': k,
-                        'Value': v
-                    }
-                    for k,v in non_nested_display_metadata.items()
-                ])
-            )
-        ]
-
-        slide_metadata_div = html.Div(
-            dbc.Accordion(
-                children = [
-                    dbc.AccordionItem(
-                        title = 'Image Metadata',
-                        children = non_nested_image_metadata_table + image_nested_accordions
-                    ),
-                    dbc.AccordionItem(
-                        title = 'Case Metadata',
-                        children = non_nested_case_metadata_table + case_nested_accordions
-                    )
-                ],
-                start_collapsed=True
-            )
-        )
-
-        # Updating fetch error store to be empty again
-        fetch_data_store = json.dumps({})
-
+        # Clearing markers from previous slide
         new_marker_div = html.Div()
 
         return new_layer_children, remove_old_edits, new_marker_div, manual_rois, gen_rois, new_tile_layer, new_slide_info, slide_metadata_div
-
 
 #TODO: This can be rewritten as its own embeddable blueprint
 # However, if it is only initially embedded, new image overlays can't be added as the application is 
@@ -4094,11 +2790,6 @@ class ChannelMixer(MapComponent):
 
     def __init__(self):
         """Constructor method
-
-        :param image_metadata: Dictionary containing "frames" data for a given image. "frames" here is a list containing channel names and indices.
-        :type image_metadata: dict
-        :param tiles_url: URL to refer to for accessing tiles (contains /{z}/{x}/{y}). Allows for "style" parameter to be passed. See large-image documentation: https://girder.github.io/large_image/getting_started.html#styles-changing-colors-scales-and-other-properties
-        :type tiles_url: str
         """
         super().__init__()
 
@@ -4230,28 +2921,48 @@ class ChannelMixer(MapComponent):
             ]
         )(self.update_channel_mix)
 
-    def update_slide(self, selected_slide, vis_data):
+    def update_slide(self, selected_slide, session_data):
         """Updating component data when a new slide is selected
 
         :param selected_slide: New slide
         :type selected_slide: list
-        :param vis_data: Data relating to current visualization session
-        :type vis_data: str
+        :param session_data: Data relating to current visualization session
+        :type session_data: str
         """
 
         if not any([i['value'] or i['value']==0 for i in ctx.triggered]):
             raise exceptions.PreventUpdate
         
-        vis_data = json.loads(vis_data)
-        new_slide = vis_data['current'][get_pattern_matching_value(selected_slide)]
+        session_data = json.loads(session_data)
+        new_slide = session_data['current'][get_pattern_matching_value(selected_slide)]
 
-        user_external_token = vis_data.get('user').get('external',{}).get('token')
-        if not 'user' in vis_data:
-            new_metadata = requests.get(new_slide['image_metadata_url']).json()
-        elif 'user' in vis_data and not 'url' in new_slide:
-            new_metadata = requests.get(new_slide['image_metadata_url']+f'?token={vis_data["user"]["token"]}').json()
-        elif 'url' in new_slide and not user_external_token is None:
-            new_metadata = requests.get(new_slide['image_metadata_url']+f'?token={user_external_token}').json()
+        new_metadata = None
+        if not 'image_metadata' in new_slide:
+            user_external_token = self.get_user_external_token(session_data)
+            user_internal_token = self.get_user_internal_token(session_data)
+
+            if new_slide.get('type')=='local_item':
+                # Getting urls from LocalTileServer method
+                new_slide_urls = LocalTileServer.get_slide_urls(new_slide, user_internal_token)
+            elif new_slide.get('type')=='remote_item':
+                # Getting urls from DSATileServer method
+                new_slide_urls = DSATileServer.get_slide_urls(new_slide, user_external_token)
+            else:
+                # Getting urls from CustomTileServer method?
+                new_slide_urls = CustomTileServer.get_slide_urls(new_slide, user_external_token)
+
+            new_slide = new_slide | new_slide_urls
+
+        if new_slide.get('type')=='local_item':
+            if not user_internal_token is None:
+                new_metadata = requests.get(new_slide['image_metadata']+f'?token={user_internal_token}').json()
+            else:
+                new_metadata = requests.get(new_slide['image_metadata']).json()
+        elif new_slide.get('type')=='remote_item':
+            if not user_external_token is None:
+                new_metadata = requests.get(new_slide['image_metadata']+f'?token={user_external_token}').json()
+            else:
+                new_metadata = requests.get(new_slide['image_metadata']).json()
 
         new_frame_list = self.process_frames(new_metadata)
         new_color_selector_children = []
@@ -4404,22 +3115,22 @@ class ChannelMixer(MapComponent):
                 ]
             }
 
-            if '?token' in slide_info['tiles_url']:
+            if '?token' in slide_info['tiles']:
                 start_str = '&'
             else:
                 start_str = '?'
             styled_urls.append(
-                slide_info['tiles_url']+f'{start_str}style='+json.dumps({"bands":f_dict["bands"]+style_dict["bands"]})
+                slide_info['tiles']+f'{start_str}style='+json.dumps({"bands":f_dict["bands"]+style_dict["bands"]})
             )
 
         if not rgb_style_dict is None:
-            if '?token' in slide_info['tiles_url']:
+            if '?token' in slide_info['tiles']:
                 start_str = '&'
             else:
                 start_str = '?'
 
             styled_urls.append(
-                slide_info['tiles_url']+f'{start_str}style='+json.dumps({"bands":rgb_style_dict["bands"]+style_dict["bands"]})
+                slide_info['tiles']+f'{start_str}style='+json.dumps({"bands":rgb_style_dict["bands"]+style_dict["bands"]})
             )
 
         return styled_urls

@@ -3,6 +3,7 @@
 from fusion_tools.visualization import Visualization
 from fusion_tools.handler.dsa_handler import DSAHandler
 from fusion_tools.components import (
+    SlideMap,
     HybridSlideMap,
     ChannelMixer,
     OverlayOptions,
@@ -57,9 +58,10 @@ def get_layout(args):
             ],
             "Visualization": [
                 [
-                    HybridSlideMap(
-                        cache = True
-                    ),
+                    #HybridSlideMap(
+                    #    cache = True
+                    #),
+                    SlideMap(),
                     [
                         OverlayOptions(),
                         ChannelMixer(),

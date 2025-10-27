@@ -19,34 +19,61 @@ fusion\_tools.handler module
 
 .. automodule:: fusion_tools.handler.dsa_handler
    :members:
-   :undoc-members:
-   :show-inheritance:
 
-Interactive *DSA* components
----------------------------------
 
-.. automodule:: fusion_tools.handler.login
+Digital Slide Archive (DSA) Integrated Components
+-------------------------------------------------
+
+DSALoginComponent
+^^^^^^^^^^^^^^^^^
+
+This component controls logging-in and authentication of users to a connected DSA instance.
+
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/9fY7JI6ESwA?si=WLIYr5fandIDwauc" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+
+.. autoclass:: fusion_tools.handler.login::DSALoginComponent
    :members:
-   :undoc-members:
-   :show-inheritance:
 
-.. automodule:: fusion_tools.handler.survey
-    :members:
-    :undoc-members:
-    :show-inheritance:
 
-.. automodule:: fusion_tools.handler.plugin
-    :members:
-    :undoc-members:
-    :show-inheritance:
+DSASession
+^^^^^^^^^^
 
-.. automodule:: fusion_tools.handler.dataset_builder
-    :members:
-    :undoc-members:
-    :show-inheritance:
+This component controls saving visualization sessions and saving them as files to an attached DSA instance.
 
-.. automodule:: fusion_tools.handler.dataset_uploader
-    :members:
-    :undoc-members:
-    :show-inheritance:
-    
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/iL24kA1iMV4?si=BDTeGQWlc2h6deJG" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+.. autoclass:: fusion_tools.handler.save_session::DSASession
+   :members:
+
+
+DatasetBuilder
+^^^^^^^^^^^^^^
+
+This component allows for selection of different slides in various collections/folders in an attached DSA instance as well as locally-hosted slides.
+
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/BqXS19wbyxc?si=IlhcPq1fYTm_9qLa" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+.. autoclass:: fusion_tools.handler.dataset_builder::DatasetBuilder
+   :members:
+
+
+
+DSAUploader
+^^^^^^^^^^^
+
+This component controls formatted uploads to an attached DSA instance.
+
+.. raw:: html
+
+   <iframe width="560" height="315" src="https://www.youtube.com/embed/_wkRoArpV9k?si=AfQGQhK-sPlxKls7" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+
+.. autoclass:: fusion_tools.handler.dataset_uploader::DSAUploader
+   :members:
+

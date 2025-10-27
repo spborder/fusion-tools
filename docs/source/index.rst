@@ -26,6 +26,35 @@ design their own upload templates for new varieties of spatial data or new cloud
 plugins.  
 
 
+Installation
+-------------
+
+`fusion-tools` is deployed through PyPI and can be installed using:
+
+```bash
+$ pip install fusion-tools
+```
+
+If you would like to install a version of `fusion-tools` earler than v3.6.18 (July 2025) (Dash < 3.0.0, other minor changes), install with the following syntax:
+
+```bash
+$ pip install fusion-tools[interactive]<=3.6.18
+```
+
+The "interactive" tag is necessary for accessing interactive component dependencies in early deployments.
+
+
+`large-image` setup
+--------------------
+
+`fusion-tools` uses `large-image` for all whole slide image (WSI) reading operations. The `large-image` library includes an extensive collection of different image file readers, however, due to some hardware/operating system requirements, `fusion-tools` includes only the following:
+
+- openjpeg
+- openslide
+- tifffile
+
+For a full list of image formats supported by `large-image` and installation instructions for each (or all), see [large-image documentation](https://girder.github.io/large_image/formats.html).
+
 Table of contents
 -------------------
 
@@ -38,3 +67,24 @@ Table of contents
    visualization
    components_overview
    non_interactive
+
+
+Citation
+----------
+
+If you find this work useful in your own research, please consider citing:
+
+Border, S.P., Ferreira, R.M., Lucarelli, N. et al. FUSION: a web-based application for in-depth exploration of multi-omics data with brightfield histology. Nat Commun 16, 8388 (2025). https://doi.org/10.1038/s41467-025-63050-9
+
+```
+@article{border2025fusion,
+  title={FUSION: A web-based application for in-depth exploration of multi-omics data with brightfield histology},
+  author={Border, Samuel P and Ferreira, Ricardo Melo and Lucarelli, Nicholas and Kumar, Suhas Katari Chaluva and Paul, Anindya S and Manthey, David and Barisoni, Laura and Levites Strekalova, Yulia A and Ray, Jessica and Cheng, Ying-Hua and others},
+  journal={Nature Communications},
+  volume={16},
+  number={1},
+  pages={8388},
+  year={2025},
+  publisher={Nature Publishing Group UK London}
+}
+```

@@ -2030,8 +2030,8 @@ class GlobalPropertyPlotter(MultiTool):
             #TODO: Check if slide is in cache
 
             # Determine whether this is a DSA slide or local
-            if 'url' in slide:
-                item_id = slide['metadata_url'].split('/')[-1]
+            if slide.get('type')=='remote_item':
+                item_id = slide['metadata'].split('/')[-1]
                 # Setting request string
                 external_token = session_data.get('user').get('external',{}).get('token')
                 if not external_token is None:
@@ -2048,9 +2048,9 @@ class GlobalPropertyPlotter(MultiTool):
                     all_property_keys.extend(req_obj.json())
                 
             else:
-                item_id = slide['metadata_url'].split('/')[-2]
+                item_id = slide['id']
                 # Setting LocalTileServer request string
-                request_str = f'{slide["annotations_metadata_url"].replace("metadata","data/list")}'
+                request_str = f'{slide["annotations_metadata"].replace("metadata","data/list")}'
 
                 req_obj = requests.get(request_str)
                 if req_obj.ok:
@@ -2113,23 +2113,26 @@ class GlobalPropertyPlotter(MultiTool):
         keys_list+= [i for i in req_keys if not i in keys_list]
 
         property_data = pd.DataFrame()
+
+        user_external_token = self.get_user_external_token(session_data)
+        user_internal_token = self.get_user_internal_token(session_data)
+
         for slide in session_data['current']:
             if slide.get('cached'):
                 #TODO: Grab data from the local fusionDB instance
                 pass
 
             # Determine whether this is a DSA slide or local
-            if 'url' in slide:
-                item_id = slide['metadata_url'].split('/')[-1]
+            if slide.get('type')=='remote_item':
+                item_id = slide['metadata'].split('/')[-1]
                 if not structure_list is None and not structure_list==[]:
-                    external_token = session_data.get('user').get('external',{}).get('token')
                     if external_token is None:
                         ann_meta = requests.get(
-                            slide['annotations_metadata_url']
+                            slide['annotations_metadata']
                         ).json()
                     else:
                         ann_meta = requests.get(
-                            slide['annotations_metadata_url']+f'?token={external_token}'
+                            slide['annotations_metadata']+f'?token={user_external_token}'
                         ).json()
 
                     structure_names = [a['annotation']['name'] for a in ann_meta]
@@ -2145,7 +2148,7 @@ class GlobalPropertyPlotter(MultiTool):
                 
                 # Setting request string
                 if not external_token is None:
-                    request_str = f'{slide["url"]}/annotation/item/{item_id}/plot/data?token={external_token}'
+                    request_str = f'{slide["url"]}/annotation/item/{item_id}/plot/data?token={user_external_token}'
                 else:
                     request_str = f'{slide["url"]}/annotation/item/{item_id}/plot/data'
 
@@ -2168,9 +2171,9 @@ class GlobalPropertyPlotter(MultiTool):
                 if structure_list is None:
                     structure_list = ['__all__']
 
-                item_id = slide['metadata_url'].split('/')[-2]
+                item_id = slide['id']
                 # Setting LocalTileServer request string
-                request_str = f'{slide["annotations_metadata_url"].replace("metadata","data")}?include_keys={",".join(keys_list).strip()}&include_anns={",".join(structure_list).strip()}'
+                request_str = f'{slide["annotations_metadata_url"].replace("metadata","data")}?include_keys={",".join(keys_list).strip()}&include_anns={",".join(structure_list).strip()}&token={user_internal_token}'
                 req_obj = requests.get(request_str)
                 if req_obj.ok:
                     req_json = req_obj.json()
@@ -2185,19 +2188,6 @@ class GlobalPropertyPlotter(MultiTool):
 
 
         return property_data
-
-    def load(self, component_prefix: int):
-        self.component_prefix = component_prefix
-
-        self.blueprint = DashBlueprint(
-            transforms = [
-                PrefixIdTransform(prefix = f'{self.component_prefix}'),
-                MultiplexerTransform()
-            ]
-        )        
-        
-        self.get_callbacks()
-        self.global_property_plotter_callbacks()
 
     def extract_property_info(self, property_data):
             
@@ -2473,7 +2463,7 @@ class GlobalPropertyPlotter(MultiTool):
             ]
         )(self.select_data_from_plot)
 
-    def global_property_plotter_callbacks(self):
+    def get_clientside_callbacks(self):
         
         self.blueprint.clientside_callback(
             """
@@ -2531,10 +2521,11 @@ class GlobalPropertyPlotter(MultiTool):
 
             
             const sessionItems = parsedSessionData.current.map((s_data) =>
-                'api_url' in s_data
-                ? s_data.metadata_url.split('/').reverse()[0]
-                : s_data.metadata_url.split('/').reverse()[1]
+                'url' in s_data
+                ? s_data.metadata.split('/').reverse()[0]
+                : s_data.metadata.split('/').reverse()[1]
             );
+            console.log(sessionItems);
 
             // If session items haven't changed, return
             if (JSON.stringify(sessionItems) === JSON.stringify(currentItems)) {
@@ -2551,10 +2542,10 @@ class GlobalPropertyPlotter(MultiTool):
             }
 
             const cloudSlides = parsedSessionData.current.filter(
-                (item) => 'api_url' in item
+                (item) => item.type=='remote_item'
             );
             const localSlides = parsedSessionData.current.filter(
-                (item) => !('api_url' in item)
+                (item) => item.type=='local_item'
             );
 
             const localPropUrls = localSlides.map((slide_info) =>
@@ -2563,8 +2554,8 @@ class GlobalPropertyPlotter(MultiTool):
 
             const cloudPropUrls = cloudSlides.map((slide_info) =>
                 'user' in parsedSessionData
-                ? `${slide_info.annotations_url}/plot/list?token=${parsedSessionData.user.external.token}&adjacentItems=false&sources=item,annotation,annotationelement&annotations=["__all__"]`
-                : `${slide_info.annotations_url}/plot/list?adjacentItems=false&sources=item,annotation,annotationelement&annotations=["__all__"]`
+                ? `${slide_info.annotations}/plot/list?token=${parsedSessionData.user.external.token}&adjacentItems=false&sources=item,annotation,annotationelement&annotations=["__all__"]`
+                : `${slide_info.annotations}/plot/list?token=${parsedSessionData.user.token}&adjacentItems=false&sources=item,annotation,annotationelement&annotations=["__all__"]`
             );
 
             // Fetch cloud data (POST) concurrently 
@@ -2663,39 +2654,7 @@ class GlobalPropertyPlotter(MultiTool):
             prevent_initial_call = True,
         )
 
-    def update_drop_type(self, switch_switched, keys_info):
-        """Update the property selection mode (either dropdown menu or tree view)
-
-        :param switch_switched: Switch selected
-        :type switch_switched: list
-        :return: New property selector component
-        :rtype: list
-        """
-
-        switch_switched = get_pattern_matching_value(switch_switched)
-        keys_info = json.loads(get_pattern_matching_value(keys_info))
-
-        if switch_switched:
-            # This is using the Tree View
-            property_drop = dta.TreeView(
-                id = {'type': f'{self.component_prefix}-global-property-plotter-drop','index': 0},
-                multiple = True,
-                checkable = True,
-                checked = [],
-                selected = [],
-                expanded = [],
-                data = keys_info['tree']['full']
-            )
-        else:
-            property_drop = dcc.Dropdown(
-                options = [] if keys_info['dropdown'] is None else keys_info['dropdown'],
-                value = [],
-                id = {'type': f'{self.component_prefix}-global-property-plotter-drop','index': 0},
-                multi = True,
-                placeholder = 'Properties'
-            )
-
-        return [property_drop]
+        #TODO: Have to update the inputs to this callback since those don't always change now when a new page is accessed
 
     def update_properties_and_filters(self, property_selection, property_checked, structure_selection, label_selection, filter_prop_mod, filter_prop_remove, filter_prop_selector, property_divs,current_data, keys_info, property_info):
         """Updating the properties, structures, and filters incorporated into the main plot
@@ -3656,7 +3615,11 @@ class GlobalPropertyPlotter(MultiTool):
         session_data = json.loads(session_data)
         selected_data = get_pattern_matching_value(selected_data)
 
+        user_external_token = self.get_user_external_token(session_data)
+        user_internal_token = self.get_user_internal_token(session_data)
+
         session_names = [i['name'] for i in session_data['current']]
+        local_names = [i['name'] for i in session_data['local']]
         selected_image_list = []
         selected_image = go.Figure()
         for s_idx,s in enumerate(selected_data['points']):
@@ -3669,10 +3632,15 @@ class GlobalPropertyPlotter(MultiTool):
                 s_bbox = s_custom[1:]
 
             if s_slide in session_names:
+                if s_slide in local_names:
+                    user_token = user_internal_token
+                else:
+                    user_token = user_external_token
+
                 image_region = Image.open(
                     BytesIO(
                         requests.get(
-                            session_data['current'][session_names.index(s_slide)]['regions_url']+f'?top={s_bbox[1]}&left={s_bbox[0]}&bottom={s_bbox[3]}&right={s_bbox[2]}'
+                            session_data['current'][session_names.index(s_slide)]['regions']+f'?top={s_bbox[1]}&left={s_bbox[0]}&bottom={s_bbox[3]}&right={s_bbox[2]}&token={user_token}'
                         ).content
                     )
                 )

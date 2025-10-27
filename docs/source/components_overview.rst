@@ -184,115 +184,109 @@ This component enables extracting different types of data from the current slide
    :members:
    
 
-Digital Slide Archive (DSA) Integrated Components
--------------------------------------------------
 
-DSALoginComponent
-^^^^^^^^^^^^^^^^^
-
-This component controls logging-in and authentication of users to a connected DSA instance.
-
-.. raw:: html
-
-   <iframe width="560" height="315" src="https://www.youtube.com/embed/9fY7JI6ESwA?si=WLIYr5fandIDwauc" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
-
-
-.. autoclass:: fusion_tools.handler.login::DSALoginComponent
-   :members:
-
-
-DSASession
-^^^^^^^^^^
-
-This component controls saving visualization sessions and saving them as files to an attached DSA instance.
-
-.. raw:: html
-
-   <iframe width="560" height="315" src="https://www.youtube.com/embed/iL24kA1iMV4?si=BDTeGQWlc2h6deJG" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
-
-.. autoclass:: fusion_tools.handler.save_session::DSASession
-   :members:
-
-
-DatasetBuilder
-^^^^^^^^^^^^^^
-
-This component allows for selection of different slides in various collections/folders in an attached DSA instance as well as locally-hosted slides.
-
-.. raw:: html
-
-   <iframe width="560" height="315" src="https://www.youtube.com/embed/BqXS19wbyxc?si=IlhcPq1fYTm_9qLa" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
-
-.. autoclass:: fusion_tools.handler.dataset_builder::DatasetBuilder
-   :members:
-
-
-
-DSAUploader
-^^^^^^^^^^^
-
-This component controls formatted uploads to an attached DSA instance.
-
-.. raw:: html
-
-   <iframe width="560" height="315" src="https://www.youtube.com/embed/_wkRoArpV9k?si=AfQGQhK-sPlxKls7" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
-
-.. autoclass:: fusion_tools.handler.dataset_uploader::DSAUploader
-   :members:
-
-
-DSAPluginGroup
-^^^^^^^^^^^^^^
-
-This component holds multiple DSA plugin input components as well as a button for "running" that plugin based on input values.
-
-.. autoclass:: fusion_tools.handler.plugin::DSAPluginGroup
-   :members:
-
-
-DSAPluginProgress
-^^^^^^^^^^^^^^^^^
-
-This component lets users monitor the progress of their running/completed plugins in DSA and cancel individual jobs.
-
-.. autoclass:: fusion_tools.handler.plugin::DSAPluginProgress
-   :members:
-
-
-
-DSAPluginRunner
-^^^^^^^^^^^^^^^
-
-This component lets users select plugins and specify their inputs prior to hitting "run".
-
-.. autoclass:: fusion_tools.handler.plugin::DSAPluginRunner
-   :members:
-
-
-DSAResourceSelector
-^^^^^^^^^^^^^^^^^^^
-
-This is a general component embedded in other DSA components that enables parsing through folders/collections/user folders.
-
-.. autoclass:: fusion_tools.handler.resource_selector::DSAResourceSelector
-   :members:
 
 Designing Custom Components
 ---------------------------
 
-Custom components can be integrated into *fusion-tools* layouts by defining *DashBlueprint* objects inside a class which inherits from *Tool* which can be imported from *fusion_tools*.
+Custom components can be integrated into *fusion-tools* layouts by defining *DashBlueprint* objects inside a class which inherits from *Tool* which can be imported from *fusion_tools.components.base*.
 
 CustomFunction
 ^^^^^^^^^^^^^^
 
-This component lets users define a *lambda* function which can be applied to either individual structures in the current slide, automatically 
-extracting image, mask, etc.
+This component enables simplified deployment of some Python function which incorporates data from a `SlideMap`. 
+For example, if you had a function that took as input an image and a mask of a structure on a slide, you would 
+first specify a `FUSIONFunction` like so:
+
+.. code-block:: python
+
+   from fusion_tools.components import FUSIONFunction
+
+   def mask_image(image,mask):
+      # Function masks out regions of the image outside of the mask
+      masked_image = np.multiply(image,np.repeats(mask[...,None],axis=-1,repeats=3))
+
+      return masked_image
 
 
+   example_function = FUSIONFunction(
+      title = 'Example Function',
+      description = 'This is an example of a function deployed through FUSION.',
+      urls = [],
+      function = lambda image, mask: mask_image(image,mask),
+      function_type = 'structure',
+      input_spec = [
+         {
+            'name': 'image',
+            'description': 'Image of structure in SlideMap',
+            'type': 'image'
+         },
+         {
+            'name': 'mask',
+            'description': 'Mask of structure in SlideMap',
+            'type': 'mask'
+         }
+      ],
+      output_spec = [
+         {
+            'name': 'Masked Image',
+            'type': 'image',
+            'description': 'This is what the masked image looks like!'
+         }
+      ]
+   )
 
+Available function types are structure, layer, and ROI. For each function type, "input_spec" items can have types:
 
+- Automatically populated:
+   - image, mask, annotation
+- Interactive:
+   - string, boolean, options, numeric, region
 
+Now add this function to a layout like so:
 
+.. code-block:: python
 
+   from fusion_tools.visualization import Visualization
+   from fusion_tools.components import SlideMap, CustomFunction
 
+   vis = Visualization(
+      components = [
+         [
+            SlideMap(),
+            CustomFunction(
+               title = 'Example Functions',
+               description = 'Trying out a custom function',
+               custom_function = [
+                  example_function
+               ]
+            )
+         ]
+      ]
+   )
+
+   vis.start()
+
+Anything added in the "input_spec" as an image, mask, or annotation is automatically populated with the image, mask, or annotation 
+associated with a given structure. Other input spec types create interactive components to pass a specific type of input to the function.
+
+Outputs of the function are then rendered in a separate component and "type" values can include image, numeric, string, or function.
+
+"Function"-type outputs should be lambda functions that take two inputs, output (the all of the outputs from the function) and output_index 
+which is only used if generating interactive components. If outputs are generated which you want to be interactive, 
+add the callbacks to the "output_callbacks" argument of `FUSIONFunction` like so:
+
+.. code-block:: python
+
+   output_callbacks = [
+      {
+         'inputs': [],
+         'outputs': [],
+         'states': [],
+         'function': lambda inputs,states: some_function(inputs,states)
+      }
+   ]
+
+Where "inputs" is a list of `Input()` objects, "outputs" is a list of `Output()` objects, and "states" is a list of `State()` objects 
+as in a typical *Dash* callback.
 

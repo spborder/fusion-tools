@@ -61,7 +61,6 @@ class OverlayOptions(Tool):
 
         self.component_prefix = component_prefix
 
-        self.title = 'Overlay Options'
         self.blueprint = DashBlueprint(
             transforms = [
                 PrefixIdTransform(prefix = f'{component_prefix}'),

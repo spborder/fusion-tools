@@ -31,11 +31,12 @@ from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, Pr
 from fusion_tools.utils.shapes import load_annotations, detect_histomics
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
 
-from fusion_tools.components.base import DSATool
+from fusion_tools.components.base import DSATool, BaseSchema
 
 
-class SurveyType:
+class SurveyType(BaseSchema):
     def __init__(self,
+                 description: str = '',
                  question_list:list = [],
                  users: list = [],
                  storage_folder: str = ''
@@ -51,9 +52,12 @@ class SurveyType:
         
         """    
 
+        self.description = description
         self.question_list = question_list
         self.users = users
         self.storage_folder = storage_folder
+
+        
 
 class DSASurvey(DSATool):
     """Handler for DSASurvey component, letting users add a survey questionnaire to a layout (with optional login for targeting specific users).
@@ -71,22 +75,6 @@ class DSASurvey(DSATool):
         
         self.dsa_handler = dsa_handler
         self.survey = survey
-
-    def __str__(self):
-        return self.title
-
-    def load(self, component_prefix:int):
-
-        self.component_prefix = component_prefix
-
-        self.blueprint = DashBlueprint(
-            transforms=[
-                PrefixIdTransform(prefix=f'{component_prefix}'),
-                MultiplexerTransform()
-            ]
-        )
-
-        self.get_callbacks()
 
     def gen_layout(self, session_data:Union[dict,None]):
 
@@ -110,8 +98,6 @@ class DSASurvey(DSATool):
         # Callback for admins seeing current survey responses
         # Callback for admins to download current survey results
         # Callback for admins to add usernames to the survey
-
-
         pass
 
 
