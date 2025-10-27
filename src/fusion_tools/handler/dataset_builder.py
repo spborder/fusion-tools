@@ -45,27 +45,13 @@ class DatasetBuilder(DSATool):
         super().__init__()
         self.include_only = include_only
         self.handler = handler
-
-    def load(self, component_prefix:int):
-
-        self.component_prefix = component_prefix
-
-        self.blueprint = DashBlueprint(
-            transforms=[
-                PrefixIdTransform(prefix=f'{component_prefix}',escape = lambda input_id: self.prefix_escape(input_id)),
-                MultiplexerTransform()
-            ]
-        )
-
-        self.get_callbacks()
-        self.dataset_builder_callbacks()
        
     def gen_collections_dataframe(self,session_data:dict):
 
         collections_info = []
 
         user_token = self.get_user_external_token(session_data)
-        user_login = self.get_user_external_token(session_data)
+        user_login = self.get_user_external_login(session_data)
         user_id = self.get_user_external_id(session_data)
         
         collections = self.handler.get_collections(session_data.get('user',{}).get('token'))
@@ -81,7 +67,7 @@ class DatasetBuilder(DSATool):
                 'Last Updated': folder_count['updated']
             } | c['meta'])
 
-        if 'user' in session_data:
+        if not user_login is None:
             collections_info.append({
                 'Collection Name': f'User: {user_login}',
                 'Collection ID': user_id,
@@ -505,7 +491,7 @@ class DatasetBuilder(DSATool):
 
         return folder_slides, folder_folders
 
-    def dataset_builder_callbacks(self):
+    def get_clientside_callbacks(self):
 
         self.blueprint.clientside_callback(
             """
@@ -1293,9 +1279,9 @@ class DatasetBuilder(DSATool):
             if not s.get('id') in local_slide_ids:
                 new_slide_info.append(
                     {
-                        'name': slide_info.get('name',''),
-                        'id': slide_info.get('_id',''),
-                        'remote_id': slide_info.get('_id'),
+                        'name': s.get('name',''),
+                        'id': s.get('_id',''),
+                        'remote_id': s.get('_id'),
                         'url': self.handler.girderApiUrl,
                     }
                 )

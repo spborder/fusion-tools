@@ -4,56 +4,31 @@ Components which integrate custom functionality within a set structure
 
 """
 
-import os
-import sys
 import json
 import geojson
 import geopandas as gpd
 import numpy as np
-import pandas as pd
-import textwrap
-import re
-import uuid
-import threading
-import zipfile
-from shutil import rmtree
-from copy import deepcopy
 
 from typing_extensions import Union
 from shapely.geometry import box, shape
 import plotly.express as px
 import plotly.graph_objects as go
-from umap import UMAP
 
 from PIL import Image, ImageOps
-
-from io import BytesIO
-import requests
 
 # Dash imports
 import dash
 dash._dash_renderer._set_react_version('18.2.0')
 import dash_leaflet as dl
-import dash_leaflet.express as dlx
-from dash import dcc, callback, ctx, ALL, MATCH, exceptions, Patch, no_update, dash_table
-from dash.dash_table.Format import Format, Scheme
+from dash import dcc, callback, ctx, ALL, exceptions, no_update
 import dash_bootstrap_components as dbc
-import dash_mantine_components as dmc
 from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform, BlockingCallbackTransform
 from dash_extensions.javascript import Namespace, arrow_function
 
 # fusion-tools imports
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
-from fusion_tools.utils.shapes import (
-    find_intersecting, 
-    extract_geojson_properties, 
-    process_filters_queries,
-    detect_histomics,
-    histomics_to_geojson,
-    export_annotations
-)
-from fusion_tools.utils.images import get_feature_image, write_ome_tiff, format_intersecting_masks
-from fusion_tools.utils.stats import get_label_statistics, run_wilcox_rank_sum
+
+from fusion_tools.utils.images import get_feature_image
 from fusion_tools.components.base import Tool, MultiTool
 
 import time

@@ -1031,8 +1031,6 @@ class Visualization:
             elif in_memory_store.get('user').get('id') in current_user_ids:
                 if in_memory_store.get('session').get('id') in current_vis_session_ids:
                     print('------------Previous Window/Previous User/Previous Session---------------')
-                    # Don't modify data stores
-
                     # Checking which items this user has specific access to
                     prev_user_access = self.database.check_user_access(user_id = in_memory_store.get('user').get('id'), admin = in_memory_store.get('user').get('admin',False))
                     # Adding public items and items this user has access to
