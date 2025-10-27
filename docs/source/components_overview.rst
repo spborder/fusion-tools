@@ -204,7 +204,7 @@ first specify a `FUSIONFunction` like so:
 
    def mask_image(image,mask):
       # Function masks out regions of the image outside of the mask
-      masked_image = np.multiply(image,np.repeats(mask[...,None],axis=-1,repeats=3))
+      masked_image = np.multiply(image,np.repeats(mask[...,None],axis=-1,repeats=3)).astype(np.uint8)
 
       return masked_image
 
