@@ -57,7 +57,7 @@ An example simple *Dash* application is provided below (curtesy of `the Dash web
 
 
 A `BasicTool` in `fusion-tools`
-================================
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 *fusion-tools* components are written as `DashBlueprint <https://www.dash-extensions.com/sections/enrich>`_ 
 objects. Similar to `Flask Blueprints <https://flask.palletsprojects.com/en/stable/blueprints/>`_, 
@@ -164,7 +164,7 @@ This can then be added into a *fusion-tools* *Visualization* as below:
 
 
 *Pattern-matching callbacks*
-=============================
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 `Pattern-matching callbacks <https://dash.plotly.com/pattern-matching-callbacks>` is a method in *Dash* to apply callbacks to either multiple 
 components of the same "type" but different "index" or to associate callbacks with other 
@@ -247,7 +247,7 @@ Dash. For more information on multi-page applications see `this link <https://da
 
 
 "Linkage" in `fusion-tools`
-============================
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 In general, components in `fusion-tools` are designed to work in-tandem with other components in order to visualize, analyze, alter, etc. data. 
 However, looking at the above specifications for callbacks, the question that emerges is how do we specify which component ids should interact with which? 
