@@ -763,6 +763,19 @@ class SlideMap(MapComponent):
                 };
 
                 const scale_geoJSON = (data, name, id, x_scale, y_scale) => {
+
+                    // For empty annotations
+                    if (data.features.length==0){
+                        return {
+                            ...data,
+                            properties: {
+                                name: name,
+                                _id: id
+                            },
+                            features: []
+                        }
+                    }
+                    
                     if ('user' in data.features[0].properties){
                         return {
                             ...data,
@@ -868,7 +881,6 @@ class SlideMap(MapComponent):
 
                     // Initializing empty annotations list
                     var annotations_list = new Array(ann_meta.length);
-                    // TODO: This could need some additional headers for CORS
                     try {
                         if ('annotations_geojson_url' in map_slide_information){
                             // This slide has a specific url for getting individual GeoJSON formatted annotations
@@ -1299,22 +1311,20 @@ class SlideMap(MapComponent):
 
             else:
                 # Use requests to get annotations data
+                print(f'{ann_error_store=}')
                 if 'annotations_geojson_url' in ann_error_store:
                     raw_geojson = []
                     for req_url in ann_error_store['annotations_geojson_url']:
-                        if not user_external_token is None:
-                            req_url += f'?token={user_external_token}'
                         new_geojson = requests.get(req_url).json()
                         raw_geojson.append(new_geojson)
                 else:
                     raw_geojson = []
                     new_geojson = requests.get(ann_error_store['annotations']).json()
                     raw_geojson.extend(new_geojson)
+                
+            print(f'{len(raw_geojson)=}')
 
             metadata_url = ann_error_store['annotations_metadata']
-            if not user_external_token is None:
-                metadata_url += f'?token={user_external_token}'
-
             ann_metadata = requests.get(metadata_url).json()
             # Filtering out overlaid images
             ann_metadata = [a for a in ann_metadata if not 'image_path' in a]
@@ -2157,12 +2167,12 @@ class MultiFrameSlideMap(SlideMap):
 
     def generate_annotation_layers(self, annotation_metadata, image_metadata, slide_info):
 
-        new_layer_children = super().generate_annotation_layers(annotation_metadata, slide_info)
+        new_layer_children, new_image_overlays = super().generate_annotation_layers(annotation_metadata, image_metadata, slide_info)
         new_layer_children.extend(
-            self.process_frames(image_metadata)
+            self.process_frames(image_metadata, slide_info.get('tiles'))
         )
 
-        return new_layer_children
+        return new_layer_children, new_image_overlays
 
     def generate_tile_layers(self, tile_url, image_metadata):
         
@@ -2682,19 +2692,18 @@ class HybridSlideMap(MultiFrameSlideMap):
         new_slide['x_scale'] = x_scale
         new_slide['y_scale'] = y_scale
 
-        new_layer_children = self.generate_annotation_layers(new_annotations_metadata,new_image_metadata,new_slide)
         slide_metadata_div = self.generate_metadata_components(new_image_metadata, new_metadata, new_annotations_metadata)
 
         if 'frames' in new_image_metadata:
             new_tile_layer = self.generate_tile_layers(new_slide.get('tiles'),new_image_metadata)
+            new_layer_children, new_image_overlays = self.generate_annotation_layers(new_annotations_metadata,new_image_metadata,new_slide)
+
         else:
-            new_tile_layer = SlideMap.generate_tile_layers(new_slide.get('tiles'),new_image_metadata)
+            new_layer_children, new_image_overlays = SlideMap.generate_annotation_layers(self,new_annotations_metadata,new_image_metadata,new_slide)
+            new_tile_layer = SlideMap.generate_tile_layers(self,new_slide.get('tiles'),new_image_metadata)
 
         new_slide_info = {}
-        #new_slide_info['image_overlays'] = image_overlay_annotations
         new_slide_info = new_slide_info | new_slide
-
-        new_slide_info['cached'] = get_from_cache
 
         new_slide_info = json.dumps(new_slide_info)
 
@@ -2964,7 +2973,7 @@ class ChannelMixer(MapComponent):
             else:
                 new_metadata = requests.get(new_slide['image_metadata']).json()
 
-        new_frame_list = self.process_frames(new_metadata)
+        new_frame_list = self.process_frames(new_metadata, new_slide.get('tiles'))
         new_color_selector_children = []
 
         return [new_frame_list], [new_color_selector_children]

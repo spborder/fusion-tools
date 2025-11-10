@@ -71,9 +71,8 @@ class DatasetBuilder(DSATool):
             collections_info.append({
                 'Collection Name': f'User: {user_login}',
                 'Collection ID': user_id,
-                'Number of Folder': 2,
+                'Number of Folders': 2,
                 'Last Updated': '-',
-                'token': user_token
             })
             
         collections_df = pd.DataFrame.from_records(collections_info)
@@ -89,7 +88,7 @@ class DatasetBuilder(DSATool):
 
         # Adding current session data here
         user_external_token = self.get_user_external_token(session_data)
-        user_internal_token = session_data.get('user').get('token')
+        user_internal_token = self.get_user_internal_token(session_data)
         starting_slides = []
         starting_slides_components = []
         starting_slide_idx = 0
@@ -561,16 +560,17 @@ class DatasetBuilder(DSATool):
         """
         
         if not local_slide:
+            item_id = slide_info.get('_id') if '_id' in slide_info else slide_info.get('id')
             try:               
-                item_info = self.handler.get_item_info(slide_info.get('remote_id'),user_token)
-                thumb_url = self.handler.get_image_thumbnail(slide_info.get('remote_id'), user_token = user_token, return_url = True)
+                item_info = self.handler.get_item_info(item_id,user_token)
+                thumb_url = self.handler.get_image_thumbnail(item_id, user_token = user_token, return_url = True)
 
                 folder_info = self.handler.get_folder_info(item_info['folderId'], user_token = user_token)
                 slide_info = {
                     k:v for k,v in item_info.items() if type(v) in [int,float,str]
                 }
             except girder_client.HttpError:
-                print(f'Item not found! {slide_id}')
+                print(f'Item not found! {item_id}')
                 return html.Div()
         else:
             
@@ -929,7 +929,8 @@ class DatasetBuilder(DSATool):
             )
             
             folder_slides, folder_folders = self.organize_folder_contents(
-                folder_info=folder_info
+                folder_info=folder_info,
+                session_data = session_data
             )
 
             if len(folder_folders)>0:
@@ -995,7 +996,8 @@ class DatasetBuilder(DSATool):
                 )
                 
                 folder_slides, folder_folders = self.organize_folder_contents(
-                    folder_info=folder_info
+                    folder_info=folder_info,
+                    session_data = session_data
                 )
 
                 if len(folder_folders)>0:
@@ -1055,6 +1057,7 @@ class DatasetBuilder(DSATool):
         session_data = json.loads(session_data)
 
         user_external_token = self.get_user_external_token(session_data)
+        user_internal_token = self.get_user_internal_token(session_data)
 
         current_slide_indices = list(set(self.get_component_indices(current_slide_components)))
         current_collection_indices = list(set(self.get_component_indices(current_collection_components)))
@@ -1071,7 +1074,7 @@ class DatasetBuilder(DSATool):
             active_folders.append(path)
 
         current_selected_slides = builder_data['selected_slides']
-        current_selected_slide_ids = [i.get('id') for i in current_selected_slides]
+        current_selected_slide_ids = [i.get('id') if 'id' in i else i.get('_id') for i in current_selected_slides]
         current_local_slide_ids = [i.get('id') for i in session_data.get('local')]
         selected_slides = Patch()
         
@@ -1090,7 +1093,7 @@ class DatasetBuilder(DSATool):
                 
                 if s in current_local_slide_ids:
                     local = True
-                    user_token = session_data.get('user').get('token')
+                    user_token = user_internal_token
                     slide_info = session_data.get('local')[current_local_slide_ids.index(s)]
                 else:
                     local = False
@@ -1260,6 +1263,7 @@ class DatasetBuilder(DSATool):
         session_data = json.loads(session_data)
 
         user_external_token = self.get_user_external_token(session_data)
+        user_internal_id = self.get_user_internal_id(session_data)
 
         prev_vis_data_in_handler = []
         for i in session_data['current']:
@@ -1283,8 +1287,16 @@ class DatasetBuilder(DSATool):
                         'id': s.get('_id',''),
                         'remote_id': s.get('_id'),
                         'url': self.handler.girderApiUrl,
+                        'type': 'remote_item'
                     }
                 )
+
+                # Adding access to UserAccess table
+                self.database.add_access(
+                    item_id = s.get('_id'),
+                    user_id = user_internal_id
+                )
+
             else:
                 new_slide_info.append(
                     session_data['local'][local_slide_ids.index(s.get('id'))]

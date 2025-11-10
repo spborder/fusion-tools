@@ -524,7 +524,7 @@ class LocalTileServer(TileServer):
 
         if not user_token is None:
             for k,v in slide_url_dict.items():
-                v += f'?token={user_token}'
+                slide_url_dict[k] = v + f'?token={user_token}'
 
         return slide_url_dict
 
@@ -1177,9 +1177,9 @@ class DSATileServer(TileServer):
         if not user_token is None:
             for k,v in slide_url_dict.items():
                 if not '?' in v:
-                    v += f'?token={user_token}'
+                    slide_url_dict[k] = v + f'?token={user_token}'
                 else:
-                    v += f'&token={user_token}'
+                    slide_url_dict[k] = v + f'&token={user_token}'
 
         # Adding annotations_geojson_url?
         annotations_metadata = requests.get(slide_url_dict.get('annotations_metadata')).json()
