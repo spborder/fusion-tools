@@ -1,6 +1,6 @@
 [project]
 name = "fusion-tools"
-version = "3.6.58"
+version = "3.6.61"
 description = "Modular visualization and analysis dashboard creation for high-resolution microscopy images."
 authors = [
     {name = "Sam Border", email = "sam.border2256@gmail.com"}

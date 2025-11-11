@@ -8,6 +8,9 @@ import json
 import geojson
 import geopandas as gpd
 import numpy as np
+import uuid
+
+import requests
 
 from typing_extensions import Union
 from shapely.geometry import box, shape
@@ -148,7 +151,34 @@ class CustomFunction(Tool):
         )
 
         self.get_callbacks()
+        self.get_namespace()
         self.output_callbacks()
+
+    def get_namespace(self):
+
+        self.js_namespace = Namespace(
+            "fusionTools","customFunction"
+        )
+
+        self.js_namespace.add(
+            src = """
+                function(feature,context){
+                    var {lineColor} = context.hideout;
+                    var style = {};
+
+                    style.fillColor = lineColor[feature.properties.name];
+                    style.fillOpacity = 0.3;
+                    style.color = lineColor[feature.properties.name];
+
+                    return style;
+                }
+            """,
+            name = 'featureStyle'
+        )
+
+        self.js_namespace.dump(
+            assets_folder = self.assets_folder
+        )
 
     def output_callbacks(self):
         """Registering callbacks passed by users to the layout
@@ -188,6 +218,7 @@ class CustomFunction(Tool):
                 State({'type': 'custom-function-input-info','index': ALL},'data'),
                 State({'type': 'custom-function-structure-drop','index': ALL},'value'),
                 State({'type': 'custom-function-structure-number','index': ALL},'value'),
+                State({'type': 'custom-function-structure-all','index': ALL},'value'),
                 State({'type': 'custom-function-main-roi-store','index': ALL},'data'),
                 State({'type': 'map-slide-information','index': ALL},'data'),
                 State({'type': 'feature-overlay','index': ALL},'name'),
@@ -220,7 +251,6 @@ class CustomFunction(Tool):
             ]
         )(self.update_structures)
 
-        #TODO: Downloading derived data
         # Open region selection modal
         self.blueprint.callback(
             [
@@ -336,7 +366,6 @@ class CustomFunction(Tool):
 
 
         if function_info.function_type=='layer':
-            #TODO: Add an All checkbox or something instead of putting in the number
             function_type_components = html.Div([
                 dbc.Row([
                     dbc.Col(dbc.Label('Structure: '),md = 3),
@@ -345,7 +374,7 @@ class CustomFunction(Tool):
                             options = [],
                             value = [],
                             id = {'type': 'custom-function-structure-drop','index': 0},
-                            multi = True
+                            multi = False
                         ),
                         md = 7
                     ),
@@ -372,9 +401,15 @@ class CustomFunction(Tool):
                                 id = {'type': 'custom-function-structure-number','index': 0},
                                 type = 'number',
                                 min = 0
+                            ),
+                            dbc.RadioButton(
+                                label = 'All',
+                                id = {'type': 'custom-function-all-structure','index': 0},
+                                value = False,
+                                style = {'marginRight': '5px', 'marginLeft': '5px'}
                             )
                         ])
-                    )
+                    ),
                 ],style = {'marginBottom':'5px'})
             ])
 
@@ -387,7 +422,7 @@ class CustomFunction(Tool):
                             options = [],
                             value = [],
                             id = {'type': 'custom-function-structure-drop','index': 0},
-                            multi = True
+                            multi = False
                         ),
                         md = 7
                     ),
@@ -405,6 +440,9 @@ class CustomFunction(Tool):
                         )
                     ],md=2)
                 ],style = {'marginBottom':'5px'}),
+                dbc.Row([
+
+                ],style= {'marginBottom':'5px'}),
                 html.Hr()
             ])
         elif function_info.function_type=='ROI':
@@ -642,8 +680,7 @@ class CustomFunction(Tool):
             dbc.Row(html.P(output_spec.get('description'))),
         ]
 
-        if output_spec['type']=='image':
-            
+        if output_spec['type']=='image':            
             if type(output)==list:
                 image_dims = [i.shape if type(i)==np.ndarray else np.array(i).shape for i in output]
                 max_height = max([i[0] for i in image_dims])
@@ -728,10 +765,10 @@ class CustomFunction(Tool):
                     n_clicks = 0,
                     className = 'd-grid col-12 mx-auto',
                     color = 'secondary',
-                    id = {'type': 'custom-function-view-annotations','index': 0}
+                    id = {'type': f'{self.component_prefix}-custom-function-view-annotations','index': 0}
                 ),
                 dcc.Store(
-                    id = {'type': 'custom-function-output-annotation-store','index': 0},
+                    id = {'type': f'{self.component_prefix}-custom-function-output-annotation-store','index': 0},
                     data = json.dumps(output),
                     storage_type = 'memory'
                 )
@@ -799,7 +836,7 @@ class CustomFunction(Tool):
             feature_mask = None
             feature_image = get_feature_image(
                 feature,
-                slide_information['regions_url'],
+                slide_information['regions'],
                 return_mask = return_mask,
                 return_image = return_image,
                 frame_index = frame_index,
@@ -808,7 +845,7 @@ class CustomFunction(Tool):
         elif return_image and return_mask:
             feature_image, feature_mask = get_feature_image(
                 feature,
-                slide_information['regions_url'],
+                slide_information['regions'],
                 return_mask = return_mask,
                 return_image = return_image,
                 frame_index = frame_index,
@@ -818,7 +855,7 @@ class CustomFunction(Tool):
             feature_image = None
             feature_mask = get_feature_image(
                 feature,
-                slide_information['regions_url'],
+                slide_information['regions'],
                 return_mask = return_mask,
                 return_image = return_image,
                 frame_index = frame_index,
@@ -834,6 +871,8 @@ class CustomFunction(Tool):
         
         tile_url = get_pattern_matching_value(tile_url)
         tile_size = get_pattern_matching_value(tile_size)
+
+        map_slide_information = json.loads(get_pattern_matching_value(map_slide_information))
 
         if any([i is None for i in [tile_url, tile_size]]):
             raise exceptions.PreventUpdate
@@ -882,11 +921,37 @@ class CustomFunction(Tool):
         else:
 
             output_anns = [json.loads(i) for i in output_anns]
-            scaled_geojson = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*slide_information['x_scale'],c[1]*slide_information['y_scale']),g),o) for o in output_anns]
+            formatted_anns = []
+            for o in output_anns:
+                if type(o)==list:
+                    if o[0].get('type')=='Feature':
+                        formatted_anns.append({
+                            'type': 'FeatureCollection',
+                            'features': o, 
+                            'properties': {'name': o[0].get('properties',{}).get('name'),'_id': uuid.uuid4().hex[:24]}
+                        })
+                    elif o[0].get('type')=='FeatureCollection':
+                        formatted_anns.extend(o)
+                elif type(o)==dict:
+                    if o.get('type')=='Feature':
+                        formatted_anns.append({
+                            'type': 'FeatureCollection',
+                            'features': [o],
+                            'properties': {
+                                'name': o.get('properties',{}).get('name'),
+                                '_id': uuid.uuid4().hex[:24]
+                            }
+                        })
+                    elif o.get('type')=='FeatureCollection':
+                        formatted_anns.append(o)
+
+            scaled_geojson = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*map_slide_information['x_scale'],c[1]*map_slide_information['y_scale']),g),o) for o in formatted_anns]
             ann_names = [
                 o.get('properties',{}).get('name',f'Layer {o_idx+1}')
-                for o_idx,o in enuemrate(output_anns)
+                for o_idx,o in enumerate(formatted_anns)
             ]
+            for idx,(g,o) in enumerate(zip(scaled_geojson,formatted_anns)):
+                g['properties'] = o.get('properties',{'name': f'Layer {idx+1}','_id': uuid.uuid4().hex[:24]})
 
             modal_children = [
                 html.Div([
@@ -979,7 +1044,7 @@ class CustomFunction(Tool):
 
         return update_infos, main_updated_info, modal_open, roi_button_color, main_button_color
 
-    def run_function(self, clicked, function_name, function_inputs, function_input_info, structure_names, structure_number, main_roi_store, current_slide_information, overlay_names, session_data):
+    def run_function(self, clicked, function_name, function_inputs, function_input_info, structure_names, structure_number, structure_all_clicked, main_roi_store, current_slide_information, overlay_names, session_data):
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
@@ -993,8 +1058,11 @@ class CustomFunction(Tool):
 
         # Used only in layer function types
         structure_number = get_pattern_matching_value(structure_number)
+        structure_all_clicked = get_pattern_matching_value(structure_all_clicked)
         current_slide_information = json.loads(get_pattern_matching_value(current_slide_information))
         session_data = json.loads(session_data)
+
+        user_internal_token = self.get_user_internal_token(session_data)
 
         # Assigning kwarg vals from input components
         kwarg_inputs = {}
@@ -1008,18 +1076,26 @@ class CustomFunction(Tool):
         all_input_names = [i['name'] for i in function_info.input_spec]
         all_input_types = [i['type'] for i in function_info.input_spec]
 
+        function_output = []
+
         if function_info.function_type=='layer':
             # For functions which are called on a whole layer
             # Getting the layer id
-            slide_annotation_metadata = current_slide_information.get('annotation_metadata')
+            slide_annotation_metadata = requests.get(current_slide_information.get('annotations_metadata')).json()
             slide_annotation_names = [
-                i.get('name') for i in slide_annotation_metadata
-            ]            
+                i.get('name') if 'name' in i else i.get('annotation',{}).get('name') for i in slide_annotation_metadata
+            ]
+
             layer_id = slide_annotation_metadata[slide_annotation_names.index(structure_names)]['_id']
             structure_generator = self.database.get_structure_generator(layer_id = layer_id)
+            max_structure_idx = structure_number if not structure_all_clicked else None
 
-            function_output = []
-            for f in structure_generator:
+            structure_outputs = []
+            for f_idx,f in enumerate(structure_generator):
+                if max_structure_idx is not None:
+                    if f_idx >= max_structure_idx-1:
+                        break
+
                 if any([i in all_input_types for i in ['image','mask']]):
                     f_img, f_mask = self.get_feature_image(
                         feature = {'type': 'Feature', 'geometry': f.geom, 'properties': {'id': f.id} | f.properties},
@@ -1036,20 +1112,21 @@ class CustomFunction(Tool):
                 if 'annotation' in all_input_types:
                     kwarg_inputs[all_input_names[all_input_types.index('annotation')]] = {'type': 'Feature', 'geometry': f.geom, 'properties': {'id': f.id} | f.properties}
 
-                function_output.extend(function_info.function(**kwarg_inputs))
+                structure_outputs.append(function_info.function(**kwarg_inputs))
+
+            function_output.append(structure_outputs)
 
         elif function_info.function_type=='structure':
             # For functions which are called on each structure/feature individually
             # Getting the layer id
-            slide_annotation_metadata = current_slide_information.get('annotation_metadata')
+            slide_annotation_metadata = requests.get(current_slide_information.get('annotations_metadata')).json()
             slide_annotation_names = [
-                i.get('name') for i in slide_annotation_metadata
+                i.get('name') if 'name' in i else i.get('annotation',{}).get('name') for i in slide_annotation_metadata
             ]            
             layer_id = slide_annotation_metadata[slide_annotation_names.index(structure_names)]['_id']
-            structure_generator = self.database.get_structure_generator(layer_id = layer_id)
+            item_id = current_slide_information.get('id')
+            structure_generator = self.database.get_structure_generator(item_id = item_id, layer_id = layer_id, user_token = user_internal_token)
 
-
-            function_output = []
             for f in structure_generator:
                 if any([i in all_input_types for i in ['image','mask']]):
                     f_img, f_mask = self.get_feature_image(
@@ -1067,7 +1144,9 @@ class CustomFunction(Tool):
                 if 'annotation' in all_input_types:
                     kwarg_inputs[all_input_names[all_input_types.index('annotation')]] = {'type': 'Feature', 'geometry': f.geom, 'properties': {'id': f.id} | f.properties}
 
-                function_output.extend(function_info.function(**kwarg_inputs))
+                function_output.append(function_info.function(**kwarg_inputs))
+
+                # Break here so the structure generator only goes through once.
                 break
 
         elif function_info.function_type=='ROI':
@@ -1079,7 +1158,7 @@ class CustomFunction(Tool):
             if 'annotation' in all_input_types:
                 scaled_intersecting_anns = []
 
-                slide_annotation_metadata = current_slide_information.get('annotation_metadata')
+                slide_annotation_metadata = requests.get(current_slide_information.get('annotations_metadata')).json()
                 for s in slide_annotation_metadata:
                     intersecting_structure_ids = self.database.get_structures_in_bbox(
                         bbox = main_bounds,
@@ -1107,7 +1186,7 @@ class CustomFunction(Tool):
                             ],
                             'properties': {
                                 'id': s.get('_id'),
-                                'name': s.get('name')
+                                'name': s.get('name') if 'name' in s else s.get('annotation',{}).get('name')
                             }
                         }
 
@@ -1125,13 +1204,8 @@ class CustomFunction(Tool):
 
                 kwarg_inputs[all_input_names[all_input_types.index('image')]] = roi_img
             
-            function_output = function_info.function(**kwarg_inputs)
+            function_output.append(function_info.function(**kwarg_inputs))
         
-        if not type(function_output)==tuple and not type(function_output)==list:
-            function_output = [function_output]
-        elif type(function_output)==tuple:
-            function_output = [function_output]
-
         output_children = []
         output_content = []
         for o_idx, (output,spec) in enumerate(zip(function_output,function_info.output_spec)):
@@ -1141,26 +1215,25 @@ class CustomFunction(Tool):
 
             #Adding outputs to the output_content list
             # available types include string, numeric, annotation, image, and function
-            if spec.type in ['string','numeric','annotation']:
-                if spec.type=='numeric':
+            if spec.get('type') in ['string','numeric','annotation']:
+                if spec.get('type')=='numeric':
                     if type(output)==np.ndarray:
                         output_content.append(output.tolist())
                     else:
                         output_content.append(output)
                 else:
                     output_content.append(output)
-            elif spec.type=='image':
+            elif spec.get('type')=='image':
                 output_content.append(
                     f'/tmp/image_output_{o_idx}.png'
                 )
 
-            elif spec.type=='function':
+            elif spec.get('type')=='function':
                 output_content.append(
                     'function-output'
                 )
             
         #TODO: Specifying output data here depending on what the function output is
-
         output_data = json.dumps({
             'content': output_content,
             'filename': f'{function_info.title}_output.json'

@@ -39,7 +39,7 @@ def buffer_shapes(feature, buffer_radius):
     feature_shape = shape(feature['geometry'])
     buffered_shape = feature_shape.buffer(buffer_radius)
 
-    return buffered_shape.__geo_interface__
+    return {'type': 'Feature', 'geometry': buffered_shape.__geo_interface__,'properties': feature.get('properties')}
 
 # Defining CustomFunction component for buffering shapes
 buffer_shapes_component = FUSIONFunction(
@@ -48,7 +48,7 @@ buffer_shapes_component = FUSIONFunction(
     urls = [
         'https://shapely.readthedocs.io/en/stable/manual.html#constructive-methods'
     ],
-    function = lambda feature,radius: buffer_shapes(feature,radius),
+    function = lambda feature,buffer_radius: buffer_shapes(feature,buffer_radius),
     function_type = 'layer',
     input_spec = [
         {
@@ -350,7 +350,8 @@ interstitium_thickness = FUSIONFunction(
 def main():
 
     # Grabbing first item from demo DSA instance
-    base_url = 'https://demo.kitware.com/histomicstk/api/v1'
+    proxy_url = 'http://localhost:8070/'
+    base_url = proxy_url + 'https://demo.kitware.com/histomicstk/api/v1'
     item_id = ['5bbdeed1e629140048d01bcb','58b480ba92ca9a000b08c89d']
     #base_url = os.environ.get('DSA_URL')
 
@@ -387,6 +388,10 @@ def main():
             'Dataset Builder': [
                 dsa_handler.create_dataset_builder()
             ]
+        },
+        app_options = {
+            'host': '192.168.86.27',
+            'port': 8050
         }
     )
 

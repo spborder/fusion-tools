@@ -775,7 +775,7 @@ class SlideMap(MapComponent):
                             features: []
                         }
                     }
-                    
+
                     if ('user' in data.features[0].properties){
                         return {
                             ...data,
@@ -955,10 +955,10 @@ class SlideMap(MapComponent):
         user_external_token = self.get_user_external_token(session_data)
         user_internal_token = self.get_user_internal_token(session_data)
 
-        if new_slide.get('type')=='local_item':
+        if new_slide.get('type')=='local':
             # Getting urls from LocalTileServer method
             new_slide_urls = LocalTileServer.get_slide_urls(new_slide, user_internal_token)
-        elif new_slide.get('type')=='remote_item':
+        elif new_slide.get('type')=='remote':
             # Getting urls from DSATileServer method
             new_slide_urls = DSATileServer.get_slide_urls(new_slide, user_external_token)
         else:
@@ -989,6 +989,10 @@ class SlideMap(MapComponent):
                 new_image_metadata = cached_item.get('image_meta')
                 new_metadata = cached_item.get('meta')
                 new_annotations_metadata = cached_item.get('ann_meta')
+
+            else:
+                # Adding item to cache
+                pass
         
 
         if not cached_item:
@@ -1311,7 +1315,7 @@ class SlideMap(MapComponent):
 
             else:
                 # Use requests to get annotations data
-                print(f'{ann_error_store=}')
+                #print(f'{ann_error_store=}')
                 if 'annotations_geojson_url' in ann_error_store:
                     raw_geojson = []
                     for req_url in ann_error_store['annotations_geojson_url']:
@@ -1322,7 +1326,7 @@ class SlideMap(MapComponent):
                     new_geojson = requests.get(ann_error_store['annotations']).json()
                     raw_geojson.extend(new_geojson)
                 
-            print(f'{len(raw_geojson)=}')
+            #print(f'{len(raw_geojson)=}')
 
             metadata_url = ann_error_store['annotations_metadata']
             ann_metadata = requests.get(metadata_url).json()
@@ -1382,11 +1386,20 @@ class SlideMap(MapComponent):
 
         session_data = json.loads(session_data)
 
+        user_internal_id = self.get_user_internal_id(session_data)
+        annotations_metadata = None
+        if not slide_information is None:
+            if 'annotations_metadata' in slide_information:
+                annotations_metadata = requests.get(slide_information.get('annotations_metadata')).json()
+
+        if annotations_metadata is None:
+            raise exceptions.PreventUpdate
+
         # Checking if slide is already cached
         #TODO: This checks if the current anntotations are at least the same length as the expected number of annotations
-        if self.cache and not slide_information.get('id') is None and len(annotations_geojson)>=len(slide_information.get('annotations_metadata')):
+        if self.cache and not slide_information.get('id') is None and len(annotations_geojson)>=len(annotations_metadata):
             db_item = self.check_slide_in_cache(
-                user_id = session_data.get('user',{}).get('id'),
+                user_id = user_internal_id,
                 vis_session_id = session_data.get('session',{}).get('id'),
                 image_id = slide_information.get('id')
             )
@@ -1405,12 +1418,13 @@ class SlideMap(MapComponent):
                     kwargs = {
                         'slide_id': slide_information.get('id'),
                         'slide_name':slide_information.get('name'),
-                        'metadata': {},
-                        'image_metadata': {},
+                        'item_type': slide_information.get('type'),
+                        'metadata': requests.get(slide_information.get('metadata')).json(),
+                        'image_metadata': requests.get(slide_information.get('image_metadata')).json(),
                         'image_filepath': None,
-                        'annotations_metadata': {},
+                        'annotations_metadata': requests.get(slide_information.get('annotations_metadata')).json(),
                         'annotations': slide_crs_geojson,
-                        'user_id': session_data.get('user',{}).get('id'),
+                        'user_id': user_internal_id,
                         'vis_session_id': session_data.get('session',{}).get('id'),
                         'public': slide_information.get('public')
                     },
@@ -1426,7 +1440,7 @@ class SlideMap(MapComponent):
         elif not self.cache and not slide_information.get('id') is None:
             # If not using caching, only the current slide's annotations are added to the database and previous annotations for that session/user are removed
             user_session_slides = self.check_slide_in_cache(
-                user_id = session_data.get('user',{}).get('id'),
+                user_id = user_internal_id,
                 vis_session_id = session_data.get('session',{}).get('id'),
                 image_id = None 
             )
@@ -1436,7 +1450,7 @@ class SlideMap(MapComponent):
                 self.database.get_remove(
                     table_name = 'item',
                     inst_id = i.get('id'),
-                    user_id = session_data.get('user',{}).get('id'),
+                    user_id = user_internal_id,
                     vis_session_id = session_data.get('session',{}).get('id')
                 )
 
@@ -1444,7 +1458,7 @@ class SlideMap(MapComponent):
                 #print(f'This slide has annotations and an id: {slide_information.get("name")}')
                 # Checking if current slide is in the cache
                 db_item = self.check_slide_in_cache(
-                    user_id = session_data.get('user',{}).get('id'),
+                    user_id = user_internal_id,
                     vis_session_id = session_data.get('session',{}).get('id'),
                     image_id = slide_information.get('id')
                 )
@@ -1469,7 +1483,7 @@ class SlideMap(MapComponent):
                             'image_filepath': None,
                             'annotations_metadata': {},
                             'annotations': slide_crs_geojson,
-                            'user_id': session_data.get('user',{}).get('id'),
+                            'user_id': user_internal_id,
                             'vis_session_id': session_data.get('session',{}).get('id'),
                             'public': slide_information.get('public')
                         },
@@ -2950,10 +2964,10 @@ class ChannelMixer(MapComponent):
             user_external_token = self.get_user_external_token(session_data)
             user_internal_token = self.get_user_internal_token(session_data)
 
-            if new_slide.get('type')=='local_item':
+            if new_slide.get('type')=='local':
                 # Getting urls from LocalTileServer method
                 new_slide_urls = LocalTileServer.get_slide_urls(new_slide, user_internal_token)
-            elif new_slide.get('type')=='remote_item':
+            elif new_slide.get('type')=='remote':
                 # Getting urls from DSATileServer method
                 new_slide_urls = DSATileServer.get_slide_urls(new_slide, user_external_token)
             else:
@@ -2962,12 +2976,12 @@ class ChannelMixer(MapComponent):
 
             new_slide = new_slide | new_slide_urls
 
-        if new_slide.get('type')=='local_item':
+        if new_slide.get('type')=='local':
             if not user_internal_token is None:
                 new_metadata = requests.get(new_slide['image_metadata']+f'?token={user_internal_token}').json()
             else:
                 new_metadata = requests.get(new_slide['image_metadata']).json()
-        elif new_slide.get('type')=='remote_item':
+        elif new_slide.get('type')=='remote':
             if not user_external_token is None:
                 new_metadata = requests.get(new_slide['image_metadata']+f'?token={user_external_token}').json()
             else:

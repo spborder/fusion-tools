@@ -410,7 +410,8 @@ class fusionDB:
       
     def add_slide(self,
         slide_id:str, 
-        slide_name:str, 
+        slide_name:str,
+        item_type: str, 
         metadata: dict, 
         image_metadata: dict, 
         image_filepath:Union[str,None], 
@@ -421,19 +422,33 @@ class fusionDB:
         public: bool = False):
 
         #print(f'{slide_id=}, {public=}')
-        new_item = self.get_create(
-            table_name = 'local_item',
-            inst_id = slide_id,
-            kwargs = {
-                'name': slide_name,
-                'meta': metadata,
-                'image_meta': image_metadata,
-                'ann_meta': annotations_metadata,
-                'filepath': image_filepath,
-                'session': vis_session_id,
-                'public': public, 
-            }
-        )
+        if item_type is None or item_type=='local':
+            new_item = self.get_create(
+                table_name = item_type if not item_type is None else 'local',
+                inst_id = slide_id,
+                kwargs = {
+                    'name': slide_name,
+                    'meta': metadata,
+                    'image_meta': image_metadata,
+                    'ann_meta': annotations_metadata,
+                    'filepath': image_filepath,
+                    'session': vis_session_id,
+                    'public': public, 
+                }
+            )
+        else:
+            new_item = self.get_create(
+                table_name = item_type if not item_type is None else 'remote',
+                inst_id = slide_id,
+                kwargs = {
+                    'name': slide_name,
+                    'meta': metadata,
+                    'image_meta': image_metadata,
+                    'ann_meta': annotations_metadata,
+                    'session': vis_session_id,
+                    'public': public, 
+                }
+            )
 
         if not public and user_id is not None:
             self.add_access(slide_id,user_id)
@@ -791,7 +806,7 @@ class fusionDB:
 
             return return_list
 
-    def get_structures_in_bbox(self, bbox:list, item_id:Union[str,None] = None, layer_id:Union[str,list,None] = None, structure_id:Union[str,list,None] = None):
+    def get_structures_in_bbox(self, bbox:list, item_id:Union[str,None] = None, layer_id:Union[str,list,None] = None, structure_id:Union[str,list,None] = None, user_token:Union[str,list,None] = None):
         """Querying database for structures that intersect with a 
 
         :param bbox: _description_
@@ -812,11 +827,22 @@ class fusionDB:
             search_query = session.query(
                 Structure.id,
                 Structure.geom
-            )
+            ).filter(Layer.item==Item.id).filter(Structure.layer==Layer.id)
 
             if not item_id is None:
                 if type(item_id)==str:
                     search_query = search_query.filter(Item.id == item_id)
+
+                if not user_token is None:
+                    query_user = self.get_user(
+                        user_token = user_token
+                    )
+                    if not query_user is None:
+                        search_query = search_query.filter(or_(Item.public==True,Item.user_access.any(id = query_user.get('id'))))
+                    else:
+                        search_query = search_query.filter(Item.public==True)
+                else:
+                    search_query = search_query.filter(Item.public==True)
 
             if not layer_id is None:
                 if type(layer_id)==list:
@@ -841,21 +867,31 @@ class fusionDB:
 
             return return_list
 
-    def get_structure_generator(self, item_id: Union[str,list,None] = None, layer_id:Union[str,list,None] = None, structure_id: Union[str,list,None] = None):
-
+    def get_structure_generator(self, item_id: Union[str,list,None] = None, layer_id:Union[str,list,None] = None, structure_id:Union[str,list,None] = None, user_token:Union[str,None] = None):
 
         with self.get_db() as session:
             search_query = session.query(
                 Structure.id,
                 Structure.geom,
                 Structure.properties
-            ).filter(Structure.layer == Layer.id).filter(Layer.item==Item.id)
+            ).filter(Layer.item==Item.id).filter(Structure.layer==Layer.id)
 
             if not item_id is None:
                 if type(item_id)==list:
                     search_query = search_query.filter(Item.id.in_(item_id))
                 elif type(item_id)==str:
                     search_query = search_query.filter(Item.id == item_id)
+
+                if not user_token is None:
+                    query_user = self.get_user(
+                        user_token = user_token
+                    )
+                    if not query_user is None:
+                        search_query = search_query.filter(or_(Item.public==True,Item.user_access.any(id = query_user.get('id'))))
+                    else:
+                        search_query = search_query.filter(Item.public==True)
+                else:
+                    search_query = search_query.filter(Item.public==True)
 
             if not layer_id is None:
                 if type(layer_id)==list:

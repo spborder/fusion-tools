@@ -1209,7 +1209,7 @@ class Visualization:
                             'id': local_slide_id,
                             'cached': True,
                             'public': False,
-                            'type': 'local_item',
+                            'type': 'local',
                         } | self.local_tile_server.get_slide_urls(local_slide_id)
                     else:
                         self.local_tile_server.add_new_slide(
@@ -1224,7 +1224,7 @@ class Visualization:
                             'id': local_slide_id,
                             'cached': True,
                             'public': s.public,
-                            'type': 'local_item',
+                            'type': 'local',
                         } | self.local_tile_server.get_slide_urls(local_slide_id)
 
                 slide_store['current'].append(slide_dict)
@@ -1247,7 +1247,7 @@ class Visualization:
                             'id': j.id,
                             'url': local_tile_server_url,
                             'cached': True,
-                            'type': 'local_item',
+                            'type': 'local',
                         } | t.get_slide_urls(j.id, standalone = True)
                         for j_idx,j in enumerate(t.get_item_names_ids())
                     ])
@@ -1257,7 +1257,7 @@ class Visualization:
                             'id': j.id,
                             'url': local_tile_server_url,
                             'cached': True,
-                            'type': 'local_item',
+                            'type': 'local',
                         } | j.get_slide_urls(j.id,standalone=True)
                         for j_idx,j in enumerate(t.get_item_names_ids())
                     ])
@@ -1271,7 +1271,7 @@ class Visualization:
                         'remote_id': t.item_id,
                         'url': t.base_url,
                         'public': True,
-                        'type': 'remote_item',
+                        'type': 'remote',
                     })
                 elif type(t)==CustomTileServer:
                     slide_store['current'].append({
@@ -1583,6 +1583,9 @@ class Visualization:
                 print(f'------Creating Visualization Page {page} with {n_rows} rows, {n_cols} columns, and {n_tabs} tabs--------')
                 print(f'----------------- Components in the same {self.linkage} may communicate through callbacks---------')
             
+            if self.default_page is None:
+                # Setting default page to be the first listed page in a multi-page layout
+                self.default_page = self.app_options.get('requests_pathname_prefix','/')+list(self.components.keys())[0].replace(" ","-")
 
         # Iterating through each named page
         for page_idx,page in enumerate(list(self.components.keys())):
