@@ -1125,6 +1125,9 @@ class CustomFunction(Tool):
             ]            
             layer_id = slide_annotation_metadata[slide_annotation_names.index(structure_names)]['_id']
             item_id = current_slide_information.get('id')
+
+            # Modify this to get index of structure->translate to id->pass to structure_generator
+
             structure_generator = self.database.get_structure_generator(item_id = item_id, layer_id = layer_id, user_token = user_internal_token)
 
             for f in structure_generator:
@@ -1206,6 +1209,38 @@ class CustomFunction(Tool):
             
             function_output.append(function_info.function(**kwarg_inputs))
         
+        elif function_info.function_type=='item':
+            # For functions which are called on an item
+            # Return all annotations, all image, no mask?
+            # Return generators?
+            if 'image' in all_input_types:
+                # Either return a tile generator (with additional argument: tile_size),
+                # or return "region" url
+                image_spec = function_info.input_spec[all_input_names[all_input_types.index('image')]]
+                if image_spec.get('url'):
+                    kwarg_inputs[all_input_names[all_input_types.index('image')]] = current_slide_information.get('regions')
+                elif image_spec.get('generator'):
+                    tile_size = image_spec.get('generator').get('tile_size',{'width': 512, 'height': 512})
+                    tile_overlap = image_spec.get('generator').get('tile_overlap')
+
+                    if current_slide_information.get('type')=='local':
+                        tile_iterator = large_image.open(current_slide_information.get('filepath')).tileIterator(tile_size = tile_size, tile_overlap = tile_overlap)
+                        kwarg_inputs[all_input_names[all_input_types.index('image')]] = tile_iterator
+                    elif current_slide_innformation.get('type')=='remote':
+                        tile_iterator = DSATileServer.get_tile_iterator(
+                            slide_url_dict = current_slide_information,
+                            tile_size = tile_size
+                        )
+                        kwarg_inputs[all_input_names[all_input_types.index('image')]] = tile_iterator
+
+            if 'annotation' in all_input_types:
+                kwarg_inputs[all_input_names[all_input_types.index('annotation')]] = self.database.get_layers(
+                    item_id = current_slide_information.get('id'),
+                    user_token = user_internal_token
+                )
+
+            function_output.append(function_info.function(**kwarg_inputs))
+
         output_children = []
         output_content = []
         for o_idx, (output,spec) in enumerate(zip(function_output,function_info.output_spec)):

@@ -917,3 +917,61 @@ class fusionDB:
             #return return_list
             return search_query.all()
 
+    def get_layers(self, item_id, user_token: Union[str,None] = None) -> list:
+        
+        # Check user has access to item (or item is public)
+        # Get layer ids associated with that item
+        # Get structures associated with that layer
+        # Assemble FeatureCollection objects
+
+        if not user_token is None:
+            query_user = self.get_user(
+                user_token = user_token
+            )
+
+            user_access_list = self.check_user_access(user_id = query_user.get('id'), admin = query_user.get('admin'))
+        else:
+            user_access_list = []
+
+
+        with self.get_db() as session:
+            item_query = session.query(
+                Item
+            ).filter(Item.id==item_id).first()
+
+            if not item_query.get('public'):
+                if not item_id in user_access_list:
+                    return []
+            
+            layer_query = session.query(
+                Layer.id
+            ).filter(Layer.item==item_id)
+
+            feature_collection_list = []
+            for l in layer_query.all():
+
+                feature_collection = {
+                    'type': 'FeatureCollection',
+                    'features': [],
+                    'properties': {
+                        'name': l.get('name'),
+                        '_id': l.get('id')
+                    }
+                }
+
+                structure_query = session.query(
+                    Structure
+                ).filter(Structure.layer==Layer.id)
+
+                for s in structure_query.all():
+                    feature_collection['features'].append({
+                        'type': 'Feature',
+                        'geometry': s.get('geom'),
+                        'properties': s.get('properties')
+                    })
+
+
+                feature_collection_list.append(feature_collection)
+
+            return feature_collection_list
+

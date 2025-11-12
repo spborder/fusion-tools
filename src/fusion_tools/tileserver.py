@@ -28,7 +28,8 @@ from fusion_tools.utils.shapes import (
     detect_geojson, 
     detect_histomics,
     structures_within_poly,
-    extract_nested_prop)
+    extract_nested_prop
+)
 
 
 class Slide:
@@ -1197,6 +1198,84 @@ class DSATileServer(TileServer):
         slide_url_dict['annotations_geojson_url'] = annotations_geojson_urls
 
         return slide_url_dict
+    
+    @staticmethod
+    def get_tile_iterator(slide_url_dict, tile_size):
+        
+        slide_image_metadata = requests.get(slide_url_dict.get('image_metadata')).json()
+        slide_height, slide_width = slide_image_metadata.get('sizeY'), slide_image_metadata.get('sizeX')
+        # minx, miny, maxx, maxy
+        available_bbox = [
+            0,0,
+            slide_width,slide_height
+        ]
+
+        x_start = np.maximum(int(tile_size.get('width')/2),int(available_bbox[0]+(tile_size.get('width')/2)))
+        y_start = np.maximum(int(tile_size.get('height')/2),int(available_bbox[1]+(tile_size.get('height')/2)))
+        n_x = floor((available_bbox[2]-available_bbox[0])/tile_size.get('width'))
+        n_y = floor((available_bbox[3]-available_bbox[1])/tile_size.get('height'))
+
+        bbox_list = []
+        for x in range(0,n_x):
+            for y in range(0,n_y):
+
+                # Adding column of bboxes
+                bbox = [
+                    int(x_start-(tile_size.get('width')/2)),
+                    int(y_start-(tile_size.get('height')/2)),
+                    int(x_start+(tile_size.get('width')/2)),
+                    int(y_start+(tile_size.get('height')/2))
+                ]
+
+                bbox_list.append(bbox)
+
+                y_start+=tile_size.get('height')
+
+            bottom_row_bbox = [
+                int(x_start - (tile_size.get('width')/2)),
+                int(available_bbox[3]-tile_size.get('height')),
+                int(x_start + (tile_size.get('width')/2)),
+                int(available_bbox[3])
+            ]
+
+            bbox_list.append(bottom_row_bbox)
+            x_start += tile_size.get('width')
+            y_start = np.maximum(tile_size.get('height')/2,available_bbox[1]-(tile_size.get('height')/2))
+
+        # Adding right-side column
+        for y in range(0,n_y):
+            right_column_bbox = [
+                int(available_bbox[2] - tile_size.get('width')),
+                int(y_start - (tile_size.get('height')/2)),
+                int(available_bbox[2]),
+                int(y_start + (tile_size.get('height')/2))
+            ]
+
+            bbox_list.append(right_column_bbox)
+            y_start+=tile_size.get('height')
+
+        # Adding bottom-right corner
+        bottom_right_bbox = [
+            int(available_bbox[2]-tile_size.get('width')),
+            int(available_bbox[3]-tile_size.get('height')),
+            int(available_bbox[2]),
+            int(available_bbox[3])
+        ]
+
+        bbox_list.append(bottom_right_bbox)
+
+        if '?' in slide_url_dict.get('regions'):
+            sep_str = '&'
+        else:
+            sep_str = '?'
+
+        bbox_region_urls = [
+            f'{slide_url_dict.get("regions")}/{sep_str}left={b[0]}&top={b[1]}&right={b[2]}&bottom={b[3]}'
+            for b in bbox_list
+        ]
+
+        return bbox_region_urls
+
 
 class CustomTileServer(TileServer):
     """CustomTileServer component if using some other tiles endpoint (must pass tileSize and levels in dictionary)
