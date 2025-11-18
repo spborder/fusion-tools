@@ -26,7 +26,7 @@ import dash_leaflet as dl
 from dash import dcc, callback, ctx, ALL, exceptions, no_update
 import dash_bootstrap_components as dbc
 from dash_extensions.enrich import DashBlueprint, html, Input, Output, State, PrefixIdTransform, MultiplexerTransform, BlockingCallbackTransform
-from dash_extensions.javascript import Namespace, arrow_function
+from dash_extensions.javascript import Namespace, arrow_function, assign
 
 # fusion-tools imports
 from fusion_tools.visualization.vis_utils import get_pattern_matching_value
@@ -167,13 +167,25 @@ class CustomFunction(Tool):
                     var style = {};
 
                     style.fillColor = lineColor[feature.properties.name];
-                    style.fillOpacity = 0.3;
+                    style.fillOpacity = Number(0.3);
                     style.color = lineColor[feature.properties.name];
 
                     return style;
                 }
             """,
             name = 'featureStyle'
+        )
+
+        self.js_namespace.add(
+            src = """
+                function(feature, layer, context){
+
+                    const remove_keys = ['fillColor','lineColor','lineWidth','id','_id','_index','cluster'];
+                    remove_keys.forEach(key => delete feature.properties[key]);
+                    layer.bindTooltip(JSON.stringify(feature.properties))
+                }
+            """,
+            name = 'featureTooltip'
         )
 
         self.js_namespace.dump(
@@ -560,7 +572,7 @@ class CustomFunction(Tool):
             ) if not input_spec['type'] in ['image','mask','annotation'] else None
         ]
 
-        if input_spec['type']=='text':
+        if input_spec['type']=='string':
             input_component = html.Div([
                 dbc.Row([
                     dbc.Col(input_desc_column,md=5),
@@ -928,7 +940,7 @@ class CustomFunction(Tool):
                         formatted_anns.append({
                             'type': 'FeatureCollection',
                             'features': o, 
-                            'properties': {'name': o[0].get('properties',{}).get('name'),'_id': uuid.uuid4().hex[:24]}
+                            'properties': {'name': o[0].get('properties',{}).get('name'),'id': uuid.uuid4().hex[:24]}
                         })
                     elif o[0].get('type')=='FeatureCollection':
                         formatted_anns.extend(o)
@@ -939,7 +951,7 @@ class CustomFunction(Tool):
                             'features': [o],
                             'properties': {
                                 'name': o.get('properties',{}).get('name'),
-                                '_id': uuid.uuid4().hex[:24]
+                                'id': uuid.uuid4().hex[:24]
                             }
                         })
                     elif o.get('type')=='FeatureCollection':
@@ -951,7 +963,8 @@ class CustomFunction(Tool):
                 for o_idx,o in enumerate(formatted_anns)
             ]
             for idx,(g,o) in enumerate(zip(scaled_geojson,formatted_anns)):
-                g['properties'] = o.get('properties',{'name': f'Layer {idx+1}','_id': uuid.uuid4().hex[:24]})
+                g['properties'] = o.get('properties',{'name': f'Layer {idx+1}','id': uuid.uuid4().hex[:24]})
+
 
             modal_children = [
                 html.Div([
@@ -971,6 +984,7 @@ class CustomFunction(Tool):
                                             dl.GeoJSON(
                                                 data = o_ann,
                                                 format = 'geojson',
+                                                onEachFeature= self.js_namespace('featureTooltip'),
                                                 options = {
                                                     'style': self.js_namespace('featureStyle')
                                                 },
@@ -1086,35 +1100,34 @@ class CustomFunction(Tool):
                 i.get('name') if 'name' in i else i.get('annotation',{}).get('name') for i in slide_annotation_metadata
             ]
 
-            layer_id = slide_annotation_metadata[slide_annotation_names.index(structure_names)]['_id']
-            structure_generator = self.database.get_structure_generator(layer_id = layer_id)
+            layer_id = slide_annotation_metadata[slide_annotation_names.index(structure_names)]['id']
+            structure_generator = self.database.get_structure_generator(
+                item_id = current_slide_information.get('id'),
+                layer_id = layer_id,
+                user_token = user_internal_token
+            )
             max_structure_idx = structure_number if not structure_all_clicked else None
 
-            structure_outputs = []
+
+            structure_inputs = []
             for f_idx,f in enumerate(structure_generator):
                 if max_structure_idx is not None:
                     if f_idx >= max_structure_idx-1:
                         break
 
-                if any([i in all_input_types for i in ['image','mask']]):
-                    f_img, f_mask = self.get_feature_image(
-                        feature = {'type': 'Feature', 'geometry': f.geom, 'properties': {'id': f.id} | f.properties},
-                        slide_information = current_slide_information,
-                        return_mask = 'mask' in all_input_types,
-                        return_image = 'image' in all_input_types
-                    )
-                    if not f_img is None:
-                        kwarg_inputs[all_input_names[all_input_types.index('image')]] = f_img
-                    
-                    if not f_mask is None:
-                        kwarg_inputs[all_input_names[all_input_types.index('mask')]] = f_mask
+                structure_inputs.append({'type': 'Feature', 'geometry': f.geom, 'properties': {'id': f.id} | f.properties})
 
-                if 'annotation' in all_input_types:
-                    kwarg_inputs[all_input_names[all_input_types.index('annotation')]] = {'type': 'Feature', 'geometry': f.geom, 'properties': {'id': f.id} | f.properties}
+            if 'annotation' in all_input_types:
+                kwarg_inputs[all_input_names[all_input_types.index('annotation')]] = {
+                    'type': 'FeatureCollection',
+                    'features': structure_inputs,
+                    'properties': {
+                        'name': structure_names,
+                        'id': layer_id
+                    }
+                }
 
-                structure_outputs.append(function_info.function(**kwarg_inputs))
-
-            function_output.append(structure_outputs)
+            function_output.append(function_info.function(**kwarg_inputs))
 
         elif function_info.function_type=='structure':
             # For functions which are called on each structure/feature individually
@@ -1123,7 +1136,7 @@ class CustomFunction(Tool):
             slide_annotation_names = [
                 i.get('name') if 'name' in i else i.get('annotation',{}).get('name') for i in slide_annotation_metadata
             ]            
-            layer_id = slide_annotation_metadata[slide_annotation_names.index(structure_names)]['_id']
+            layer_id = slide_annotation_metadata[slide_annotation_names.index(structure_names)]['id']
             item_id = current_slide_information.get('id')
 
             # Modify this to get index of structure->translate to id->pass to structure_generator
@@ -1166,7 +1179,7 @@ class CustomFunction(Tool):
                     intersecting_structure_ids = self.database.get_structures_in_bbox(
                         bbox = main_bounds,
                         item_id = current_slide_information.get('id'),
-                        layer_id = s.get('_id')
+                        layer_id = s.get('id')
                     )
 
                     if len(intersecting_structure_ids)>0:
@@ -1188,7 +1201,7 @@ class CustomFunction(Tool):
                                 for f in structure_generator
                             ],
                             'properties': {
-                                'id': s.get('_id'),
+                                'id': s.get('id'),
                                 'name': s.get('name') if 'name' in s else s.get('annotation',{}).get('name')
                             }
                         }
@@ -1223,10 +1236,10 @@ class CustomFunction(Tool):
                     tile_size = image_spec.get('generator').get('tile_size',{'width': 512, 'height': 512})
                     tile_overlap = image_spec.get('generator').get('tile_overlap')
 
-                    if current_slide_information.get('type')=='local':
+                    if current_slide_information.get('item_type')=='local_item':
                         tile_iterator = large_image.open(current_slide_information.get('filepath')).tileIterator(tile_size = tile_size, tile_overlap = tile_overlap)
                         kwarg_inputs[all_input_names[all_input_types.index('image')]] = tile_iterator
-                    elif current_slide_innformation.get('type')=='remote':
+                    elif current_slide_innformation.get('item_type')=='remote_item':
                         tile_iterator = DSATileServer.get_tile_iterator(
                             slide_url_dict = current_slide_information,
                             tile_size = tile_size

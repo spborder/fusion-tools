@@ -2,9 +2,6 @@
 Utility functions for visualization components
 
 """
-import os
-import sys
-
 
 def get_pattern_matching_value(input_val):
     """Used to extract usable values from components generated using pattern-matching syntax
@@ -32,5 +29,21 @@ def get_pattern_matching_value(input_val):
     return return_val
 
 
+def flatten_list(l):
+    """Used for flattening arbitrarily nested lists, excluding dictionaries.
 
+    :param l: Input list to be flattened
+    :type l: list
+    :yield: flattened list item
+    :rtype: None
+    """
+    for item in l:
+        if type(item)==list:
+            try:
+                yield from flatten_list(item)
+            except TypeError:
+                yield item
+        else:
+            yield item
+        
 

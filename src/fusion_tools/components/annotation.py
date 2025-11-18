@@ -127,7 +127,7 @@ class AnnotationSchema(BaseSchema):
     def add_user(self, user_dict:Union[dict,str], admin:bool = False):
         """Add a new user to AnnotationSchema
 
-        :param user_dict: User info (login, _id) or just login name to add to schema
+        :param user_dict: User info (login, id) or just login name to add to schema
         :type user_dict: Union[dict,str]
         :param admin: Whether this user is added as an admin to the schema or not, defaults to False
         :type admin: bool, optional
@@ -912,7 +912,7 @@ class FeatureAnnotation(Tool):
                         'name': fc_name,
                         'index': 0,
                         'bboxes': computeBBoxes(featureCollection, bbox_padding),
-                        'ids': featureCollection.features.map(f => f.properties._id)
+                        'ids': featureCollection.features.map(f => f.properties.id)
                     };
                 });
             
@@ -1321,6 +1321,8 @@ class FeatureAnnotation(Tool):
 
         structure_names = [i['name'] for i in current_structure_data]
 
+        user_internal_id = self.get_user_internal_id(session_data)
+
         if structure_drop_value is None or not structure_drop_value in structure_names:
             raise exceptions.PreventUpdate
         
@@ -1404,7 +1406,7 @@ class FeatureAnnotation(Tool):
                             },
                             'properties': {
                                 'name': 'featureAnnotation Marker',
-                                '_id': uuid.uuid4().hex[:24]
+                                'id': uuid.uuid4().hex[:24]
                             }
                         }
                     ]
@@ -1421,7 +1423,7 @@ class FeatureAnnotation(Tool):
         # Saving current annotation values to the database
         new_anns = self.check_database(
             structure_id = current_structure_id,
-            user_id = session_data.get('user',{}).get('_id'),
+            user_id = user_internal_id,
             session_id = session_data.get('session',{}).get('id')
         )
         
@@ -1429,7 +1431,7 @@ class FeatureAnnotation(Tool):
             updated_annotation_store = json.dumps(
                 {
                     'id': uuid.uuid4().hex[:24],
-                    'user': session_data.get('user',{}).get('_id'),
+                    'user': user_internal_id,
                     'session': session_data.get('session',{}).get('id'),
                     'structure': current_structure_id,
                     'data': []
@@ -2093,7 +2095,9 @@ class FeatureAnnotation(Tool):
         else:
             session_data = json.loads(session_data)
             
-            current_user = session_data.get('user',{}).get('login')
+            current_user = self.get_user_internal_login(session_data)
+            user_internal_id = self.get_user_internal_id(session_data)
+
             user_status = 'guest'
             if not current_user is None:
                 if not self.user_spec is None:
@@ -2129,7 +2133,7 @@ class FeatureAnnotation(Tool):
                 # from this and/or previous sessions
                 user_session_list = self.check_database(
                     table_name = 'vis_session',
-                    user_id = session_data.get('user').get('_id')
+                    user_id = user_internal_id
                 )[0]
                 print(user_session_list)
 
@@ -2179,7 +2183,9 @@ class FeatureAnnotation(Tool):
             raise exceptions.PreventUpdate
 
         session_data = json.loads(session_data)
-        current_user = session_data.get('user',{}).get('login')
+        current_user = self.get_user_internal_login(session_data)
+        user_internal_id = self.get_user_internal_id(session_data)
+
         user_status = 'guest'
         if not current_user is None:
             if not self.user_spec is None:
@@ -2189,10 +2195,10 @@ class FeatureAnnotation(Tool):
                     user_status = 'user'
         
         if user_status=='guest':
-            user_id_filter = session_data.get('user',{}).get('_id')
+            user_id_filter = user_internal_id
             session_id_filter = session_data.get('session',{}).get('id')
         elif user_status=='user':
-            user_id_filter = session_data.get('user',{}).get('_id')
+            user_id_filter = user_internal_id
             # This filter is based on session row selections made by the user
             session_id_filter = []
         elif user_status=='admin':
@@ -3175,7 +3181,7 @@ class BulkLabels(Tool):
                                     (f['bbox'][1]+f['bbox'][3])/2
                                 ]
                             },
-                            'properties': f_data | {'_id': f['properties']['_id']}
+                            'properties': f_data | {'id': f['properties'].get('_id') if '_id' in f['properties'] else f['properties'].get('id')}
                         }
                         for f,f_data in zip(filtered_geojson['features'],filtered_ref_list)
                     ]
@@ -3358,7 +3364,7 @@ class BulkLabels(Tool):
 
         for m_idx, m in enumerate(marker_features):
             m_centroid = list(m['geometry']['coordinates'])
-            m_id = m['properties']['_id']
+            m_id = m['properties']['id']
             if m_centroid in current_centroids:
                 cent_idx = current_centroids.index(m_centroid)
                 if label_method=='in':
@@ -3396,7 +3402,7 @@ class BulkLabels(Tool):
                 current_labels['labels'].append(
                     {
                         'centroid': m_centroid,
-                        '_id': m_id,
+                        'id': m_id,
                         'labels': [{
                             'type': label_type,
                             'value': label_text
@@ -3601,9 +3607,9 @@ class BulkLabels(Tool):
         current_annotations = json.loads(get_pattern_matching_value(current_annotations))
         current_labels = json.loads(get_pattern_matching_value(current_labels))
 
-        label_ids = [i['_id'] for i in current_labels['labels']]
+        label_ids = [i['id'] for i in current_labels['labels']]
         for c in current_annotations:
-            feature_ids = [i['properties']['_id'] for i in c['features']]
+            feature_ids = [i['properties']['id'] for i in c['features']]
             id_intersect = list(set(label_ids) & set(feature_ids))
             if len(id_intersect)>0:
                 for id in id_intersect:

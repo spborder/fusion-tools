@@ -879,7 +879,7 @@ class DataExtractor(Tool):
         feature_collection = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/x_scale,c[1]/y_scale),g),feature_collection)
         feature_collection['properties'] = {
             'name': structure_name,
-            '_id': uuid.uuid4().hex[:24]
+            'id': uuid.uuid4().hex[:24]
         }
 
         if save_format=='Aperio XML':
@@ -1021,7 +1021,7 @@ class DataExtractor(Tool):
                             'image_opts': image_opts,
                             'mask_opts': data_masks,
                             'combine': '&' in data,
-                            '_id': uuid.uuid4().hex[:24]
+                            'id': uuid.uuid4().hex[:24]
                         }
                     )    
                 else:
@@ -1034,7 +1034,7 @@ class DataExtractor(Tool):
                             'format': data_format,
                             'folder': self.assets_folder+'/downloads/'+base_download_folder,
                             'features': struct_features,
-                            '_id': uuid.uuid4().hex[:24]
+                            'id': uuid.uuid4().hex[:24]
                         }
                     )
 
@@ -1043,13 +1043,13 @@ class DataExtractor(Tool):
             'base_folder':self.assets_folder+'/downloads/'+base_download_folder,
             'zip_file_path': self.assets_folder+'/downloads/'+base_download_folder+'/fusion_download.zip',
             'download_tasks': download_thread_list,
-            'current_task': download_thread_list[0]['_id'],
+            'current_task': download_thread_list[0]['id'],
             'completed_tasks': []
         })
 
         new_thread = threading.Thread(
             target = self.pick_download_type,
-            name = download_thread_list[0]['_id'],
+            name = download_thread_list[0]['id'],
             args = [download_thread_list[0]],
             daemon = True
         )
@@ -1121,7 +1121,7 @@ class DataExtractor(Tool):
                     download_data = no_update
                     del download_info_store['download_tasks'][0]
 
-                    download_info_store['current_task'] = download_info_store['download_tasks'][0]['_id']
+                    download_info_store['current_task'] = download_info_store['download_tasks'][0]['id']
 
                     task_name = f'{download_info_store["download_tasks"][0]["structure"]} {download_info_store["download_tasks"][0]["download_type"]}'
 

@@ -102,10 +102,6 @@ class VisSession(Base):
 
         return vis_dict
 
-class ItemType(enum.Enum):
-    local = 1
-    remote = 2
-
 
 class Item(Base):
     __tablename__='item'
@@ -123,11 +119,11 @@ class Item(Base):
     user_access: Mapped[List["User"]] = relationship(
         secondary = UserAccess, back_populates="item_access"
     )
-    type = Column(Enum(ItemType))
+    item_type = mapped_column(String)
 
     __mapper_args__ = {
         'polymorphic_identity': 'item',
-        'polymorphic_on': 'type'
+        'polymorphic_on': 'item_type'
     }
 
     def to_dict(self):
@@ -157,7 +153,7 @@ class LocalItem(Item):
 
     def to_dict(self):
 
-        item_dict = super().to_dict() | {'filepath': self.filepath, 'url': self.url, 'type': self.type}
+        item_dict = super().to_dict() | {'filepath': self.filepath, 'url': self.url, 'item_type': self.item_type}
 
         return item_dict
 
@@ -174,7 +170,7 @@ class RemoteItem(Item):
 
     def to_dict(self):
 
-        item_dict = super().to_dict() | {'url': self.url, 'remote_id': self.remote_id, 'type': self.type}
+        item_dict = super().to_dict() | {'url': self.url, 'remote_id': self.remote_id, 'item_type': self.item_type}
 
         return item_dict
 

@@ -48,7 +48,7 @@ from fusion_tools.utils.shapes import (
     aperio_to_geojson,
     extract_geojson_properties
 )
-from fusion_tools.visualization.vis_utils import get_pattern_matching_value
+from fusion_tools.visualization.vis_utils import get_pattern_matching_value, flatten_list
 
 import time
 
@@ -637,6 +637,7 @@ class SlideMap(MapComponent):
                 State({'type': 'base-layer','index': ALL},'children'),
                 State({'type': 'feature-lineColor','index': ALL},'value'),
                 State({'type': 'adv-overlay-colormap','index': ALL},'value'),
+                State({'type': 'manual-roi-perform-spatial-agg','index': ALL},'checked'),
                 State({'type': 'manual-roi-separate-switch','index': ALL},'checked'),
                 State({'type': 'manual-roi-summarize-switch','index': ALL},'checked'),
                 State({'type': 'map-slide-information','index': ALL},'data'),
@@ -741,7 +742,8 @@ class SlideMap(MapComponent):
                 var annotations_list = [];
 
                 function uuidv4() {
-                    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
+                    // return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
+                    return 'xxxxxxxxxxxxxxxxxxxxxxxx'
                     .replace(/[xy]/g, function (c) {
                         const r = Math.random() * 16 | 0, 
                             v = c == 'x' ? r : (r & 0x3 | 0x8);
@@ -752,11 +754,23 @@ class SlideMap(MapComponent):
                 // Annotations have to be in GeoJSON format already in order to use this
                 function process_json(json_data, idx, ann_meta){
                     if (json_data.constructor.name == 'Object'){
-                        return scale_geoJSON(json_data, ann_meta[idx].name, ann_meta[idx]["_id"],map_slide_information.x_scale, map_slide_information.y_scale);
+                        if ("_id" in ann_meta[idx]){
+                            var ann_id = ann_meta[idx]["_id"];
+                        } else if ("id" in ann_meta[idx]){
+                            var ann_id = ann_meta[idx]["id"];
+                        }
+
+                        return scale_geoJSON(json_data, ann_meta[idx].name, ann_id,map_slide_information.x_scale, map_slide_information.y_scale);
                     } else {
                         let scaled_list = [];
                         for (let j=0; j<json_data.length; j++){
-                            scaled_list.push(scale_geoJSON(json_data[j], ann_meta[idx+j].name, ann_meta[idx+j]["_id"], map_slide_information.x_scale, map_slide_information.y_scale));
+                            if ("_id" in ann_meta[idx+j]){
+                                var ann_id = ann_meta[idx+j]["_id"];
+                            } else if ("id" in ann_meta[idx+j]){
+                                var ann_id = ann_meta[idx+j]["id"];
+                            }
+
+                            scaled_list.push(scale_geoJSON(json_data[j], ann_meta[idx+j].name, ann_id, map_slide_information.x_scale, map_slide_information.y_scale));
                         }
                         return scaled_list;
                     }
@@ -770,7 +784,7 @@ class SlideMap(MapComponent):
                             ...data,
                             properties: {
                                 name: name,
-                                _id: id
+                                id: id
                             },
                             features: []
                         }
@@ -781,7 +795,7 @@ class SlideMap(MapComponent):
                             ...data,
                             properties: {
                                 name: name,
-                                _id: id
+                                id: id
                             },
                             features: data.features.map((feature,f_idx) => ({
                                 ...feature,
@@ -794,7 +808,7 @@ class SlideMap(MapComponent):
                                 properties: {
                                     ...feature.properties.user,
                                     name: name,
-                                    _id: uuidv4(),
+                                    id: uuidv4(),
                                     _index: f_idx,
                                 }
                             }))
@@ -804,7 +818,7 @@ class SlideMap(MapComponent):
                             ...data,
                             properties: {
                                 name: name,
-                                _id: id
+                                id: id
                             },
                             features: data.features.map((feature,f_idx) => ({
                                 ...feature,
@@ -817,7 +831,7 @@ class SlideMap(MapComponent):
                                 properties: {
                                     ...feature.properties,
                                     name: name,
-                                    _id: uuidv4(),
+                                    id: uuidv4(),
                                     _index: f_idx,
                                 }
                             }))
@@ -885,7 +899,7 @@ class SlideMap(MapComponent):
                         if ('annotations_geojson_url' in map_slide_information){
                             // This slide has a specific url for getting individual GeoJSON formatted annotations
                             var new_annotations = [];
-                            ann_meta.forEach((ann_,idx) => ann_meta.splice(idx,1,{'name': ann_.annotation.name, '_id': ann_._id}))
+                            ann_meta.forEach((ann_,idx) => ann_meta.splice(idx,1,{'name': ann_.annotation.name, 'id': ann_._id}))
                             const promises = map_slide_information.annotations_geojson_url.map((url,idx) =>
                                 fetch(url, {
                                     method: 'GET',
@@ -929,7 +943,7 @@ class SlideMap(MapComponent):
                         for (let m=0; m<map_slide_information.manual_rois.length; m++){
                             console.log(map_slide_information.manual_rois[m]);
                             let manual_roi = map_slide_information.manual_rois[m];
-                            annotations_list.push(scale_geoJSON(manual_roi, manual_roi.properties.name, manual_roi.properties._id, map_slide_information.x_scale, map_slide_information.y_scale))
+                            annotations_list.push(scale_geoJSON(manual_roi, manual_roi.properties.name, manual_roi.properties.id, map_slide_information.x_scale, map_slide_information.y_scale))
                         }
                     };
                 };
@@ -955,10 +969,10 @@ class SlideMap(MapComponent):
         user_external_token = self.get_user_external_token(session_data)
         user_internal_token = self.get_user_internal_token(session_data)
 
-        if new_slide.get('type')=='local':
+        if new_slide.get('item_type')=='local_item':
             # Getting urls from LocalTileServer method
             new_slide_urls = LocalTileServer.get_slide_urls(new_slide, user_internal_token)
-        elif new_slide.get('type')=='remote':
+        elif new_slide.get('item_type')=='remote_item':
             # Getting urls from DSATileServer method
             new_slide_urls = DSATileServer.get_slide_urls(new_slide, user_external_token)
         else:
@@ -1285,6 +1299,8 @@ class SlideMap(MapComponent):
         ann_error_store = json.loads(get_pattern_matching_value(ann_error_store))
         user_external_token = self.get_user_external_token(session_data)
 
+        user_internal_id = self.get_user_internal_id(session_data)
+
         if type(ann_error_store)==list:
             if len(ann_error_store)>0:
                 ann_error_store = ann_error_store[0]
@@ -1306,7 +1322,7 @@ class SlideMap(MapComponent):
                     asyncio.gather(
                         self.database.get_item_annotations(
                             item_id = ann_error_store.get('id'),
-                            user_id = session_data.get('user').get('id'),
+                            user_id = user_internal_id,
                             vis_session_id = session_data.get('session').get('id')
                         )
                     )
@@ -1315,7 +1331,6 @@ class SlideMap(MapComponent):
 
             else:
                 # Use requests to get annotations data
-                #print(f'{ann_error_store=}')
                 if 'annotations_geojson_url' in ann_error_store:
                     raw_geojson = []
                     for req_url in ann_error_store['annotations_geojson_url']:
@@ -1326,8 +1341,6 @@ class SlideMap(MapComponent):
                     new_geojson = requests.get(ann_error_store['annotations']).json()
                     raw_geojson.extend(new_geojson)
                 
-            #print(f'{len(raw_geojson)=}')
-
             metadata_url = ann_error_store['annotations_metadata']
             ann_metadata = requests.get(metadata_url).json()
             # Filtering out overlaid images
@@ -1338,8 +1351,8 @@ class SlideMap(MapComponent):
             for s,m in zip(scaled_geojson,ann_metadata):
                 if 'annotation' in m:
                     s['properties'] = {
-                        'name': m['annotation']['name'],
-                        '_id': m['_id']
+                        'name': m.get('annotation',{}).get('name'),
+                        'id': m.get('_id') if '_id' in m else m.get('id')
                     }
                 else:
                     s['properties'] = m
@@ -1347,14 +1360,14 @@ class SlideMap(MapComponent):
                 for f_idx, f in enumerate(s['features']):
                     if 'properties' in f:
                         if not 'user' in f['properties']:
-                            if not all([i in f['properties'] for i in ['_index','_id','name']]):
-                                f['properties'] = f['properties'] | {'_index': f_idx, '_id': uuid.uuid4().hex[:24], 'name': s['properties']['name']}
+                            if not all([i in f['properties'] for i in ['_index','id','name']]):
+                                f['properties'] = f['properties'] | {'_index': f_idx, 'id': uuid.uuid4().hex[:24], 'name': s['properties']['name']}
                         else:
                             f['properties'] = f['properties']['user']
-                            if not all([i in f['properties'] for i in ['_index','_id','name']]):
-                                f['properties'] = f['properties'] | {'_index': f_idx, '_id': uuid.uuid4().hex[:24], 'name': s['properties']['name']}
+                            if not all([i in f['properties'] for i in ['_index','id','name']]):
+                                f['properties'] = f['properties'] | {'_index': f_idx, 'id': uuid.uuid4().hex[:24], 'name': s['properties']['name']}
                     else:
-                        f['properties'] = {'_index': f_idx, '_id': uuid.uuid4().hex[:24], 'name': s['properties']['name']}
+                        f['properties'] = {'_index': f_idx, 'id': uuid.uuid4().hex[:24], 'name': s['properties']['name']}
             
         return scaled_geojson, [json.dumps(scaled_geojson)]
 
@@ -1406,19 +1419,20 @@ class SlideMap(MapComponent):
             if not db_item:
                 # Then this item is not cached, add it to the database.
                 # Use the original slide CRS annotations when adding to the database:
-                slide_crs_geojson = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/slide_information['x_scale'],c[1]/slide_information['y_scale']),g),a) for a in annotations_geojson if not a is None]
+                slide_crs_geojson = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/slide_information.get('x_scale',1),c[1]/slide_information.get('y_scale',1)),g),a) for a in annotations_geojson if not a is None]
                 for a,s in zip([i for i in annotations_geojson if not i is None],slide_crs_geojson):
                     s['properties'] = a['properties']
 
                 start = time.time()
                 # Adding to database on another thread:
+                #print(f'{slide_information=}')
                 new_thread = threading.Thread(
                     target = self.database.add_slide,
                     name = uuid.uuid4().hex[:24],
                     kwargs = {
                         'slide_id': slide_information.get('id'),
                         'slide_name':slide_information.get('name'),
-                        'item_type': slide_information.get('type'),
+                        'item_type': slide_information.get('item_type'),
                         'metadata': requests.get(slide_information.get('metadata')).json(),
                         'image_metadata': requests.get(slide_information.get('image_metadata')).json(),
                         'image_filepath': None,
@@ -1426,7 +1440,7 @@ class SlideMap(MapComponent):
                         'annotations': slide_crs_geojson,
                         'user_id': user_internal_id,
                         'vis_session_id': session_data.get('session',{}).get('id'),
-                        'public': slide_information.get('public')
+                        'public': slide_information.get('public',False)
                     },
                     daemon = True
                 )
@@ -1466,7 +1480,7 @@ class SlideMap(MapComponent):
                     #print('Adding current slide to database')
                     # Then this item is not cached, add it to the database.
                     # Use the original slide CRS annotations when adding to the database:
-                    slide_crs_geojson = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/slide_information['x_scale'],c[1]/slide_information['y_scale']),g),a) for a in annotations_geojson if not a is None]
+                    slide_crs_geojson = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/slide_information.get('x_scale',1),c[1]/slide_information.get('y_scale',1)),g),a) for a in annotations_geojson if not a is None]
                     for a,s in zip([i for i in annotations_geojson if not i is None],slide_crs_geojson):
                         s['properties'] = a['properties']
 
@@ -1478,14 +1492,15 @@ class SlideMap(MapComponent):
                         kwargs = {
                             'slide_id': slide_information.get('id'),
                             'slide_name':slide_information.get('name'),
-                            'metadata': {},
-                            'image_metadata': {},
+                            'item_type': slide_information.get('item_type'),
+                            'metadata': requests.get(slide_information.get('metadata')).json(),
+                            'image_metadata': requests.get(slide_information.get('image_metadata')).json(),
                             'image_filepath': None,
-                            'annotations_metadata': {},
+                            'annotations_metadata': requests.get(slide_information.get('annotations_metadata')).json(),
                             'annotations': slide_crs_geojson,
                             'user_id': user_internal_id,
                             'vis_session_id': session_data.get('session',{}).get('id'),
-                            'public': slide_information.get('public')
+                            'public': slide_information.get('public',False)
                         },
                         daemon = True
                     )
@@ -1493,7 +1508,7 @@ class SlideMap(MapComponent):
             
             
         start = time.time()
-        new_available_properties, new_feature_names, new_property_info = extract_geojson_properties(annotations_geojson,None,['barcode','_id','_index'],4)
+        new_available_properties, new_feature_names, new_property_info = extract_geojson_properties(annotations_geojson,None,['barcode','id','_index'],4)
         annotations_info_store = json.dumps({
             'available_properties': new_available_properties,
             'feature_names': new_feature_names,
@@ -1650,7 +1665,7 @@ class SlideMap(MapComponent):
                     'features': [
                         i
                     ],
-                    'properties': i['properties'] if '_id' in i['properties'] else i['properties'] | {'_id': uuid.uuid4().hex[:24], 'name': f'Manual ROI {idx+1}'}
+                    'properties': i['properties'] if 'id' in i['properties'] else i['properties'] | {'id': uuid.uuid4().hex[:24], 'name': f'Manual ROI {idx+1}'}
                 }
                 for idx,i in enumerate(geojson_list[-1]['features'])
             ]
@@ -1702,7 +1717,7 @@ class SlideMap(MapComponent):
 
         return annotation_components
 
-    def add_manual_roi(self,new_geojson:list, uploaded_shape: list, current_annotations:list, frame_layers:list, line_colors:list, colormap:list, separate_switch: list, summarize_switch: list, map_slide_information:list, session_data:dict) -> list:
+    def add_manual_roi(self,new_geojson:list, uploaded_shape: list, current_annotations:list, frame_layers:list, line_colors:list, colormap:list, spatial_agg_switch: list, separate_switch: list, summarize_switch: list, map_slide_information:list, session_data:dict) -> list:
         """Adding a manual region of interest (ROI) to the SlideMap using dl.EditControl() tools including polygon, rectangle, and markers.
 
         :param new_geojson: Incoming GeoJSON object that is emitted by dl.EditControl() following annotation on SlideMap
@@ -1733,9 +1748,13 @@ class SlideMap(MapComponent):
         session_data = json.loads(session_data)
         map_slide_information = json.loads(get_pattern_matching_value(map_slide_information))
 
+        user_internal_id = self.get_user_internal_id(session_data)
+
         colormap = get_pattern_matching_value(colormap)
+        spatial_agg_switch = get_pattern_matching_value(spatial_agg_switch)
         separate_switch = get_pattern_matching_value(separate_switch)
         summarize_switch = get_pattern_matching_value(summarize_switch)
+        spatial_agg_switch = spatial_agg_switch if not spatial_agg_switch is None else False
         separate_switch = separate_switch if not separate_switch is None else False
         summarize_switch = summarize_switch if not summarize_switch is None else False
 
@@ -1774,21 +1793,21 @@ class SlideMap(MapComponent):
                         'features': [f],
                         'properties':{
                             'name': new_roi_name,
-                            '_id': uuid.uuid4().hex[:24]
+                            'id': uuid.uuid4().hex[:24]
                         }
                     }
                     
                     for f_idx,f in enumerate(new_roi['features']):
                         f['properties'] = {
                             'name': new_roi_name,
-                            '_id': uuid.uuid4().hex[:24],
+                            'id': uuid.uuid4().hex[:24],
                             '_index': f_idx
                         }
 
                     manual_roi_idxes.append(max(manual_roi_idxes)+1)
                     
                     # Aggregate if any initial annotations are present
-                    if len(initial_annotations)>0:
+                    if len(initial_annotations)>0 and spatial_agg_switch:
                         # Spatial aggregation performed just between individual manual ROIs and initial annotations (no manual ROI to manual ROI aggregation)
                         new_roi = spatially_aggregate(new_roi, initial_annotations,separate=separate_switch,summarize=summarize_switch)
                     
@@ -1796,13 +1815,12 @@ class SlideMap(MapComponent):
                     added_roi_names.append(new_roi_name)
 
         elif 'upload-shape-data' in ctx.triggered_id['type']:
-            x_scale = map_slide_information['x_scale']
-            y_scale = map_slide_information['y_scale']
+            x_scale = map_slide_information.get('x_scale',1)
+            y_scale = map_slide_information.get('y_scale',1)
 
             if not uploaded_shape is None:
                 upload_shape_type = uploaded_shape.split(',')[0]
 
-                #TODO: Add a check here for large-image vs. GeoJSON format
                 if 'json' in upload_shape_type:
                     uploaded_roi = json.loads(base64.b64decode(uploaded_shape.split(',')[-1]).decode())
 
@@ -1818,28 +1836,32 @@ class SlideMap(MapComponent):
 
                 if type(uploaded_roi)==dict:
                     uploaded_roi = [uploaded_roi]
+                elif type(uploaded_roi)==list:
+                    # Flattening list in case of nesting
+                    uploaded_roi = flatten_list(uploaded_roi)
                 
                 if not uploaded_roi is None:
                     for up_idx, up in enumerate(uploaded_roi):
                         scaled_upload = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]*x_scale,c[1]*y_scale),g),up)
 
-                        # Checking if there is a name or _id property:
-                        if 'properties' in scaled_upload:
-                            if 'name' in scaled_upload['properties']:
-                                if 'Manual' in scaled_upload['properties']['name']:
-                                    scaled_upload['properties']['name'] = scaled_upload['properties']['name'].replace('Manual','Upload')
+                        # Checking if there is a name or id property:
+                        if 'properties' in up:
+                            scaled_upload['properties'] = up['properties']
+                            if 'name' in up['properties']:
+                                if 'Manual' in up['properties']['name']:
+                                    scaled_upload['properties']['name'] = up['properties']['name'].replace('Manual','Upload')
                             
-                            scaled_upload['properties']['_id'] = uuid.uuid4().hex[:24]
+                            scaled_upload['properties']['id'] = uuid.uuid4().hex[:24]
 
                         else:
                             scaled_upload['properties'] = {
                                 'name': f'Upload {len([i for i in annotation_names if "Upload" in i])+1+up_idx}',
-                                '_id': uuid.uuid4().hex[:24]
+                                'id': uuid.uuid4().hex[:24]
                             }
 
                         # Aggregate if any initial annotations are present
                         new_roi_name = scaled_upload['properties']['name']
-                        if len(initial_annotations)>0:
+                        if len(initial_annotations)>0 and spatial_agg_switch:
                             # Spatial aggregation performed just between individual manual ROIs and initial annotations (no manual ROI to manual ROI aggregation)
                             new_roi = spatially_aggregate(scaled_upload, initial_annotations,separate=separate_switch,summarize=summarize_switch)
                         else:
@@ -1876,6 +1898,14 @@ class SlideMap(MapComponent):
         if len(deleted_rois)>0:
             operation = True
             for d_idx,(man_d,current_d) in enumerate(deleted_rois):
+                #TODO: Delete from database
+                _ = self.database.get_remove(
+                    table_name = 'layer',
+                    inst_id = current_d.get('_id') if '_id' in current_d else current_d.get('id'),
+                    user_id = user_internal_id,
+                    vis_session_id = session_data.get('session').get('id')
+                )
+
                 del new_manual_rois[man_d-d_idx]
                 del current_annotations[current_d-d_idx]
 
@@ -1883,23 +1913,32 @@ class SlideMap(MapComponent):
         new_session_data = deepcopy(session_data)
 
         # Finding the current slide index:
-        if 'tiles' in map_slide_information:
-            current_slide_tile_urls = [i['tiles'] for i in new_session_data['current']]
-            slide_idx = current_slide_tile_urls.index(map_slide_information['tiles'])
+        if 'id' in map_slide_information:
+            current_slide_tile_urls = [i['id'] for i in new_session_data['current']]
+            slide_idx = current_slide_tile_urls.index(map_slide_information['id'])
 
+            #TODO: Add new ROIs to database
+            scaled_rois = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/map_slide_information.get('x_scale',1),c[1]/map_slide_information.get('y_scale',1)),g),a) for a in deepcopy(added_rois)]
+            scaled_w_props_rois = []
+            for a,s in zip(added_rois,scaled_rois):
+                w_props = deepcopy(s)
+                w_props['properties'] = a['properties']
+                scaled_w_props_rois.append(w_props)
+
+            self.database.add_layer(scaled_w_props_rois,map_slide_information['id'])
+
+            """
             if not 'manual_rois' in new_session_data['current'][slide_idx]:
-                scaled_rois = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/map_slide_information['x_scale'],c[1]/map_slide_information['y_scale']),g),a) for a in deepcopy(added_rois)]
                 new_session_data['current'][slide_idx]['manual_rois'] = [
                     i | {'properties': a['properties']}
                     for a,i in zip(added_rois,scaled_rois)
                 ]
             else:
-                scaled_rois = [geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/map_slide_information['x_scale'],c[1]/map_slide_information['y_scale']),g),a) for a in deepcopy(added_rois)]
                 new_session_data['current'][slide_idx]['manual_rois'] += [
                     i | {'properties': a['properties']}
                     for a,i in zip(added_rois,scaled_rois)
                 ]
-
+            """
 
         new_session_data = json.dumps(new_session_data)
 
@@ -2013,8 +2052,8 @@ class SlideMap(MapComponent):
             slide_information = json.loads(get_pattern_matching_value(slide_information))
 
             scaled_position = [
-                [current_position[0][1]/slide_information['x_scale'], current_position[0][0]/slide_information['y_scale']],
-                [current_position[1][1]/slide_information['x_scale'], current_position[1][0]/slide_information['y_scale']]
+                [current_position[0][1]/slide_information.get('x_scale',1), current_position[0][0]/slide_information.get('y_scale',1)],
+                [current_position[1][1]/slide_information.get('x_scale',1), current_position[1][0]/slide_information.get('y_scale',1)]
             ]
             export_data = {
                 'content': json.dumps({
@@ -2045,7 +2084,7 @@ class SlideMap(MapComponent):
             ]
         }
 
-        scaled_manual_roi = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/slide_information['x_scale'],c[1]/slide_information['y_scale']),g),manual_roi)
+        scaled_manual_roi = geojson.utils.map_geometries(lambda g: geojson.utils.map_tuples(lambda c: (c[0]/slide_information.get('x_scale',1),c[1]/slide_information.get('y_scale',1)),g),manual_roi)
 
         return {'content': json.dumps(scaled_manual_roi),'filename': f'Manual ROI {manual_roi_feature_index+1}.json'}
 
@@ -2438,7 +2477,7 @@ class LargeSlideMap(SlideMap):
                                 "features": [],
                                 "properties": {
                                     "name": annotation.annotation.name,
-                                    "_id": annotation._id
+                                    "id": annotation._id
                                 }
                             };
                             for (let i = 0; i<new_annotations.annotation.elements.length; i++){
@@ -2500,7 +2539,7 @@ class LargeSlideMap(SlideMap):
                                 ...data,
                                 properties: {
                                     name: name,
-                                    _id: id
+                                    id: id
                                 },
                                 features: data.features.map(feature => ({
                                     ...feature,
@@ -2516,7 +2555,7 @@ class LargeSlideMap(SlideMap):
 
                         for (let ann=0; ann<new_annotations.length; ann++){
                             let annotation = map_slide_information.annotations_metadata[ann];
-                            let new_geojson = scale_geoJSON(new_annotations[ann], annotation.name, annotation._id, map_slide_information.x_scale, map_slide_information.y_scale);
+                            let new_geojson = scale_geoJSON(new_annotations[ann], annotation.name, annotation.id, map_slide_information.x_scale, map_slide_information.y_scale);
                             
                             annotations_str.push(new_geojson);
                             annotations_list.push(new_geojson);
@@ -2562,14 +2601,14 @@ class LargeSlideMap(SlideMap):
                 annotation_names.append(a['annotation']['name'])
                 initial_anns.append({
                     'type': 'FeatureCollection', 
-                    'properties': {'name': a['annotation']['name'], '_id': a['_id']},
+                    'properties': {'name': a['annotation']['name'], 'id': a.get('_id') if '_id' in a else a.get('id')},
                     'features': []
                     })
             elif 'name' in a:
                 annotation_names.append(a['name'])
                 initial_anns.append({
                     'type': 'FeatureCollection',
-                    'properties': {'name': a['name'],'_id': a['_id']},
+                    'properties': {'name': a['name'],'id': a.get('_id') if '_id' in a else a.get('id')},
                     'features': []
                 })
             elif 'image_path' in a:
@@ -2774,7 +2813,7 @@ class SlideImageOverlay(MapComponent):
             self.name = name
 
         self.image_bounds = self.get_image_bounds()
-        self._id = uuid.uuid4().hex[:24]
+        self.id = uuid.uuid4().hex[:24]
 
     def get_image_bounds(self):
         """Get total bounds of image overlay in original CRS (number of pixels)
@@ -2796,7 +2835,7 @@ class SlideImageOverlay(MapComponent):
             'image_bounds': self.image_bounds,
             'properties': {
                 'name': self.name,
-                '_id': self._id
+                'id': self.id
             }
         }
 
@@ -2964,10 +3003,10 @@ class ChannelMixer(MapComponent):
             user_external_token = self.get_user_external_token(session_data)
             user_internal_token = self.get_user_internal_token(session_data)
 
-            if new_slide.get('type')=='local':
+            if new_slide.get('item_type')=='local_item':
                 # Getting urls from LocalTileServer method
                 new_slide_urls = LocalTileServer.get_slide_urls(new_slide, user_internal_token)
-            elif new_slide.get('type')=='remote':
+            elif new_slide.get('item_type')=='remote_item':
                 # Getting urls from DSATileServer method
                 new_slide_urls = DSATileServer.get_slide_urls(new_slide, user_external_token)
             else:
@@ -2976,12 +3015,12 @@ class ChannelMixer(MapComponent):
 
             new_slide = new_slide | new_slide_urls
 
-        if new_slide.get('type')=='local':
+        if new_slide.get('item_type')=='local_item':
             if not user_internal_token is None:
                 new_metadata = requests.get(new_slide['image_metadata']+f'?token={user_internal_token}').json()
             else:
                 new_metadata = requests.get(new_slide['image_metadata']).json()
-        elif new_slide.get('type')=='remote':
+        elif new_slide.get('item_type')=='remote_item':
             if not user_external_token is None:
                 new_metadata = requests.get(new_slide['image_metadata']+f'?token={user_external_token}').json()
             else:

@@ -42,7 +42,7 @@ class OverlayOptions(Tool):
     description = 'Select options below to adjust overlay color, transparency, and line color for structures on your slide.'
 
     def __init__(self,
-                 ignore_list: list = ["_id", "_index"],
+                 ignore_list: list = ["id", "_index"],
                  property_depth: int = 4
                  ):
         """Constructor method
@@ -268,6 +268,16 @@ class OverlayOptions(Tool):
                                             dbc.CardBody([
                                                 # Whether to separate structures or not
                                                 # Whether to summarize or not
+                                                dmc.Switch(
+                                                    size = 'lg',
+                                                    radius = 'lg',
+                                                    label = 'Perform Spatial Aggregation',
+                                                    onLabel = "ON",
+                                                    offLabel = "OFF",
+                                                    description = 'Spatially aggregate properties of intersecting structures with manual or uploaded ROIs',
+                                                    id = {'type': 'manual-roi-perform-spatial-agg','index': 0}
+                                                ),
+                                                html.Hr(),
                                                 dmc.Switch(
                                                     size = 'lg',
                                                     radius = 'lg',
@@ -902,7 +912,7 @@ class OverlayOptions(Tool):
                 filtered_geojson, filter_reference_list = process_filters_queries(filter_list,[],['all'],current_annotations)
                 filtered_geojson['properties'] = {
                     'name': f'Filtered {len([i for i in current_overlay_names if "Filtered" in i])}',
-                    '_id': uuid.uuid4().hex[:24]
+                    'id': uuid.uuid4().hex[:24]
                 }
 
                 line_colors_dict = {

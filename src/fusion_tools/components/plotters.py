@@ -447,14 +447,14 @@ class PropertyViewer(Tool):
             
             if current_property_data['update_view']:
                 intersecting_shapes,intersecting_properties = find_intersecting(g,current_bounds_box)
-                current_property_data[g['properties']['_id']] = {
+                current_property_data[g['properties']['id']] = {
                     "geometry": intersecting_shapes,
                     "properties": intersecting_properties.to_dict('records')
                 }
             else:
-                if g['properties']['_id'] in current_property_data:
-                    intersecting_properties = pd.DataFrame.from_records(current_property_data[g['properties']['_id']]['properties'])
-                    intersecting_shapes = current_property_data[g['properties']['_id']]['geometry']
+                if g['properties']['id'] in current_property_data:
+                    intersecting_properties = pd.DataFrame.from_records(current_property_data[g['properties']['id']]['properties'])
+                    intersecting_shapes = current_property_data[g['properties']['id']]['geometry']
                 else:
                     intersecting_properties = pd.DataFrame()
                     intersecting_shapes = {}
@@ -621,21 +621,21 @@ class PropertyViewer(Tool):
                     else:
                         g_plot = f'Uh oh! column dtype is: {intersecting_properties[current_property_data["property"]].dtype}'
                 else:
-                    g_plot = f'Uh oh! {current_property_data["property"]} is not in {g["properties"]["name"]} with id: {g["properties"]["_id"]}'
+                    g_plot = f'Uh oh! {current_property_data["property"]} is not in {g["properties"]["name"]} with id: {g["properties"]["id"]}'
             else:
                 g_plot = 'Select a property to view'
 
             plot_tabs_children.append(
                 dbc.Tab(
                     g_plot,
-                    tab_id = g['properties']['_id'],
+                    tab_id = g['properties']['id'],
                     label = f"{g['properties']['name']} ({g_count})"
                 )
             )
 
         plot_tabs = dbc.Tabs(
             plot_tabs_children,
-            active_tab = current_features[0]['properties']['_id'],
+            active_tab = current_features[0]['properties']['id'],
             id = {'type': f'{self.component_prefix}-property-viewer-tabs','index': 0}
         )
 
@@ -2139,7 +2139,7 @@ class GlobalPropertyPlotter(MultiTool):
                     structure_ids = []
                     for s in structure_list:
                         if s in structure_names:
-                            structure_ids.append(ann_meta[structure_names.index(s)]['_id'])
+                            structure_ids.append(ann_meta[structure_names.index(s)]['id'])
                 else:
                     structure_ids = ["__all__"]
 

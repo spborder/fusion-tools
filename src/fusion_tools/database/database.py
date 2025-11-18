@@ -421,10 +421,10 @@ class fusionDB:
         user_id: Union[str,None] = None,
         public: bool = False):
 
-        #print(f'{slide_id=}, {public=}')
-        if item_type is None or item_type=='local':
+        #print(f'{slide_id=}, {public=}, {item_type=}, {user_id=}')
+        if item_type=='local_item':
             new_item = self.get_create(
-                table_name = item_type if not item_type is None else 'local',
+                table_name = 'local_item',
                 inst_id = slide_id,
                 kwargs = {
                     'name': slide_name,
@@ -436,9 +436,24 @@ class fusionDB:
                     'public': public, 
                 }
             )
+
+        elif item_type=='remote_item':
+            new_item = self.get_create(
+                table_name = 'remote_item',
+                inst_id = slide_id,
+                kwargs = {
+                    'name': slide_name,
+                    'meta': metadata,
+                    'image_meta': image_metadata,
+                    'ann_meta': annotations_metadata,
+                    'session': vis_session_id,
+                    'public': public, 
+                }
+            )
+
         else:
             new_item = self.get_create(
-                table_name = item_type if not item_type is None else 'remote',
+                table_name = 'item',
                 inst_id = slide_id,
                 kwargs = {
                     'name': slide_name,
@@ -453,14 +468,22 @@ class fusionDB:
         if not public and user_id is not None:
             self.add_access(slide_id,user_id)
 
+        self.add_layer(annotations, slide_id)
+
+    def add_layer(self, annotations:Union[dict,list],item_id:str):
+
+        if type(annotations)==dict:
+            annotations =  [annotations]
+
         for ann_idx, ann in enumerate(annotations):
+            jic_uuid = self.get_uuid()
             # Adding layer
             new_layer = self.get_create(
                 table_name = 'layer',
-                inst_id = ann['properties']['_id'],
+                inst_id = ann.get('properties',{}).get('_id',jic_uuid),
                 kwargs = {
-                    'name': ann['properties']['name'],
-                    'item': slide_id,
+                    'name': ann.get('properties',{}).get('name'),
+                    'item': item_id
                 }
             )
 
@@ -468,26 +491,26 @@ class fusionDB:
                 # Adding image overlay layer
                 new_image_overlay = self.get_create(
                     table_name = 'image_overlay',
-                    inst_id = ann['properties']['_id'],
+                    inst_id = ann.get('properties',{}).get('_id',self.get_uuid()),
                     kwargs = {
-                        'bounds': ann['image_bounds'],
-                        'properties': ann['image_properties'],
-                        'image_src': ann['image_path'],
-                        'layer': ann['properties']['_id'],
-                        'item': slide_id
+                        'bounds': ann.get('image_bounds'),
+                        'properties': ann.get('image_properties'),
+                        'image_src': ann.get('image_path'),
+                        'layer': ann.get('properties',{}).get('_id',jic_uuid),
+                        'item': item_id
                     }
                 )
             else:
                 # Adding Structures in Layer
-                for f_idx, f in enumerate(ann['features']):
+                for f_idx, f in enumerate(ann.get('features',[])):
                     new_structure = self.get_create(
                         table_name = 'structure',
-                        inst_id = f['properties'].get('_id',uuid.uuid4().hex[:24]),
+                        inst_id = f.get('properties',{}).get('_id',uuid.uuid4().hex[:24]),
                         kwargs = {
-                            'geom': f['geometry'],
-                            'properties': f['properties'],
-                            'layer': ann['properties']['_id'],
-                            'item': slide_id,
+                            'geom': f.get('geometry'),
+                            'properties': f.get('properties',{'name': ann.get('properties',{}).get('name')}),
+                            'layer': ann.get('properties',{}).get('_id',jic_uuid),
+                            'item': item_id,
                         }
                     )
 
@@ -933,41 +956,47 @@ class fusionDB:
         else:
             user_access_list = []
 
-
         with self.get_db() as session:
             item_query = session.query(
                 Item
             ).filter(Item.id==item_id).first()
 
-            if not item_query.get('public'):
+            if not item_query.to_dict().get('public'):
                 if not item_id in user_access_list:
                     return []
             
             layer_query = session.query(
-                Layer.id
+                Layer.name,
+                Layer.id,
+                Layer.item
             ).filter(Layer.item==item_id)
 
             feature_collection_list = []
             for l in layer_query.all():
+                #print(f'{l=}, (item_id={item_id})')
+                if not l[2]==item_id:
+                    continue
 
                 feature_collection = {
                     'type': 'FeatureCollection',
                     'features': [],
                     'properties': {
-                        'name': l.get('name'),
-                        '_id': l.get('id')
+                        'name': l[0],
+                        '_id': l[1]
                     }
                 }
 
                 structure_query = session.query(
-                    Structure
-                ).filter(Structure.layer==Layer.id)
+                    Structure.geom,
+                    Structure.properties,
+                    Structure.layer
+                ).filter(Structure.layer==l[1])
 
                 for s in structure_query.all():
                     feature_collection['features'].append({
                         'type': 'Feature',
-                        'geometry': s.get('geom'),
-                        'properties': s.get('properties')
+                        'geometry': s[0],
+                        'properties': s[1]
                     })
 
 

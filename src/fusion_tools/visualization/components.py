@@ -1209,7 +1209,7 @@ class Visualization:
                             'id': local_slide_id,
                             'cached': True,
                             'public': False,
-                            'type': 'local',
+                            'item_type': 'local_item',
                         } | self.local_tile_server.get_slide_urls(local_slide_id)
                     else:
                         self.local_tile_server.add_new_slide(
@@ -1224,7 +1224,7 @@ class Visualization:
                             'id': local_slide_id,
                             'cached': True,
                             'public': s.public,
-                            'type': 'local',
+                            'item_type': 'local_item',
                         } | self.local_tile_server.get_slide_urls(local_slide_id)
 
                 slide_store['current'].append(slide_dict)
@@ -1247,7 +1247,7 @@ class Visualization:
                             'id': j.id,
                             'url': local_tile_server_url,
                             'cached': True,
-                            'type': 'local',
+                            'item_type': 'local_item',
                         } | t.get_slide_urls(j.id, standalone = True)
                         for j_idx,j in enumerate(t.get_item_names_ids())
                     ])
@@ -1257,7 +1257,7 @@ class Visualization:
                             'id': j.id,
                             'url': local_tile_server_url,
                             'cached': True,
-                            'type': 'local',
+                            'item_type': 'local_item',
                         } | j.get_slide_urls(j.id,standalone=True)
                         for j_idx,j in enumerate(t.get_item_names_ids())
                     ])
@@ -1271,7 +1271,7 @@ class Visualization:
                         'remote_id': t.item_id,
                         'url': t.base_url,
                         'public': True,
-                        'type': 'remote',
+                        'item_type': 'remote_item',
                     })
                 elif type(t)==CustomTileServer:
                     slide_store['current'].append({

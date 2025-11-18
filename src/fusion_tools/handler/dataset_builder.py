@@ -93,7 +93,7 @@ class DatasetBuilder(DSATool):
         starting_slides_components = []
         starting_slide_idx = 0
         for s in session_data['current']:
-            if s.get('type')=='remote':
+            if s.get('item_type')=='remote_item':
                 local = False
                 user_token = user_external_token
                 if not s['url']==self.handler.girderApiUrl:
@@ -1267,7 +1267,7 @@ class DatasetBuilder(DSATool):
 
         prev_vis_data_in_handler = []
         for i in session_data['current']:
-            if i.get('type')=='remote':
+            if i.get('item_type')=='remote_item':
                 if i['url']==self.handler.girderApiUrl:
                     prev_vis_data_in_handler.append(i)
                 else:
@@ -1287,7 +1287,7 @@ class DatasetBuilder(DSATool):
                         'id': s.get('_id',''),
                         'remote_id': s.get('_id'),
                         'url': self.handler.girderApiUrl,
-                        'type': 'remote'
+                        'item_type': 'remote_item'
                     }
                 )
 
