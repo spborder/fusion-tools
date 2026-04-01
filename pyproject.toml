@@ -1,6 +1,6 @@
 [project]
 name = "fusion-tools"
-version = "3.6.89"
+version = "3.6.90"
 description = "Modular visualization and analysis dashboard creation for high-resolution microscopy images."
 authors = [
     {name = "Sam Border", email = "sam.border2256@gmail.com"}
@@ -39,5 +39,3 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.group.build.dependencies]
 build = "^1.2.2.post1"
-
-

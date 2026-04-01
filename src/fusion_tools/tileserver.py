@@ -20,12 +20,12 @@ import asyncio
 
 from shapely.geometry import box, shape
 
-from fusion_tools.database.database import fusionDB 
+from fusion_tools.database.database import fusionDB
 from fusion_tools.utils.shapes import (
     load_annotations,
-    histomics_to_geojson, 
-    detect_image_overlay, 
-    detect_geojson, 
+    histomics_to_geojson,
+    detect_image_overlay,
+    detect_geojson,
     detect_histomics,
     structures_within_poly,
     extract_nested_prop
@@ -41,7 +41,7 @@ class Slide:
                  metadata: Union[dict,None] = None,
                  image_style: Union[dict,None] = None,
                  public: bool = False):
-        
+
         self.image_filepath = image_filepath
         self.annotations = annotations
         self.metadata = metadata
@@ -50,7 +50,7 @@ class Slide:
 
         # Checking path exists
         assert(os.path.exists(self.image_filepath))
-        
+
         # Checking image is readable by large_image
         if image_style is None:
             img_source = large_image.open(self.image_filepath)
@@ -102,11 +102,11 @@ class Slide:
         for a in annotations:
             if hasattr(a,'to_dict'):
                 a = a.to_dict()
-                
+
             if 'properties' in a:
                 ann_metadata.append({
                     'name': a['properties']['name'],
-                    '_id': a['properties']['_id'] 
+                    '_id': a['properties']['_id']
                 })
             elif 'image_path' in a:
                 ann_metadata.append(a)
@@ -159,10 +159,10 @@ class Slide:
                             print(f'Found annotations of type: {type(n)}, make sure to specify if this is an overlay image (use fusion_tools.SlideImageOverlay) or a label mask (use fusion_tools.utils.shapes.load_label_mask)')
                         else:
                             print(f'Unknown annotations type found: {n}')
-                    
+
                     geojson_annotations.extend(processed_anns)
                     annotations_metadata.extend(self.extract_meta_dict(processed_anns))
-                        
+
             elif type(annotations)==dict:
                 if 'annotation' in annotations:
                     converted_annotations = histomics_to_geojson(annotations)
@@ -172,13 +172,13 @@ class Slide:
                     geojson_annotations.append(annotations)
                     annotations_metadata.extend(self.extract_meta_dict([annotations]))
 
-        return geojson_annotations, annotations_metadata    
+        return geojson_annotations, annotations_metadata
 
 
 class TileServer:
     """Components which pull information from a slide(s)
     """
-    
+
     def get_slide_urls(slide_dict,**kwargs):
         raise NotImplementedError
 
@@ -241,12 +241,12 @@ class LocalTileServer(TileServer):
 
     def __str__(self):
         return f'TileServer class to {self.host}:{self.tile_server_port}'
-    
+
     def add_new_image(self,
-        new_image_id:str, 
-        new_image_path:str, 
-        new_annotations:Union[str,list,dict,None] = None, 
-        new_metadata:Union[dict,None] = None, 
+        new_image_id:str,
+        new_image_path:str,
+        new_annotations:Union[str,list,dict,None] = None,
+        new_metadata:Union[dict,None] = None,
         new_image_style:Union[dict,None] = None,
         new_image_public: bool = False,
         session_id: Union[str,None] = None,
@@ -271,6 +271,7 @@ class LocalTileServer(TileServer):
         self.database.add_slide(
             slide_id = slide_id,
             slide_name = slide_name,
+            item_type = 'local_item',
             metadata = slide_obj.metadata,
             image_metadata = slide_obj.image_metadata,
             image_filepath = slide_obj.image_filepath,
@@ -316,15 +317,15 @@ class LocalTileServer(TileServer):
                 'filters': {
                     'item': {
                         'id': item_id
-                    } 
+                    }
                 }| user_filter
             }
         )
 
         return image_item
-    
+
     async def get_tile_source(self,item_id:str,style:Union[str,None]=None, token: Union[str,None] = None):
-        """Getting large-image tile source for a given id+style combo. 
+        """Getting large-image tile source for a given id+style combo.
 
         :param item_id: String uuid for local image
         :type item_id: str
@@ -347,7 +348,7 @@ class LocalTileServer(TileServer):
             )
 
             return tile_source
-        
+
     async def get_item_annotations(self, item_id:str, request: Request = None):
         """Loading annotations from item database
 
@@ -387,7 +388,7 @@ class LocalTileServer(TileServer):
                     'filters': {
                         'layer': {
                             'id': layer_id
-                        } 
+                        }
                     }| user_filter
                 }
             )
@@ -454,7 +455,7 @@ class LocalTileServer(TileServer):
         )
 
         return {'message': item_ids}
-    
+
     async def get_id_info(self, id:str):
         """Get info for a single id
         """
@@ -472,7 +473,7 @@ class LocalTileServer(TileServer):
                 media_type='application/json',
                 status_code=400,
             )
-    
+
     def get_item_names_ids(self, filters = None, size = None, offset = 0):
         """Get list of names and ids of all locally stored images in this tileserver
         """
@@ -498,7 +499,7 @@ class LocalTileServer(TileServer):
 
     @staticmethod
     def get_slide_urls(slide_dict,user_token,standalone = False):
-        
+
         slide_id = slide_dict.get('id')
         url = slide_dict.get('url')
 
@@ -553,7 +554,7 @@ class LocalTileServer(TileServer):
         metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/metadata'
 
         return metadata_url
-        
+
     def get_image_metadata_url(self,slide_id):
         image_metadata_url = f'{self.protocol}://{self.host}:{self.tile_server_port}/{slide_id}/image_metadata'
 
@@ -589,7 +590,7 @@ class LocalTileServer(TileServer):
         tile_source = tile_source[0]
         if tile_source is None:
             return Response(
-                content = 'invalid image id', 
+                content = 'invalid image id',
                 media_type='application/json',
                 status_code=400,
             )
@@ -602,7 +603,7 @@ class LocalTileServer(TileServer):
                 y = y,
                 z = z,
             )
-    
+
         except large_image.exceptions.TileSourceXYZRangeError:
             # This error appears for any negative tile coordinates
             raw_tile = np.zeros(
@@ -614,10 +615,10 @@ class LocalTileServer(TileServer):
             ).tobytes()
 
         return Response(
-            content = raw_tile, 
+            content = raw_tile,
             media_type='image/png',
         )
-    
+
     async def get_image_metadata(self,id:str, request:Request = None):
         """Getting large-image metadata for image
 
@@ -647,10 +648,10 @@ class LocalTileServer(TileServer):
         else:
             return Response(
                 content = 'invalid image id',
-                media_type='application/json', 
+                media_type='application/json',
                 status_code=400,
             )
-        
+
     async def get_metadata(self, id:str, request: Request = None):
         """Getting metadata associated with slide/case/patient
 
@@ -683,7 +684,7 @@ class LocalTileServer(TileServer):
                 media_type='application/json',
                 status_code=400,
             )
-    
+
     async def get_region(self, id:str, top: int, left: int, bottom:int, right:int,style:Union[None,str] = None):
         """
         Grabbing a specific region in the image based on bounding box coordinates
@@ -700,7 +701,7 @@ class LocalTileServer(TileServer):
 
         tile_source = await asyncio.gather(self.get_tile_source(id,style, token))
         tile_source = tile_source[0]
-        
+
         if tile_source is None:
             return Response(
                 content = 'invalid image id',
@@ -738,15 +739,15 @@ class LocalTileServer(TileServer):
 
         if tile_source is None:
             return Response(
-                content = 'invalid image id', 
-                media_type = 'application/json', 
+                content = 'invalid image id',
+                media_type = 'application/json',
                 status_code=400,
             )
 
         thumbnail, mime_type = tile_source.getThumbnail(encoding='PNG')
-        
+
         return Response(
-            content = thumbnail, 
+            content = thumbnail,
             media_type = 'image/png',
         )
 
@@ -767,7 +768,7 @@ class LocalTileServer(TileServer):
         """
 
         image_annotations = await asyncio.gather(self.get_item_annotations(id, request))
-        
+
         if len(image_annotations)>0:
             if all([i is None for i in [top,left,bottom,right]]):
                 # Returning all annotations by default
@@ -792,7 +793,7 @@ class LocalTileServer(TileServer):
                                 # If it doesn't intersect should it return anything?
 
                         elif detect_geojson(ann):
-                            
+
                             if type(ann)==dict:
                                 filtered_anns = structures_within_poly(
                                     original = ann,
@@ -826,14 +827,14 @@ class LocalTileServer(TileServer):
                         else:
                             print(f'Unrecognized annotation format found for image: {id}')
                     return Response(
-                        content = json.dumps(image_region_anns), 
+                        content = json.dumps(image_region_anns),
                         media_type='application/json',
                     )
 
         else:
             return Response(
                 content = 'invalid image id',
-                media_type = 'application/json', 
+                media_type = 'application/json',
                 status_code = 400,
             )
 
@@ -858,7 +859,7 @@ class LocalTileServer(TileServer):
                 media_type = 'application/json',
                 status_code = 400,
             )
-        
+
         image_item = image_item[0][0]
 
         ann_meta = image_item.get('ann_meta',[])
@@ -888,13 +889,13 @@ class LocalTileServer(TileServer):
                 if not v_val in v_info['distinct']:
                     v_info['distinct'].append(v_val)
                     v_info['distinctcount'] += 1
-                
+
                 v_info['count'] +=1
                 property_list[property_names.index('annotation.name')] = v_info
 
             else:
                 property_names.append('annotation.name')
-                
+
                 v_info = {
                     'key': 'annotation.name',
                     'title': 'Annotation Name',
@@ -916,7 +917,7 @@ class LocalTileServer(TileServer):
 
             else:
                 property_names.append('annotation.id')
-                
+
                 v_info = {
                     'key': 'annotation.id',
                     'title': 'Annotation ID',
@@ -936,7 +937,7 @@ class LocalTileServer(TileServer):
                             values_list = extract_nested_prop(f_props[f_m],4)
                         elif type(f_props[f_m]) in [str,int,float]:
                             values_list = [{f_m: f_props[f_m]}]
-                        
+
                         for v in values_list:
                             v_key = list(v.keys())[0]
                             v_val = list(v.values())[0]
@@ -947,19 +948,19 @@ class LocalTileServer(TileServer):
                                     if not v_val in v_info['distinct']:
                                         v_info['distinct'].append(v_val)
                                         v_info['distinctcount'] += 1
-                                    
+
                                 elif type(v_val) in [int,float]:
                                     if v_val>v_info['max']:
                                         v_info['max'] = v_val
                                     elif v_val<v_info['min']:
                                         v_info['min'] = v_val
-                                    
+
                                 v_info['count'] += 1
 
                                 property_list[property_names.index(v_key)] = v_info
                             else:
                                 property_names.append(v_key)
-                                
+
                                 v_info = {
                                     'key': v_key.lower().replace(' --> ','.'),
                                     'title': v_key,
@@ -976,7 +977,7 @@ class LocalTileServer(TileServer):
                                     v_info['min'] = v_val
 
                                 property_list.append(v_info)
-                                    
+
 
         return Response(
             content = json.dumps(property_list),
@@ -1000,7 +1001,7 @@ class LocalTileServer(TileServer):
             if request.query_params.get('token'):
                 token = request.query_params.get('token')
 
-                
+
         image_item = await self.get_item(id, token)[0]
         image_anns = await self.get_item_annotations(id,request)
 
@@ -1028,7 +1029,7 @@ class LocalTileServer(TileServer):
                 elif type(include_anns)==list:
                     if not a_id in include_anns and not a_name in include_anns:
                         continue
-                        
+
             for f in features:
                 f_props = f.get('properties')
                 f_bbox = list(shape(f['geometry']).bounds)
@@ -1089,7 +1090,7 @@ class LocalTileServer(TileServer):
         :type port: str, optional
         """
         self.app.include_router(self.router)
-        
+
         # Enabling CORS (https://fastapi.tiangolo.com/tutorial/cors/#use-corsmiddleware)
         self.app.add_middleware(
             CORSMiddleware,
@@ -1121,7 +1122,7 @@ class DSATileServer(TileServer):
         self.base_url = api_url
         self.item_id = item_id
 
-        #TODO: Add some method for appending the user_token to these URLs (Might be better to save this on the 
+        #TODO: Add some method for appending the user_token to these URLs (Might be better to save this on the
         # component side so that that property can be dynamic)
         if user_token is None:
             info_url = f'{api_url}/item/{item_id}'
@@ -1161,7 +1162,7 @@ class DSATileServer(TileServer):
 
     @staticmethod
     def get_slide_urls(slide_dict,user_token):
-        
+
         item_id = slide_dict.get('remote_id')
         item_url = slide_dict.get('url')
 
@@ -1198,10 +1199,10 @@ class DSATileServer(TileServer):
         slide_url_dict['annotations_geojson_url'] = annotations_geojson_urls
 
         return slide_url_dict
-    
+
     @staticmethod
     def get_tile_iterator(slide_url_dict, tile_size):
-        
+
         slide_image_metadata = requests.get(slide_url_dict.get('image_metadata')).json()
         slide_height, slide_width = slide_image_metadata.get('sizeY'), slide_image_metadata.get('sizeX')
         # minx, miny, maxx, maxy
@@ -1296,7 +1297,7 @@ class CustomTileServer(TileServer):
         :param image_metadata: Dictionary containing at least ['tileWidth','tileHeight','sizeX','sizeY','levels']
         :type image_metadata: dict
         """
-        
+
         self.tiles_url = tiles_url
         self.regions_url = regions_url
         self.annotations_url = annotations_url

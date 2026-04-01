@@ -57,9 +57,9 @@ class Visualization:
             components = components
         )
         vis_session.start()
-        
+
     """
-    
+
     def __init__(self,
                  local_slides: Union[Slide,list,str,None] = None,
                  local_annotations: Union[list,dict,None] = None,
@@ -335,7 +335,7 @@ class Visualization:
         if clicked:
             return not is_open
         return is_open
-    
+
     def open_header(self, clicked, is_open):
 
         if clicked:
@@ -352,7 +352,7 @@ class Visualization:
                 header_size = self.header[ctx.triggered_id['index']].modal_size
             else:
                 header_size = 'lg'
-            
+
             if hasattr(self.header[ctx.triggered_id['index']],'fullscreen'):
                 header_fullscreen = self.header[ctx.triggered_id['index']].fullscreen
             else:
@@ -369,7 +369,7 @@ class Visualization:
             raise exceptions.PreventUpdate
 
     def open_current_modal(self, clicked, session_data, in_memory_store):
-        
+
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
 
@@ -541,7 +541,7 @@ class Visualization:
                                 ],md = 10)
                             ])
                         )
-            
+
 
             button_rows = dbc.Row([
                 dbc.Col(
@@ -576,7 +576,7 @@ class Visualization:
                 dbc.ModalTitle("Current User Actions")
             ]),
             dbc.ModalBody([
-                user_avatar,   
+                user_avatar,
                 html.Hr(),
             ] + user_info_rows + [html.Hr(),session_info_rows]+[
                 html.Hr(),
@@ -597,7 +597,7 @@ class Visualization:
                             target='_blank'
                         )
                     ],md='auto')
-                ]), 
+                ]),
             ])
         ]
 
@@ -610,7 +610,7 @@ class Visualization:
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
-        
+
         modal_children = [
             dbc.ModalHeader([
                 dbc.ModalTitle("Log in")
@@ -625,8 +625,8 @@ class Visualization:
                     ),
                     dbc.Col(
                         dbc.Input(
-                            type = 'text', 
-                            id = {'type': 'user-prev-val','index': 0}, 
+                            type = 'text',
+                            id = {'type': 'user-prev-val','index': 0},
                             placeholder = 'login'
                         ),
                         md = 10
@@ -641,8 +641,8 @@ class Visualization:
                     ),
                     dbc.Col(
                         dbc.Input(
-                            type = 'password', 
-                            id = {'type': 'user-prev-val','index': 1}, 
+                            type = 'password',
+                            id = {'type': 'user-prev-val','index': 1},
                             placeholder = 'password'
                         )
                     )
@@ -684,10 +684,10 @@ class Visualization:
                             target='_blank'
                         )
                     ],md='auto')
-                ]), 
+                ]),
             ])
         ]
-        
+
         if clicked:
             return modal_children
         else:
@@ -697,7 +697,7 @@ class Visualization:
 
         if not any([i['value'] for i in ctx.triggered]):
             raise exceptions.PreventUpdate
-        
+
         modal_children = [
             dbc.ModalHeader([
                 dbc.ModalTitle("Create New User")
@@ -757,8 +757,8 @@ class Visualization:
                     ),
                     dbc.Col(
                         dbc.Input(
-                            type = 'text', 
-                            id = {'type': 'user-new-val','index': 3}, 
+                            type = 'text',
+                            id = {'type': 'user-new-val','index': 3},
                             placeholder = 'login'
                         ),
                         md = 10
@@ -773,8 +773,8 @@ class Visualization:
                     ),
                     dbc.Col(
                         dbc.Input(
-                            type = 'password', 
-                            id = {'type': 'user-new-val','index': 4}, 
+                            type = 'password',
+                            id = {'type': 'user-new-val','index': 4},
                             placeholder = 'password'
                         )
                     )
@@ -807,10 +807,10 @@ class Visualization:
                             target='_blank'
                         )
                     ],md='auto')
-                ]), 
+                ]),
             ])
         ]
-        
+
         if clicked:
             return modal_children
         else:
@@ -843,7 +843,7 @@ class Visualization:
             if new_user is None:
                 # Some failure creating new user
                 raise exceptions.PreventUpdate
-            
+
             else:
                 new_in_memory = {
                     'user': new_user,
@@ -872,14 +872,14 @@ class Visualization:
                 }
 
         elif 'user-logout-submit' in ctx.triggered_id['type']:
-            
+
             new_in_memory = {
                 'user': None,
                 'session': None
             }
 
         elif 'user-info-save' in ctx.triggered_id['type']:
-            
+
             current_keys.append('token')
             current_vals.append(uuid.uuid4().hex[:24])
 
@@ -938,7 +938,7 @@ class Visualization:
             session_data['local'] = self.vis_store_content.get('local')
 
         elif self.access_count > 1:
-            
+
             current_user_ids = self.database.get_ids('user')
             current_vis_session_ids = self.database.get_ids('vis_session')
 
@@ -1027,7 +1027,7 @@ class Visualization:
                 in_memory_store['session'] = new_session
                 session_data['user'] = new_user
                 session_data['session'] = new_session
-            
+
             elif in_memory_store.get('user').get('id') in current_user_ids:
                 if in_memory_store.get('session').get('id') in current_vis_session_ids:
                     print('------------Previous Window/Previous User/Previous Session---------------')
@@ -1074,7 +1074,7 @@ class Visualization:
                     use_prefix = True,
                     session_data=session_data
                 )
-            
+
             elif 'session' in pathname:
                 from fusion_tools.handler.dsa_handler import DSAHandler
                 temp_handler = DSAHandler(
@@ -1089,7 +1089,7 @@ class Visualization:
 
                 if 'user' in session_data:
                     new_session_data['user'] = session_data['user']
-                
+
                 page_pathname = session_content['page'].replace(self.app_options.get('requests_pathname_prefix','/'),'').replace('-',' ')
 
                 page_content = self.update_page_layout(
@@ -1101,7 +1101,7 @@ class Visualization:
                 in_memory_store['session'] = {
                     'id': path_search.replace('?id=','')
                 }
-            
+
             elif 'item' in pathname:
                 #TODO: Loading an individual item from id
 
@@ -1134,7 +1134,7 @@ class Visualization:
                 use_prefix = True,
                 session_data=session_data
             )
-    
+
         return page_content, signed_in_user, json.dumps(session_data), json.dumps(in_memory_store)
 
     def new_user(self, guest: bool = True, id: Union[str,None] = None):
@@ -1177,7 +1177,7 @@ class Visualization:
         if not self.local_slides is None:
             if self.local_annotations is None:
                 self.local_annotations = [None]*len(self.local_slides)
-            
+
             if self.slide_metadata is None:
                 self.slide_metadata = [None]*len(self.local_slides)
 
@@ -1210,7 +1210,9 @@ class Visualization:
                             'cached': True,
                             'public': False,
                             'item_type': 'local_item',
-                        } | self.local_tile_server.get_slide_urls(local_slide_id)
+                            'url': self.local_tile_server.access_url
+                        }
+                        slide_dict = slide_dict | self.local_tile_server.get_slide_urls(slide_dict,slide_store.get('user').get('token'))
                     else:
                         self.local_tile_server.add_new_slide(
                             slide_id = local_slide_id,
@@ -1225,7 +1227,9 @@ class Visualization:
                             'cached': True,
                             'public': s.public,
                             'item_type': 'local_item',
-                        } | self.local_tile_server.get_slide_urls(local_slide_id)
+                            'url': self.local_tile_server.access_url
+                        }
+                        slide_dict = slide_dict | self.local_tile_server.get_slide_urls(slide_dict,slide_store.get('user').get('token'))
 
                 slide_store['current'].append(slide_dict)
                 slide_store['local'].append(slide_dict)
@@ -1236,31 +1240,24 @@ class Visualization:
         if not self.tileservers is None:
             if isinstance(self.tileservers,TileServer):
                 self.tileservers = [self.tileservers]
-            
+
             for t_idx,t in enumerate(self.tileservers):
                 if type(t)==LocalTileServer:
                     local_tile_server_url = f'{t.protocol}://{t.host}:{t.port}/tileserver'
 
-                    slide_store['current'].extend([
-                        {
+                    for j_idx,j in enumerate(t.get_item_names_ids()):
+
+                        slide_dict = {
                             'name': j.name,
                             'id': j.id,
                             'url': local_tile_server_url,
                             'cached': True,
                             'item_type': 'local_item',
-                        } | t.get_slide_urls(j.id, standalone = True)
-                        for j_idx,j in enumerate(t.get_item_names_ids())
-                    ])
-                    slide_store['local'].extend([
-                        {
-                            'name': j.name,
-                            'id': j.id,
-                            'url': local_tile_server_url,
-                            'cached': True,
-                            'item_type': 'local_item',
-                        } | j.get_slide_urls(j.id,standalone=True)
-                        for j_idx,j in enumerate(t.get_item_names_ids())
-                    ])
+                        }
+                        slide_dict = slide_dict | t.get_slide_urls(j, slide_store.get('user').get('token'),standalone = True)
+
+                        slide_store['current'].append(slide_dict)
+                        slide_store['local'].extend(slide_dict)
 
                 elif type(t)==DSATileServer:
 
@@ -1434,7 +1431,7 @@ class Visualization:
         return layout
 
     def update_page_layout(self, page_components_list:list, use_prefix:bool, session_data:Union[list,dict]):
-        
+
         page_children = []
         for row_idx,row in enumerate(page_components_list):
             row_children = []
@@ -1444,7 +1441,7 @@ class Visualization:
                         # If this component needs to be updated with new session data, call that method here
                         if col.session_update:
                             col_layout = col.update_layout(
-                                session_data = session_data, 
+                                session_data = session_data,
                                 use_prefix = use_prefix
                             )
                         else:
@@ -1505,7 +1502,7 @@ class Visualization:
                         )
 
             else:
-                
+
                 if row.session_update:
                     row_layout = row.update_layout(
                         session_data = session_data,
@@ -1525,7 +1522,7 @@ class Visualization:
                         width = True
                     )
                 )
-            
+
             page_children.append(
                 dbc.Row(
                     row_children
@@ -1562,9 +1559,9 @@ class Visualization:
 
             print(f'------Creating Visualization with {n_rows} rows, {n_cols} columns, and {n_tabs} tabs--------')
             print(f'----------------- Components in the same {self.linkage} may communicate through callbacks---------')
-        
+
             self.components = {
-                'main': self.components 
+                'main': self.components
             }
 
             self.default_page = 'main'
@@ -1582,7 +1579,7 @@ class Visualization:
 
                 print(f'------Creating Visualization Page {page} with {n_rows} rows, {n_cols} columns, and {n_tabs} tabs--------')
                 print(f'----------------- Components in the same {self.linkage} may communicate through callbacks---------')
-            
+
             if self.default_page is None:
                 # Setting default page to be the first listed page in a multi-page layout
                 self.default_page = self.app_options.get('requests_pathname_prefix','/')+list(self.components.keys())[0].replace(" ","-")
@@ -1590,7 +1587,7 @@ class Visualization:
         # Iterating through each named page
         for page_idx,page in enumerate(list(self.components.keys())):
             page_children = []
-            
+
             if type(self.linkage)==str:
                 if self.linkage=='page':
                     component_prefix = page_idx
@@ -1600,7 +1597,7 @@ class Visualization:
 
             row_components = []
             for row_idx,row in enumerate(self.components[page]):
-                
+
                 if type(self.linkage)==str:
                     if self.linkage=='row':
                         component_prefix = row_idx
@@ -1626,7 +1623,7 @@ class Visualization:
                             col.gen_layout(session_data = self.vis_store_content)
                             col.add_database(database = self.database)
                             col_components.append(str(col))
-                            
+
                             row_children.append(
                                 dbc.Col(
                                     dbc.Card([
@@ -1651,7 +1648,7 @@ class Visualization:
                                 elif type(self.linkage)==list:
                                     if self.linkage[page_idx]=='tab':
                                         component_prefix = tab_idx
-                                
+
                                 tab.add_assets_folder(self.assets_folder)
                                 tab.load(component_prefix = component_prefix)
                                 tab.gen_layout(session_data = self.vis_store_content)
@@ -1686,10 +1683,10 @@ class Visualization:
                                     width = True
                                 )
                             )
-                
+
                     row_components.append(col_components)
                 else:
-                    
+
                     row.add_assets_folder(self.assets_folder)
                     row.load(component_prefix = component_prefix)
                     row.gen_layout(session_data = self.vis_store_content)
@@ -1721,7 +1718,7 @@ class Visualization:
         if upload_check:
             from fusion_tools.handler.dataset_uploader import DSAUploadHandler
             du.configure_upload(
-                self.viewer_app, 
+                self.viewer_app,
                 Path(self.assets_folder+'/tmp/uploads'),
                 upload_api = '/upload',
                 http_request_handler = DSAUploadHandler
@@ -1735,11 +1732,11 @@ class Visualization:
             elif type(c)==str:
                 if c=='DSA Uploader':
                     check = True
-        
+
         return check
 
     def gen_header_components(self):
-        
+
         for h_idx, h in enumerate(self.header):
             h.load(h_idx)
             h.gen_layout({})
@@ -1846,9 +1843,9 @@ class Visualization:
                     max_age = cors_options.get('max_age','36000000')
                 )
             )
-        
+
         app.mount(
-            path = self.app_options.get('requests_pathname_prefix','/'), 
+            path = self.app_options.get('requests_pathname_prefix','/'),
             app = CORSMiddleware(
                 WSGIMiddleware(self.viewer_app.server),
                     allow_origins = allowed_origins if not cors_options.get('allow_origins')==['*'] else ['*'],
@@ -1883,8 +1880,8 @@ class Visualization:
             )
 
         else:
-            if not self.local_tile_server is None:      
-                nest_asyncio.apply()      
+            if not self.local_tile_server is None:
+                nest_asyncio.apply()
                 new_thread = threading.Thread(
                     target = self.local_tile_server.start,
                     daemon=True
@@ -1901,5 +1898,3 @@ class Visualization:
                     host = self.app_options['host'],
                     port = self.app_options['port']
                 )
-
-
