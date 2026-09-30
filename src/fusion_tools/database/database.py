@@ -3,74 +3,77 @@
 Structure schemas for different items in SQLite database
 
 """
-import json
-import uuid
-import time
-import bcrypt
 
+import time
+import uuid
+from collections.abc import Generator
+from contextlib import contextmanager
 from datetime import datetime
 
-from sqlalchemy import (
-    not_, or_, and_, func, select, insert, event, union_all, create_engine, update, exc,
-    Column, String, Boolean,ForeignKey, JSON, text)
-from sqlalchemy.orm import (
-    declarative_base, sessionmaker, 
-    mapped_column, Session, scoped_session,
-    with_loader_criteria
-)
-from sqlalchemy.pool import NullPool
-
-from typing import Generator
-from contextlib import contextmanager
+import bcrypt
 from shapely.geometry import box, shape
-
-from typing_extensions import Union
+from sqlalchemy import (
+    create_engine,
+    func,
+    insert,
+    not_,
+    or_,
+    select,
+    update,
+)
+from sqlalchemy.orm import (
+    Session,
+    scoped_session,
+    sessionmaker,
+)
 
 from .models import (
-    Base, User, UserAccess, 
-    VisSession, Item, Layer, 
-    LocalItem, RemoteItem,
-    Structure, ImageOverlay, Annotation,
-    Data
+    Annotation,
+    Base,
+    Data,
+    ImageOverlay,
+    Item,
+    Layer,
+    LocalItem,
+    RemoteItem,
+    Structure,
+    User,
+    UserAccess,
+    VisSession,
 )
 
-
 TABLE_NAMES = {
-    'user': User,
-    'user_access': UserAccess,
-    'vis_session': VisSession,
-    'item': Item,
-    'local_item': LocalItem,
-    'remote_item': RemoteItem,
-    'layer': Layer,
-    'structure': Structure,
-    'image_overlay': ImageOverlay,
-    'annotation': Annotation,
-    'data': Data
+    "user": User,
+    "user_access": UserAccess,
+    "vis_session": VisSession,
+    "item": Item,
+    "local_item": LocalItem,
+    "remote_item": RemoteItem,
+    "layer": Layer,
+    "structure": Structure,
+    "image_overlay": ImageOverlay,
+    "annotation": Annotation,
+    "data": Data,
 }
 
 
-#TODO: add access check to UserAccess table for any query that mentions data from an item
+# TODO: add access check to UserAccess table for any query that mentions data from an item
 # This includes Item, Layer, Structure, ImageOverlay, and Annotation elements
 # either user_id or user_token can be used to identify a user, though user_id is a column in UserAccess
 
 
 class fusionDB:
-    def __init__(self,
-                 db_url:str,
-                 echo:bool = False):
-        
+    def __init__(self, db_url: str, echo: bool = False):
+
         self.engine = create_engine(
             db_url,
-            connect_args={
-                "check_same_thread": False
-            },
-            echo = echo,
-            pool_pre_ping = True,
-            pool_recycle=3600
+            connect_args={"check_same_thread": False},
+            echo=echo,
+            pool_pre_ping=True,
+            pool_recycle=3600,
         )
 
-        Base.metadata.create_all(bind = self.engine)
+        Base.metadata.create_all(bind=self.engine)
         self.SessionLocal = scoped_session(sessionmaker(bind=self.engine))
 
         """
@@ -102,9 +105,9 @@ class fusionDB:
 
     def get_uuid(self):
         return uuid.uuid4().hex[:24]
-    
-    def add(self, obj, session = None):
-        # Using sessionmaker in a context manager 
+
+    def add(self, obj, session=None):
+        # Using sessionmaker in a context manager
         # (closes automatically and rolls back in the event of a database error)
         if session is None:
             with self.get_db() as session:
@@ -115,7 +118,7 @@ class fusionDB:
 
         return True
 
-    def remove(self, obj, session = None):
+    def remove(self, obj, session=None):
         # Using sessionmaker in a context manager
         # (closes automatically and rolls back in the event of a database error)
         # Testing if the session object also has a .delete method
@@ -125,10 +128,15 @@ class fusionDB:
                 session.commit()
         else:
             session.delete(obj)
-        
+
         return True
-    
-    def get_create(self, table_name:str, inst_id:Union[str,None] = None, kwargs:Union[dict,None] = None):
+
+    def get_create(
+        self,
+        table_name: str,
+        inst_id: str | None = None,
+        kwargs: dict | None = None,
+    ):
         """Function for updating or adding items to the database based on whether or not that particular instance already exists
 
         :param table_name: Name of table that the instance belongs/should belong to
@@ -137,23 +145,24 @@ class fusionDB:
         :type inst_id: Union[str,None], optional
         :param kwargs: Additional arguments used in the creation/updation of an instance, defaults to None
         :type kwargs: Union[dict,None], optional
-        :return: Returns the newly created instance if the table name exists 
+        :return: Returns the newly created instance if the table name exists
         """
         with self.get_db() as session:
             if table_name in TABLE_NAMES:
                 if not inst_id is None:
-                    get_create_result = session.query(
-                        TABLE_NAMES.get(table_name)
-                    ).filter_by(id = inst_id).first()
+                    get_create_result = (
+                        session.query(TABLE_NAMES.get(table_name))
+                        .filter_by(id=inst_id)
+                        .first()
+                    )
 
                     if not get_create_result:
-                        #TODO: Add a "created" option to each model
+                        # TODO: Add a "created" option to each model
 
                         # This is if this thing does not exist in the table
                         updated = datetime.now()
                         get_create_result = TABLE_NAMES.get(table_name)(
-                            id = inst_id,
-                            **kwargs | {'updated': updated}
+                            id=inst_id, **kwargs | {"updated": updated}
                         )
 
                         self.add(get_create_result, session)
@@ -161,18 +170,20 @@ class fusionDB:
                         # This is if this thing DOES exist in the table, update
                         updated = datetime.now()
                         get_create_result = TABLE_NAMES.get(table_name)(
-                            id = inst_id,
-                            **kwargs | {'updated': updated}
+                            id=inst_id, **kwargs | {"updated": updated}
                         )
-                        update_kwargs = kwargs | {'updated': updated}
-                        session.execute(update(TABLE_NAMES.get(table_name)).where(getattr(TABLE_NAMES.get(table_name),'id')==inst_id).values(update_kwargs))
-                
+                        update_kwargs = kwargs | {"updated": updated}
+                        session.execute(
+                            update(TABLE_NAMES.get(table_name))
+                            .where(TABLE_NAMES.get(table_name).id == inst_id)
+                            .values(update_kwargs)
+                        )
+
                 else:
                     new_id = self.get_uuid()
                     updated = datetime.now()
                     get_create_result = TABLE_NAMES.get(table_name)(
-                        id = new_id,
-                        **kwargs | {'updated': updated}
+                        id=new_id, **kwargs | {"updated": updated}
                     )
 
                     self.add(get_create_result, session)
@@ -183,7 +194,13 @@ class fusionDB:
             else:
                 return None
 
-    def get_remove(self, table_name:str, inst_id:Union[str,None] = None, user_id: Union[str,None] = None, vis_session_id: Union[str,None] = None):
+    def get_remove(
+        self,
+        table_name: str,
+        inst_id: str | None = None,
+        user_id: str | None = None,
+        vis_session_id: str | None = None,
+    ):
         """The opposite of self.get_create, checks if an item is present in the table and if it is, deletes it.
 
         :param table_name: Name of table that the instance belongs to
@@ -197,29 +214,29 @@ class fusionDB:
                 if not inst_id is None:
                     get_remove_result = session.query(
                         TABLE_NAMES.get(table_name)
-                    ).filter_by(id = inst_id)
+                    ).filter_by(id=inst_id)
 
                     if not get_remove_result:
-                        #print("Instance not present in db")
+                        # print("Instance not present in db")
                         # If this thing isn't in the table, don't do anything
                         pass
                     else:
                         # This is if this thing DOES exist in the table, remove it
                         if not user_id is None:
                             get_remove_result = get_remove_result.filter(
-                                getattr(TABLE_NAMES.get(table_name),'user')==user_id
+                                TABLE_NAMES.get(table_name).user == user_id
                             )
 
                         if not vis_session_id is None:
                             get_remove_result = get_remove_result.filter(
-                                getattr(TABLE_NAMES.get(table_name),'session')==vis_session_id
+                                TABLE_NAMES.get(table_name).session == vis_session_id
                             )
 
                         if get_remove_result:
                             for r in get_remove_result.all():
-                                self.remove(r,session)
+                                self.remove(r, session)
                         else:
-                            #print('Not found for this user/vis_session')
+                            # print('Not found for this user/vis_session')
                             pass
                 else:
                     # Don't delete anything if no instance id is provided
@@ -231,7 +248,7 @@ class fusionDB:
             else:
                 return None
 
-    def count(self, table_name:str):
+    def count(self, table_name: str):
         """Get the count of unique instances within this specific table
 
         :param table_name: Name of table to query (user, vis_session, item, layer, structure, image_overlay, annotation)
@@ -240,7 +257,7 @@ class fusionDB:
         :rtype: int
         """
 
-        #TODO: Add some filtering capability here
+        # TODO: Add some filtering capability here
         with self.get_db() as session:
             if table_name in TABLE_NAMES:
                 count_result = session.execute(
@@ -251,7 +268,7 @@ class fusionDB:
             else:
                 return 0
 
-    def search_op(self, search_query, table_name:str, column:str, op:dict):
+    def search_op(self, search_query, table_name: str, column: str, op: dict):
         """Method for applying different types of filters to database queries
 
         :param search_query: DB query object
@@ -267,54 +284,65 @@ class fusionDB:
         """
         op_type = list(op.keys())[0]
         op_query = list(op.values())
-        if op_type in ['==','!=','>','<','>=','<=','in','!in']:
+        if op_type in ["==", "!=", ">", "<", ">=", "<=", "in", "!in"]:
             # Numeric operations
-            if all([type(i) in [int,float] for i in op_query]) and op_type in ['==','!=','>','<','>=','<=']:
-                if op_type=='==':
+            if all([type(i) in [int, float] for i in op_query]) and op_type in [
+                "==",
+                "!=",
+                ">",
+                "<",
+                ">=",
+                "<=",
+            ]:
+                if op_type == "==":
                     search_query = search_query.filter(
-                        getattr(TABLE_NAMES.get(table_name),column)==op_query[0]
+                        getattr(TABLE_NAMES.get(table_name), column) == op_query[0]
                     )
-                elif op_type=='!=':
+                elif op_type == "!=":
                     search_query = search_query.filter(
-                        getattr(TABLE_NAMES.get(table_name),column)!=op_query[0]
+                        getattr(TABLE_NAMES.get(table_name), column) != op_query[0]
                     )
-                elif op_type=='>':
+                elif op_type == ">":
                     search_query = search_query.filter(
-                        getattr(TABLE_NAMES.get(table_name),column) > op_query[0]
+                        getattr(TABLE_NAMES.get(table_name), column) > op_query[0]
                     )
-                elif op_type=='>=':
+                elif op_type == ">=":
                     search_query = search_query.filter(
-                        getattr(TABLE_NAMES.get(table_name),column) >= op_query[0]
+                        getattr(TABLE_NAMES.get(table_name), column) >= op_query[0]
                     )
-                elif op_type=='<':
+                elif op_type == "<":
                     search_query = search_query.filter(
-                        getattr(TABLE_NAMES.get(table_name),column) < op_query[0]
+                        getattr(TABLE_NAMES.get(table_name), column) < op_query[0]
                     )
-                elif op_type=='<=':
+                elif op_type == "<=":
                     search_query = search_query.filter(
-                        getattr(TABLE_NAMES.get(table_name),column) <= op_query[0]
+                        getattr(TABLE_NAMES.get(table_name), column) <= op_query[0]
                     )
 
             # String operations
-            elif all([type(i)==str for i in op_query]) and op_type in ['==','!=']:
-                if op_type=='==':
+            elif all([type(i) == str for i in op_query]) and op_type in ["==", "!="]:
+                if op_type == "==":
                     search_query = search_query.filter(
-                        getattr(TABLE_NAMES.get(table_name),column) == op_query[0]
+                        getattr(TABLE_NAMES.get(table_name), column) == op_query[0]
                     )
-                elif op_type=='!=':
+                elif op_type == "!=":
                     search_query = search_query.filter(
-                        getattr(TABLE_NAMES.get(table_name),column) != op_query[0]
+                        getattr(TABLE_NAMES.get(table_name), column) != op_query[0]
                     )
-            
+
             # List operations
-            elif all([type(i)==list for i in op_query]) and op_type in ['in','!in']:
-                if op_type=='in':
+            elif all([type(i) == list for i in op_query]) and op_type in ["in", "!in"]:
+                if op_type == "in":
                     search_query = search_query.filter(
-                        getattr(TABLE_NAMES.get(table_name),column).in_(op_query[0])
+                        getattr(TABLE_NAMES.get(table_name), column).in_(op_query[0])
                     )
-                elif op_type=='!in':
+                elif op_type == "!in":
                     search_query = search_query.filter(
-                        not_(getattr(TABLE_NAMES.get(table_name),column).in_(op_query[0]))
+                        not_(
+                            getattr(TABLE_NAMES.get(table_name), column).in_(
+                                op_query[0]
+                            )
+                        )
                     )
 
             return search_query
@@ -322,7 +350,9 @@ class fusionDB:
         else:
             return search_query
 
-    async def search(self, search_kwargs:dict, size:Union[int,None] = None, offset = 0, order = None):
+    async def search(
+        self, search_kwargs: dict, size: int | None = None, offset=0, order=None
+    ):
         """Search DB
 
         :param search_kwargs: Dictionary containing "type" (table name) and "filters"
@@ -337,230 +367,236 @@ class fusionDB:
         :rtype: list
         """
 
-        if not search_kwargs.get('type','') in TABLE_NAMES:
+        if not search_kwargs.get("type", "") in TABLE_NAMES:
             return []
 
         # By default, not validating user access and only searching public items
         public_only_search = True
 
-        #print(f'db search called: {json.dumps(search_kwargs,indent=4)}')
+        # print(f'db search called: {json.dumps(search_kwargs,indent=4)}')
         with self.get_db() as session:
-            search_query = session.query(
-                TABLE_NAMES.get(search_kwargs.get('type'))
-            )
-            
+            search_query = session.query(TABLE_NAMES.get(search_kwargs.get("type")))
+
             # Applying filters
-            search_filters = search_kwargs.get('filters')
+            search_filters = search_kwargs.get("filters")
             if not search_filters is None:
                 table_joins = list(set(list(search_filters.keys())))
 
                 # Determine ahead of time if will need to check user access
-                if search_kwargs.get('type')=='item' and 'user' in table_joins:
+                if search_kwargs.get("type") == "item" and "user" in table_joins:
                     public_only_search = False
 
                 for t in table_joins:
                     if t in TABLE_NAMES:
-                        if hasattr(TABLE_NAMES.get(t),'item') and 'user' in table_joins:
+                        if (
+                            hasattr(TABLE_NAMES.get(t), "item")
+                            and "user" in table_joins
+                        ):
                             public_only_search = False
 
-                if search_kwargs.get('type')=='item' and public_only_search:
+                if search_kwargs.get("type") == "item" and public_only_search:
                     # This covers the case of public-only-searches
                     search_query = search_query.filter(Item.public == True)
-                    
+
                 for t in table_joins:
                     if t in TABLE_NAMES:
-                        if not t == search_kwargs.get('type'):
+                        if not t == search_kwargs.get("type"):
                             # Don't join on User, save that for checking public_only_search
-                            if t=='user':
+                            if t == "user":
                                 continue
                             search_query = search_query.join(TABLE_NAMES.get(t))
 
-                        for k,v in search_filters.get(t).items():
-                            if type(v)==str:
+                        for k, v in search_filters.get(t).items():
+                            if type(v) == str:
                                 search_query = search_query.filter(
-                                    getattr(TABLE_NAMES.get(t),k)==v
+                                    getattr(TABLE_NAMES.get(t), k) == v
                                 )
-                            elif type(v)==dict:
-                                search_query = self.search_op(search_query,t,k,v)
+                            elif type(v) == dict:
+                                search_query = self.search_op(search_query, t, k, v)
 
             if not public_only_search:
                 # Combining original query with all public items and all items the user has access to
-                user_args = search_filters.get('user')
+                user_args = search_filters.get("user")
                 query_user = self.get_user(
-                    user_id = user_args.get('id'),
-                    user_token = user_args.get('token')
+                    user_id=user_args.get("id"), user_token=user_args.get("token")
                 )
                 if not query_user is None:
                     # Filtering public or has access
-                    search_query = search_query.filter(or_(Item.public==True,Item.user_access.any(id = query_user.get('id'))))
+                    search_query = search_query.filter(
+                        or_(
+                            Item.public == True,
+                            Item.user_access.any(id=query_user.get("id")),
+                        )
+                    )
                 else:
                     # Filtering public
-                    search_query = search_query.filter(Item.public==True)
+                    search_query = search_query.filter(Item.public == True)
 
             return_list = []
-            for idx,i in enumerate(search_query.all()):
+            for idx, i in enumerate(search_query.all()):
                 if not size is None:
-                    if len(return_list)==size:
+                    if len(return_list) == size:
                         break
 
-                if idx>=offset:
+                if idx >= offset:
                     return_list.append(i.to_dict())
 
             return return_list
-      
-    def add_slide(self,
-        slide_id:str, 
-        slide_name:str,
-        item_type: str, 
-        metadata: dict, 
-        image_metadata: dict, 
-        image_filepath:Union[str,None], 
-        annotations_metadata:dict,
-        annotations:Union[list,dict,None],
-        vis_session_id: Union[str,None] = None,
-        user_id: Union[str,None] = None,
-        public: bool = False):
 
-        #print(f'{slide_id=}, {public=}, {item_type=}, {user_id=}')
-        if item_type=='local_item':
+    def add_slide(
+        self,
+        slide_id: str,
+        slide_name: str,
+        item_type: str,
+        metadata: dict,
+        image_metadata: dict,
+        image_filepath: str | None,
+        annotations_metadata: dict,
+        annotations: list | dict | None,
+        vis_session_id: str | None = None,
+        user_id: str | None = None,
+        public: bool = False,
+    ):
+
+        # print(f'{slide_id=}, {public=}, {item_type=}, {user_id=}')
+        if item_type == "local_item":
             new_item = self.get_create(
-                table_name = 'local_item',
-                inst_id = slide_id,
-                kwargs = {
-                    'name': slide_name,
-                    'meta': metadata,
-                    'image_meta': image_metadata,
-                    'ann_meta': annotations_metadata,
-                    'filepath': image_filepath,
-                    'session': vis_session_id,
-                    'public': public, 
-                }
+                table_name="local_item",
+                inst_id=slide_id,
+                kwargs={
+                    "name": slide_name,
+                    "meta": metadata,
+                    "image_meta": image_metadata,
+                    "ann_meta": annotations_metadata,
+                    "filepath": image_filepath,
+                    "session": vis_session_id,
+                    "public": public,
+                },
             )
 
-        elif item_type=='remote_item':
+        elif item_type == "remote_item":
             new_item = self.get_create(
-                table_name = 'remote_item',
-                inst_id = slide_id,
-                kwargs = {
-                    'name': slide_name,
-                    'meta': metadata,
-                    'image_meta': image_metadata,
-                    'ann_meta': annotations_metadata,
-                    'session': vis_session_id,
-                    'public': public, 
-                }
+                table_name="remote_item",
+                inst_id=slide_id,
+                kwargs={
+                    "name": slide_name,
+                    "meta": metadata,
+                    "image_meta": image_metadata,
+                    "ann_meta": annotations_metadata,
+                    "session": vis_session_id,
+                    "public": public,
+                },
             )
 
         else:
             new_item = self.get_create(
-                table_name = 'item',
-                inst_id = slide_id,
-                kwargs = {
-                    'name': slide_name,
-                    'meta': metadata,
-                    'image_meta': image_metadata,
-                    'ann_meta': annotations_metadata,
-                    'session': vis_session_id,
-                    'public': public, 
-                }
+                table_name="item",
+                inst_id=slide_id,
+                kwargs={
+                    "name": slide_name,
+                    "meta": metadata,
+                    "image_meta": image_metadata,
+                    "ann_meta": annotations_metadata,
+                    "session": vis_session_id,
+                    "public": public,
+                },
             )
 
         if not public and user_id is not None:
-            self.add_access(slide_id,user_id)
+            self.add_access(slide_id, user_id)
 
         self.add_layer(annotations, slide_id)
 
-    def add_layer(self, annotations:Union[dict,list],item_id:str):
+    def add_layer(self, annotations: dict | list, item_id: str):
 
-        if type(annotations)==dict:
-            annotations =  [annotations]
+        if type(annotations) == dict:
+            annotations = [annotations]
 
         for ann_idx, ann in enumerate(annotations):
             jic_uuid = self.get_uuid()
             # Adding layer
             new_layer = self.get_create(
-                table_name = 'layer',
-                inst_id = ann.get('properties',{}).get('_id',jic_uuid),
-                kwargs = {
-                    'name': ann.get('properties',{}).get('name'),
-                    'item': item_id
-                }
+                table_name="layer",
+                inst_id=ann.get("properties", {}).get("_id", jic_uuid),
+                kwargs={"name": ann.get("properties", {}).get("name"), "item": item_id},
             )
 
-            if 'image_path' in ann:
+            if "image_path" in ann:
                 # Adding image overlay layer
                 new_image_overlay = self.get_create(
-                    table_name = 'image_overlay',
-                    inst_id = ann.get('properties',{}).get('_id',self.get_uuid()),
-                    kwargs = {
-                        'bounds': ann.get('image_bounds'),
-                        'properties': ann.get('image_properties'),
-                        'image_src': ann.get('image_path'),
-                        'layer': ann.get('properties',{}).get('_id',jic_uuid),
-                        'item': item_id
-                    }
+                    table_name="image_overlay",
+                    inst_id=ann.get("properties", {}).get("_id", self.get_uuid()),
+                    kwargs={
+                        "bounds": ann.get("image_bounds"),
+                        "properties": ann.get("image_properties"),
+                        "image_src": ann.get("image_path"),
+                        "layer": ann.get("properties", {}).get("_id", jic_uuid),
+                        "item": item_id,
+                    },
                 )
             else:
                 # Adding Structures in Layer
-                for f_idx, f in enumerate(ann.get('features',[])):
+                for f_idx, f in enumerate(ann.get("features", [])):
                     new_structure = self.get_create(
-                        table_name = 'structure',
-                        inst_id = f.get('properties',{}).get('_id',uuid.uuid4().hex[:24]),
-                        kwargs = {
-                            'geom': f.get('geometry'),
-                            'properties': f.get('properties',{'name': ann.get('properties',{}).get('name')}),
-                            'layer': ann.get('properties',{}).get('_id',jic_uuid),
-                            'item': item_id,
-                        }
+                        table_name="structure",
+                        inst_id=f.get("properties", {}).get(
+                            "_id", uuid.uuid4().hex[:24]
+                        ),
+                        kwargs={
+                            "geom": f.get("geometry"),
+                            "properties": f.get(
+                                "properties",
+                                {"name": ann.get("properties", {}).get("name")},
+                            ),
+                            "layer": ann.get("properties", {}).get("_id", jic_uuid),
+                            "item": item_id,
+                        },
                     )
 
     def add_vis_session(self, vis_session: dict):
 
         vis_session_kwargs = {
-            'user': vis_session.get('user',{}).get('id'),
-            'data': vis_session.get('data',{})
+            "user": vis_session.get("user", {}).get("id"),
+            "data": vis_session.get("data", {}),
         }
 
         new_vis_session = self.get_create(
-            table_name = 'vis_session',
-            inst_id = vis_session.get('session',{}).get('id'),
-            kwargs = vis_session_kwargs
+            table_name="vis_session",
+            inst_id=vis_session.get("session", {}).get("id"),
+            kwargs=vis_session_kwargs,
         )
 
         new_user = self.get_create(
-            table_name = 'user',
-            inst_id = vis_session.get('user',{}).get('id'),
-            kwargs = {
-                k:v
-                for k,v in vis_session.get('user',{}).items() 
-                if not k=='id'
-            }
+            table_name="user",
+            inst_id=vis_session.get("user", {}).get("id"),
+            kwargs={
+                k: v for k, v in vis_session.get("user", {}).items() if not k == "id"
+            },
         )
 
     def add_access(self, item_id, user_id):
 
         with self.get_db() as session:
             statement = session.execute(
-                insert(UserAccess).values(
-                    user_id = user_id,
-                    item_id = item_id
-                )
+                insert(UserAccess).values(user_id=user_id, item_id=item_id)
             )
-        
-    def get_user(self, user_token:Union[str,None] = None, user_id: Union[str,None] = None) -> User:
+
+    def get_user(
+        self, user_token: str | None = None, user_id: str | None = None
+    ) -> User:
 
         with self.get_db() as session:
             if not user_token is None:
                 search_query = session.execute(
-                    select(User).where(User.token==user_token)
+                    select(User).where(User.token == user_token)
                 ).first()
             elif not user_id is None:
                 search_query = session.execute(
-                    select(User).where(User.id==user_id)
+                    select(User).where(User.id == user_id)
                 ).first()
 
             if not search_query is None:
-                if len(search_query)>0:
+                if len(search_query) > 0:
                     return search_query[0].to_dict()
                 else:
                     return None
@@ -571,11 +607,11 @@ class fusionDB:
 
         with self.get_db() as session:
             search_query = session.execute(
-                select(User).where(User.login==user_login)
+                select(User).where(User.login == user_login)
             ).first()
 
             if not search_query is None:
-                if len(search_query)>0:
+                if len(search_query) > 0:
                     if search_query[0].verify_password(user_password):
                         return search_query[0].to_dict()
                     else:
@@ -588,24 +624,27 @@ class fusionDB:
     def create_new_user(self, user_kwargs: dict):
 
         # Required kwargs are login, password, firstname, lastname
-        if not all([user_kwargs.get(j) for j in ['login','password','firstName','lastName']]):
+        if not all(
+            [user_kwargs.get(j) for j in ["login", "password", "firstName", "lastName"]]
+        ):
             return None
         else:
             # Check uniqueness of login
             with self.get_db() as session:
                 search_query = session.execute(
-                    select(User).where(User.login==user_kwargs.get('login'))
+                    select(User).where(User.login == user_kwargs.get("login"))
                 ).first()
 
                 if search_query is None:
-                    
-                    user_kwargs['password'] = bcrypt.hashpw(user_kwargs['password'].encode(),bcrypt.gensalt())
-                    user_kwargs['token'] = self.get_uuid()
-                    user_kwargs['updated'] = datetime.now()
+                    user_kwargs["password"] = bcrypt.hashpw(
+                        user_kwargs["password"].encode(), bcrypt.gensalt()
+                    )
+                    user_kwargs["token"] = self.get_uuid()
+                    user_kwargs["updated"] = datetime.now()
 
                     new_id = self.get_uuid()
-                    new_user = User(id = new_id, **user_kwargs)
-                    user_kwargs['id'] = new_id
+                    new_user = User(id=new_id, **user_kwargs)
+                    user_kwargs["id"] = new_id
 
                     self.add(new_user, session)
                     session.commit()
@@ -614,7 +653,7 @@ class fusionDB:
                 else:
                     return None
 
-    def check_user_access(self, user_id:str, admin:bool = False) -> list:
+    def check_user_access(self, user_id: str, admin: bool = False) -> list:
 
         user_access_rows = []
         with self.get_db() as session:
@@ -626,59 +665,70 @@ class fusionDB:
         # Admins have access to everything
         non_public_access_list = []
         if admin:
-            non_public_access_list =  [i[1] for i in user_access_rows]
+            non_public_access_list = [i[1] for i in user_access_rows]
         else:
-            for user,item in user_access_rows:
-                if user_id==user:
+            for user, item in user_access_rows:
+                if user_id == user:
                     non_public_access_list.append(item)
 
         return non_public_access_list
 
-    def get_names(self, table_name:str, user_token: Union[str,None] = None, size:Union[int,None]=None, offset = 0):
-        
-        #TODO: This should get access controlled
+    def get_names(
+        self,
+        table_name: str,
+        user_token: str | None = None,
+        size: int | None = None,
+        offset=0,
+    ):
+
+        # TODO: This should get access controlled
         return_names = []
         with self.get_db() as session:
-
             if table_name in TABLE_NAMES:
-                #if not table_name=='item':
-                name_query = session.execute(
-                    select(getattr(TABLE_NAMES.get(table_name),'name'))
-                )
-                #else:
+                # if not table_name=='item':
+                name_query = session.execute(select(TABLE_NAMES.get(table_name).name))
+                # else:
                 #    name_query = session.query(Item.name)
                 #    name_query = name_query.join(UserAccess)
 
-                for a_idx,a in enumerate(name_query.all()):
+                for a_idx, a in enumerate(name_query.all()):
                     if not size is None:
-                        if len(return_names)==size:
+                        if len(return_names) == size:
                             break
-                    if a_idx>=offset:
+                    if a_idx >= offset:
                         return_names.append(a[0])
 
             return return_names
 
-    def get_ids(self, table_name: str, user_token: Union[str,None] = None, size:Union[int,None] = None, offset = 0):
+    def get_ids(
+        self,
+        table_name: str,
+        user_token: str | None = None,
+        size: int | None = None,
+        offset=0,
+    ):
 
-        #TODO: This should be access controlled
+        # TODO: This should be access controlled
         return_ids = []
         with self.get_db() as session:
-
             if table_name in TABLE_NAMES:
-                id_query = session.execute(
-                    select(getattr(TABLE_NAMES.get(table_name),'id'))
-                )
+                id_query = session.execute(select(TABLE_NAMES.get(table_name).id))
 
                 for a_idx, a in enumerate(id_query.all()):
                     if not size is None:
-                        if len(return_ids)==size:
+                        if len(return_ids) == size:
                             break
-                    if a_idx>=offset:
+                    if a_idx >= offset:
                         return_ids.append(a[0])
-            
+
             return return_ids
 
-    async def get_item_annotations(self, item_id:str, user_id:Union[str,None] = None, vis_session_id:Union[str,None] = None)->list:
+    async def get_item_annotations(
+        self,
+        item_id: str,
+        user_id: str | None = None,
+        vis_session_id: str | None = None,
+    ) -> list:
         """Loading annotations from item database
 
         :param item_id: String uuid for an item
@@ -694,76 +744,64 @@ class fusionDB:
         item_annotations = []
 
         item_layers = await self.search(
-            search_kwargs = {
-                'type': 'layer',
-                'filters': {
-                    'item': {
-                        'id': item_id
-                    }
-                }
-            }
+            search_kwargs={"type": "layer", "filters": {"item": {"id": item_id}}}
         )
 
         for l in item_layers:
-            layer_name = l.get('name')
-            layer_id = l.get('id')
+            layer_name = l.get("name")
+            layer_id = l.get("id")
 
             layer_structures = await self.search(
                 search_kwargs={
-                    'type': 'structure',
-                    'filters': {
-                        'layer': {
-                            'id': layer_id
-                        }
-                    }
+                    "type": "structure",
+                    "filters": {"layer": {"id": layer_id}},
                 }
             )
 
-            if len(layer_structures)>0:
+            if len(layer_structures) > 0:
                 item_annotations.append(
                     {
-                        'type': 'FeatureCollection',
-                        'properties': {
-                            'name': layer_name,
-                            '_id': layer_id
-                        },
-                        'features': [
+                        "type": "FeatureCollection",
+                        "properties": {"name": layer_name, "_id": layer_id},
+                        "features": [
                             {
-                                'type': 'Feature',
-                                'geometry': s.get('geom'),
-                                'properties': s.get('properties')
+                                "type": "Feature",
+                                "geometry": s.get("geom"),
+                                "properties": s.get("properties"),
                             }
                             for s in layer_structures
-                        ]
+                        ],
                     }
                 )
             else:
                 # This could be an ImageOverlay layer
                 image_overlays = await self.search(
-                    search_kwargs = {
-                        'type': 'image_overlay',
-                        'filters': {
-                            'layer': {
-                                'id': layer_id
-                            }
-                        }
+                    search_kwargs={
+                        "type": "image_overlay",
+                        "filters": {"layer": {"id": layer_id}},
                     }
                 )
 
-                if len(image_overlays)>0:
-                    item_annotations.extend(
-                        [
-                            i.to_dict() for i in image_overlays
-                        ]
-                    )
+                if len(image_overlays) > 0:
+                    item_annotations.extend([i.to_dict() for i in image_overlays])
 
         return item_annotations
 
-    def get_structure_property_keys(self, item_id:Union[str,list,None] = None, layer_id:Union[str,list,None] = None):
-        #TODO: Make a more efficient way to get names of properties for each structure
+    def get_structure_property_keys(
+        self,
+        item_id: str | list | None = None,
+        layer_id: str | list | None = None,
+    ):
+        # TODO: Make a more efficient way to get names of properties for each structure
         pass
 
-    def get_structure_property_data(self, item_id:Union[str,list,None] = None, layer_id:Union[str,list,None] = None, structure_id:Union[str,list,None] = None, property_list:Union[str,list] = None):
+    def get_structure_property_data(
+        self,
+        item_id: str | list | None = None,
+        layer_id: str | list | None = None,
+        structure_id: str | list | None = None,
+        property_list: str | list = None,
+    ):
         """Extracting one or multiple properties from structures given id filters.
 
         :param item_id: String uuid for one or multiple image items, defaults to None
@@ -780,57 +818,75 @@ class fusionDB:
 
         if property_list is None:
             return []
-        elif type(property_list)==str:
+        elif type(property_list) == str:
             property_list = [property_list]
 
         # Ensuring uniqueness of property names
         property_list = list(set(property_list))
 
         with self.get_db() as session:
-            search_query = session.query(
-                *[Structure.properties[p.split(' --> ')] for p in property_list],
-                Structure.id,
-                Structure.geom,
-                Layer.id,
-                Layer.name,
-                Item.id,
-                Item.name
-            ).filter(Structure.layer == Layer.id).filter(Layer.item==Item.id)
+            search_query = (
+                session.query(
+                    *[Structure.properties[p.split(" --> ")] for p in property_list],
+                    Structure.id,
+                    Structure.geom,
+                    Layer.id,
+                    Layer.name,
+                    Item.id,
+                    Item.name,
+                )
+                .filter(Structure.layer == Layer.id)
+                .filter(Layer.item == Item.id)
+            )
 
             if not item_id is None:
-                if type(item_id)==list:
+                if type(item_id) == list:
                     search_query = search_query.filter(Item.id.in_(item_id))
-                elif type(item_id)==str:
+                elif type(item_id) == str:
                     search_query = search_query.filter(Item.id == item_id)
 
             if not layer_id is None:
-                if type(layer_id)==list:
+                if type(layer_id) == list:
                     search_query = search_query.filter(Layer.id.in_(layer_id))
-                elif type(layer_id)==str:
-                    search_query = search_query.filter(Layer.id==layer_id)
+                elif type(layer_id) == str:
+                    search_query = search_query.filter(Layer.id == layer_id)
 
             if not structure_id is None:
-                if type(structure_id)==list:
+                if type(structure_id) == list:
                     search_query = search_query.filter(Structure.id.in_(structure_id))
-                elif type(structure_id)==str:
-                    search_query = search_query.filter(Structure.id==structure_id)
-            
-            returned_props = property_list + ['structure.id','geometry','layer.id','layer.name','item.id','item.name']
+                elif type(structure_id) == str:
+                    search_query = search_query.filter(Structure.id == structure_id)
+
+            returned_props = property_list + [
+                "structure.id",
+                "geometry",
+                "layer.id",
+                "layer.name",
+                "item.id",
+                "item.name",
+            ]
             return_list = []
-            for idx,i in enumerate(search_query.all()):
-                i_dict = {'_index': idx}
-                for prop,prop_name in zip(i,returned_props):
-                    if not prop_name=='geometry':
+            for idx, i in enumerate(search_query.all()):
+                i_dict = {"_index": idx}
+                for prop, prop_name in zip(i, returned_props):
+                    if not prop_name == "geometry":
                         i_dict[prop_name] = prop
                     else:
-                        i_dict['bbox'] = list(shape(prop).bounds)
+                        i_dict["bbox"] = list(shape(prop).bounds)
 
                 return_list.append(i_dict)
 
             return return_list
 
-    def get_structures_in_bbox(self, bbox:list, item_id:Union[str,None] = None, layer_id:Union[str,list,None] = None, structure_id:Union[str,list,None] = None, user_token:Union[str,list,None] = None):
-        """Querying database for structures that intersect with a 
+    def get_structures_in_bbox(
+        self,
+        bbox: list,
+        item_id: str | None = None,
+        layer_id: str | list | None = None,
+        structure_id: str | list | None = None,
+        user_token: str | list | None = None,
+    ):
+        """Querying database for structures that intersect with a
 
         :param bbox: _description_
         :type bbox: list
@@ -843,46 +899,50 @@ class fusionDB:
         :return: _description_
         :rtype: _type_
         """
-        
-        #TODO: Test the performance of this using shape().intersects() vs. checking min/max ranges for bounding boxes
+
+        # TODO: Test the performance of this using shape().intersects() vs. checking min/max ranges for bounding boxes
         with self.get_db() as session:
             start = time.time()
-            search_query = session.query(
-                Structure.id,
-                Structure.geom
-            ).filter(Layer.item==Item.id).filter(Structure.layer==Layer.id)
+            search_query = (
+                session.query(Structure.id, Structure.geom)
+                .filter(Layer.item == Item.id)
+                .filter(Structure.layer == Layer.id)
+            )
 
             if not item_id is None:
-                if type(item_id)==str:
+                if type(item_id) == str:
                     search_query = search_query.filter(Item.id == item_id)
 
                 if not user_token is None:
-                    query_user = self.get_user(
-                        user_token = user_token
-                    )
+                    query_user = self.get_user(user_token=user_token)
                     if not query_user is None:
-                        search_query = search_query.filter(or_(Item.public==True,Item.user_access.any(id = query_user.get('id'))))
+                        search_query = search_query.filter(
+                            or_(
+                                Item.public == True,
+                                Item.user_access.any(id=query_user.get("id")),
+                            )
+                        )
                     else:
-                        search_query = search_query.filter(Item.public==True)
+                        search_query = search_query.filter(Item.public == True)
                 else:
-                    search_query = search_query.filter(Item.public==True)
+                    search_query = search_query.filter(Item.public == True)
 
             if not layer_id is None:
-                if type(layer_id)==list:
+                if type(layer_id) == list:
                     search_query = search_query.filter(Layer.id.in_(layer_id))
-                elif type(layer_id)==str:
-                    search_query = search_query.filter(Layer.id==layer_id)
+                elif type(layer_id) == str:
+                    search_query = search_query.filter(Layer.id == layer_id)
 
             if not structure_id is None:
-                if type(structure_id)==list:
+                if type(structure_id) == list:
                     search_query = search_query.filter(Structure.id.in_(structure_id))
-                elif type(structure_id)==str:
-                    search_query = search_query.filter(Structure.id==structure_id)
+                elif type(structure_id) == str:
+                    search_query = search_query.filter(Structure.id == structure_id)
 
             # Box should be minx, miny, maxx, maxy
             query_box = box(*bbox)
             return_list = []
-            for idx,i in enumerate(search_query.all()):
+            for idx, i in enumerate(search_query.all()):
                 structure_id = i[0]
                 structure_geom = i[1]
                 if shape(structure_geom).intersects(query_box):
@@ -890,117 +950,113 @@ class fusionDB:
 
             return return_list
 
-    def get_structure_generator(self, item_id: Union[str,list,None] = None, layer_id:Union[str,list,None] = None, structure_id:Union[str,list,None] = None, user_token:Union[str,None] = None):
+    def get_structure_generator(
+        self,
+        item_id: str | list | None = None,
+        layer_id: str | list | None = None,
+        structure_id: str | list | None = None,
+        user_token: str | None = None,
+    ):
 
         with self.get_db() as session:
-            search_query = session.query(
-                Structure.id,
-                Structure.geom,
-                Structure.properties
-            ).filter(Layer.item==Item.id).filter(Structure.layer==Layer.id)
+            search_query = (
+                session.query(Structure.id, Structure.geom, Structure.properties)
+                .filter(Layer.item == Item.id)
+                .filter(Structure.layer == Layer.id)
+            )
 
             if not item_id is None:
-                if type(item_id)==list:
+                if type(item_id) == list:
                     search_query = search_query.filter(Item.id.in_(item_id))
-                elif type(item_id)==str:
+                elif type(item_id) == str:
                     search_query = search_query.filter(Item.id == item_id)
 
                 if not user_token is None:
-                    query_user = self.get_user(
-                        user_token = user_token
-                    )
+                    query_user = self.get_user(user_token=user_token)
                     if not query_user is None:
-                        search_query = search_query.filter(or_(Item.public==True,Item.user_access.any(id = query_user.get('id'))))
+                        search_query = search_query.filter(
+                            or_(
+                                Item.public == True,
+                                Item.user_access.any(id=query_user.get("id")),
+                            )
+                        )
                     else:
-                        search_query = search_query.filter(Item.public==True)
+                        search_query = search_query.filter(Item.public == True)
                 else:
-                    search_query = search_query.filter(Item.public==True)
+                    search_query = search_query.filter(Item.public == True)
 
             if not layer_id is None:
-                if type(layer_id)==list:
+                if type(layer_id) == list:
                     search_query = search_query.filter(Layer.id.in_(layer_id))
-                elif type(layer_id)==str:
-                    search_query = search_query.filter(Layer.id==layer_id)
+                elif type(layer_id) == str:
+                    search_query = search_query.filter(Layer.id == layer_id)
 
             if not structure_id is None:
-                if type(structure_id)==list:
+                if type(structure_id) == list:
                     search_query = search_query.filter(Structure.id.in_(structure_id))
-                elif type(structure_id)==str:
-                    search_query = search_query.filter(Structure.id==structure_id)
-            
-            #returned_props = ['structure.id','geometry','structure.properties']
-            #return_list = []
-            #for idx,i in enumerate(search_query.all()):
+                elif type(structure_id) == str:
+                    search_query = search_query.filter(Structure.id == structure_id)
+
+            # returned_props = ['structure.id','geometry','structure.properties']
+            # return_list = []
+            # for idx,i in enumerate(search_query.all()):
             #    i_dict = {'_index': idx}
             #    for prop,prop_name in zip(i,returned_props):
             #        i_dict[prop_name] = prop
 
             #    return_list.append(i_dict)
 
-            #return return_list
+            # return return_list
             return search_query.all()
 
-    def get_layers(self, item_id, user_token: Union[str,None] = None) -> list:
-        
+    def get_layers(self, item_id, user_token: str | None = None) -> list:
+
         # Check user has access to item (or item is public)
         # Get layer ids associated with that item
         # Get structures associated with that layer
         # Assemble FeatureCollection objects
 
         if not user_token is None:
-            query_user = self.get_user(
-                user_token = user_token
-            )
+            query_user = self.get_user(user_token=user_token)
 
-            user_access_list = self.check_user_access(user_id = query_user.get('id'), admin = query_user.get('admin'))
+            user_access_list = self.check_user_access(
+                user_id=query_user.get("id"), admin=query_user.get("admin")
+            )
         else:
             user_access_list = []
 
         with self.get_db() as session:
-            item_query = session.query(
-                Item
-            ).filter(Item.id==item_id).first()
+            item_query = session.query(Item).filter(Item.id == item_id).first()
 
-            if not item_query.to_dict().get('public'):
+            if not item_query.to_dict().get("public"):
                 if not item_id in user_access_list:
                     return []
-            
-            layer_query = session.query(
-                Layer.name,
-                Layer.id,
-                Layer.item
-            ).filter(Layer.item==item_id)
+
+            layer_query = session.query(Layer.name, Layer.id, Layer.item).filter(
+                Layer.item == item_id
+            )
 
             feature_collection_list = []
             for l in layer_query.all():
-                #print(f'{l=}, (item_id={item_id})')
-                if not l[2]==item_id:
+                # print(f'{l=}, (item_id={item_id})')
+                if not l[2] == item_id:
                     continue
 
                 feature_collection = {
-                    'type': 'FeatureCollection',
-                    'features': [],
-                    'properties': {
-                        'name': l[0],
-                        '_id': l[1]
-                    }
+                    "type": "FeatureCollection",
+                    "features": [],
+                    "properties": {"name": l[0], "_id": l[1]},
                 }
 
                 structure_query = session.query(
-                    Structure.geom,
-                    Structure.properties,
-                    Structure.layer
-                ).filter(Structure.layer==l[1])
+                    Structure.geom, Structure.properties, Structure.layer
+                ).filter(Structure.layer == l[1])
 
                 for s in structure_query.all():
-                    feature_collection['features'].append({
-                        'type': 'Feature',
-                        'geometry': s[0],
-                        'properties': s[1]
-                    })
-
+                    feature_collection["features"].append(
+                        {"type": "Feature", "geometry": s[0], "properties": s[1]}
+                    )
 
                 feature_collection_list.append(feature_collection)
 
             return feature_collection_list
-

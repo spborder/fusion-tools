@@ -1,86 +1,75 @@
-"""Generating FUSION (Functional Unit State Identification in WSIs) layout
-"""
-from fusion_tools.visualization import Visualization
-from fusion_tools.handler.dsa_handler import DSAHandler
+"""Generating FUSION (Functional Unit State Identification in WSIs) layout"""
+
 from fusion_tools.components import (
-    SlideMap,
-    HybridSlideMap,
+    BulkLabels,
     ChannelMixer,
-    OverlayOptions,
-    PropertyViewer,
+    DataExtractor,
     GlobalPropertyPlotter,
     HRAViewer,
-    DataExtractor,
-    BulkLabels
+    OverlayOptions,
+    PropertyViewer,
+    SlideMap,
 )
-
 from fusion_tools.fusion.data_types import get_upload_types
 from fusion_tools.fusion.welcome import WelcomePage
+from fusion_tools.handler.dsa_handler import DSAHandler
+from fusion_tools.visualization import Visualization
+
 
 def get_layout(args):
 
     # Initialize DSA Handler
     dsa_handler = DSAHandler(
-        girderApiUrl=args['girderApiUrl'],
-        username = args['user'],
-        password=args['pword']
+        girderApiUrl=args["girderApiUrl"], username=args["user"], password=args["pword"]
     )
 
     dsa_login_component = dsa_handler.create_login_component()
-    
+
     dsa_plugin_progress = dsa_handler.create_plugin_progress()
 
     dsa_dataset_builder = dsa_handler.create_dataset_builder()
 
-    dsa_dataset_uploader = dsa_handler.create_uploader(
-        upload_types = get_upload_types()
-    )
+    dsa_dataset_uploader = dsa_handler.create_uploader(upload_types=get_upload_types())
 
     dsa_save_session = dsa_handler.create_save_session()
 
-    initial_items = args['initialItems']
+    initial_items = args["initialItems"]
 
-    if not 'default_page' in args['app_options']:
-        args['app_options']['default_page'] = 'Welcome'
+    if not "default_page" in args["app_options"]:
+        args["app_options"]["default_page"] = "Welcome"
 
     fusion_vis = Visualization(
         tileservers=[dsa_handler.get_tile_server(i) for i in initial_items],
-        linkage = 'page',
-        database = args.get('database',None),
-        header = [
+        linkage="page",
+        database=args.get("database", None),
+        header=[
             dsa_login_component,
             dsa_plugin_progress,
             dsa_save_session,
         ],
-        components = {
-            "Welcome": [
-                WelcomePage()
-            ],
+        components={
+            "Welcome": [WelcomePage()],
             "Visualization": [
                 [
-                    #HybridSlideMap(
+                    # HybridSlideMap(
                     #    cache = True
-                    #),
+                    # ),
                     SlideMap(),
                     [
                         OverlayOptions(),
                         ChannelMixer(),
-                        PropertyViewer(ignore_list=['_id','_index']),
-                        GlobalPropertyPlotter(ignore_list = ['_id','_index']),
+                        PropertyViewer(ignore_list=["_id", "_index"]),
+                        GlobalPropertyPlotter(ignore_list=["_id", "_index"]),
                         HRAViewer(),
                         BulkLabels(),
-                        DataExtractor()
-                    ]
+                        DataExtractor(),
+                    ],
                 ]
             ],
-            "Dataset Builder": [
-                dsa_dataset_builder
-            ],
-            "Dataset Uploader": [
-                dsa_dataset_uploader
-            ]
+            "Dataset Builder": [dsa_dataset_builder],
+            "Dataset Uploader": [dsa_dataset_uploader],
         },
-        app_options = args['app_options']
+        app_options=args["app_options"],
     )
 
     return fusion_vis

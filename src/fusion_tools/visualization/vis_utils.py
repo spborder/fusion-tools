@@ -3,6 +3,7 @@ Utility functions for visualization components
 
 """
 
+
 def get_pattern_matching_value(input_val):
     """Used to extract usable values from components generated using pattern-matching syntax
 
@@ -12,13 +13,13 @@ def get_pattern_matching_value(input_val):
     :return: Value used in callbacks
     :rtype: None
     """
-    if type(input_val)==list:
-        if len(input_val)>0:
+    if type(input_val) == list:
+        if len(input_val) > 0:
             return_val = input_val[0]
-            if type(return_val)==list:
-                if len(return_val)==0:
+            if type(return_val) == list:
+                if len(return_val) == 0:
                     return_val = None
-                
+
         else:
             return_val = None
     elif input_val is None:
@@ -38,12 +39,10 @@ def flatten_list(l):
     :rtype: None
     """
     for item in l:
-        if type(item)==list:
+        if type(item) == list:
             try:
                 yield from flatten_list(item)
             except TypeError:
                 yield item
         else:
             yield item
-        
-
