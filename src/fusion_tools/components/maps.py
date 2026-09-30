@@ -2095,7 +2095,7 @@ class SlideMap(MapComponent):
                                     ]["name"].replace("Manual", "Upload")
                             else:
                                 scaled_upload["properties"]["name"] = (
-                                    f"Upload {len([i for i in annotation_names if 'Upload' in i]) + 1 + up_idx}",
+                                    f"Upload {len([i for i in annotation_names if 'Upload' in i]) + 1 + up_idx}"
                                 )
 
                             scaled_upload["properties"]["id"] = uuid.uuid4().hex[:24]
