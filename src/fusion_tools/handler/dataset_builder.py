@@ -58,9 +58,7 @@ class DatasetBuilder(DSATool):
         user_login = self.get_user_external_login(session_data)
         user_id = self.get_user_external_id(session_data)
 
-        collections = self.handler.get_collections(
-            session_data.get("user", {}).get("token")
-        )
+        collections = self.handler.get_collections(user_token=user_token)
         for c in collections:
             # slide_count = self.handler.get_collection_slide_count(collection_name = c['name'])
             folder_count = self.handler.get_path_info(
@@ -197,7 +195,7 @@ class DatasetBuilder(DSATool):
                                                     [
                                                         {
                                                             "Slide Name": j["name"],
-                                                            "Slide ID": f"local{j_idx}",
+                                                            "Slide ID": j["id"],
                                                         }
                                                         for j_idx, j in enumerate(
                                                             session_data["local"]
@@ -678,7 +676,7 @@ class DatasetBuilder(DSATool):
 
             for f in empty_folders:
                 if not f["_id"] in folders_in_folder and not f["_id"] in unique_folders:
-                    if not user_token is None:
+                    if user_token is None:
                         folder_info = self.handler.gc.get(f"/folder/{f['_id']}/details")
                     else:
                         folder_info = self.handler.gc.get(
@@ -786,7 +784,7 @@ class DatasetBuilder(DSATool):
                 slide_info.get("_id") if "_id" in slide_info else slide_info.get("id")
             )
             try:
-                item_info = self.handler.get_item_info(item_id, user_token)
+                item_info = self.handler.get_item_info(item_id, user_token=user_token)
                 thumb_url = self.handler.get_image_thumbnail(
                     item_id, user_token=user_token, return_url=True
                 )
@@ -804,9 +802,7 @@ class DatasetBuilder(DSATool):
             # TODO: Deriving thumbnail url from local slide info
             thumb_url = slide_info.get("")
 
-            folder_info = {
-                "name": slide_info.get("filepath").replace(slide_info.get("name"), "")
-            }
+            folder_info = {"name": "Local Files"}
 
         slide_card = html.Div(
             [
@@ -1550,7 +1546,9 @@ class DatasetBuilder(DSATool):
                 else:
                     local = False
                     user_token = user_external_token
-                    slide_info = self.handler.get_item_info(s, user_external_token)
+                    slide_info = self.handler.get_item_info(
+                        s, user_token=user_external_token
+                    )
 
                 new_slide_component = self.make_selected_slide(
                     slide_info=slide_info,
@@ -1599,7 +1597,7 @@ class DatasetBuilder(DSATool):
                         local = False
                         user_token = user_external_token
                         slide_info = self.handler.get_item_info(
-                            new_slide_id, user_external_token
+                            new_slide_id, user_token=user_external_token
                         )
 
                     selected_slides.append(

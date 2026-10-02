@@ -1390,6 +1390,7 @@ class CustomFunction(Tool):
         )
         session_data = json.loads(session_data)
 
+        user_external_token = self.get_user_external_token(session_data)
         user_internal_token = self.get_user_internal_token(session_data)
 
         # Assigning kwarg vals from input components
@@ -1420,26 +1421,53 @@ class CustomFunction(Tool):
             layer_id = slide_annotation_metadata[
                 slide_annotation_names.index(structure_names)
             ]["_id"]
-            structure_generator = self.database.get_structure_generator(
-                item_id=current_slide_information.get("id"),
-                layer_id=layer_id,
-                user_token=user_internal_token,
-            )
-            max_structure_idx = structure_number if not structure_all_clicked else None
-
             structure_inputs = []
-            for f_idx, f in enumerate(structure_generator):
-                if max_structure_idx is not None:
-                    if f_idx >= max_structure_idx - 1:
-                        break
-
-                structure_inputs.append(
-                    {
-                        "type": "Feature",
-                        "geometry": f.geom,
-                        "properties": {"id": f.id} | f.properties,
-                    }
+            if current_slide_information.get("cached", False):
+                structure_generator = self.database.get_structure_generator(
+                    item_id=current_slide_information.get("id"),
+                    layer_id=layer_id,
+                    user_token=user_internal_token,
                 )
+                max_structure_idx = (
+                    structure_number if not structure_all_clicked else None
+                )
+
+                for f_idx, f in enumerate(structure_generator):
+                    if max_structure_idx is not None:
+                        if f_idx >= max_structure_idx - 1:
+                            break
+
+                    structure_inputs.append(
+                        {
+                            "type": "Feature",
+                            "geometry": f.geom,
+                            "properties": {"id": f.id} | f.properties,
+                        }
+                    )
+            else:
+                # If not cached, use url
+                if "annotations_geojson_url" in current_slide_information:
+                    use_url = [
+                        i
+                        for i in current_slide_information["annotations_geojson_url"]
+                        if layer_id in i
+                    ]
+                    if len(use_url) > 0:
+                        layer_geojson = requests.get(use_url[0]).json()
+                        structure_inputs = layer_geojson.get("features")
+
+                elif "annotations" in current_slide_information:
+                    layers_geojson = requests.get(
+                        current_slide_information["annotations"]
+                    ).json()
+                    if isinstance(layers_geojson, list):
+                        layer_ids = [i.get("id", "") for i in layers_geojson]
+                        if layer_id in layer_ids:
+                            structure_inputs = layers_geojson[
+                                layer_ids.index(layer_id)
+                            ].get("features")
+                    elif isinstance(layers_geojson, dict):
+                        structure_inputs = layers_geojson.get("features")
 
             if "annotation" in all_input_types:
                 kwarg_inputs[all_input_names[all_input_types.index("annotation")]] = {
@@ -1466,19 +1494,49 @@ class CustomFunction(Tool):
             item_id = current_slide_information.get("id")
 
             # Modify this to get index of structure->translate to id->pass to structure_generator
+            structure_list = []
+            if current_slide_information.get("cached", False):
+                structure_generator = self.database.get_structure_generator(
+                    item_id=item_id, layer_id=layer_id, user_token=user_internal_token
+                )
+                structure_list = [
+                    {
+                        "type": "Feature",
+                        "geometry": f.geom,
+                        "properties": {"id": f.id} | f.properties,
+                    }
+                    for f in structure_generator
+                ]
 
-            structure_generator = self.database.get_structure_generator(
-                item_id=item_id, layer_id=layer_id, user_token=user_internal_token
-            )
+            else:
+                # If not cached, use url
+                if "annotations_geojson_url" in current_slide_information:
+                    use_url = [
+                        i
+                        for i in current_slide_information["annotations_geojson_url"]
+                        if layer_id in i
+                    ]
+                    if len(use_url) > 0:
+                        layer_geojson = requests.get(use_url[0]).json()
+                        structure_inputs = layer_geojson.get("features")
 
-            for f in structure_generator:
+                elif "annotations" in current_slide_information:
+                    layers_geojson = requests.get(
+                        current_slide_information["annotations"]
+                    ).json()
+                    if isinstance(layers_geojson, list):
+                        layer_ids = [i.get("id", "") for i in layers_geojson]
+                        if layer_id in layer_ids:
+                            structure_inputs = layers_geojson[
+                                layer_ids.index(layer_id)
+                            ].get("features")
+                    elif isinstance(layers_geojson, dict):
+                        structure_inputs = layers_geojson.get("features")
+
+            for f in structure_list:
                 if any([i in all_input_types for i in ["image", "mask"]]):
                     f_img, f_mask = self.get_feature_image(
-                        feature={
-                            "type": "Feature",
-                            "geometry": f.geom,
-                            "properties": {"id": f.id} | f.properties,
-                        },
+                        feature=f,
                         slide_information=current_slide_information,
                         return_mask="mask" in all_input_types,
                         return_image="image" in all_input_types,
@@ -1496,11 +1554,7 @@ class CustomFunction(Tool):
                 if "annotation" in all_input_types:
                     kwarg_inputs[
                         all_input_names[all_input_types.index("annotation")]
-                    ] = {
-                        "type": "Feature",
-                        "geometry": f.geom,
-                        "properties": {"id": f.id} | f.properties,
-                    }
+                    ] = f
 
                 function_output.append(function_info.function(**kwarg_inputs))
 
@@ -1519,6 +1573,7 @@ class CustomFunction(Tool):
                     current_slide_information.get("annotations_metadata")
                 ).json()
                 for s in slide_annotation_metadata:
+                    # TODO: Update without using cached
                     intersecting_structure_ids = self.database.get_structures_in_bbox(
                         bbox=main_bounds,
                         item_id=current_slide_information.get("id"),
@@ -1526,6 +1581,7 @@ class CustomFunction(Tool):
                     )
 
                     if len(intersecting_structure_ids) > 0:
+                        # TODO: Update without using cached
                         structure_generator = self.database.get_structure_generator(
                             structure_id=intersecting_structure_ids
                         )

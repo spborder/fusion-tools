@@ -1247,7 +1247,7 @@ class SlideMap(MapComponent):
             },
             url=tile_url,
             tileSize=image_metadata.get("tileHeight", 240),
-            crossOrigin="true",
+            # crossOrigin="true",
             maxNativeZoom=image_metadata["levels"] - 2
             if image_metadata["levels"] >= 2
             else 0,
